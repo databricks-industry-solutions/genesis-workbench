@@ -1,0 +1,47 @@
+bundle:
+  name: genesis_workbench
+  databricks_cli_version: ">=0.236.*"
+
+include:
+  - variables.yml
+  - resources/jobs/*.yml
+  - resources/schemas/*.yml
+  - resources/app.yml
+    
+artifacts:
+    genesis_workbench:
+      type: whl
+      build: poetry build 
+      path: library/genesis_workbench
+
+sync:
+  paths:
+    - .
+    - library/genesis_workbench
+  
+targets:
+  dev:
+    mode: development
+    default: true
+    variables:
+      app_name: ${var.dev_prefix}-genesis-workbench
+      core_schema_name: ${var.dev_prefix}_dbx_genesis_workbench_core
+    workspace:
+      root_path: ${var.current_working_directory}
+      host: https://adb-830292400663869.9.azuredatabricks.net
+    permissions:
+      - user_name: ${var.current_user}
+        level: CAN_MANAGE
+
+  prod:
+    mode: production
+    variables:
+      app_name: genesis-workbench
+    workspace:
+      host: https://adb-830292400663869.9.azuredatabricks.net
+      root_path: ${var.current_working_directory}
+    permissions:
+      - user_name: ${var.current_user}
+        level: CAN_MANAGE
+    run_as:
+      user_name: ${var.current_user} #sp name should be used instead later.

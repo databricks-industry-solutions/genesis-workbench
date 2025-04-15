@@ -1,0 +1,21 @@
+variables: 
+  current_user:
+    description: User deploying the bundle. Can apply to service principals as well.
+    default: ${workspace.current_user.userName}
+  current_working_directory:
+    description: Working directory or bundle root.
+    default: /Users/${var.current_user}/.bundle/${bundle.name}/${bundle.target}
+  catalog_name:
+    description: primary catalog where data, models, and files are stored for this project.
+    default: genesis_workbench 
+  core_schema_name:
+    description: The schema where core components will be installed.
+    default: dbx_genesis_workbench_core 
+  serving_endpoint:
+    description: queryable serving endpoint for app to access
+    default: databricks-meta-llama-3-3-70b-instruct
+  app_name:
+    description: Name of the databricks app 
+    default: genesis-workbench
+  dev_prefix:
+    description: A prefix for resources in dev environment

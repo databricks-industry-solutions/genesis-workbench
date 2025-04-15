@@ -1,0 +1,8 @@
+resources:
+  registered_models:
+    hello_world_model:
+      name: "gwb_hello_world"
+      schema_name: ${var.schema_name}
+      catalog_name: ${var.catalog_name}
+      comment: "Simple test model to show model deployment in DAB. Doesn't actually run hello world, int doubler model."
+    

@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "genesis_workbench"
+version = "0.1.0"
+description = "Genesis workbench for Databricks"
+authors = ["Srijit Nair <srijit.nair@databricks.com>", "Eli Swanson <eli.swanson@databricks.com>"]
+license = "DB License"
+readme = "README.md"
+keywords = ["example", "project"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "License :: DB License",
+]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

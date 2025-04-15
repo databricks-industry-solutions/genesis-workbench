@@ -1,0 +1,8 @@
+resources:
+  schemas:
+    core_workbench:
+      catalog_name: ${var.catalog_name}
+      name: core_workbench
+    esmfold:
+      catalog_name: ${var.catalog_name}
+      name: esmfold

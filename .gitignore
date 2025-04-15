@@ -1,0 +1,12 @@
+.databricks/
+build/
+dist/
+__pycache__/
+*.egg-info
+.venv/
+scratch/**
+!scratch/README.md
+.vscode
+**/dist/
+poetry.lock
+.DS_Store

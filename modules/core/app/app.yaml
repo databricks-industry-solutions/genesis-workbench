@@ -1,0 +1,10 @@
+command: [
+  "streamlit", 
+  "run",
+  "home.py"
+]
+
+env:
+  - name: STREAMLIT_BROWSER_GATHER_USAGE_STATS
+    value: "false"
+

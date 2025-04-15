@@ -1,0 +1,57 @@
+import streamlit as st
+
+st.set_page_config(layout="wide")
+#delete the top right menu
+
+st.logo("images/blank.png", size="large", icon_image="images/dbx_logo_icon_2.png")
+st.sidebar.image("images/big_blank.png", width=200)
+st.sidebar.image("images/dbx_logo_1.png", width=200)
+
+home_page = st.Page(
+    page="views/home.py",
+    title="Home",
+    icon=":material/home:"
+)
+
+single_cell_page = st.Page(
+    page="views/single_cell.py",
+    title="Single Cell",
+    icon=":material/microbiology:"
+)
+
+protein_page = st.Page(
+    page="views/protein_studies.py",
+    title="Protein Studies",
+    icon=":material/biotech:"
+)
+
+small_molecules_page = st.Page(
+    page="views/small_molecules.py",
+    title="Small Molecules",
+    icon=":material/vaccines:"
+)
+
+settings_page = st.Page(
+    page="views/settings.py",
+    title="Settings",
+    icon=":material/settings:"
+)
+
+monitoring_alerts_page = st.Page(
+    page="views/monitoring_alerts.py",
+    title="Monitoring and Alerts",
+    icon=":material/monitoring:"
+)
+
+pg = st.navigation(pages=[
+    home_page,
+    single_cell_page,
+    protein_page,
+    small_molecules_page,
+    monitoring_alerts_page,
+    settings_page
+])
+
+
+
+pg.run()

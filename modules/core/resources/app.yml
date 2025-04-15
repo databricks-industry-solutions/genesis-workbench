@@ -1,0 +1,15 @@
+resources:
+  apps:
+    genesis_workbench_app:
+      name: ${var.app_name}
+      description: 'UI For Genesis Workbench'
+
+      # The location of the source code for the app
+      source_code_path: ../app
+
+      # The resources in the bundle which this app has access to. This binds the resource in the app with the bundle resource.
+      #resources:
+      #  - name: 'app-job'
+      #    job:
+      #      id: ${resources.jobs.hello_world.id}
+      #      permission: 'CAN_MANAGE_RUN'
