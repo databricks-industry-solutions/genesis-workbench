@@ -16,7 +16,7 @@ curl -sSL https://install.python-poetry.org | python3 -
 export PATH="/root/.local/bin:$PATH"
 
 echo "================================"
-echo "Preparing to deploy module $CWD"
+echo "⚙️ Preparing to deploy module $CWD"
 echo "================================"
 
 cd modules/$CWD
