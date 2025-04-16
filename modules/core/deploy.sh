@@ -40,4 +40,8 @@ fi
 
 echo "▶️ Deploying UI Application"
 echo ""
-
+databricks bundle run -t $ENV genesis_workbench_app $EXTRA_PARAMS
+if [ $? -ne 0 ]; then
+    echo "❗️ Error. Aborting deploy."
+    exit 1
+fi
