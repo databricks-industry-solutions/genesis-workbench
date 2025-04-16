@@ -1,7 +1,7 @@
 # Databricks notebook source
 #parameters to the notebook
-catalog = dbutils.widgets.text("catalog", "")
-schema = dbutils.widgets.text("schema", "")
+catalog = dbutils.widgets.get("catalog", "")
+schema = dbutils.widgets.get("schema", "")
 
 
 # COMMAND ----------
