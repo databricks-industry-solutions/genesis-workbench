@@ -1,25 +1,30 @@
 resources:
   jobs:
     genesis_workbench_job:
-      name: initial_setup
+      name: ${var.resource_prefix}_initial_setup
 
       email_notifications:
         on_failure:
           - ${var.current_user}
 
       tasks:
-        - task_key: notebook_task
-          job_cluster_key: job_cluster
+        - task_key: create_table_task
           notebook_task:
-            notebook_path: ../../notebooks/initialize_workflow.py
-          libraries:
-            - whl: ../../library/genesis_workbench/dist/*.whl
+            notebook_path: ../../notebooks/initialize_tables.py
 
-      job_clusters:
-        - job_cluster_key: job_cluster
-          new_cluster:
-            spark_version: 15.4.x-cpu-ml-scala2.12
-            node_type_id: Standard_D3_v2
-            autoscale:
-                min_workers: 1
-                max_workers: 4
+          #lets use serverless
+          #libraries:
+          #  - whl: ../../library/genesis_workbench/dist/*.whl
+      environments:
+        - environment_key: Default
+          spec:
+            client: '1'
+            dependencies:
+              - ../../library/genesis_workbench/dist/*.whl
+
+      parameters:
+        - name: catalog
+          default: ${var.catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+
