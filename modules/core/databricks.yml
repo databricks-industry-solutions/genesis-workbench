@@ -24,8 +24,7 @@ targets:
     mode: development
     default: true
     variables:
-      app_name: ${var.dev_prefix}-genesis-workbench
-      core_schema_name: ${var.dev_prefix}_dbx_genesis_workbench_core
+      app_name: ${var.dev_user_prefix}-genesis-workbench
     workspace:
       root_path: ${var.current_working_directory}
       host: https://adb-830292400663869.9.azuredatabricks.net
