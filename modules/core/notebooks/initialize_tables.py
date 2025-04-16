@@ -6,6 +6,15 @@ schema = dbutils.widgets.text("schema", "")
 
 # COMMAND ----------
 
+print(f"Catalog: {catalog}")
+print(f"Schema: {schema}")
+
+# COMMAND ----------
+
+assert catalog and schema, "Catalog and schema must be provided"
+
+# COMMAND ----------
+
 spark.sql(f"USE CATALOG {catalog}")
 
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {schema}")

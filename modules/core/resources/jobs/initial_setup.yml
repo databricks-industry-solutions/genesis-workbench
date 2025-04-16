@@ -8,12 +8,18 @@ resources:
           - ${var.current_user}
 
       tasks:
-        - task_key: notebook_task
+        - task_key: create_table_task
           job_cluster_key: job_cluster
           notebook_task:
-            notebook_path: ../../notebooks/initialize_workflow.py
+            notebook_path: ../../notebooks/initialize_tables.py
           libraries:
             - whl: ../../library/genesis_workbench/dist/*.whl
+
+      parameters:
+        - name: catalog
+          default: ${var.catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
 
       job_clusters:
         - job_cluster_key: job_cluster
