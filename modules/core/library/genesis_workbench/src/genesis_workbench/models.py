@@ -5,14 +5,8 @@ from dataclasses import dataclass
 from enum import Enum
 from datetime import datetime
 
-class BaseInputAdapter(ABC):
-    """Asbtract class for an input adapter"""
-    @abstractmethod
-    def process(self,data):
-        return
-        
-class BaseOutputAdapter(ABC):
-    """Asbtract class for an output adapter"""
+class BaseAdapter(ABC):
+    """Asbtract class for an input/output adapter"""
     @abstractmethod
     def process(self,data):
         return
@@ -20,8 +14,8 @@ class BaseOutputAdapter(ABC):
 class GWBModel(PythonModel, ABC):
     """This class that will wrap any pyfunc model with adapters"""
     def __init__(self, 
-                 input_adapter:BaseInputAdapter,
-                 output_adapter:BaseOutputAdapter,
+                 input_adapter:BaseAdapter,
+                 output_adapter:BaseAdapter,
                  model:PythonModel):
         
         self.input_adapter = input_adapter
@@ -56,6 +50,9 @@ class GWBModelInfo:
     model_description_url : str #website to find more details about model
     model_uc_name : str
     model_uc_version : int
+    model_input_schema : dict[str,str]
+    model_output_schema : dict[str,str]
+    model_params_schema : dict[str,str]
     model_uc_added_by : str #id of user
     model_uc_added_date : datetime
     is_model_deployed : bool
@@ -64,4 +61,5 @@ class GWBModelInfo:
     model_deploy_platform : ModelDeployPlatform
     model_invoke_url : str
 
-    
+
+
