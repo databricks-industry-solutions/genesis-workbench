@@ -38,6 +38,9 @@ CREATE TABLE models (
     model_uc_added_by STRING,
     model_uc_added_date TIMESTAMP,
     is_model_deployed BOOLEAN,
+    model_input_schema VARIANT,
+    model_output_schema VARIANT,
+    model_params_schema VARIANT,          
     model_deployed_date TIMESTAMP,
     model_deployed_by STRING,
     model_deploy_platform STRING, -- modelserving, dcs etc
