@@ -4,7 +4,7 @@ variables:
     default: ${workspace.current_user.userName}
   current_working_directory:
     description: Working directory or bundle root.
-    default: /Users/${var.current_user}/.bundle/${bundle.name}/${bundle.target}
+    default: /Workspace/Users/${var.current_user}/.bundle/${bundle.name}/${bundle.target}
   catalog_name:
     description: primary catalog where data, models, and files are stored for this project.
     default: genesis_workbench 
