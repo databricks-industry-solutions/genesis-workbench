@@ -12,7 +12,10 @@ tags = dbutils.widgets.get("tags")
 #schema = "dev_scn_dbx_genesis_workbench_core"
 #sql_warehouse_name = "dev_scn_dbx_genesis_workbench_warehouse"
 #tags = '{"owner":"genesis_workbench","tag_name1":"value1"}'
-#current_user_name = dbutils.notebook.entry_point.getDbutils().notebook().getContext().userName().get()
+
+# COMMAND ----------
+
+current_user_name = dbutils.notebook.entry_point.getDbutils().notebook().getContext().userName().get()
 
 # COMMAND ----------
 
