@@ -6,6 +6,12 @@ schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
+#for testing
+#catalog = "genesis_workbench"
+#schema = "dev_scn_dbx_genesis_workbench_core"
+
+# COMMAND ----------
+
 print(f"Catalog: {catalog}")
 print(f"Schema: {schema}")
 
