@@ -4,12 +4,14 @@ catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 sql_warehouse_name = dbutils.widgets.get("sql_warehouse_name")
 tags = dbutils.widgets.get("tags")
+secret_scope = dbutils.widgets.get("secret_scope")
 
 # COMMAND ----------
 
 #for testing 
 #catalog = "genesis_workbench"
 #schema = "dev_scn_dbx_genesis_workbench_core"
+#secret_scope="dbx_genesis_wb"
 #sql_warehouse_name = "dev_scn_dbx_genesis_workbench_warehouse"
 #tags = '{"owner":"genesis_workbench","tag_name1":"value1"}'
 
@@ -20,9 +22,24 @@ current_user_name = dbutils.notebook.entry_point.getDbutils().notebook().getCont
 # COMMAND ----------
 
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.errors.platform import ResourceAlreadyExists
 from databricks.sdk.service import sql
 import datetime
 import json
+
+w = WorkspaceClient()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Create Secret Scope
+
+# COMMAND ----------
+
+try:
+    w.secrets.create_scope(scope=secret_scope)
+except ResourceAlreadyExists as e:
+    print("Secret scope already exists")
 
 # COMMAND ----------
 
@@ -35,7 +52,6 @@ import json
 resource_tags = json.loads(tags)
 sql_warehouse_tags = [sql.EndpointTagPair(key=key, value=value) for key, value in resource_tags.items()]
 
-w = WorkspaceClient()
 gwb_warehouse = w.warehouses.create_and_wait(name=sql_warehouse_name,
                 cluster_size="2X-Small",
                 enable_serverless_compute=True,
@@ -44,6 +60,14 @@ gwb_warehouse = w.warehouses.create_and_wait(name=sql_warehouse_name,
                 tags=sql.EndpointTags(custom_tags=sql_warehouse_tags),
                 timeout= datetime.timedelta(minutes=20)
             )
+
+# COMMAND ----------
+
+sql_warehouse_hostname = gwb_warehouse.odbc_params.hostname
+sql_warehouse_hhtp_path = gwb_warehouse.odbc_params.path
+
+w.secrets.put_secret(scope=secret_scope, key="sql_warehouse_hostname", string_value=sql_warehouse_hostname)
+w.secrets.put_secret(scope=secret_scope, key="sql_warehouse_http_path", string_value=sql_warehouse_hhtp_path)
 
 # COMMAND ----------
 
