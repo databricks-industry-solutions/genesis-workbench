@@ -47,3 +47,16 @@ CREATE TABLE models (
     model_invoke_url STRING
 )
 """)
+
+# COMMAND ----------
+
+spark.sql("DROP TABLE IF EXISTS non_dab_resources")
+
+spark.sql(f"""
+CREATE TABLE non_dab_resources (
+    resource_name STRING,
+    resource_type STRING,    
+    resource_metadata VARIANT,
+    created_date TIMESTAMP,
+    created_by STRING)
+""")
