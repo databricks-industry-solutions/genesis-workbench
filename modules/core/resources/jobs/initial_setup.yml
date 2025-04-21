@@ -30,7 +30,6 @@ resources:
         - name: catalog
           default: ${var.catalog_name}
         - name: schema
-          default: ${var.core_schema_name}
-        - name: tags
-          default: ${var.common_resource_tags}      
+          default: ${resources.schemas.core_workbench.name}
+
 

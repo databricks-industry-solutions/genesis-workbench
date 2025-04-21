@@ -40,4 +40,6 @@ variables:
   
   common_resource_tags:
     description: Resource tags
-    default: '{"owner":"genesis_workbench","tag_name1":"value1"}'
+    default: 
+      - owner: genesis_workbench
+      - created_by: ${var.current_user}
