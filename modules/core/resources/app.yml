@@ -8,8 +8,8 @@ resources:
       source_code_path: ../app
 
       # The resources in the bundle which this app has access to. This binds the resource in the app with the bundle resource.
-      #resources:
-      #  - name: 'app-job'
-      #    job:
-      #      id: ${resources.jobs.hello_world.id}
-      #      permission: 'CAN_MANAGE_RUN'
+      resources:
+        - name: "sql_warehouse"
+          sql_warehouse:
+            id: ${var.sql_warehouse_id}
+            permission: "CAN_USE"
