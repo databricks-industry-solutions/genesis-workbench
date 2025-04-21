@@ -9,11 +9,10 @@ include:
   - resources/app.yml
   - resources/volumes/libraries.yml
     
-artifacts:
-    genesis_workbench:
-      type: whl
-      build: poetry build 
-      path: library/genesis_workbench
+# artifacts:
+#     genesis_workbench:
+#       type: whl
+#       path: library/genesis_workbench/dist
 
 sync:
   paths:
