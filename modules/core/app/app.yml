@@ -7,4 +7,6 @@ command: [
 env:
   - name: STREAMLIT_BROWSER_GATHER_USAGE_STATS
     value: "false"
+  - name: SQL_WAREHOUSE
+    valueFrom: "sql_warehouse"
 

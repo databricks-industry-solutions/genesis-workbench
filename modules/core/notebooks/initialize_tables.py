@@ -6,6 +6,12 @@ schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
+#for testing
+#catalog = "genesis_workbench"
+#schema = "dev_scn_dbx_genesis_workbench_core"
+
+# COMMAND ----------
+
 print(f"Catalog: {catalog}")
 print(f"Schema: {schema}")
 
@@ -38,9 +44,25 @@ CREATE TABLE models (
     model_uc_added_by STRING,
     model_uc_added_date TIMESTAMP,
     is_model_deployed BOOLEAN,
+    model_input_schema VARIANT,
+    model_output_schema VARIANT,
+    model_params_schema VARIANT,          
     model_deployed_date TIMESTAMP,
     model_deployed_by STRING,
     model_deploy_platform STRING, -- modelserving, dcs etc
     model_invoke_url STRING
 )
+""")
+
+# COMMAND ----------
+
+spark.sql("DROP TABLE IF EXISTS non_dab_resources")
+
+spark.sql(f"""
+CREATE TABLE non_dab_resources (
+    resource_name STRING,
+    resource_type STRING,    
+    resource_metadata VARIANT,
+    created_date TIMESTAMP,
+    created_by STRING)
 """)
