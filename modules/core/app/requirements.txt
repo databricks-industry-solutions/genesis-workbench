@@ -1,2 +1,4 @@
 streamlit==1.44.0
 databricks-sdk==0.50.0
+
+genesis_workbench-0.1.0-py3-none-any.whl
