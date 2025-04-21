@@ -23,6 +23,10 @@ variables:
     description: A prefix for resources created in a shared environment
     default: dbx_gwb
   
+  secret_scope:
+    description: The secret scope to store app specific secrets
+    default: dbx_gwb_secret_scope
+
   app_name:
     description: Name of the databricks app for UI
     default: genesis-workbench
@@ -30,9 +34,9 @@ variables:
   dev_user_prefix:
     description: A prefix for resources in dev environment
 
-  sql_warehouse_name:
-    description: Name of the SQL Warehouse that will be created
-    default: dbx_genesis_workbench_warehouse
+  sql_warehouse_id:
+    description: Id of the SQL Warehouse that will be used by the app
+    default: 0000
   
   common_resource_tags:
     description: Resource tags

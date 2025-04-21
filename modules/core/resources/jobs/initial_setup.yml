@@ -12,11 +12,11 @@ resources:
           notebook_task:
             notebook_path: ../../notebooks/initialize_tables.py
 
-        - task_key: create_non_dab_resources
-          notebook_task:
-            notebook_path: ../../notebooks/create_non_dab_resources.py
-          depends_on:
-            - task_key: create_table_task
+        # - task_key: create_non_dab_resources
+        #   notebook_task:
+        #     notebook_path: ../../notebooks/create_non_dab_resources.py
+        #   depends_on:
+        #     - task_key: create_table_task
 
       environments:
         - environment_key: Default
@@ -31,8 +31,6 @@ resources:
           default: ${var.catalog_name}
         - name: schema
           default: ${var.core_schema_name}
-        - name: sql_warehouse_name
-          default: ${var.sql_warehouse_name}
         - name: tags
           default: ${var.common_resource_tags}      
 
