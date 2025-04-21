@@ -1,5 +1,5 @@
 bundle:
-  name: genesis_workbench
+  name: core
   databricks_cli_version: ">=0.236.*"
 
 include:
