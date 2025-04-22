@@ -10,3 +10,5 @@ scratch/**
 **/dist/
 poetry.lock
 .DS_Store
+*.gz
+

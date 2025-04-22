@@ -1,7 +1,35 @@
 import streamlit as st
 import pandas as pd
+from genesis_workbench.models import GWBModel
+from genesis_workbench.workbench import execute_query
+
+# def get_available_models():
+#     query_str = "SELECT model_name, model_uc_name FROM {uc_catalog_name}.{uc_schema_name}.models"
+#     df = execute_query(query_str)
+
 
 def display_settings_tab(data:dict):
+
+    p1,p2 = st.columns([2,1])
+
+    with p1:
+        st.markdown("###### Import Models:")
+        col1, col2, = st.columns([1,1], vertical_alignment="bottom")    
+        with col1:
+            select_models = st.selectbox("Source:",["Unity Catalog","Hugging Face","PyPi"],label_visibility="visible")
+
+        with col2:
+            import_button = st.button('Import',key="btn_import")
+
+        st.markdown("###### Available Models:")
+        col1, col2, = st.columns([1,1])    
+        with col1:
+            select_models = st.selectbox("Model:",["scGPT","Nicheformer"],label_visibility="collapsed",)
+
+        with col2:
+            deploy_button = st.button('Deploy',key="btn_deploy")
+
+
     col1,col2 = st.columns([2,1])
     with col1:
         st.markdown("###### Deployed Models")
@@ -24,25 +52,7 @@ def display_settings_tab(data:dict):
                     on_select="rerun",
                     selection_mode="single-row")
    
-    st.markdown("###### Available Models:")
-    
-    p1,p2 = st.columns([2,1])
 
-    with p1:
-        col1, col2, = st.columns([1,1])    
-        with col1:
-            select_models = st.selectbox("Model:",["scGPT","Nicheformer"],label_visibility="collapsed",)
-
-        with col2:
-            deploy_button = st.button('Deploy',key="btn_deploy")
-
-        st.markdown("###### Import Models:")
-        col1, col2, = st.columns([1,1], vertical_alignment="bottom")    
-        with col1:
-            select_models = st.selectbox("Source:",["Unity Catalog","Hugging Face","PyPi"],label_visibility="visible")
-
-        with col2:
-            import_button = st.button('Import',key="btn_import")
 
 
 def display_embeddings_tab(data:dict):
