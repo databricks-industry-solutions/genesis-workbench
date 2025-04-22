@@ -1,11 +1,15 @@
 import streamlit as st
 import pandas as pd
-from genesis_workbench.models import GWBModel
+from genesis_workbench.models import get_available_models
 from genesis_workbench.workbench import execute_query
 
-# def get_available_models():
-#     query_str = "SELECT model_name, model_uc_name FROM {uc_catalog_name}.{uc_schema_name}.models"
-#     df = execute_query(query_str)
+available_models_df = get_available_models()
+available_models_df["model_labels"] = (available_models_df["model_id"].astype(str) + " - " 
+                                       + available_models_df["model_display_name"].astype(str) + " [ " 
+                                       + available_models_df["model_uc_name"].astype(str) + " v"
+                                       + available_models_df["model_uc_version"].astype(str) + " ]"
+                                       )
+
 
 
 def display_settings_tab(data:dict):
@@ -24,7 +28,7 @@ def display_settings_tab(data:dict):
         st.markdown("###### Available Models:")
         col1, col2, = st.columns([1,1])    
         with col1:
-            select_models = st.selectbox("Model:",["scGPT","Nicheformer"],label_visibility="collapsed",)
+            select_models = st.selectbox("Model:",available_models_df["model_labels"],label_visibility="collapsed",)
 
         with col2:
             deploy_button = st.button('Deploy',key="btn_deploy")
