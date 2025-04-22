@@ -20,11 +20,11 @@ class WarehouseInfo:
     http_path: str
 
 def credential_provider():
-  config = Config(
-    host          = os.getenv("DATABRICKS_HOSTNAME"),
-    client_id     = os.getenv("DATABRICKS_CLIENT_ID"),
-    client_secret = os.getenv("DATABRICKS_CLIENT_SECRET"))
-  return oauth_service_principal(config)
+    config = Config(
+        host          = os.getenv("DATABRICKS_HOSTNAME"),
+        client_id     = os.getenv("DATABRICKS_CLIENT_ID"),
+        client_secret = os.getenv("DATABRICKS_CLIENT_SECRET"))
+    return oauth_service_principal(config)
 
 def get_warehouse_details_from_id(warehouse_id) -> WarehouseInfo:
     w = WorkspaceClient()
@@ -38,13 +38,19 @@ def get_warehouse_details_from_id(warehouse_id) -> WarehouseInfo:
     )
 
 def db_connect():
+
     warehouse_id = os.getenv("SQL_WAREHOUSE")
     warehouse_details = get_warehouse_details_from_id(warehouse_id)
     os.environ["DATABRICKS_HOSTNAME"] = warehouse_details.hostname
-
-    return sql.connect(server_hostname = warehouse_details.hostname,
-        http_path = warehouse_details.http_path,
-        credentials_provider = credential_provider)
+    
+    if os.getenv("IS_LOCAL_TEST","")=="Y":
+        return sql.connect(server_hostname = warehouse_details.hostname,
+            http_path = warehouse_details.http_path,
+            access_token = os.getenv("DATABRICKS_TOKEN"))
+    else:
+        return sql.connect(server_hostname = warehouse_details.hostname,
+            http_path = warehouse_details.http_path,
+            credentials_provider = credential_provider)
 
 def get_app_context() -> AppContext:
     context_str = ""
