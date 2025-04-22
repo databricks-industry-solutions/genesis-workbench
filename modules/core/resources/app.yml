@@ -13,3 +13,6 @@ resources:
           sql_warehouse:
             id: ${var.sql_warehouse_id}
             permission: "CAN_USE"
+
+
+          

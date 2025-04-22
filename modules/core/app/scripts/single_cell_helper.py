@@ -1,5 +1,12 @@
 import streamlit as st
 import pandas as pd
+from genesis_workbench.models import GWBModel
+from genesis_workbench.workbench import execute_query
+
+# def get_available_models():
+#     query_str = "SELECT model_name, model_uc_name FROM {uc_catalog_name}.{uc_schema_name}.models"
+#     df = execute_query(query_str)
+
 
 def display_settings_tab(data:dict):
 
