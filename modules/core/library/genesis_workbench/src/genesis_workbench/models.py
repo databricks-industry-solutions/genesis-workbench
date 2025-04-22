@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from datetime import datetime
+from .workbench import execute_query
 
 class BaseAdapter(ABC):
     """Asbtract class for an input/output adapter"""
@@ -28,7 +29,6 @@ class GWBModel(PythonModel, ABC):
                 self.input_adapter.process(model_input)
             )
         )
-
 
 class ModelSource(Enum):
     UNITY_CATALOG = 1

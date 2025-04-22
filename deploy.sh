@@ -2,7 +2,7 @@
 
 if [ "$#" -lt 2 ]; then
     echo "Usage: $0 <path_to_working_directory> <env>  <additional build variables>"
-    echo 'Example: deploy core dev --var="dev_user_prefix=scn"'
+    echo 'Example: deploy core dev --var="dev_user_prefix=scn,core_catalog_name=genesis_workbench,core_schema_name=dev_srijit_nair_dbx_genesis_workbench_core"'
     exit 1
 fi
 

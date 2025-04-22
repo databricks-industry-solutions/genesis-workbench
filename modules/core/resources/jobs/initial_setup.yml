@@ -28,8 +28,9 @@ resources:
 
       parameters:
         - name: catalog
-          default: ${var.catalog_name}
+          default: ${var.core_catalog_name}
         - name: schema
-          default: ${resources.schemas.core_workbench.name}
+          #default: ${resources.schemas.core_workbench.name}
+          default: ${var.core_schema_name}
 
 

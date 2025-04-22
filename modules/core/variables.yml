@@ -7,14 +7,6 @@ variables:
     description: Working directory or bundle root.
     default: /Workspace/Users/${var.current_user}/.bundle/genesis_workbench/${bundle.name}/${bundle.target}
   
-  catalog_name:
-    description: primary catalog where data, models, and files are stored for this project.
-    default: genesis_workbench 
-  
-  core_schema_name:
-    description: The schema where core components will be installed.
-    default: dbx_genesis_workbench_core 
-  
   serving_endpoint:
     description: queryable serving endpoint for app to access
     default: databricks-meta-llama-3-3-70b-instruct
@@ -31,15 +23,23 @@ variables:
     description: Name of the databricks app for UI
     default: genesis-workbench
 
-  dev_user_prefix:
-    description: A prefix for resources in dev environment
-
   sql_warehouse_id:
     description: Id of the SQL Warehouse that will be used by the app
     default: 0000
-  
+
   common_resource_tags:
     description: Resource tags
     default: 
       - owner: genesis_workbench
       - created_by: ${var.current_user}
+
+  dev_user_prefix:
+    description: A prefix for resources in dev environment
+
+  core_catalog_name:
+    description: primary catalog where data, models, and files are stored for this project.
+    #default: genesis_workbench 
+  
+  core_schema_name:
+    description: The schema where core components will be installed.
+    #default: dbx_genesis_workbench_core 
