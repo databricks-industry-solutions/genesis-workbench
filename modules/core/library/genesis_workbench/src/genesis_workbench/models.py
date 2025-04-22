@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from datetime import datetime
-from .workbench import execute_query
+from .workbench import get_app_context , execute_query
 
 class BaseAdapter(ABC):
     """Asbtract class for an input/output adapter"""
@@ -61,5 +61,14 @@ class GWBModelInfo:
     model_deploy_platform : ModelDeployPlatform
     model_invoke_url : str
 
-
-
+def get_available_models():
+    """Gets all models that are available for deployment"""
+    app_context = get_app_context()
+    query = f"SELECT \
+                model_id, model_name, model_display_name, model_source_version, model_uc_name, model_uc_version \
+            FROM \
+                {app_context.core_catalog_name}.{app_context.core_schema_name}.models \
+            WHERE \
+                is_model_deployed = false"
+    result_df = execute_query(query)
+    return result_df
