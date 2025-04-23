@@ -2,7 +2,7 @@ import mlflow
 from mlflow.pyfunc import PythonModel
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, asdict
-from enum import Enum
+from enum import StrEnum, auto
 from datetime import datetime
 from typing import Union, List
 from .workbench import UserInfo, get_app_context , execute_select_query, execute_upsert_delete_query
@@ -31,14 +31,19 @@ class GWBModel(PythonModel, ABC):
             )
         )
 
-class ModelSource(Enum):
-    UNITY_CATALOG = 1
-    PYPI = 2
-    HUGGING_FACE = 3
+class ModelSource(StrEnum):
+    UNITY_CATALOG = auto()
+    PYPI = auto()
+    HUGGINGFACE = auto()
 
-class ModelDeployPlatform(Enum):
-    MODEL_SERVING = 1
-    EXTERNAL = 2
+class ModelCategory(StrEnum):
+    SINGLE_CELL = auto()
+    PROTEIN_FOLDING = auto()
+    SMALL_MOLECULES = auto()
+
+class ModelDeployPlatform(StrEnum):
+    MODEL_SERVING = auto()
+    EXTERNAL = auto()
 
 @dataclass
 class GWBModelInfo:
@@ -51,18 +56,27 @@ class GWBModelInfo:
     model_description_url : str #website to find more details about model
     model_uc_name : str
     model_uc_version : int
+    model_owner : str
+    model_category : ModelCategory
     model_input_schema : str
     model_output_schema : str
     model_params_schema : str
     model_added_by : str #id of user
     model_added_date : datetime
     is_model_deployed : bool
+    deployment_ids: List[int]
+
+@dataclass
+class ModelDeploymentInfo:
+    """Class that contains information on model deployments"""
+    deployment_id:int
+    model_id:int
     model_deployed_date : datetime
     model_deployed_by : str
     model_deploy_platform : ModelDeployPlatform
     model_invoke_url : str
 
-def get_available_models():
+def get_available_models(model_category : ModelCategory):
     """Gets all models that are available for deployment"""
     app_context = get_app_context()
     query = f"SELECT \
@@ -70,19 +84,24 @@ def get_available_models():
             FROM \
                 {app_context.core_catalog_name}.{app_context.core_schema_name}.models \
             WHERE \
-                is_model_deployed = false"
+                is_model_deployed = false AND model_category = '{str(model_category)}' "
+    
+    
     result_df = execute_select_query(query)
     return result_df
 
-def get_deployed_models():
+def get_deployed_models(model_category : ModelCategory):
     """Gets all models that are available for deployment"""
     app_context = get_app_context()
+    
     query = f"SELECT \
-                model_id, model_display_name, model_source_version, model_uc_name, model_uc_version, date_format(model_deployed_date,'MMM dd,yyyy') as deployed_date \
+                model_id, model_display_name, model_source_version, model_uc_name,\
+                      model_uc_version, deployment_ids\
             FROM \
                 {app_context.core_catalog_name}.{app_context.core_schema_name}.models \
             WHERE \
-                is_model_deployed = true"
+                is_model_deployed = true AND model_category = '{str(model_category)}' "
+    
     result_df = execute_select_query(query)
     return result_df
 
@@ -113,7 +132,8 @@ def upsert_model_info(model_info : GWBModelInfo):
     execute_upsert_delete_query(insert_query)
 
 
-def import_model_from_uc(model_uc_name : str,
+def import_model_from_uc(model_category : ModelCategory,
+                      model_uc_name : str,
                       model_uc_version: int, 
                       user_info: UserInfo,
                       model_name: None,
@@ -139,6 +159,7 @@ def import_model_from_uc(model_uc_name : str,
         model_source_version = model_source_version,
         model_origin = ModelSource.UNITY_CATALOG,
         model_description_url = model_description_url, #website to find more details about model
+        model_category = str(model_category),
         model_uc_name = model_uc_name,
         model_uc_version = model_uc_version,
         model_input_schema = model_signature.get("inputs"),
@@ -148,10 +169,7 @@ def import_model_from_uc(model_uc_name : str,
         model_uc_added_by = user_info.user_email, #id of user
         model_uc_added_date = datetime.now(),
         is_model_deployed = False,
-        model_deployed_date = None,
-        model_deployed_by = None,
-        model_deploy_platform = None,
-        model_invoke_url = None
+        
     )
 
     upsert_model_info(gwb_model)

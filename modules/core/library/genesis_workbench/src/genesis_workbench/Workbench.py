@@ -43,13 +43,14 @@ def get_warehouse_details_from_id(warehouse_id) -> WarehouseInfo:
     )
 
 def db_connect():
-
     warehouse_id = os.getenv("SQL_WAREHOUSE")
     warehouse_details = get_warehouse_details_from_id(warehouse_id)
     os.environ["DATABRICKS_HOSTNAME"] = warehouse_details.hostname
     
+    print(warehouse_details.hostname)
+
     if os.getenv("IS_LOCAL_TEST","")=="Y":
-        return sql.connect(server_hostname = warehouse_details.hostname,
+        return sql.connect(server_hostname = os.getenv("DATABRICKS_HOSTNAME"),
             http_path = warehouse_details.http_path,
             access_token = os.getenv("DATABRICKS_TOKEN"))
     else:
