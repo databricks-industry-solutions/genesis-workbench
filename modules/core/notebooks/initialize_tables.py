@@ -33,36 +33,51 @@ spark.sql("DROP TABLE IF EXISTS models")
 
 spark.sql(f"""
 CREATE TABLE models (
-    model_id BIGINT GENERATED ALWAYS AS IDENTITY,
+    model_id BIGINT GENERATED ALWAYS AS IDENTITY,          
     model_name STRING,
     model_display_name STRING,
     model_source_version STRING,
     model_origin STRING, --uc, huggingface, pypi, bionemo, etc
     model_description_url STRING, --website to find more details about model
+    model_category STRING, -- feature to which model is mapped
     model_uc_name STRING,
     model_uc_version STRING,
-    model_uc_added_by STRING,
-    model_uc_added_date TIMESTAMP,
+    model_owner STRING,
+    model_added_by STRING,
+    model_added_date TIMESTAMP,    
+    model_input_schema STRING,
+    model_output_schema STRING,
+    model_params_schema STRING,
     is_model_deployed BOOLEAN,
-    model_input_schema VARIANT,
-    model_output_schema VARIANT,
-    model_params_schema VARIANT,          
+    deployment_ids ARRAY<BIGINT>
+)
+""")
+
+# COMMAND ----------
+
+spark.sql("DROP TABLE IF EXISTS model_deployments")
+
+spark.sql(f"""
+CREATE TABLE model_deployments (
+    deployment_id BIGINT,
+    model_id STRING,
+    input_adapter STRING,
+    output_adapter STRING,
     model_deployed_date TIMESTAMP,
     model_deployed_by STRING,
     model_deploy_platform STRING, -- modelserving, dcs etc
-    model_invoke_url STRING
-)
+    model_invoke_url STRING)
 """)
 
 # COMMAND ----------
 
 spark.sql("DROP TABLE IF EXISTS non_dab_resources")
 
-spark.sql(f"""
-CREATE TABLE non_dab_resources (
-    resource_name STRING,
-    resource_type STRING,    
-    resource_metadata VARIANT,
-    created_date TIMESTAMP,
-    created_by STRING)
-""")
+# spark.sql(f"""
+# CREATE TABLE non_dab_resources (
+#     resource_name STRING,
+#     resource_type STRING,    
+#     resource_metadata VARIANT,
+#     created_date TIMESTAMP,
+#     created_by STRING)
+# """)

@@ -12,6 +12,11 @@ class AppContext:
     core_schema_name: str
 
 @dataclass
+class UserInfo:
+    user_email : str
+    user_name: str
+
+@dataclass
 class WarehouseInfo:
     id:str
     name: str
@@ -20,11 +25,11 @@ class WarehouseInfo:
     http_path: str
 
 def credential_provider():
-  config = Config(
-    host          = os.getenv("DATABRICKS_HOSTNAME"),
-    client_id     = os.getenv("DATABRICKS_CLIENT_ID"),
-    client_secret = os.getenv("DATABRICKS_CLIENT_SECRET"))
-  return oauth_service_principal(config)
+    config = Config(
+        host          = os.getenv("DATABRICKS_HOSTNAME"),
+        client_id     = os.getenv("DATABRICKS_CLIENT_ID"),
+        client_secret = os.getenv("DATABRICKS_CLIENT_SECRET"))
+    return oauth_service_principal(config)
 
 def get_warehouse_details_from_id(warehouse_id) -> WarehouseInfo:
     w = WorkspaceClient()
@@ -41,10 +46,17 @@ def db_connect():
     warehouse_id = os.getenv("SQL_WAREHOUSE")
     warehouse_details = get_warehouse_details_from_id(warehouse_id)
     os.environ["DATABRICKS_HOSTNAME"] = warehouse_details.hostname
+    
+    print(warehouse_details.hostname)
 
-    return sql.connect(server_hostname = warehouse_details.hostname,
-        http_path = warehouse_details.http_path,
-        credentials_provider = credential_provider)
+    if os.getenv("IS_LOCAL_TEST","")=="Y":
+        return sql.connect(server_hostname = os.getenv("DATABRICKS_HOSTNAME"),
+            http_path = warehouse_details.http_path,
+            access_token = os.getenv("DATABRICKS_TOKEN"))
+    else:
+        return sql.connect(server_hostname = warehouse_details.hostname,
+            http_path = warehouse_details.http_path,
+            credentials_provider = credential_provider)
 
 def get_app_context() -> AppContext:
     context_str = ""
@@ -65,10 +77,15 @@ def get_app_context() -> AppContext:
 
     return appContext
 
-def execute_query(query)-> pd.DataFrame:
+def execute_select_query(query)-> pd.DataFrame:
     with(db_connect()) as connection:
         with connection.cursor() as cursor:
             cursor.execute(query)
             columns = [ col_desc[0] for col_desc in cursor.description]
             result = pd.DataFrame.from_records(cursor.fetchall(),columns=columns)
             return result
+        
+def execute_upsert_delete_query(query):
+    with(db_connect()) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(query)            
