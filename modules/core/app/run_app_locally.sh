@@ -21,3 +21,5 @@ export IS_LOCAL_TEST="Y"
 #export DATABRICKS_TOKEN="abcd1234"
 
 streamlit run home.py
+
+rm lib/*.whl

@@ -1,14 +1,5 @@
 import streamlit as st
 import pandas as pd
-from genesis_workbench.models import get_available_models
-from genesis_workbench.workbench import execute_query
-
-available_models_df = get_available_models()
-available_models_df["model_labels"] = (available_models_df["model_id"].astype(str) + " - " 
-                                       + available_models_df["model_display_name"].astype(str) + " [ " 
-                                       + available_models_df["model_uc_name"].astype(str) + " v"
-                                       + available_models_df["model_uc_version"].astype(str) + " ]"
-                                       )
 
 
 
@@ -44,13 +35,7 @@ def display_settings_tab(data:dict):
         with c2:
             st.button("Delete")
 
-    df = pd.DataFrame([
-        {"Model": "Teddy v1.0.3", "Deploy Date": "Apr 24, 2025"},
-        {"Model": "SCimilarity v0.0.3", "Deploy Date": "Feb 11, 2025"},
-        {"Model": "Geneformer v1.2.3", "Deploy Date": "Apr 24, 2025"},
-    ])
-
-    st.dataframe(df, 
+    st.dataframe(deployed_models_df, 
                     use_container_width=True,
                     hide_index=True,
                     on_select="rerun",

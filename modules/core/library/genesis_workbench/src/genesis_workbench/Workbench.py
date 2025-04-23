@@ -12,6 +12,11 @@ class AppContext:
     core_schema_name: str
 
 @dataclass
+class UserInfo:
+    user_email : str
+    user_name: str
+
+@dataclass
 class WarehouseInfo:
     id:str
     name: str
@@ -71,10 +76,15 @@ def get_app_context() -> AppContext:
 
     return appContext
 
-def execute_query(query)-> pd.DataFrame:
+def execute_select_query(query)-> pd.DataFrame:
     with(db_connect()) as connection:
         with connection.cursor() as cursor:
             cursor.execute(query)
             columns = [ col_desc[0] for col_desc in cursor.description]
             result = pd.DataFrame.from_records(cursor.fetchall(),columns=columns)
             return result
+        
+def execute_upsert_delete_query(query):
+    with(db_connect()) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(query)            
