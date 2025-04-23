@@ -3,7 +3,7 @@ import pandas as pd
 
 
 
-def display_settings_tab(data:dict):
+def display_settings_tab(available_models_df,deployed_models_df):
 
     p1,p2 = st.columns([2,1])
 
@@ -44,7 +44,7 @@ def display_settings_tab(data:dict):
 
 
 
-def display_embeddings_tab(data:dict):
+def display_embeddings_tab(deployed_models_df):
     
     col1,col2 = st.columns([1,1])
     with col1:
@@ -53,13 +53,8 @@ def display_embeddings_tab(data:dict):
         st.button("View Past Runs")    
 
     st.write("Select Models:")
-    df = pd.DataFrame([
-        {"Model": "Teddy v1.0.3", "Deploy Date": "Apr 24, 2025"},
-        {"Model": "SCimilarity v0.0.3", "Deploy Date": "Feb 11, 2025"},
-        {"Model": "Geneformer v1.2.3", "Deploy Date": "Apr 24, 2025"},
-    ])
 
-    st.dataframe(df, 
+    st.dataframe(deployed_models_df, 
                     use_container_width=True,
                     hide_index=True,
                     on_select="rerun",
