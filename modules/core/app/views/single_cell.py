@@ -175,7 +175,7 @@ with st.spinner("Wait"):
         deployed_models_df = get_deployed_models(ModelCategory.SINGLE_CELL)
         deployed_models_df.columns = ["Id", "Name", "Source Version", "UC Name", "UC Version", "Deployment Ids"]
 
-        st.session_state["deployed_models_df"] = available_models_df
+        st.session_state["deployed_models_df"] = deployed_models_df
     deployed_models_df = st.session_state["deployed_models_df"]
 
 
