@@ -1,7 +1,6 @@
 import streamlit as st
 import os
-from genesis_workbench.models import GWBModel
-from genesis_workbench.workbench import get_app_context, execute_query
+from genesis_workbench.workbench import get_app_context
 
 st.title(":material/settings: Settings")
 
@@ -17,6 +16,3 @@ with general_tab:
         st.text_input("Application Schema Location: ", f"{ctx.core_catalog_name}.{ctx.core_schema_name}")
         
         st.write(f"SQL Warehouse Host Name:{os.getenv('SQL_WAREHOUSE','NONE')}")
-
-        df=execute_query(f"SELECT model_name, model_uc_name FROM {ctx.core_catalog_name}.{ctx.core_schema_name}.models")
-        st.dataframe(df)
