@@ -28,7 +28,7 @@ def display_import_model_uc_dialog():
             fetch_model_info_clicked = st.form_submit_button(":material/refresh:")
     
     if fetch_model_info_clicked:
-        with st.spinner("Wait"):
+        with st.spinner("Getting model info"):
             try:
                 model_info = None
                 model_info = get_uc_model_info(uc_model_name, uc_model_version)
@@ -51,7 +51,7 @@ def display_import_model_uc_dialog():
                 uc_import_model_clicked = True
 
     if uc_import_model_clicked:
-        with st.spinner("Wait"):
+        with st.spinner("Importing model"):
             try:
                 import_model_from_uc(model_category = ModelCategory.SINGLE_CELL,
                     model_uc_name = uc_model_name,
@@ -70,9 +70,14 @@ def display_import_model_uc_dialog():
         if model_import_error:
             st.error("Error importing model") 
         else:
-            st.success("Model Imported Successfully")
-            if st.button("Close"):                
-                st.rerun()
+            st.success("Model Imported Successfully. Refreshing data..")
+            time.sleep(3)
+            del st.session_state["available_models_df"]
+            st.rerun()
+            #if st.button("Close"):
+            #    if "import_button" in st.session_state:
+            #        del st.session_state["import_button"]              
+            #    st.rerun()
 
 
 def display_settings_tab(available_models_df,deployed_models_df):
@@ -160,7 +165,7 @@ def display_embeddings_tab(deployed_models_df):
         st.write("There are no deployed models")
 
 #load data for page
-with st.spinner("Wait"):
+with st.spinner("Loading data"):
     if "available_models_df" not in st.session_state:
             available_models_df = get_available_models(ModelCategory.SINGLE_CELL)
             available_models_df["model_labels"] = (available_models_df["model_id"].astype(str) + " - " 
