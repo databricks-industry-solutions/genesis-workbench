@@ -5,7 +5,7 @@ from databricks import sql
 import os
 import pandas as pd
 from dataclasses import dataclass
-
+import streamlit as st
 @dataclass
 class AppContext:
     core_catalog_name : str
@@ -15,6 +15,9 @@ class AppContext:
 class UserInfo:
     user_email : str
     user_name: str
+    user_id: str
+    user_access_token:str
+    user_display_name : str
 
 @dataclass
 class WarehouseInfo:
@@ -23,6 +26,28 @@ class WarehouseInfo:
     cluster_size: str
     hostname: str
     http_path: str
+
+def get_user_info():
+    headers = st.context.headers
+    user_access_token = headers.get("X-Forwarded-Access-Token")
+    user_name=headers.get("X-Forwarded-Preferred-Username")
+    user_display_name = ""
+    if user_access_token:
+        # Initialize WorkspaceClient with the user's token
+        w = WorkspaceClient(token=user_access_token, auth_type="pat")
+        # Get current user information
+        current_user = w.current_user.me()
+        # Display user information
+        user_display_name = current_user.display_name
+        
+
+    return UserInfo(
+        user_name=user_name,
+        user_email=headers.get("X-Forwarded-Email"),
+        user_id=headers.get("X-Forwarded-User"),
+        user_access_token = headers.get("X-Forwarded-Access-Token"),
+        user_display_name = user_display_name if user_display_name != "" else user_name
+    )
 
 def credential_provider():
     config = Config(
@@ -46,8 +71,6 @@ def db_connect():
     warehouse_id = os.getenv("SQL_WAREHOUSE")
     warehouse_details = get_warehouse_details_from_id(warehouse_id)
     os.environ["DATABRICKS_HOSTNAME"] = warehouse_details.hostname
-    
-    print(warehouse_details.hostname)
 
     if os.getenv("IS_LOCAL_TEST","")=="Y":
         return sql.connect(server_hostname = os.getenv("DATABRICKS_HOSTNAME"),
@@ -84,7 +107,12 @@ def execute_select_query(query)-> pd.DataFrame:
             columns = [ col_desc[0] for col_desc in cursor.description]
             result = pd.DataFrame.from_records(cursor.fetchall(),columns=columns)
             return result
-        
+
+def execute_parameterized_inserts(param_query : str, list_of_records:list[list]) :
+    with(db_connect()) as connection:
+        with connection.cursor() as cursor:
+            cursor.executemany(param_query, list_of_records )
+
 def execute_upsert_delete_query(query):
     with(db_connect()) as connection:
         with connection.cursor() as cursor:

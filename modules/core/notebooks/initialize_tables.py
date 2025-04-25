@@ -49,7 +49,7 @@ CREATE TABLE models (
     model_output_schema STRING,
     model_params_schema STRING,
     is_model_deployed BOOLEAN,
-    deployment_ids ARRAY<BIGINT>
+    deployment_ids STRING
 )
 """)
 
