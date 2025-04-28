@@ -1,5 +1,8 @@
 # Databricks notebook source
 #parameters to the notebook
+dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
+dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
+
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 
