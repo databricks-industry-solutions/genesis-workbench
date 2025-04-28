@@ -11,10 +11,6 @@ variables:
     description: queryable serving endpoint for app to access
     default: databricks-meta-llama-3-3-70b-instruct
   
-  resource_prefix:
-    description: A prefix for resources created in a shared environment
-    default: dbx_gwb
-  
   app_name:
     description: Name of the databricks app for UI
     default: genesis-workbench

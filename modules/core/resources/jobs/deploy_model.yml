@@ -8,15 +8,9 @@ resources:
           - ${var.current_user}
 
       tasks:
-        - task_key: create_table_task
+        - task_key: deploy_model_task
           notebook_task:
-            notebook_path: ../../notebooks/initialize_tables.py
-
-        # - task_key: create_non_dab_resources
-        #   notebook_task:
-        #     notebook_path: ../../notebooks/create_non_dab_resources.py
-        #   depends_on:
-        #     - task_key: create_table_task
+            notebook_path: ../../notebooks/deploy_model.py
 
       environments:
         - environment_key: Default
@@ -30,7 +24,14 @@ resources:
         - name: catalog
           default: ${var.core_catalog_name}
         - name: schema
-          #default: ${resources.schemas.core_workbench.name}
           default: ${var.core_schema_name}
+        - name: fq_model_uc_name
+          default: ""
+        - name: model_version
+          default: '1' 
+        - name: workload_type
+          default: "GPU_SMALL"
+        - name: workload_size
+          default: SMALL
 
 
