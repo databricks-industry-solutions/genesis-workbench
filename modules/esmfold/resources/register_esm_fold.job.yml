@@ -9,15 +9,22 @@ resources:
 
       tasks:
         - task_key: notebook_task
-          job_cluster_key: job_cluster
           notebook_task:
             notebook_path: ../notebooks/esmfold.py
 
-      job_clusters:
-        - job_cluster_key: job_cluster
-          new_cluster:
-            spark_version: 15.4.x-cpu-ml-scala2.12
-            node_type_id: Standard_D3_v2
-            autoscale:
-                min_workers: 1
-                max_workers: 4
+      environments:
+        - environment_key: Default
+          spec:
+            client: '1'
+            dependencies:
+              - ../dist/*.whl
+              - databricks-sdk==0.50.0
+
+      # job_clusters:
+      #   - job_cluster_key: job_cluster
+      #     new_cluster:
+      #       spark_version: 15.4.x-cpu-ml-scala2.12
+      #       node_type_id: Standard_D3_v2
+      #       autoscale:
+      #           min_workers: 1
+      #           max_workers: 4
