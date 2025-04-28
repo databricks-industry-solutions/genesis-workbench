@@ -86,4 +86,33 @@ w.secrets.put_secret(scope=secret_scope, key="core_schema_name", string_value=sc
 
 # COMMAND ----------
 
+from dataclasses import dataclass
+
+@dataclass
+class MyClass:
+    id:str 
+    name:str
+    age:int
+
+cc = MyClass(name="test", age=10)
+
+# COMMAND ----------
+
+from dataclasses import asdict
+
+asdict(cc)
+
+# COMMAND ----------
+
+keys = []
+values = []
+for key, value in asdict(cc).items():
+    keys.append(key)
+    values.append(value)
+print(keys)
+print(values)
+
+
+# COMMAND ----------
+
 
