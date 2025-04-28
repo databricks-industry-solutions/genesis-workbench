@@ -1,13 +1,19 @@
 # Databricks notebook source
+import sys
+
+sys.path.append("../src")
+
 
 # COMMAND ----------
-from src.esmfold.esmfold import ESMFoldPyFunc
+
+from esmfold.esmfold import ESMFoldPyFunc
 
 # COMMAND ----------
-dbutils.widgets.text("catalog", "eswanson_genai", "Catalog")
-dbutils.widgets.text("schema", "genesis_workbench", "Schema")
+
+dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
+dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
 dbutils.widgets.text("model_name", "esmfold", "Model Name")
-dbutils.widgets.text("experiment_name", "eswanson_esmfold", "Experiment Name")
+dbutils.widgets.text("experiment_name", "dbx_genesis_workbench_modules", "Experiment Name")
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
@@ -29,12 +35,7 @@ EXPERIMENT_NAME = dbutils.widgets.get("experiment_name")
 # MAGIC #### Download model,tokenizer to the local disk of our compute
 
 # COMMAND ----------
-import sys
 
-sys.path.append("../src")
-
-
-# COMMAND ----------
 import mlflow
 import torch
 from transformers import AutoTokenizer, EsmForProteinFolding
@@ -54,9 +55,6 @@ import os
 
 from typing import Any, Dict, List, Optional
 
-
-# COMMAND ----------
-from protein_folding.protein_folding.esmfold import ESMFoldPyFunc
 
 # COMMAND ----------
 
@@ -127,17 +125,10 @@ with mlflow.start_run(run_name=f"register_{MODEL_NAME}"):
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ### Serve our model
-# MAGIC  - This process can also be achieved in the UI directly from a UC registered model
-# MAGIC  - Here we serve the model with code using the databricks-sdk
-# MAGIC  - This allows model serving to be achieved with code for easier
-# productionization of ML models
-# MAGIC  - Serving endpoints can auto capture information about model inputs and outputs
-# MAGIC    - These data are then tracked in **inference tables**
-# - we turn this feature on here (again, this can also be achieved in the UI)
+
 
 # COMMAND ----------
+
 # from databricks.sdk import WorkspaceClient
 # from databricks.sdk.service.serving import (
 #     EndpointCoreConfigInput,
@@ -197,5 +188,3 @@ with mlflow.start_run(run_name=f"register_{MODEL_NAME}"):
 #     )
 
 # print(status)
-
-# COMMAND ----------
