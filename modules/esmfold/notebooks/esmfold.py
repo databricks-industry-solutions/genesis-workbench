@@ -7,14 +7,12 @@ from src.esmfold.esmfold import ESMFoldPyFunc
 dbutils.widgets.text("catalog", "eswanson_genai", "Catalog")
 dbutils.widgets.text("schema", "genesis_workbench", "Schema")
 dbutils.widgets.text("model_name", "esmfold", "Model Name")
-dbutils.widgets.text("run_name", "eswanson_esmfold", "Run Name")
-dbutils.widgets.text("endpoint_name", "eswanson_esmfold", "Endpoint Name")
+dbutils.widgets.text("experiment_name", "eswanson_esmfold", "Experiment Name")
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
 MODEL_NAME = dbutils.widgets.get("model_name")
-RUN_NAME = dbutils.widgets.get("run_name")
-ENDPOINT_NAME = dbutils.widgets.get("endpoint_name")
+EXPERIMENT_NAME = dbutils.widgets.get("experiment_name")
 
 # COMMAND ----------
 
@@ -105,7 +103,9 @@ del tokenizer
 
 mlflow.set_registry_uri("databricks-uc")
 
-with mlflow.start_run(run_name=RUN_NAME):
+
+
+with mlflow.start_run(run_name=f"register_{MODEL_NAME}"):
     model_info = mlflow.pyfunc.log_model(
         artifact_path="esmfold",
         python_model=esmfold_model,
