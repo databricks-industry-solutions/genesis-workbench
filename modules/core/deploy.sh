@@ -11,6 +11,21 @@ fi
 ENV=$1
 EXTRA_PARAMS=${@: 2}
 
+echo ""
+echo "▶️ Extracting variables"
+echo ""
+
+var_strs="${EXTRA_PARAMS//--var=}"
+
+extracted_content=$(sed 's/.*"\([^"]*\)".*/\1/' <<< "$var_strs")
+rm -f env.env
+while read -d, -r pair; do
+  IFS='=' read -r key val <<<"$pair"
+  echo "export $key=$val" >> env.env
+done <<<"$extracted_content,"
+
+source env.env
+rm -f env.env
 
 echo ""
 echo "▶️ Building libraries"
@@ -25,11 +40,6 @@ echo ""
 echo "▶️ Adding libraries and context information to app"
 echo ""
 
-yes | cp -rf library/genesis_workbench/dist/*.whl app/lib/
-#databricks fs cp library/genesis_workbench/dist/*.whl dbfs:/Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/libraries
-
-ls -al app/lib/
-
 # Loop through all .whl files in the directory
 for file in library/genesis_workbench/dist/*.whl; do
   echo "Checking $file"
@@ -37,11 +47,20 @@ for file in library/genesis_workbench/dist/*.whl; do
   if [ -f "$file" ]; then
     # Extract just the filename (not the full path)
     filename=$(basename "$file")
+    cp -rf library/genesis_workbench/dist/$filename app/lib/
+
+    #copy the whl file to databricks volume
+    databricks fs cp ./library/genesis_workbench/dist/$filename dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries --overwrite
+   
+    echo "Copied $filename to /Volumes/$core_catalog_name/$core_schema_name/libraries"
+
     echo "Checking if $filename exists as dependency"
+
     if ! grep -wq "$filename" app/requirements.txt; then        
         echo "Adding $filename to the app dependency"
-        # Append the filename to the output file        
+        # Append the filename to the output file 
         echo -e "\nlib/$filename" >> app/requirements.txt
+
     else
         echo "Dependency already exists"
     fi

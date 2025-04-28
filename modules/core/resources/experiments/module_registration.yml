@@ -1,0 +1,7 @@
+resources:
+  experiments:
+    bundle_registration:
+      name: /Users/${var.current_user}/${var.module_registration_experiment_name}
+      permissions:
+        - level: CAN_READ
+          group_name: users

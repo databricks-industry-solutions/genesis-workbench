@@ -15,10 +15,6 @@ variables:
     description: A prefix for resources created in a shared environment
     default: dbx_gwb
   
-  secret_scope:
-    description: The secret scope to store app specific secrets
-    default: dbx_gwb_secret_scope
-
   app_name:
     description: Name of the databricks app for UI
     default: genesis-workbench
@@ -43,3 +39,7 @@ variables:
   core_schema_name:
     description: The schema where core components will be installed.
     #default: dbx_genesis_workbench_core 
+
+  module_registration_experiment_name:
+    description: The experiment to which all registered modules are logged
+    default: dbx_genesis_workbench_modules
