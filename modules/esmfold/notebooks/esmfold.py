@@ -138,64 +138,64 @@ with mlflow.start_run(run_name=f"register_{MODEL_NAME}"):
 # - we turn this feature on here (again, this can also be achieved in the UI)
 
 # COMMAND ----------
-from databricks.sdk import WorkspaceClient
-from databricks.sdk.service.serving import (
-    EndpointCoreConfigInput,
-    ServedEntityInput,
-    ServedModelInputWorkloadSize,
-    ServedModelInputWorkloadType,
-    AutoCaptureConfigInput,
-)
-from databricks.sdk import errors
+# from databricks.sdk import WorkspaceClient
+# from databricks.sdk.service.serving import (
+#     EndpointCoreConfigInput,
+#     ServedEntityInput,
+#     ServedModelInputWorkloadSize,
+#     ServedModelInputWorkloadType,
+#     AutoCaptureConfigInput,
+# )
+# from databricks.sdk import errors
 
-w = WorkspaceClient()
+# w = WorkspaceClient()
 
-endpoint_name = ENDPOINT_NAME
+# endpoint_name = ENDPOINT_NAME
 
-model_name = f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
-versions = w.model_versions.list(model_name)
-latest_version = max(versions, key=lambda v: v.version).version
+# model_name = f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
+# versions = w.model_versions.list(model_name)
+# latest_version = max(versions, key=lambda v: v.version).version
 
-print("version being served = ", latest_version)
+# print("version being served = ", latest_version)
 
 
-served_entities = [
-    ServedEntityInput(
-        entity_name=model_name,
-        entity_version=latest_version,
-        name=MODEL_NAME,
-        workload_type="GPU_SMALL",
-        workload_size="Small",
-        scale_to_zero_enabled=True,
-    )
-]
-auto_capture_config = AutoCaptureConfigInput(
-    catalog_name=CATALOG,
-    schema_name=SCHEMA,
-    table_name_prefix=f"{MODEL_NAME}_serving",
-    enabled=True,
-)
+# served_entities = [
+#     ServedEntityInput(
+#         entity_name=model_name,
+#         entity_version=latest_version,
+#         name=MODEL_NAME,
+#         workload_type="GPU_SMALL",
+#         workload_size="Small",
+#         scale_to_zero_enabled=True,
+#     )
+# ]
+# auto_capture_config = AutoCaptureConfigInput(
+#     catalog_name=CATALOG,
+#     schema_name=SCHEMA,
+#     table_name_prefix=f"{MODEL_NAME}_serving",
+#     enabled=True,
+# )
 
-try:
-    # try to update the endpoint if already have one
-    existing_endpoint = w.serving_endpoints.get(endpoint_name)
-    # may take some time to actually do the update
-    status = w.serving_endpoints.update_config(
-        name=endpoint_name,
-        served_entities=served_entities,
-        auto_capture_config=auto_capture_config,
-    )
-except errors.platform.ResourceDoesNotExist as e:
-    # if no endpoint yet, make it, wait for it to spin up, and put model on endpoint
-    status = w.serving_endpoints.create_and_wait(
-        name=endpoint_name,
-        config=EndpointCoreConfigInput(
-            name=endpoint_name,
-            served_entities=served_entities,
-            auto_capture_config=auto_capture_config,
-        ),
-    )
+# try:
+#     # try to update the endpoint if already have one
+#     existing_endpoint = w.serving_endpoints.get(endpoint_name)
+#     # may take some time to actually do the update
+#     status = w.serving_endpoints.update_config(
+#         name=endpoint_name,
+#         served_entities=served_entities,
+#         auto_capture_config=auto_capture_config,
+#     )
+# except errors.platform.ResourceDoesNotExist as e:
+#     # if no endpoint yet, make it, wait for it to spin up, and put model on endpoint
+#     status = w.serving_endpoints.create_and_wait(
+#         name=endpoint_name,
+#         config=EndpointCoreConfigInput(
+#             name=endpoint_name,
+#             served_entities=served_entities,
+#             auto_capture_config=auto_capture_config,
+#         ),
+#     )
 
-print(status)
+# print(status)
 
 # COMMAND ----------
