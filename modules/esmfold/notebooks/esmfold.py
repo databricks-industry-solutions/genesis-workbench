@@ -1,20 +1,24 @@
 # Databricks notebook source
+import sys
+
+sys.path.append("../src")
+
 
 # COMMAND ----------
-from src.esmfold.esmfold import ESMFoldPyFunc
+
+from esmfold.esmfold import ESMFoldPyFunc
 
 # COMMAND ----------
-dbutils.widgets.text("catalog", "eswanson_genai", "Catalog")
-dbutils.widgets.text("schema", "genesis_workbench", "Schema")
+
+dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
+dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
 dbutils.widgets.text("model_name", "esmfold", "Model Name")
-dbutils.widgets.text("run_name", "eswanson_esmfold", "Run Name")
-dbutils.widgets.text("endpoint_name", "eswanson_esmfold", "Endpoint Name")
+dbutils.widgets.text("experiment_name", "dbx_genesis_workbench_modules", "Experiment Name")
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
 MODEL_NAME = dbutils.widgets.get("model_name")
-RUN_NAME = dbutils.widgets.get("run_name")
-ENDPOINT_NAME = dbutils.widgets.get("endpoint_name")
+EXPERIMENT_NAME = dbutils.widgets.get("experiment_name")
 
 # COMMAND ----------
 
@@ -31,12 +35,7 @@ ENDPOINT_NAME = dbutils.widgets.get("endpoint_name")
 # MAGIC #### Download model,tokenizer to the local disk of our compute
 
 # COMMAND ----------
-import sys
 
-sys.path.append("../src")
-
-
-# COMMAND ----------
 import mlflow
 import torch
 from transformers import AutoTokenizer, EsmForProteinFolding
@@ -56,9 +55,6 @@ import os
 
 from typing import Any, Dict, List, Optional
 
-
-# COMMAND ----------
-from protein_folding.protein_folding.esmfold import ESMFoldPyFunc
 
 # COMMAND ----------
 
@@ -105,7 +101,9 @@ del tokenizer
 
 mlflow.set_registry_uri("databricks-uc")
 
-with mlflow.start_run(run_name=RUN_NAME):
+
+
+with mlflow.start_run(run_name=f"register_{MODEL_NAME}"):
     model_info = mlflow.pyfunc.log_model(
         artifact_path="esmfold",
         python_model=esmfold_model,
@@ -127,75 +125,66 @@ with mlflow.start_run(run_name=RUN_NAME):
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ### Serve our model
-# MAGIC  - This process can also be achieved in the UI directly from a UC registered model
-# MAGIC  - Here we serve the model with code using the databricks-sdk
-# MAGIC  - This allows model serving to be achieved with code for easier
-# productionization of ML models
-# MAGIC  - Serving endpoints can auto capture information about model inputs and outputs
-# MAGIC    - These data are then tracked in **inference tables**
-# - we turn this feature on here (again, this can also be achieved in the UI)
+
 
 # COMMAND ----------
-from databricks.sdk import WorkspaceClient
-from databricks.sdk.service.serving import (
-    EndpointCoreConfigInput,
-    ServedEntityInput,
-    ServedModelInputWorkloadSize,
-    ServedModelInputWorkloadType,
-    AutoCaptureConfigInput,
-)
-from databricks.sdk import errors
 
-w = WorkspaceClient()
+# from databricks.sdk import WorkspaceClient
+# from databricks.sdk.service.serving import (
+#     EndpointCoreConfigInput,
+#     ServedEntityInput,
+#     ServedModelInputWorkloadSize,
+#     ServedModelInputWorkloadType,
+#     AutoCaptureConfigInput,
+# )
+# from databricks.sdk import errors
 
-endpoint_name = ENDPOINT_NAME
+# w = WorkspaceClient()
 
-model_name = f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
-versions = w.model_versions.list(model_name)
-latest_version = max(versions, key=lambda v: v.version).version
+# endpoint_name = ENDPOINT_NAME
 
-print("version being served = ", latest_version)
+# model_name = f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
+# versions = w.model_versions.list(model_name)
+# latest_version = max(versions, key=lambda v: v.version).version
+
+# print("version being served = ", latest_version)
 
 
-served_entities = [
-    ServedEntityInput(
-        entity_name=model_name,
-        entity_version=latest_version,
-        name=MODEL_NAME,
-        workload_type="GPU_SMALL",
-        workload_size="Small",
-        scale_to_zero_enabled=True,
-    )
-]
-auto_capture_config = AutoCaptureConfigInput(
-    catalog_name=CATALOG,
-    schema_name=SCHEMA,
-    table_name_prefix=f"{MODEL_NAME}_serving",
-    enabled=True,
-)
+# served_entities = [
+#     ServedEntityInput(
+#         entity_name=model_name,
+#         entity_version=latest_version,
+#         name=MODEL_NAME,
+#         workload_type="GPU_SMALL",
+#         workload_size="Small",
+#         scale_to_zero_enabled=True,
+#     )
+# ]
+# auto_capture_config = AutoCaptureConfigInput(
+#     catalog_name=CATALOG,
+#     schema_name=SCHEMA,
+#     table_name_prefix=f"{MODEL_NAME}_serving",
+#     enabled=True,
+# )
 
-try:
-    # try to update the endpoint if already have one
-    existing_endpoint = w.serving_endpoints.get(endpoint_name)
-    # may take some time to actually do the update
-    status = w.serving_endpoints.update_config(
-        name=endpoint_name,
-        served_entities=served_entities,
-        auto_capture_config=auto_capture_config,
-    )
-except errors.platform.ResourceDoesNotExist as e:
-    # if no endpoint yet, make it, wait for it to spin up, and put model on endpoint
-    status = w.serving_endpoints.create_and_wait(
-        name=endpoint_name,
-        config=EndpointCoreConfigInput(
-            name=endpoint_name,
-            served_entities=served_entities,
-            auto_capture_config=auto_capture_config,
-        ),
-    )
+# try:
+#     # try to update the endpoint if already have one
+#     existing_endpoint = w.serving_endpoints.get(endpoint_name)
+#     # may take some time to actually do the update
+#     status = w.serving_endpoints.update_config(
+#         name=endpoint_name,
+#         served_entities=served_entities,
+#         auto_capture_config=auto_capture_config,
+#     )
+# except errors.platform.ResourceDoesNotExist as e:
+#     # if no endpoint yet, make it, wait for it to spin up, and put model on endpoint
+#     status = w.serving_endpoints.create_and_wait(
+#         name=endpoint_name,
+#         config=EndpointCoreConfigInput(
+#             name=endpoint_name,
+#             served_entities=served_entities,
+#             auto_capture_config=auto_capture_config,
+#         ),
+#     )
 
-print(status)
-
-# COMMAND ----------
+# print(status)

@@ -1,7 +1,7 @@
 resources:
   jobs:
-    genesis_workbench_job:
-      name: ${var.resource_prefix}_initial_setup
+    initial_setup_job:
+      name: dbx_gwb_initial_setup
 
       email_notifications:
         on_failure:

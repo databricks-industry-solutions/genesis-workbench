@@ -3,12 +3,37 @@ import streamlit as st
 import pandas as pd
 import time
 
-from genesis_workbench.models import ModelCategory, get_available_models, get_deployed_models
-from genesis_workbench.models import ModelCategory, get_uc_model_info, import_model_from_uc
+from genesis_workbench.models import (ModelCategory, 
+                                      get_available_models, 
+                                      get_deployed_models,
+                                      get_uc_model_info,
+                                      import_model_from_uc,
+                                      get_gwb_model_info)
+
+
+@st.dialog("Deploy Model")
+def display_deploy_model_dialog(selected_model_name):    
+    """Dialog to deploy a model to model serving"""
+    model_id = int(selected_model_name.split("-")[0].strip())
+    with st.spinner("Getting model details"):
+        try:
+            model_info = get_gwb_model_info(model_id)
+            st.markdown(f"### {model_info.model_uc_name} v{model_info.model_uc_version}")
+
+            with st.form("deploy_model_details_form", enter_to_submit=False):
+                compute_type = st.selectbox("Model Serving Compute:", ["CPU", "GPU SMALL", "GPU MEDIUM", "GPU LARGE"])
+                workload_size = st.selectbox("Workload Size:", ["SMALL", "MEDIUM","LARGE"])
+                
+
+        except Exception as e:
+            st.error("Error getting model details.")
+            
+
+
 
 @st.dialog("Import model from Unity Catalog")
 def display_import_model_uc_dialog():    
-    
+    """Dialog to import a model from UC"""
     model_info = None
     model_info_error = False
     model_import_error = False
@@ -70,10 +95,11 @@ def display_import_model_uc_dialog():
         if model_import_error:
             st.error("Error importing model") 
         else:
-            st.success("Model Imported Successfully. Refreshing data..")
-            time.sleep(3)
-            del st.session_state["available_models_df"]
-            st.rerun()
+            st.success("Model Imported Successfully.")
+            with st.spinner("Refreshing data.."):
+                time.sleep(1)
+                del st.session_state["available_models_df"]
+                st.rerun()
             #if st.button("Close"):
             #    if "import_button" in st.session_state:
             #        del st.session_state["import_button"]              
@@ -103,10 +129,12 @@ def display_settings_tab(available_models_df,deployed_models_df):
         with st.form("deploy_model_form"):
             col1, col2, = st.columns([1,1])    
             with col1:
-                select_models = st.selectbox("Model:",available_models_df["model_labels"],label_visibility="collapsed",)
+                selected_model_for_deploy = st.selectbox("Model:",available_models_df["model_labels"],label_visibility="collapsed",)
 
             with col2:
                 deploy_button = st.form_submit_button('Deploy')
+        if deploy_button:
+            display_deploy_model_dialog(selected_model_for_deploy)
 
 
     if len(deployed_models_df) > 0:

@@ -7,7 +7,8 @@ include:
   - resources/jobs/*.yml
   - resources/schemas/*.yml
   - resources/app.yml
-  - resources/volumes/libraries.yml
+  - resources/volumes/*.yml
+  - resources/experiments/*.yml
     
 # artifacts:
 #     genesis_workbench:
@@ -26,7 +27,6 @@ targets:
     variables:
       app_name: dev-${var.dev_user_prefix}-genesis-workbench
       sql_warehouse_id: 8f210e00850a2c16
-      secret_scope: dev_${var.dev_user_prefix}_dbx_gwb_secret_scope
     workspace:
       root_path: ${var.current_working_directory}
       host: https://adb-830292400663869.9.azuredatabricks.net

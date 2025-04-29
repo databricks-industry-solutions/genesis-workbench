@@ -6,6 +6,15 @@ from dataclasses import dataclass, asdict
 from enum import StrEnum, auto
 from datetime import datetime
 from typing import Union, List
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.serving import (
+        EndpointCoreConfigInput,
+        ServedEntityInput,
+        ServedModelInputWorkloadSize,
+        ServedModelInputWorkloadType,
+        AutoCaptureConfigInput,
+    )
+from databricks.sdk import errors
 from .workbench import (UserInfo, 
                         get_user_info, 
                         get_app_context ,
@@ -148,6 +157,18 @@ def get_uc_model_info(model_uc_name_fq : str, model_uc_version:int) -> ModelInfo
     return model_info
 
 
+def get_gwb_model_info(model_id:int)-> GWBModelInfo:
+    """Method to get model details using id"""
+    app_context = get_app_context()
+    query = f"SELECT * FROM \
+                {app_context.core_catalog_name}.{app_context.core_schema_name}.models \
+            WHERE model_id = {model_id} "
+        
+    result_df = execute_select_query(query)
+
+    model_info = result_df.apply(lambda row: GWBModelInfo(**row), axis=1).tolist()[0]
+    return model_info
+
 def import_model_from_uc(model_category : ModelCategory,
                       model_uc_name : str,
                       model_uc_version: int,                       
@@ -188,3 +209,49 @@ def import_model_from_uc(model_category : ModelCategory,
         deployment_ids = ""
     )
     upsert_model_info(gwb_model)
+
+
+def deploy_model(fq_model_uc_name : str, model_version: int, workload_type: str, workload_size:str):
+
+    w = WorkspaceClient()
+
+    app_context = get_app_context()
+    model_name = fq_model_uc_name.split(".")[2]
+    endpoint_name = f"{fq_model_uc_name.replace('.','_')}"
+
+    served_entities = [
+        ServedEntityInput(
+            entity_name=fq_model_uc_name,
+            entity_version=model_version,
+            name=model_name,
+            workload_type=workload_type,
+            workload_size=workload_size,
+            scale_to_zero_enabled=True,
+        )
+    ]
+    auto_capture_config = AutoCaptureConfigInput(
+        catalog_name=app_context.core_catalog_name,
+        schema_name=app_context.core_schema_name,
+        table_name_prefix=f"{model_name}_serving",
+        enabled=True,
+    )
+
+    try:
+        # try to update the endpoint if already have one
+        existing_endpoint = w.serving_endpoints.get(endpoint_name)
+        # may take some time to actually do the update
+        status = w.serving_endpoints.update_config(
+            name=endpoint_name,
+            served_entities=served_entities,
+            auto_capture_config=auto_capture_config,
+        )
+    except errors.platform.ResourceDoesNotExist as e:
+        # if no endpoint yet, make it, wait for it to spin up, and put model on endpoint
+        status = w.serving_endpoints.create(
+            name=endpoint_name,
+            config=EndpointCoreConfigInput(
+                name=endpoint_name,
+                served_entities=served_entities,
+                auto_capture_config=auto_capture_config,
+            ),
+        )

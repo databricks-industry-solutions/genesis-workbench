@@ -13,6 +13,16 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/esmfold.py
 
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: model_name
+          default: esmfold
+        - name: experiment_name
+          default: ${var.module_registration_experiment_name}
+
       job_clusters:
         - job_cluster_key: job_cluster
           new_cluster:

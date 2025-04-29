@@ -1,0 +1,38 @@
+resources:
+  jobs:
+    deploy_model_job:
+      name: dbx_gwb_deploy_model_job
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: deploy_model_task
+          notebook_task:
+            notebook_path: ../../notebooks/deploy_model.py
+
+      environments:
+        - environment_key: Default
+          spec:
+            client: '1'
+            dependencies:
+              - databricks-sdk==0.50.0
+              - mlflow==2.22.0
+              - ../../library/genesis_workbench/dist/*.whl
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: fq_model_uc_name
+          default: ""
+        - name: model_version
+          default: '1' 
+        - name: workload_type
+          default: "GPU_SMALL"
+        - name: workload_size
+          default: SMALL
+
+
