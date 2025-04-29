@@ -13,6 +13,12 @@ resources:
           sql_warehouse:
             id: ${var.sql_warehouse_id}
             permission: "CAN_USE"
+        - name: "deploy_model_job"
+          job:
+            id: ${resources.jobs.deploy_model_job.id}
+            permission: "CAN_MANAGE_RUN"
+
+
 
 
           

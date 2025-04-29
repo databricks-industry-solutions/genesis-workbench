@@ -2,33 +2,81 @@
 import streamlit as st
 import pandas as pd
 import time
+import os
 
 from genesis_workbench.models import (ModelCategory, 
                                       get_available_models, 
                                       get_deployed_models,
                                       get_uc_model_info,
                                       import_model_from_uc,
-                                      get_gwb_model_info)
+                                      get_gwb_model_info,
+                                      deploy_model)
 
+
+from streamlit.components.v1 import html
+def open_deploy_model_run_window(run_id):
+    host_name = os.getenv("DATABRICKS_HOST")
+    job_id = os.getenv("DEPLOY_MODEL_JOB_ID")
+    url = f"{host_name}#job/{job_id}/run/{run_id}"
+    open_script= """
+        <script type="text/javascript">
+            window.open('%s', '_blank').focus();
+        </script>
+    """ % (url)
+    html(open_script)
 
 @st.dialog("Deploy Model")
 def display_deploy_model_dialog(selected_model_name):    
     """Dialog to deploy a model to model serving"""
+    model_info = None
+    run_id = None
+    deploy_model_clicked = False
+    view_deploy_run_btn = False
+    close_deploy_run_btn = False
+    
     model_id = int(selected_model_name.split("-")[0].strip())
-    with st.spinner("Getting model details"):
-        try:
-            model_info = get_gwb_model_info(model_id)
-            st.markdown(f"### {model_info.model_uc_name} v{model_info.model_uc_version}")
 
-            with st.form("deploy_model_details_form", enter_to_submit=False):
-                compute_type = st.selectbox("Model Serving Compute:", ["CPU", "GPU SMALL", "GPU MEDIUM", "GPU LARGE"])
-                workload_size = st.selectbox("Workload Size:", ["SMALL", "MEDIUM","LARGE"])
-                
+    
+    if "deployment_model_details" in st.session_state:
+        model_info = st.session_state["deployment_model_details"]
+    else:
+        with st.spinner("Getting model details"):
+            try:
+                model_info = get_gwb_model_info(model_id)        
+                st.session_state["deployment_model_details"] = model_info
+            except Exception as e:
+                st.error("Error getting model details.")
+                model_info = None
 
-        except Exception as e:
-            st.error("Error getting model details.")
+    if model_info:
+        model_details = model_info.model_uc_name.split(".") 
+        st.write(f"Catalog: {model_details[0]}")
+        st.write(f"Schema: {model_details[1]}")
+        st.write(f"Model Name: {model_details[2]}")
+        st.write(f"Version: {model_info.model_uc_version}")
             
+        if model_info.is_model_deployed:
+            st.warning("This model has existing deployment(s).")
 
+        with st.form("deploy_model_details_form", enter_to_submit=False):
+            compute_type = st.selectbox("Model Serving Compute:", ["CPU", "GPU SMALL", "GPU MEDIUM", "GPU LARGE"])
+            workload_size = st.selectbox("Workload Size:", ["Small", "Medium","Large"])
+            
+            deploy_model_clicked = st.form_submit_button("Deploy Model")
+        deploy_started = False
+        if deploy_model_clicked:
+            with st.spinner("Launching deploy job"):
+                try:
+                    run_id = deploy_model(model_id, compute_type, workload_size)
+                    deploy_started = True
+                except Exception as e:
+                    print(e)
+                    st.error("Error launching deploy job.")                
+                    deploy_started = False
+        if deploy_started:
+            st.success(f"Model deploy has started with a run id {run_id}.")                
+            st.warning(f"It might take upto 30 minutes to complete")
+            view_deploy_run_btn = st.button("View Run", on_click=lambda: open_deploy_model_run_window(run_id))
 
 
 @st.dialog("Import model from Unity Catalog")

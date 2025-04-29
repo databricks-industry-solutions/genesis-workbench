@@ -121,6 +121,13 @@ def execute_upsert_delete_query(query):
         with connection.cursor() as cursor:
             cursor.execute(query)            
 
+def execute_workflow(job_id: int, params: dict) -> str:
+    w = WorkspaceClient()
+    run = w.jobs.run_now(
+        job_id=job_id,
+        job_parameters=params
+    )
+    return run.run_id
 
 
 

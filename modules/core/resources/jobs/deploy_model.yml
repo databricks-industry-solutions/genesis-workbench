@@ -26,13 +26,13 @@ resources:
           default: ${var.core_catalog_name}
         - name: schema
           default: ${var.core_schema_name}
-        - name: fq_model_uc_name
-          default: ""
-        - name: model_version
-          default: '1' 
+        - name: gwb_model_id
+          default: '-1' 
         - name: workload_type
           default: "GPU_SMALL"
         - name: workload_size
-          default: SMALL
+          default: Small
+        - name: deploy_user
+          default: none
 
 
