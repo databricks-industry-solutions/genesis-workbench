@@ -9,5 +9,8 @@ env:
     value: "false"
   - name: SQL_WAREHOUSE
     valueFrom: "sql_warehouse"
+  - name: DEPLOY_MODEL_JOB_ID
+    valueFrom: "deploy_model_job"
+
 
 

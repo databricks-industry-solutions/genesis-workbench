@@ -1,3 +1,4 @@
+import os
 import mlflow
 from mlflow.pyfunc import PythonModel
 from mlflow.models.model import ModelInfo
@@ -7,20 +8,15 @@ from enum import StrEnum, auto
 from datetime import datetime
 from typing import Union, List
 from databricks.sdk import WorkspaceClient
-from databricks.sdk.service.serving import (
-        EndpointCoreConfigInput,
-        ServedEntityInput,
-        ServedModelInputWorkloadSize,
-        ServedModelInputWorkloadType,
-        AutoCaptureConfigInput,
-    )
+
 from databricks.sdk import errors
 from .workbench import (UserInfo, 
                         get_user_info, 
                         get_app_context ,
                          execute_select_query, 
                          execute_upsert_delete_query, 
-                         execute_parameterized_inserts)
+                         execute_parameterized_inserts,
+                         execute_workflow)
 
 class BaseAdapter(ABC):
     """Asbtract class for an input/output adapter"""
@@ -99,7 +95,7 @@ def get_available_models(model_category : ModelCategory):
             FROM \
                 {app_context.core_catalog_name}.{app_context.core_schema_name}.models \
             WHERE \
-                is_model_deployed = false AND model_category = '{str(model_category)}' "
+                model_category = '{str(model_category)}' "
     
     
     result_df = execute_select_query(query)
@@ -211,47 +207,16 @@ def import_model_from_uc(model_category : ModelCategory,
     upsert_model_info(gwb_model)
 
 
-def deploy_model(fq_model_uc_name : str, model_version: int, workload_type: str, workload_size:str):
-
-    w = WorkspaceClient()
-
-    app_context = get_app_context()
-    model_name = fq_model_uc_name.split(".")[2]
-    endpoint_name = f"{fq_model_uc_name.replace('.','_')}"
-
-    served_entities = [
-        ServedEntityInput(
-            entity_name=fq_model_uc_name,
-            entity_version=model_version,
-            name=model_name,
-            workload_type=workload_type,
-            workload_size=workload_size,
-            scale_to_zero_enabled=True,
-        )
-    ]
-    auto_capture_config = AutoCaptureConfigInput(
-        catalog_name=app_context.core_catalog_name,
-        schema_name=app_context.core_schema_name,
-        table_name_prefix=f"{model_name}_serving",
-        enabled=True,
-    )
-
-    try:
-        # try to update the endpoint if already have one
-        existing_endpoint = w.serving_endpoints.get(endpoint_name)
-        # may take some time to actually do the update
-        status = w.serving_endpoints.update_config(
-            name=endpoint_name,
-            served_entities=served_entities,
-            auto_capture_config=auto_capture_config,
-        )
-    except errors.platform.ResourceDoesNotExist as e:
-        # if no endpoint yet, make it, wait for it to spin up, and put model on endpoint
-        status = w.serving_endpoints.create(
-            name=endpoint_name,
-            config=EndpointCoreConfigInput(
-                name=endpoint_name,
-                served_entities=served_entities,
-                auto_capture_config=auto_capture_config,
-            ),
-        )
+def deploy_model(gwb_model_id:int, workload_type: str, workload_size: str):
+    print(f"Deploying model id: {gwb_model_id}")
+    user_info = get_user_info()
+    model_deploy_job_id = os.environ["DEPLOY_MODEL_JOB_ID"]
+    params = {
+        "gwb_model_id": gwb_model_id,
+        "workload_type" : workload_type,
+        "workload_size" : workload_size,
+        "deploy_user": "a@b.com" if not user_info.user_email else user_info.user_email
+    }
+    
+    run_id = execute_workflow(model_deploy_job_id,params)
+    return run_id
