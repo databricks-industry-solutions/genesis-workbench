@@ -217,7 +217,7 @@ def deploy_model(fq_model_uc_name : str, model_version: int, workload_type: str,
 
     app_context = get_app_context()
     model_name = fq_model_uc_name.split(".")[2]
-    endpoint_name = f"{fq_model_uc_name.replace(".","_")}"
+    endpoint_name = f"{fq_model_uc_name.replace('.','_')}"
 
     served_entities = [
         ServedEntityInput(
