@@ -1,7 +1,7 @@
 resources:
   jobs:
-    genesis_workbench_job:
-      name: dbx_gwb_initial_setup
+    deploy_model_job:
+      name: dbx_gwb_deploy_model_job
 
       email_notifications:
         on_failure:
@@ -17,8 +17,9 @@ resources:
           spec:
             client: '1'
             dependencies:
-              - ../../library/genesis_workbench/dist/*.whl
               - databricks-sdk==0.50.0
+              - mlflow==2.22.0
+              - ../../library/genesis_workbench/dist/*.whl
 
       parameters:
         - name: catalog

@@ -1,6 +1,6 @@
 resources:
   jobs:
-    genesis_workbench_job:
+    initial_setup_job:
       name: dbx_gwb_initial_setup
 
       email_notifications:

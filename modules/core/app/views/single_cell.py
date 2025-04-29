@@ -95,10 +95,11 @@ def display_import_model_uc_dialog():
         if model_import_error:
             st.error("Error importing model") 
         else:
-            st.success("Model Imported Successfully. Refreshing data..")
-            time.sleep(3)
-            del st.session_state["available_models_df"]
-            st.rerun()
+            st.success("Model Imported Successfully.")
+            with st.spinner("Refreshing data.."):
+                time.sleep(1)
+                del st.session_state["available_models_df"]
+                st.rerun()
             #if st.button("Close"):
             #    if "import_button" in st.session_state:
             #        del st.session_state["import_button"]              
