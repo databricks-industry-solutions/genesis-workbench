@@ -17,7 +17,8 @@ from streamlit.components.v1 import html
 def open_deploy_model_run_window(run_id):
     host_name = os.getenv("DATABRICKS_HOST")
     job_id = os.getenv("DEPLOY_MODEL_JOB_ID")
-    url = f"{host_name}#job/{job_id}/run/{run_id}"
+    url = f"https://{host_name}#job/{job_id}/run/{run_id}"
+    print(url)
     open_script= """
         <script type="text/javascript">
             window.open('%s', '_blank').focus();
