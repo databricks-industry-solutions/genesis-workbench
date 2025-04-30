@@ -63,7 +63,9 @@ spark.sql("DROP TABLE IF EXISTS model_deployments")
 spark.sql(f"""
 CREATE TABLE model_deployments (
     deployment_id BIGINT,
-    model_id STRING,
+    deployment_name STRING,
+    deployment_description STRING,    
+    model_id BIGINT,
     input_adapter STRING,
     output_adapter STRING,
     model_deployed_date TIMESTAMP,
