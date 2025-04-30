@@ -52,7 +52,9 @@ CREATE TABLE models (
     model_output_schema STRING,
     model_params_schema STRING,
     is_model_deployed BOOLEAN,
-    deployment_ids STRING
+    deployment_ids STRING,
+    is_active BOOLEAN,
+    deactivated_timestamp TIMESTAMP
 )
 """)
 
@@ -72,7 +74,10 @@ CREATE TABLE model_deployments (
     model_deployed_by STRING,
     model_deploy_platform STRING, -- modelserving, dcs etc
     model_endpoint_name STRING,
-    model_invoke_url STRING)
+    model_invoke_url STRING,
+    is_active BOOLEAN,
+    deactivated_timestamp TIMESTAMP
+)
 """)
 
 

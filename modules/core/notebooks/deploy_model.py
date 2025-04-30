@@ -131,7 +131,9 @@ spark.sql(f"""
         model_deployed_by,
         model_deploy_platform, 
         model_endpoint_name,
-        model_invoke_url
+        model_invoke_url,
+        is_active,
+        deactivated_timestamp
     ) VALUES (
         {deploy_id},
         '{deployment_name}',
@@ -143,7 +145,9 @@ spark.sql(f"""
         '{deploy_user}',
         'model_serving',
         '{deploy_result.config.served_entities[0].entity_name}',
-        'https://{hostname}/serving-endpoints/{deploy_result.config.served_entities[0].entity_name}/invocations'
+        'https://{hostname}/serving-endpoints/{deploy_result.config.served_entities[0].entity_name}/invocations',
+        true,
+        NULL
     )
 """) 
 

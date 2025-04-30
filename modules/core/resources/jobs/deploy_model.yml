@@ -11,6 +11,7 @@ resources:
         - task_key: deploy_model_task
           notebook_task:
             notebook_path: ../../notebooks/deploy_model.py
+          max_retries: 0 
 
       environments:
         - environment_key: Default

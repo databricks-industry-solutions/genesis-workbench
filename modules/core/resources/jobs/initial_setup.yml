@@ -11,6 +11,7 @@ resources:
         - task_key: create_table_task
           notebook_task:
             notebook_path: ../../notebooks/initialize_tables.py
+          max_retries: 0 
 
         # - task_key: create_non_dab_resources
         #   notebook_task:
