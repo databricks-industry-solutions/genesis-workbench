@@ -129,18 +129,20 @@ spark.sql(f"""
         output_adapter,
         model_deployed_date,
         model_deployed_by,
-        model_deploy_platform, -- modelserving, dcs etc
+        model_deploy_platform, 
+        model_endpoint_name,
         model_invoke_url
     ) VALUES (
         {deploy_id},
         '{deployment_name}',
-        '{deployment_description}'
+        '{deployment_description}',
         {gwb_model_id},
         ' ',
         ' ',
         CURRENT_TIMESTAMP(),
         '{deploy_user}',
         'model_serving',
+        '{deploy_result.config.served_entities[0].entity_name}',
         'https://{hostname}/serving-endpoints/{deploy_result.config.served_entities[0].entity_name}/invocations'
     )
 """) 
