@@ -52,7 +52,9 @@ CREATE TABLE models (
     model_output_schema STRING,
     model_params_schema STRING,
     is_model_deployed BOOLEAN,
-    deployment_ids STRING
+    deployment_ids STRING,
+    is_active BOOLEAN,
+    deactivated_timestamp TIMESTAMP
 )
 """)
 
@@ -63,13 +65,19 @@ spark.sql("DROP TABLE IF EXISTS model_deployments")
 spark.sql(f"""
 CREATE TABLE model_deployments (
     deployment_id BIGINT,
-    model_id STRING,
+    deployment_name STRING,
+    deployment_description STRING,    
+    model_id BIGINT,
     input_adapter STRING,
     output_adapter STRING,
     model_deployed_date TIMESTAMP,
     model_deployed_by STRING,
     model_deploy_platform STRING, -- modelserving, dcs etc
-    model_invoke_url STRING)
+    model_endpoint_name STRING,
+    model_invoke_url STRING,
+    is_active BOOLEAN,
+    deactivated_timestamp TIMESTAMP
+)
 """)
 
 

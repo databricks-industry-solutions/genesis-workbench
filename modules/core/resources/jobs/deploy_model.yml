@@ -11,6 +11,7 @@ resources:
         - task_key: deploy_model_task
           notebook_task:
             notebook_path: ../../notebooks/deploy_model.py
+          max_retries: 0 
 
       environments:
         - environment_key: Default
@@ -28,6 +29,10 @@ resources:
           default: ${var.core_schema_name}
         - name: gwb_model_id
           default: '-1' 
+        - name: deployment_name
+          default: name
+        - name: deployment_description
+          default: description
         - name: workload_type
           default: "GPU_SMALL"
         - name: workload_size

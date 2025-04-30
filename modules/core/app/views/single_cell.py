@@ -17,7 +17,8 @@ from streamlit.components.v1 import html
 def open_deploy_model_run_window(run_id):
     host_name = os.getenv("DATABRICKS_HOST")
     job_id = os.getenv("DEPLOY_MODEL_JOB_ID")
-    url = f"{host_name}#job/{job_id}/run/{run_id}"
+    url = f"https://{host_name}#job/{job_id}/run/{run_id}"
+    print(url)
     open_script= """
         <script type="text/javascript">
             window.open('%s', '_blank').focus();
@@ -54,20 +55,21 @@ def display_deploy_model_dialog(selected_model_name):
         st.write(f"Schema: {model_details[1]}")
         st.write(f"Model Name: {model_details[2]}")
         st.write(f"Version: {model_info.model_uc_version}")
-            
+        
         if model_info.is_model_deployed:
             st.warning("This model has existing deployment(s).")
 
         with st.form("deploy_model_details_form", enter_to_submit=False):
+            deploy_name = st.text_input("Deployment Name:", placeholder="eg: finetuned geneformer")
+            deploy_description= st.text_area("Deployment Description:", max_chars=5000)
             compute_type = st.selectbox("Model Serving Compute:", ["CPU", "GPU SMALL", "GPU MEDIUM", "GPU LARGE"])
-            workload_size = st.selectbox("Workload Size:", ["Small", "Medium","Large"])
-            
+            workload_size = st.selectbox("Workload Size:", ["Small", "Medium","Large"])            
             deploy_model_clicked = st.form_submit_button("Deploy Model")
         deploy_started = False
         if deploy_model_clicked:
             with st.spinner("Launching deploy job"):
                 try:
-                    run_id = deploy_model(model_id, compute_type, workload_size)
+                    run_id = deploy_model(model_id, deploy_name, deploy_description, compute_type, workload_size)
                     deploy_started = True
                 except Exception as e:
                     print(e)
@@ -254,7 +256,7 @@ with st.spinner("Loading data"):
 
     if "deployed_models_df" not in st.session_state:
         deployed_models_df = get_deployed_models(ModelCategory.SINGLE_CELL)
-        deployed_models_df.columns = ["Id", "Name", "Source Version", "UC Name", "UC Version", "Deployment Ids"]
+        deployed_models_df.columns = ["Id", "Name", "Description", "Model Name", "Source Version", "UC Name/Version"]
 
         st.session_state["deployed_models_df"] = deployed_models_df
     deployed_models_df = st.session_state["deployed_models_df"]

@@ -76,16 +76,23 @@ class GWBModelInfo:
     model_added_date : datetime
     is_model_deployed : bool
     deployment_ids: str
+    is_active: bool 
+    deactivated_timestamp : datetime
 
 @dataclass
 class ModelDeploymentInfo:
     """Class that contains information on model deployments"""
     deployment_id:int
+    deployment_name: str
+    deployment_description: str
     model_id:int
     model_deployed_date : datetime
     model_deployed_by : str
     model_deploy_platform : ModelDeployPlatform
     model_invoke_url : str
+    is_active: bool 
+    deactivated_timestamp : datetime
+
 
 def get_available_models(model_category : ModelCategory):
     """Gets all models that are available for deployment"""
@@ -95,7 +102,7 @@ def get_available_models(model_category : ModelCategory):
             FROM \
                 {app_context.core_catalog_name}.{app_context.core_schema_name}.models \
             WHERE \
-                model_category = '{str(model_category)}' "
+                model_category = '{str(model_category)}' AND is_active=true"
     
     
     result_df = execute_select_query(query)
@@ -105,18 +112,19 @@ def get_deployed_models(model_category : ModelCategory):
     """Gets all models that are available for deployment"""
     app_context = get_app_context()
     
-    query = f"SELECT \
-                model_id, model_display_name, model_source_version, model_uc_name,\
-                      model_uc_version, deployment_ids\
+    query = f"SELECT deployment_id, deployment_name, deployment_description, model_display_name, model_source_version, \
+                concat(model_uc_name,'/',model_uc_version) as uc_name  \
             FROM \
-                {app_context.core_catalog_name}.{app_context.core_schema_name}.models \
+                {app_context.core_catalog_name}.{app_context.core_schema_name}.model_deployments \
+            INNER JOIN {app_context.core_catalog_name}.{app_context.core_schema_name}.models ON \
+                models.model_id = model_deployments.model_id \
             WHERE \
-                is_model_deployed = true AND model_category = '{str(model_category)}' "
+                model_category = '{str(model_category)}' and model_deployments.is_active=true"
     
     result_df = execute_select_query(query)
     return result_df
 
-def upsert_model_info(model_info : GWBModelInfo):
+def insert_model_info(model_info : GWBModelInfo):
     """Register the model in GWB"""
     columns = []
     values = []
@@ -133,11 +141,11 @@ def upsert_model_info(model_info : GWBModelInfo):
 
     app_context = get_app_context()
 
-    #delete any existing records    
-    if model_info.model_id != -1:
-        delete_query = f"DELETE FROM {app_context.core_catalog_name}.{app_context.core_schema_name}.models \
-                        WHERE model_id = {model_info.model_id}"
-        execute_upsert_delete_query(delete_query)
+    # #delete any existing records    
+    # if model_info.model_id != -1:
+    #     delete_query = f"DELETE FROM {app_context.core_catalog_name}.{app_context.core_schema_name}.models \
+    #                     WHERE model_id = {model_info.model_id}"
+    #     execute_upsert_delete_query(delete_query)
 
     #insert the record
     insert_sql = f"""
@@ -202,17 +210,21 @@ def import_model_from_uc(model_category : ModelCategory,
         model_added_by = user_info.user_email, #id of user
         model_added_date = datetime.now(),
         is_model_deployed = False,
-        deployment_ids = ""
+        deployment_ids = "",
+        is_active = True,
+        deactivated_timestamp=None
     )
-    upsert_model_info(gwb_model)
+    insert_model_info(gwb_model)
 
 
-def deploy_model(gwb_model_id:int, workload_type: str, workload_size: str):
+def deploy_model(gwb_model_id:int, deployment_name:str, deployment_description: str, workload_type: str, workload_size: str):
     print(f"Deploying model id: {gwb_model_id}")
     user_info = get_user_info()
     model_deploy_job_id = os.environ["DEPLOY_MODEL_JOB_ID"]
     params = {
         "gwb_model_id": gwb_model_id,
+        "deployment_name" : deployment_name,
+        "deployment_description" : deployment_description,
         "workload_type" : workload_type,
         "workload_size" : workload_size,
         "deploy_user": "a@b.com" if not user_info.user_email else user_info.user_email
