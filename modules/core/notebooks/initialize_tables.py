@@ -71,6 +71,7 @@ CREATE TABLE model_deployments (
     model_deployed_date TIMESTAMP,
     model_deployed_by STRING,
     model_deploy_platform STRING, -- modelserving, dcs etc
+    model_endpoint_name STRING,
     model_invoke_url STRING)
 """)
 
