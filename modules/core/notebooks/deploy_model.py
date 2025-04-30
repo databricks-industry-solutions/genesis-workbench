@@ -4,6 +4,9 @@
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
 dbutils.widgets.text("gwb_model_id", "11", "Model Id")
+dbutils.widgets.text("deployment_name", "my_finetuned_deployment", "Deployment Name")
+dbutils.widgets.text("deployment_description", "description", "Deployment Description")
+
 dbutils.widgets.text("workload_type", "CPU", "Endpoint Workload Type")
 dbutils.widgets.text("workload_size", "Medium", "Endpoint Workload Size")
 dbutils.widgets.text("deploy_user", "a@b.com", "User Id")
@@ -11,6 +14,8 @@ dbutils.widgets.text("deploy_user", "a@b.com", "User Id")
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 gwb_model_id = dbutils.widgets.get("gwb_model_id")
+deployment_name = dbutils.widgets.get("deployment_name")
+deployment_description = dbutils.widgets.get("deployment_description")
 workload_type = dbutils.widgets.get("workload_type")
 workload_size = dbutils.widgets.get("workload_size")
 deploy_user = dbutils.widgets.get("deploy_user")
@@ -21,6 +26,8 @@ deploy_user = dbutils.widgets.get("deploy_user")
 print(f"catalog: {catalog}")
 print(f"schema: {schema}")
 print(f"gwb_model_id: {gwb_model_id}")
+print(f"deployment_name: {deployment_name}")
+print(f"deployment_description: {deployment_description}")
 print(f"workload_type: {workload_type}")
 print(f"workload_size: {workload_size}")
 
@@ -115,6 +122,8 @@ hostname = spark.conf.get("spark.databricks.workspaceUrl")
 spark.sql(f"""
     INSERT INTO {catalog}.{schema}.model_deployments(
         deployment_id,
+        deployment_name,
+        deployment_description,
         model_id,
         input_adapter,
         output_adapter,
@@ -124,6 +133,8 @@ spark.sql(f"""
         model_invoke_url
     ) VALUES (
         {deploy_id},
+        '{deployment_name}',
+        '{deployment_description}'
         {gwb_model_id},
         ' ',
         ' ',

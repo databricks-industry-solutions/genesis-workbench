@@ -81,6 +81,8 @@ class GWBModelInfo:
 class ModelDeploymentInfo:
     """Class that contains information on model deployments"""
     deployment_id:int
+    deployment_name: str
+    deployment_description: str
     model_id:int
     model_deployed_date : datetime
     model_deployed_by : str
@@ -105,13 +107,14 @@ def get_deployed_models(model_category : ModelCategory):
     """Gets all models that are available for deployment"""
     app_context = get_app_context()
     
-    query = f"SELECT \
-                model_id, model_display_name, model_source_version, model_uc_name,\
-                      model_uc_version, deployment_ids\
+    query = f"SELECT deployment_id, deployment_name, deployment_description, model_display_name, model_source_version, \
+                concat(model_uc_name,'/',model_uc_version) as uc_name  \
             FROM \
-                {app_context.core_catalog_name}.{app_context.core_schema_name}.models \
+                {app_context.core_catalog_name}.{app_context.core_schema_name}.model_deployments \
+            INNER JOIN {app_context.core_catalog_name}.{app_context.core_schema_name}.models ON \
+                models.model_id = model_deployments.model_id \
             WHERE \
-                is_model_deployed = true AND model_category = '{str(model_category)}' "
+                model_category = '{str(model_category)}' "
     
     result_df = execute_select_query(query)
     return result_df
@@ -207,12 +210,14 @@ def import_model_from_uc(model_category : ModelCategory,
     upsert_model_info(gwb_model)
 
 
-def deploy_model(gwb_model_id:int, workload_type: str, workload_size: str):
+def deploy_model(gwb_model_id:int, deployment_name:str, deployment_description: str, workload_type: str, workload_size: str):
     print(f"Deploying model id: {gwb_model_id}")
     user_info = get_user_info()
     model_deploy_job_id = os.environ["DEPLOY_MODEL_JOB_ID"]
     params = {
         "gwb_model_id": gwb_model_id,
+        "deployment_name" : deployment_name,
+        "deployment_description" : deployment_description,
         "workload_type" : workload_type,
         "workload_size" : workload_size,
         "deploy_user": "a@b.com" if not user_info.user_email else user_info.user_email
