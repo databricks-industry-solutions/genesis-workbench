@@ -86,6 +86,11 @@ class ModelDeploymentInfo:
     deployment_name: str
     deployment_description: str
     model_id:int
+    input_adapter:str
+    output_adapter:str 
+    is_adapter:bool
+    deploy_model_uc_name: str
+    deploy_model_uc_version: str
     model_deployed_date : datetime
     model_deployed_by : str
     model_deploy_platform : ModelDeployPlatform

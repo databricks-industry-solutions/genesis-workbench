@@ -13,3 +13,4 @@ poetry.lock
 *.gz
 env.env
 temp.*
+/temp

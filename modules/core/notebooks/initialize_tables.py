@@ -70,6 +70,9 @@ CREATE TABLE model_deployments (
     model_id BIGINT,
     input_adapter STRING,
     output_adapter STRING,
+    is_adapter BOOLEAN,
+    deploy_model_uc_name STRING,
+    deploy_model_uc_version STRING,
     model_deployed_date TIMESTAMP,
     model_deployed_by STRING,
     model_deploy_platform STRING, -- modelserving, dcs etc
