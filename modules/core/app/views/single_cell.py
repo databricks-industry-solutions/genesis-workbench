@@ -26,7 +26,7 @@ def open_deploy_model_run_window(run_id):
     """ % (url)
     html(open_script)
 
-@st.dialog("Deploy Model")
+@st.dialog("Deploy Model", width="large")
 def display_deploy_model_dialog(selected_model_name):    
     """Dialog to deploy a model to model serving"""
     model_info = None
@@ -51,17 +51,34 @@ def display_deploy_model_dialog(selected_model_name):
 
     if model_info:
         model_details = model_info.model_uc_name.split(".") 
-        st.write(f"Catalog: {model_details[0]}")
-        st.write(f"Schema: {model_details[1]}")
-        st.write(f"Model Name: {model_details[2]}")
-        st.write(f"Version: {model_info.model_uc_version}")
+        st.write(f"Model Name: {model_info.model_display_name} ")
+        st.write(f"Registered Name: {model_info.model_uc_name} v{model_info.model_uc_version}")
         
         if model_info.is_model_deployed:
-            st.warning("This model has existing deployment(s).")
+            st.warning("❗️This model has existing deployment(s).")
 
         with st.form("deploy_model_details_form", enter_to_submit=False):
             deploy_name = st.text_input("Deployment Name:", placeholder="eg: finetuned geneformer")
             deploy_description= st.text_area("Deployment Description:", max_chars=5000)
+            c1,c2,c3 = st.columns([1,1,1])
+            with c1:
+                st.write("Input Schema")
+                st.json(model_info.model_input_schema)
+            with c2:
+                st.write("Output Schema")
+                st.json(model_info.model_output_schema)
+            with c3:
+                st.write("Parameters")
+                st.json(model_info.model_params_schema)
+            
+            c1,c2 = st.columns([1,1])
+            with c1:
+                input_adapter_code = st.file_uploader("Input Adapter:", type="py", help="A python file with only one class definition that extends `genesis_workbench.models.BaseAdapter`." )
+            with c2: 
+                output_adapter_code = st.file_uploader("Output Adapter:", type="py", help="A python file with only one class definition that extends `genesis_workbench.models.BaseAdapter`." )
+            
+            new_sample_input = st.text_area("Provide a sample input data (required if using adapters):")
+
             compute_type = st.selectbox("Model Serving Compute:", ["CPU", "GPU SMALL", "GPU MEDIUM", "GPU LARGE"])
             workload_size = st.selectbox("Workload Size:", ["Small", "Medium","Large"])            
             deploy_model_clicked = st.form_submit_button("Deploy Model")
@@ -96,7 +113,7 @@ def display_import_model_uc_dialog():
     with st.form("import_model_uc_form_fetch", enter_to_submit=False ):
         c1,c2,c3 = st.columns([3,1,1], vertical_alignment="bottom")
         with c1:
-            uc_model_name = st.text_input("Unity Catalog Name (catalog.schema.model_name):", value="genesis_workbench.dev_srijit_nair_dbx_genesis_workbench_core.test_model")
+            uc_model_name = st.text_input("Unity Catalog Name (catalog.schema.model_name):", value="genesis_workbench.dev_srijit_nair_dbx_genesis_workbench_core.gene_embedder")
         with c2:
             uc_model_version = st.number_input("Version:", min_value=1, step=1, max_value=999)
         with c3:

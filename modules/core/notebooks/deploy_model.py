@@ -6,7 +6,8 @@ dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Sc
 dbutils.widgets.text("gwb_model_id", "11", "Model Id")
 dbutils.widgets.text("deployment_name", "my_finetuned_deployment", "Deployment Name")
 dbutils.widgets.text("deployment_description", "description", "Deployment Description")
-
+dbutils.widgets.text("input_adapter", "none", "Input Adapter Class Content")
+dbutils.widgets.text("output_adapter", "none", "Output Adapter Class Content")
 dbutils.widgets.text("workload_type", "CPU", "Endpoint Workload Type")
 dbutils.widgets.text("workload_size", "Medium", "Endpoint Workload Size")
 dbutils.widgets.text("deploy_user", "a@b.com", "User Id")
@@ -16,6 +17,8 @@ schema = dbutils.widgets.get("schema")
 gwb_model_id = dbutils.widgets.get("gwb_model_id")
 deployment_name = dbutils.widgets.get("deployment_name")
 deployment_description = dbutils.widgets.get("deployment_description")
+input_adapter = dbutils.widgets.get("input_adapter")
+output_adapter = dbutils.widgets.get("output_adapter")
 workload_type = dbutils.widgets.get("workload_type")
 workload_size = dbutils.widgets.get("workload_size")
 deploy_user = dbutils.widgets.get("deploy_user")
@@ -38,8 +41,6 @@ from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.serving import (
         EndpointCoreConfigInput,
         ServedEntityInput,
-        ServedModelInputWorkloadSize,
-        ServedModelInputWorkloadType,
         AutoCaptureConfigInput,
         ServingEndpointDetailed
     )
@@ -127,6 +128,9 @@ spark.sql(f"""
         model_id,
         input_adapter,
         output_adapter,
+        is_adapter,
+        deploy_model_uc_name,
+        deploy_model_uc_version,
         model_deployed_date,
         model_deployed_by,
         model_deploy_platform, 
