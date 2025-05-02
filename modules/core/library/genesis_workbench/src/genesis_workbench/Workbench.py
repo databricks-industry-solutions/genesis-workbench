@@ -7,7 +7,6 @@ from databricks import sql
 import os
 import pandas as pd
 from dataclasses import dataclass
-import streamlit as st
 
 @dataclass
 class AppContext:
@@ -30,27 +29,6 @@ class WarehouseInfo:
     hostname: str
     http_path: str
 
-def get_user_info():
-    headers = st.context.headers
-    user_access_token = headers.get("X-Forwarded-Access-Token")
-    user_name=headers.get("X-Forwarded-Preferred-Username")
-    user_display_name = ""
-    if user_access_token:
-        # Initialize WorkspaceClient with the user's token
-        w = WorkspaceClient(token=user_access_token, auth_type="pat")
-        # Get current user information
-        current_user = w.current_user.me()
-        # Display user information
-        user_display_name = current_user.display_name
-        
-
-    return UserInfo(
-        user_name=user_name,
-        user_email=headers.get("X-Forwarded-Email"),
-        user_id=headers.get("X-Forwarded-User"),
-        user_access_token = headers.get("X-Forwarded-Access-Token"),
-        user_display_name = user_display_name if user_display_name != "" else user_name
-    )
 
 def credential_provider():
     config = Config(
@@ -116,7 +94,7 @@ def execute_parameterized_inserts(param_query : str, list_of_records:list[list])
         with connection.cursor() as cursor:
             cursor.executemany(param_query, list_of_records )
 
-def execute_upsert_delete_query(query):
+def execute_insert_delete_query(query):
     with(db_connect()) as connection:
         with connection.cursor() as cursor:
             cursor.execute(query)            
