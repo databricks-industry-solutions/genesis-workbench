@@ -1,17 +1,17 @@
 # Databricks notebook source
-# MAGIC %pip install /Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/libraries/genesis_workbench-0.1.0-py3-none-any.whl --force-reinstall
-# MAGIC
-# MAGIC %pip install databricks-sql-connector
-# MAGIC
-# MAGIC dbutils.widgets.removeAll()
-# MAGIC dbutils.library.restartPython()
+# %pip install /Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/libraries/genesis_workbench-0.1.0-py3-none-any.whl --force-reinstall
+
+# %pip install databricks-sql-connector
+
+# dbutils.widgets.removeAll()
+# dbutils.library.restartPython()
 
 # COMMAND ----------
 
 #some example data for reference
 gwb_model_id = 2
 input_adapter_str = """
-from genesis_workbench.models import BaseAdapter
+from genesis_workbench.adapters import BaseAdapter
 
 class MyInAdapter(BaseAdapter):
     def process(self, data):
@@ -23,7 +23,7 @@ class MyInAdapter(BaseAdapter):
         }
 """
 output_adapter_str = """
-from genesis_workbench.models import BaseAdapter
+from genesis_workbench.adapters import BaseAdapter
 
 class MyOutAdapter(BaseAdapter):
     def process(self, data):
