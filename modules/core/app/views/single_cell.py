@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 import time
 import os
-from databricks.sdk import WorkspaceClient
+import json
 from genesis_workbench.models import (ModelCategory, 
                                       get_available_models, 
                                       get_deployed_models,
@@ -11,31 +11,12 @@ from genesis_workbench.models import (ModelCategory,
                                       import_model_from_uc,
                                       get_gwb_model_info,
                                       deploy_model)
-from genesis_workbench.workbench import UserInfo
+
+from utils.streamlit_helper import get_user_info
 
 from streamlit.components.v1 import html
+from io import StringIO
 
-
-def get_user_info():
-    headers = st.context.headers
-    user_access_token = headers.get("X-Forwarded-Access-Token")
-    user_name=headers.get("X-Forwarded-Preferred-Username")
-    user_display_name = ""
-    if user_access_token:
-        # Initialize WorkspaceClient with the user's token
-        w = WorkspaceClient(token=user_access_token, auth_type="pat")
-        # Get current user information
-        current_user = w.current_user.me()
-        # Display user information
-        user_display_name = current_user.display_name
-
-    return UserInfo(
-        user_name=user_name,
-        user_email=headers.get("X-Forwarded-Email"),
-        user_id=headers.get("X-Forwarded-User"),
-        user_access_token = headers.get("X-Forwarded-Access-Token"),
-        user_display_name = user_display_name if user_display_name != "" else user_name
-    )
 
 def open_deploy_model_run_window(run_id):
     host_name = os.getenv("DATABRICKS_HOST")
@@ -58,20 +39,16 @@ def display_deploy_model_dialog(selected_model_name):
     view_deploy_run_btn = False
     close_deploy_run_btn = False
     user_info = get_user_info()
-    
+    is_adapter = False
     model_id = int(selected_model_name.split("-")[0].strip())
 
-    
-    if "deployment_model_details" in st.session_state:
-        model_info = st.session_state["deployment_model_details"]
-    else:
-        with st.spinner("Getting model details"):
-            try:
-                model_info = get_gwb_model_info(model_id)        
-                st.session_state["deployment_model_details"] = model_info
-            except Exception as e:
-                st.error("Error getting model details.")
-                model_info = None
+    with st.spinner("Getting model details"):
+        try:
+            model_info = get_gwb_model_info(model_id)        
+            st.session_state["deployment_model_details"] = model_info
+        except Exception as e:
+            st.error("Error getting model details.")
+            model_info = None
 
     if model_info:
         model_details = model_info.model_uc_name.split(".") 
@@ -97,32 +74,87 @@ def display_deploy_model_dialog(selected_model_name):
             
             c1,c2 = st.columns([1,1])
             with c1:
+                input_adapter_code_text = ""
                 input_adapter_code = st.file_uploader("Input Adapter:", type="py", help="A python file with only one class definition that extends `genesis_workbench.models.BaseAdapter`." )
+                if input_adapter_code is not None:
+                    stringio = StringIO(input_adapter_code.getvalue().decode("utf-8"))
+                    input_adapter_code_text = stringio.read()
             with c2: 
+                output_adapter_code_text = ""
                 output_adapter_code = st.file_uploader("Output Adapter:", type="py", help="A python file with only one class definition that extends `genesis_workbench.models.BaseAdapter`." )
+                if output_adapter_code is not None:
+                    stringio = StringIO(output_adapter_code.getvalue().decode("utf-8"))
+                    output_adapter_code_text = stringio.read()
             
-            new_sample_input = st.text_area("Provide a sample input data (required if using adapters):")
+            sample_input_data_dict_as_json = '{"data": [1.0, 2.0, 3.0, 4.0, 5.0],\
+                "type":"list" \
+                } '
+            sample_params_as_json = '{"index": "a", "num_embeddings": 10}'
+            new_sample_input = st.text_area("Provide a sample input data (required if using adapters):", help=f"Example: `{sample_input_data_dict_as_json}`")
+            new_sample_params = st.text_area("Provide a sample parameter dictionary (required if using adapters):" ,help=f"Example: `{sample_params_as_json}`")
 
             compute_type = st.selectbox("Model Serving Compute:", ["CPU", "GPU SMALL", "GPU MEDIUM", "GPU LARGE"])
             workload_size = st.selectbox("Workload Size:", ["Small", "Medium","Large"])            
             deploy_model_clicked = st.form_submit_button("Deploy Model")
 
         deploy_started = False
-        if deploy_model_clicked:
-            with st.spinner("Launching deploy job"):
-                try:
-                    run_id = deploy_model(user_info = user_info,
-                                          gwb_model_id = model_id,
-                                          deployment_name=deploy_name,
-                                          deployment_description=deploy_description, 
-                                          workload_type=compute_type,
-                                          workload_size=workload_size)
+        validation_pass = True
+        error_message = ""
 
-                    deploy_started = True
-                except Exception as e:
-                    print(e)
-                    st.error("Error launching deploy job.")                
-                    deploy_started = False
+        if deploy_model_clicked:
+
+            with st.spinner("Launching deploy job"):
+                #validate inputs
+                if len(deploy_name.strip())>0 and len(deploy_description.strip())>0:
+
+                    if (
+                        ( len(input_adapter_code_text.strip())==0 and len(output_adapter_code_text.strip())==0 ) or
+                        ( len(new_sample_input.strip())>0 and len(new_sample_params.strip())>0 )  ):
+
+                        try:
+                            json.loads(new_sample_input)
+                        except Exception as e:
+                            validation_pass = False
+                            error_message = f"Unable to parse sample input JSON: \n {e}"
+
+                        try:
+                            json.loads(new_sample_params)
+                        except Exception as e:
+                            validation_pass = False
+                            error_message = f"Unable to parse sample params JSON: \n {e}"
+
+                        if validation_pass:
+
+                            try:
+                                run_id = deploy_model(user_info = user_info,
+                                                    gwb_model_id = model_id,
+                                                    deployment_name=deploy_name,
+                                                    deployment_description=deploy_description, 
+                                                    input_adapter_str=input_adapter_code_text,
+                                                    output_adapter_str=output_adapter_code_text,
+                                                    sample_input_data_dict_as_json=new_sample_input,
+                                                    sample_params_as_json=new_sample_params,
+                                                    workload_type=compute_type,
+                                                    workload_size=workload_size)
+
+                                deploy_started = True
+                            except Exception as e:
+                                print(e)
+                                st.error("Error launching deploy job.")                
+                                deploy_started = False
+                        else:
+                            deploy_started = False
+                    else:
+                        validation_pass = False
+                        error_message = f"Sample inputs and params are required if using adapter."
+                else:
+                    validation_pass = False
+                    error_message = f"Deployment name and description is required."
+
+
+        if not validation_pass:
+            st.error(error_message)
+
         if deploy_started:
             st.success(f"Model deploy has started with a run id {run_id}.")                
             st.warning(f"It might take upto 30 minutes to complete")
