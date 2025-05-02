@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 import time
 import os
-
+import json
 from genesis_workbench.models import (ModelCategory, 
                                       get_available_models, 
                                       get_deployed_models,
@@ -12,8 +12,12 @@ from genesis_workbench.models import (ModelCategory,
                                       get_gwb_model_info,
                                       deploy_model)
 
+from utils.streamlit_helper import get_user_info
 
 from streamlit.components.v1 import html
+from io import StringIO
+
+
 def open_deploy_model_run_window(run_id):
     host_name = os.getenv("DATABRICKS_HOST")
     job_id = os.getenv("DEPLOY_MODEL_JOB_ID")
@@ -26,7 +30,7 @@ def open_deploy_model_run_window(run_id):
     """ % (url)
     html(open_script)
 
-@st.dialog("Deploy Model")
+@st.dialog("Deploy Model", width="large")
 def display_deploy_model_dialog(selected_model_name):    
     """Dialog to deploy a model to model serving"""
     model_info = None
@@ -34,47 +38,123 @@ def display_deploy_model_dialog(selected_model_name):
     deploy_model_clicked = False
     view_deploy_run_btn = False
     close_deploy_run_btn = False
-    
+    user_info = get_user_info()
+    is_adapter = False
     model_id = int(selected_model_name.split("-")[0].strip())
 
-    
-    if "deployment_model_details" in st.session_state:
-        model_info = st.session_state["deployment_model_details"]
-    else:
-        with st.spinner("Getting model details"):
-            try:
-                model_info = get_gwb_model_info(model_id)        
-                st.session_state["deployment_model_details"] = model_info
-            except Exception as e:
-                st.error("Error getting model details.")
-                model_info = None
+    with st.spinner("Getting model details"):
+        try:
+            model_info = get_gwb_model_info(model_id)        
+            st.session_state["deployment_model_details"] = model_info
+        except Exception as e:
+            st.error("Error getting model details.")
+            model_info = None
 
     if model_info:
         model_details = model_info.model_uc_name.split(".") 
-        st.write(f"Catalog: {model_details[0]}")
-        st.write(f"Schema: {model_details[1]}")
-        st.write(f"Model Name: {model_details[2]}")
-        st.write(f"Version: {model_info.model_uc_version}")
+        st.write(f"Model Name: {model_info.model_display_name} ")
+        st.write(f"Registered Name: {model_info.model_uc_name} v{model_info.model_uc_version}")
         
         if model_info.is_model_deployed:
-            st.warning("This model has existing deployment(s).")
+            st.warning("❗️This model has existing deployment(s).")
 
         with st.form("deploy_model_details_form", enter_to_submit=False):
             deploy_name = st.text_input("Deployment Name:", placeholder="eg: finetuned geneformer")
             deploy_description= st.text_area("Deployment Description:", max_chars=5000)
+            c1,c2,c3 = st.columns([1,1,1])
+            with c1:
+                st.write("Input Schema")
+                st.json(model_info.model_input_schema)
+            with c2:
+                st.write("Output Schema")
+                st.json(model_info.model_output_schema)
+            with c3:
+                st.write("Parameters")
+                st.json(model_info.model_params_schema)
+            
+            c1,c2 = st.columns([1,1])
+            with c1:
+                input_adapter_code_text = ""
+                input_adapter_code = st.file_uploader("Input Adapter:", type="py", help="A python file with only one class definition that extends `genesis_workbench.models.BaseAdapter`." )
+                if input_adapter_code is not None:
+                    stringio = StringIO(input_adapter_code.getvalue().decode("utf-8"))
+                    input_adapter_code_text = stringio.read()
+            with c2: 
+                output_adapter_code_text = ""
+                output_adapter_code = st.file_uploader("Output Adapter:", type="py", help="A python file with only one class definition that extends `genesis_workbench.models.BaseAdapter`." )
+                if output_adapter_code is not None:
+                    stringio = StringIO(output_adapter_code.getvalue().decode("utf-8"))
+                    output_adapter_code_text = stringio.read()
+            
+            sample_input_data_dict_as_json = '{"data": [1.0, 2.0, 3.0, 4.0, 5.0],\
+                "type":"list" \
+                } '
+            sample_params_as_json = '{"index": "a", "num_embeddings": 10}'
+            new_sample_input = st.text_area("Provide a sample input data (required if using adapters):", help=f"Example: `{sample_input_data_dict_as_json}`")
+            new_sample_params = st.text_area("Provide a sample parameter dictionary (required if using adapters):" ,help=f"Example: `{sample_params_as_json}`")
+
             compute_type = st.selectbox("Model Serving Compute:", ["CPU", "GPU SMALL", "GPU MEDIUM", "GPU LARGE"])
             workload_size = st.selectbox("Workload Size:", ["Small", "Medium","Large"])            
             deploy_model_clicked = st.form_submit_button("Deploy Model")
+
         deploy_started = False
+        validation_pass = True
+        error_message = ""
+
         if deploy_model_clicked:
+
             with st.spinner("Launching deploy job"):
-                try:
-                    run_id = deploy_model(model_id, deploy_name, deploy_description, compute_type, workload_size)
-                    deploy_started = True
-                except Exception as e:
-                    print(e)
-                    st.error("Error launching deploy job.")                
-                    deploy_started = False
+                #validate inputs
+                if len(deploy_name.strip())>0 and len(deploy_description.strip())>0:
+
+                    if (
+                        ( len(input_adapter_code_text.strip())==0 and len(output_adapter_code_text.strip())==0 ) or
+                        ( len(new_sample_input.strip())>0 and len(new_sample_params.strip())>0 )  ):
+
+                        try:
+                            json.loads(new_sample_input)
+                        except Exception as e:
+                            validation_pass = False
+                            error_message = f"Unable to parse sample input JSON: \n {e}"
+
+                        try:
+                            json.loads(new_sample_params)
+                        except Exception as e:
+                            validation_pass = False
+                            error_message = f"Unable to parse sample params JSON: \n {e}"
+
+                        if validation_pass:
+
+                            try:
+                                run_id = deploy_model(user_info = user_info,
+                                                    gwb_model_id = model_id,
+                                                    deployment_name=deploy_name,
+                                                    deployment_description=deploy_description, 
+                                                    input_adapter_str=input_adapter_code_text,
+                                                    output_adapter_str=output_adapter_code_text,
+                                                    sample_input_data_dict_as_json=new_sample_input,
+                                                    sample_params_as_json=new_sample_params,
+                                                    workload_type=compute_type,
+                                                    workload_size=workload_size)
+
+                                deploy_started = True
+                            except Exception as e:
+                                print(e)
+                                st.error("Error launching deploy job.")                
+                                deploy_started = False
+                        else:
+                            deploy_started = False
+                    else:
+                        validation_pass = False
+                        error_message = f"Sample inputs and params are required if using adapter."
+                else:
+                    validation_pass = False
+                    error_message = f"Deployment name and description is required."
+
+
+        if not validation_pass:
+            st.error(error_message)
+
         if deploy_started:
             st.success(f"Model deploy has started with a run id {run_id}.")                
             st.warning(f"It might take upto 30 minutes to complete")
@@ -89,6 +169,7 @@ def display_import_model_uc_dialog():
     model_import_error = False
     fetch_model_info_clicked = False
     uc_import_model_clicked = False
+    user_info = get_user_info()
 
     if "import_uc_model_info" in st.session_state:
         model_info = st.session_state["import_uc_model_info"]
@@ -96,7 +177,7 @@ def display_import_model_uc_dialog():
     with st.form("import_model_uc_form_fetch", enter_to_submit=False ):
         c1,c2,c3 = st.columns([3,1,1], vertical_alignment="bottom")
         with c1:
-            uc_model_name = st.text_input("Unity Catalog Name (catalog.schema.model_name):", value="genesis_workbench.dev_srijit_nair_dbx_genesis_workbench_core.test_model")
+            uc_model_name = st.text_input("Unity Catalog Name (catalog.schema.model_name):", value="genesis_workbench.dev_srijit_nair_dbx_genesis_workbench_core.gene_embedder")
         with c2:
             uc_model_version = st.number_input("Version:", min_value=1, step=1, max_value=999)
         with c3:
@@ -128,7 +209,8 @@ def display_import_model_uc_dialog():
     if uc_import_model_clicked:
         with st.spinner("Importing model"):
             try:
-                import_model_from_uc(model_category = ModelCategory.SINGLE_CELL,
+                import_model_from_uc(user_info = user_info,
+                    model_category = ModelCategory.SINGLE_CELL,
                     model_uc_name = uc_model_name,
                     model_uc_version =  uc_model_version, 
                     model_name = model_name,

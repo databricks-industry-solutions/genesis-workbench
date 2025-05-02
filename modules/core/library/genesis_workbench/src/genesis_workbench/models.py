@@ -1,5 +1,6 @@
 import os
 import mlflow
+from mlflow import MlflowClient
 from mlflow.pyfunc import PythonModel
 from mlflow.models.model import ModelInfo
 from abc import ABC, abstractmethod
@@ -7,40 +8,17 @@ from dataclasses import dataclass, asdict
 from enum import StrEnum, auto
 from datetime import datetime
 from typing import Union, List
+import pandas as pd
+import numpy as np
 from databricks.sdk import WorkspaceClient
-
 from databricks.sdk import errors
 from .workbench import (UserInfo, 
-                        get_user_info, 
                         get_app_context ,
                          execute_select_query, 
-                         execute_upsert_delete_query, 
                          execute_parameterized_inserts,
                          execute_workflow)
+from .adapters import BaseAdapter, GWBModel
 
-class BaseAdapter(ABC):
-    """Asbtract class for an input/output adapter"""
-    @abstractmethod
-    def process(self,data):
-        return
-
-class GWBModel(PythonModel, ABC):
-    """This class that will wrap any pyfunc model with adapters"""
-    def __init__(self, 
-                 input_adapter:BaseAdapter,
-                 output_adapter:BaseAdapter,
-                 model:PythonModel):
-        
-        self.input_adapter = input_adapter
-        self.output_adapter = output_adapter
-        self.model = model
-
-    def predict(self, model_input, params):
-        return self.output_adapter.process(
-            self.model.predict(
-                self.input_adapter.process(model_input)
-            )
-        )
 
 class ModelSource(StrEnum):
     UNITY_CATALOG = auto()
@@ -86,6 +64,11 @@ class ModelDeploymentInfo:
     deployment_name: str
     deployment_description: str
     model_id:int
+    input_adapter:str
+    output_adapter:str 
+    is_adapter:bool
+    deploy_model_uc_name: str
+    deploy_model_uc_version: str
     model_deployed_date : datetime
     model_deployed_by : str
     model_deploy_platform : ModelDeployPlatform
@@ -93,6 +76,10 @@ class ModelDeploymentInfo:
     is_active: bool 
     deactivated_timestamp : datetime
 
+def get_latest_model_version(model_name):
+    client = MlflowClient()
+    model_version_infos = client.search_model_versions("name = '%s'" % model_name)
+    return max([int(model_version_info.version) for model_version_info in model_version_infos])
 
 def get_available_models(model_category : ModelCategory):
     """Gets all models that are available for deployment"""
@@ -173,7 +160,8 @@ def get_gwb_model_info(model_id:int)-> GWBModelInfo:
     model_info = result_df.apply(lambda row: GWBModelInfo(**row), axis=1).tolist()[0]
     return model_info
 
-def import_model_from_uc(model_category : ModelCategory,
+def import_model_from_uc(user_info : UserInfo,
+                      model_category : ModelCategory,
                       model_uc_name : str,
                       model_uc_version: int,                       
                       model_name: None,
@@ -182,7 +170,6 @@ def import_model_from_uc(model_category : ModelCategory,
                       model_description_url:str = None
                       ):
     """Imports a UC model intp GWB"""    
-    user_info = get_user_info()
     model_info = get_uc_model_info(model_uc_name, model_uc_version)
     #throws exception if not found 
     model_signature = model_info.signature.to_dict()
@@ -217,14 +204,26 @@ def import_model_from_uc(model_category : ModelCategory,
     insert_model_info(gwb_model)
 
 
-def deploy_model(gwb_model_id:int, deployment_name:str, deployment_description: str, workload_type: str, workload_size: str):
+def deploy_model(user_info: UserInfo,
+                 gwb_model_id:int,
+                 deployment_name:str,
+                 deployment_description:str,
+                 input_adapter_str:str,
+                 output_adapter_str,
+                 sample_input_data_dict_as_json:str,
+                 sample_params_as_json: str,
+                 workload_type:str,
+                 workload_size: str):
     print(f"Deploying model id: {gwb_model_id}")
-    user_info = get_user_info()
     model_deploy_job_id = os.environ["DEPLOY_MODEL_JOB_ID"]
     params = {
         "gwb_model_id": gwb_model_id,
         "deployment_name" : deployment_name,
         "deployment_description" : deployment_description,
+        'input_adapter_str': input_adapter_str,
+        'output_adapter_str': output_adapter_str,
+        'sample_input_data_dict_as_json': sample_input_data_dict_as_json,
+        'sample_params_as_json': sample_params_as_json,
         "workload_type" : workload_type,
         "workload_size" : workload_size,
         "deploy_user": "a@b.com" if not user_info.user_email else user_info.user_email

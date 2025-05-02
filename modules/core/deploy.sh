@@ -11,21 +11,21 @@ fi
 ENV=$1
 EXTRA_PARAMS=${@: 2}
 
-# echo ""
-# echo "▶️ Extracting variables"
-# echo ""
+echo ""
+echo "▶️ Extracting variables"
+echo ""
 
-# var_strs="${EXTRA_PARAMS//--var=}"
+var_strs="${EXTRA_PARAMS//--var=}"
 
-# extracted_content=$(sed 's/.*"\([^"]*\)".*/\1/' <<< "$var_strs")
-# rm -f env.env
-# while read -d, -r pair; do
-#   IFS='=' read -r key val <<<"$pair"
-#   echo "export $key=$val" >> env.env
-# done <<<"$extracted_content,"
+extracted_content=$(sed 's/.*"\([^"]*\)".*/\1/' <<< "$var_strs")
+rm -f env.env
+while read -d, -r pair; do
+  IFS='=' read -r key val <<<"$pair"
+  echo "export $key=$val" >> env.env
+done <<<"$extracted_content,"
 
-# source env.env
-# rm -f env.env
+source env.env
+rm -f env.env
 
 echo ""
 echo "▶️ Building libraries"
@@ -55,7 +55,6 @@ for file in library/genesis_workbench/dist/*.whl; do
         echo "Adding $filename to the app dependency"
         # Append the filename to the output file 
         echo -e "\nlib/$filename" >> app/requirements.txt
-
     else
         echo "Dependency already exists"
     fi
@@ -64,6 +63,21 @@ for file in library/genesis_workbench/dist/*.whl; do
 done
 
 echo $EXTRA_PARAMS > app/extra_params.txt
+
+echo ""
+echo "▶️ Creating schema if not exists"
+echo ""
+
+set +e
+databricks schemas get $core_catalog_name.$core_schema_name
+if [ "$?" -eq "0" ]
+then
+  echo "Schema $core_catalog_name.$core_schema_name already exists"
+else
+  echo "Schema $core_catalog_name.$core_schema_name does not exist.Creating.."
+  databricks schemas create $core_schema_name $core_catalog_name
+fi
+set -e
 
 echo ""
 echo "▶️ Validating bundle"
@@ -88,6 +102,23 @@ echo "▶️ Deploying UI Application"
 echo ""
 
 databricks bundle run -t $ENV genesis_workbench_app $EXTRA_PARAMS
+
+
+echo ""
+echo "▶️ Copying libraries to UC Volume"
+echo ""
+
+# Loop through all .whl files in the directory
+for file in library/genesis_workbench/dist/*.whl; do
+  echo "Checking $file"
+  # Check if the file exists (in case there are no .whl files)
+  if [ -f "$file" ]; then
+    # Extract just the filename (not the full path)
+    filename=$(basename "$file")
+    echo "Copying $filename to dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename"
+    databricks fs cp library/genesis_workbench/dist/$filename dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename --overwrite
+  fi
+done
 
 #unfortunately databricks sync uses gitignore to synce files
 #so we need to manualy delete the wheel files we created so that it does not
