@@ -63,6 +63,8 @@ for file in library/genesis_workbench/dist/*.whl; do
   fi
 done
 
+exit 1
+
 echo $EXTRA_PARAMS > app/extra_params.txt
 
 echo ""

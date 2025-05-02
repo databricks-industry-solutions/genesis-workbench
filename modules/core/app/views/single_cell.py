@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 import time
 import os
-
+from databricks.sdk import WorkspaceClient
 from genesis_workbench.models import (ModelCategory, 
                                       get_available_models, 
                                       get_deployed_models,
@@ -11,9 +11,32 @@ from genesis_workbench.models import (ModelCategory,
                                       import_model_from_uc,
                                       get_gwb_model_info,
                                       deploy_model)
-
+from genesis_workbench.workbench import UserInfo
 
 from streamlit.components.v1 import html
+
+
+def get_user_info():
+    headers = st.context.headers
+    user_access_token = headers.get("X-Forwarded-Access-Token")
+    user_name=headers.get("X-Forwarded-Preferred-Username")
+    user_display_name = ""
+    if user_access_token:
+        # Initialize WorkspaceClient with the user's token
+        w = WorkspaceClient(token=user_access_token, auth_type="pat")
+        # Get current user information
+        current_user = w.current_user.me()
+        # Display user information
+        user_display_name = current_user.display_name
+
+    return UserInfo(
+        user_name=user_name,
+        user_email=headers.get("X-Forwarded-Email"),
+        user_id=headers.get("X-Forwarded-User"),
+        user_access_token = headers.get("X-Forwarded-Access-Token"),
+        user_display_name = user_display_name if user_display_name != "" else user_name
+    )
+
 def open_deploy_model_run_window(run_id):
     host_name = os.getenv("DATABRICKS_HOST")
     job_id = os.getenv("DEPLOY_MODEL_JOB_ID")
@@ -34,6 +57,7 @@ def display_deploy_model_dialog(selected_model_name):
     deploy_model_clicked = False
     view_deploy_run_btn = False
     close_deploy_run_btn = False
+    user_info = get_user_info()
     
     model_id = int(selected_model_name.split("-")[0].strip())
 
@@ -82,11 +106,18 @@ def display_deploy_model_dialog(selected_model_name):
             compute_type = st.selectbox("Model Serving Compute:", ["CPU", "GPU SMALL", "GPU MEDIUM", "GPU LARGE"])
             workload_size = st.selectbox("Workload Size:", ["Small", "Medium","Large"])            
             deploy_model_clicked = st.form_submit_button("Deploy Model")
+
         deploy_started = False
         if deploy_model_clicked:
             with st.spinner("Launching deploy job"):
                 try:
-                    run_id = deploy_model(model_id, deploy_name, deploy_description, compute_type, workload_size)
+                    run_id = deploy_model(user_info = user_info,
+                                          gwb_model_id = model_id,
+                                          deployment_name=deploy_name,
+                                          deployment_description=deploy_description, 
+                                          workload_type=compute_type,
+                                          workload_size=workload_size)
+
                     deploy_started = True
                 except Exception as e:
                     print(e)
@@ -106,6 +137,7 @@ def display_import_model_uc_dialog():
     model_import_error = False
     fetch_model_info_clicked = False
     uc_import_model_clicked = False
+    user_info = get_user_info()
 
     if "import_uc_model_info" in st.session_state:
         model_info = st.session_state["import_uc_model_info"]
@@ -145,7 +177,8 @@ def display_import_model_uc_dialog():
     if uc_import_model_clicked:
         with st.spinner("Importing model"):
             try:
-                import_model_from_uc(model_category = ModelCategory.SINGLE_CELL,
+                import_model_from_uc(user_info = user_info,
+                    model_category = ModelCategory.SINGLE_CELL,
                     model_uc_name = uc_model_name,
                     model_uc_version =  uc_model_version, 
                     model_name = model_name,
