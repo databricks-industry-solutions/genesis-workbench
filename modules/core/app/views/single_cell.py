@@ -12,7 +12,7 @@ from genesis_workbench.models import (ModelCategory,
                                       get_gwb_model_info,
                                       deploy_model)
 
-from utils.streamlit_helper import get_user_info
+from utils.streamlit_helper import get_user_info, get_app_context
 
 from streamlit.components.v1 import html
 from io import StringIO
@@ -44,7 +44,7 @@ def display_deploy_model_dialog(selected_model_name):
 
     with st.spinner("Getting model details"):
         try:
-            model_info = get_gwb_model_info(model_id)        
+            model_info = get_gwb_model_info(model_id, get_app_context())        
             st.session_state["deployment_model_details"] = model_info
         except Exception as e:
             st.error("Error getting model details.")
@@ -64,34 +64,35 @@ def display_deploy_model_dialog(selected_model_name):
             c1,c2,c3 = st.columns([1,1,1])
             with c1:
                 st.write("Input Schema")
-                st.json(model_info.model_input_schema)
+                st.json(model_info.model_input_schema, expanded=False)
             with c2:
                 st.write("Output Schema")
-                st.json(model_info.model_output_schema)
+                st.json(model_info.model_output_schema, expanded=False)
             with c3:
                 st.write("Parameters")
-                st.json(model_info.model_params_schema)
+                st.json(model_info.model_params_schema, expanded=False)
             
-            c1,c2 = st.columns([1,1])
-            with c1:
-                input_adapter_code_text = ""
-                input_adapter_code = st.file_uploader("Input Adapter:", type="py", help="A python file with only one class definition that extends `genesis_workbench.models.BaseAdapter`." )
-                if input_adapter_code is not None:
-                    stringio = StringIO(input_adapter_code.getvalue().decode("utf-8"))
-                    input_adapter_code_text = stringio.read()
-            with c2: 
-                output_adapter_code_text = ""
-                output_adapter_code = st.file_uploader("Output Adapter:", type="py", help="A python file with only one class definition that extends `genesis_workbench.models.BaseAdapter`." )
-                if output_adapter_code is not None:
-                    stringio = StringIO(output_adapter_code.getvalue().decode("utf-8"))
-                    output_adapter_code_text = stringio.read()
-            
-            sample_input_data_dict_as_json = '{"data": [1.0, 2.0, 3.0, 4.0, 5.0],\
-                "type":"list" \
-                } '
-            sample_params_as_json = '{"index": "a", "num_embeddings": 10}'
-            new_sample_input = st.text_area("Provide a sample input data (required if using adapters):", help=f"Example: `{sample_input_data_dict_as_json}`")
-            new_sample_params = st.text_area("Provide a sample parameter dictionary (required if using adapters):" ,help=f"Example: `{sample_params_as_json}`")
+            with st.expander("Add Input/Output Adapters:"):
+                c1,c2 = st.columns([1,1])
+                with c1:
+                    input_adapter_code_text = ""
+                    input_adapter_code = st.file_uploader("Input Adapter:", type="py", help="A python file with only one class definition that extends `genesis_workbench.models.BaseAdapter`." )
+                    if input_adapter_code is not None:
+                        stringio = StringIO(input_adapter_code.getvalue().decode("utf-8"))
+                        input_adapter_code_text = stringio.read()
+                with c2: 
+                    output_adapter_code_text = ""
+                    output_adapter_code = st.file_uploader("Output Adapter:", type="py", help="A python file with only one class definition that extends `genesis_workbench.models.BaseAdapter`." )
+                    if output_adapter_code is not None:
+                        stringio = StringIO(output_adapter_code.getvalue().decode("utf-8"))
+                        output_adapter_code_text = stringio.read()
+                
+                sample_input_data_dict_as_json = '{"data": [1.0, 2.0, 3.0, 4.0, 5.0],\
+                    "type":"list" \
+                    } '
+                sample_params_as_json = '{"index": "a", "num_embeddings": 10}'
+                new_sample_input = st.text_area("Provide a sample input data (required if using adapters):", help=f"Example: `{sample_input_data_dict_as_json}`")
+                new_sample_params = st.text_area("Provide a sample parameter dictionary (required if using adapters):" ,help=f"Example: `{sample_params_as_json}`")
 
             compute_type = st.selectbox("Model Serving Compute:", ["CPU", "GPU SMALL", "GPU MEDIUM", "GPU LARGE"])
             workload_size = st.selectbox("Workload Size:", ["Small", "Medium","Large"])            
@@ -209,7 +210,7 @@ def display_import_model_uc_dialog():
     if uc_import_model_clicked:
         with st.spinner("Importing model"):
             try:
-                import_model_from_uc(user_info = user_info,
+                import_model_from_uc(get_app_context(), user_email = user_info.user_email,
                     model_category = ModelCategory.SINGLE_CELL,
                     model_uc_name = uc_model_name,
                     model_uc_version =  uc_model_version, 
@@ -327,7 +328,7 @@ def display_embeddings_tab(deployed_models_df):
 #load data for page
 with st.spinner("Loading data"):
     if "available_models_df" not in st.session_state:
-            available_models_df = get_available_models(ModelCategory.SINGLE_CELL)
+            available_models_df = get_available_models(ModelCategory.SINGLE_CELL, get_app_context())
             available_models_df["model_labels"] = (available_models_df["model_id"].astype(str) + " - " 
                                                 + available_models_df["model_display_name"].astype(str) + " [ " 
                                                 + available_models_df["model_uc_name"].astype(str) + " v"
@@ -337,7 +338,7 @@ with st.spinner("Loading data"):
     available_models_df = st.session_state["available_models_df"]
 
     if "deployed_models_df" not in st.session_state:
-        deployed_models_df = get_deployed_models(ModelCategory.SINGLE_CELL)
+        deployed_models_df = get_deployed_models(ModelCategory.SINGLE_CELL, get_app_context())
         deployed_models_df.columns = ["Id", "Name", "Description", "Model Name", "Source Version", "UC Name/Version"]
 
         st.session_state["deployed_models_df"] = deployed_models_df

@@ -1,11 +1,18 @@
 # Databricks notebook source
+# COMMAND ----------
+
+#%pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.2 torch==2.3.1 transformers==4.41.2 accelerate==0.31.0 mlflow==2.22.0
+#%pip install /Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/libraries/genesis_workbench-0.1.0-py3-none-any.whl --force-reinstall
+#dbutils.library.restartPython()
+
+# COMMAND ----------
+
 import sys
 
 sys.path.append("../src")
 
 
 # COMMAND ----------
-
 from esmfold.esmfold import ESMFoldPyFunc
 
 # COMMAND ----------
@@ -14,11 +21,29 @@ dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
 dbutils.widgets.text("model_name", "esmfold", "Model Name")
 dbutils.widgets.text("experiment_name", "dbx_genesis_workbench_modules", "Experiment Name")
+dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id")
+dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
+dbutils.widgets.text("cache_dir", "cache_dir", "Cache dir")
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
 MODEL_NAME = dbutils.widgets.get("model_name")
 EXPERIMENT_NAME = dbutils.widgets.get("experiment_name")
+USER_EMAIL = dbutils.widgets.get("user_email")
+SQL_WAREHOUSE_ID = dbutils.widgets.get("sql_warehouse_id")
+CACHE_DIR = dbutils.widgets.get("cache_dir")
+
+print(f"Cache dir: {CACHE_DIR}")
+cache_full_path = f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}"
+print(f"Cache full path: {cache_full_path}")
+# COMMAND ----------
+
+import os
+
+databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
+os.environ["SQL_WAREHOUSE"]=SQL_WAREHOUSE_ID
+os.environ["IS_TOKEN_AUTH"]="Y"
+os.environ["DATABRICKS_TOKEN"]=databricks_token
 
 # COMMAND ----------
 
@@ -54,15 +79,17 @@ from mlflow.models import infer_signature
 import os
 
 from typing import Any, Dict, List, Optional
+from genesis_workbench.models import (ModelCategory, 
+                                      import_model_from_uc,
+                                      get_latest_model_version)
 
+from genesis_workbench.workbench import AppContext
 
 # COMMAND ----------
 
-CACHE_DIR = "/local_disk0/hf_cache/"
-
-tokenizer = AutoTokenizer.from_pretrained("facebook/esmfold_v1", cache_dir=CACHE_DIR)
+tokenizer = AutoTokenizer.from_pretrained("facebook/esmfold_v1", cache_dir=cache_full_path)
 model = EsmForProteinFolding.from_pretrained(
-    "facebook/esmfold_v1", low_cpu_mem_usage=True, cache_dir=CACHE_DIR
+    "facebook/esmfold_v1", low_cpu_mem_usage=True, cache_dir=cache_full_path
 )
 
 # COMMAND ----------
@@ -108,7 +135,7 @@ with mlflow.start_run(run_name=f"register_{MODEL_NAME}"):
         artifact_path="esmfold",
         python_model=esmfold_model,
         artifacts={
-            "cache": CACHE_DIR,
+            "cache": cache_full_path,
         },
         pip_requirements=[
             "mlflow==2.15.1",
@@ -125,7 +152,23 @@ with mlflow.start_run(run_name=f"register_{MODEL_NAME}"):
 
 # COMMAND ----------
 
+model_uc_name=f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
+model_version = get_latest_model_version(model_uc_name)
+model_uri = f"models:/{model_uc_name}/{model_version}"
 
+app_context = AppContext(
+        core_catalog_name=CATALOG,
+        core_schema_name=SCHEMA
+    )
+
+import_model_from_uc(app_context,user_email=USER_EMAIL,
+                    model_category=ModelCategory.SINGLE_CELL,
+                    model_uc_name=f"{CATALOG}.{SCHEMA}.{MODEL_NAME}",
+                    model_uc_version=model_version,
+                    model_name="ESMFold2",
+                    model_display_name="ESMFold2",
+                    model_source_version="v2.0",
+                    model_description_url="https://github.com/facebookresearch/esm?tab=readme-ov-file#evolutionary-scale-modeling")
 
 # COMMAND ----------
 

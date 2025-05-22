@@ -40,8 +40,8 @@ echo ""
 databricks bundle deploy -t $ENV $EXTRA_PARAMS
 
 echo ""
-echo "▶️ Running initialization job"
+echo "▶️ Running model registration job"
 echo ""
 
-databricks bundle run -t $ENV genesis_workbench_job $EXTRA_PARAMS
+databricks bundle run -t $ENV register_esm_fold $EXTRA_PARAMS
 

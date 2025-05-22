@@ -13,7 +13,7 @@ import numpy as np
 from databricks.sdk import WorkspaceClient
 from databricks.sdk import errors
 from .workbench import (UserInfo, 
-                        get_app_context ,
+                        AppContext,
                          execute_select_query, 
                          execute_parameterized_inserts,
                          execute_workflow)
@@ -81,9 +81,9 @@ def get_latest_model_version(model_name):
     model_version_infos = client.search_model_versions("name = '%s'" % model_name)
     return max([int(model_version_info.version) for model_version_info in model_version_infos])
 
-def get_available_models(model_category : ModelCategory):
+def get_available_models(model_category : ModelCategory,app_context:AppContext):
+    
     """Gets all models that are available for deployment"""
-    app_context = get_app_context()
     query = f"SELECT \
                 model_id, model_name, model_display_name, model_source_version, model_uc_name, model_uc_version \
             FROM \
@@ -95,9 +95,8 @@ def get_available_models(model_category : ModelCategory):
     result_df = execute_select_query(query)
     return result_df
 
-def get_deployed_models(model_category : ModelCategory):
+def get_deployed_models(model_category : ModelCategory, app_context:AppContext):
     """Gets all models that are available for deployment"""
-    app_context = get_app_context()
     
     query = f"SELECT deployment_id, deployment_name, deployment_description, model_display_name, model_source_version, \
                 concat(model_uc_name,'/',model_uc_version) as uc_name  \
@@ -111,7 +110,7 @@ def get_deployed_models(model_category : ModelCategory):
     result_df = execute_select_query(query)
     return result_df
 
-def insert_model_info(model_info : GWBModelInfo):
+def insert_model_info(model_info : GWBModelInfo, app_context:AppContext):
     """Register the model in GWB"""
     columns = []
     values = []
@@ -125,8 +124,6 @@ def insert_model_info(model_info : GWBModelInfo):
             else:
                 values.append(value)
             params.append("?")
-
-    app_context = get_app_context()
 
     # #delete any existing records    
     # if model_info.model_id != -1:
@@ -148,9 +145,9 @@ def get_uc_model_info(model_uc_name_fq : str, model_uc_version:int) -> ModelInfo
     return model_info
 
 
-def get_gwb_model_info(model_id:int)-> GWBModelInfo:
+def get_gwb_model_info(model_id:int, app_context: AppContext)-> GWBModelInfo:
     """Method to get model details using id"""
-    app_context = get_app_context()
+
     query = f"SELECT * FROM \
                 {app_context.core_catalog_name}.{app_context.core_schema_name}.models \
             WHERE model_id = {model_id} "
@@ -160,14 +157,15 @@ def get_gwb_model_info(model_id:int)-> GWBModelInfo:
     model_info = result_df.apply(lambda row: GWBModelInfo(**row), axis=1).tolist()[0]
     return model_info
 
-def import_model_from_uc(user_info : UserInfo,
-                      model_category : ModelCategory,
-                      model_uc_name : str,
-                      model_uc_version: int,                       
-                      model_name: None,
-                      model_source_version : None,
-                      model_display_name:str = None, 
-                      model_description_url:str = None
+def import_model_from_uc(app_context: AppContext ,
+                        user_email : str,
+                        model_category : ModelCategory,
+                        model_uc_name : str,
+                        model_uc_version: int,                       
+                        model_name: None,
+                        model_source_version : None,
+                        model_display_name:str = None, 
+                        model_description_url:str = None                      
                       ):
     """Imports a UC model intp GWB"""    
     model_info = get_uc_model_info(model_uc_name, model_uc_version)
@@ -194,14 +192,14 @@ def import_model_from_uc(user_info : UserInfo,
         model_output_schema = model_signature.get("outputs"),
         model_params_schema = model_signature.get("params",None),
         model_owner = "TBD",
-        model_added_by = user_info.user_email, #id of user
+        model_added_by = user_email, #id of user
         model_added_date = datetime.now(),
         is_model_deployed = False,
         deployment_ids = "",
         is_active = True,
         deactivated_timestamp=None
     )
-    insert_model_info(gwb_model)
+    insert_model_info(gwb_model, app_context)
 
 
 def deploy_model(user_info: UserInfo,
