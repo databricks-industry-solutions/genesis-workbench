@@ -53,7 +53,7 @@ def db_connect():
     warehouse_details = get_warehouse_details_from_id(warehouse_id)
     os.environ["DATABRICKS_HOSTNAME"] = warehouse_details.hostname
 
-    if os.getenv("IS_LOCAL_TEST","")=="Y":
+    if os.getenv("IS_TOKEN_AUTH","")=="Y":
         return sql.connect(server_hostname = os.getenv("DATABRICKS_HOSTNAME"),
             http_path = warehouse_details.http_path,
             access_token = os.getenv("DATABRICKS_TOKEN"))
@@ -62,24 +62,6 @@ def db_connect():
             http_path = warehouse_details.http_path,
             credentials_provider = credential_provider)
 
-def get_app_context() -> AppContext:
-    context_str = ""
-    with open("extra_params.txt", "r") as file:
-        context_str = file.read()
-
-    #context str is like --var="dev_user_prefix=scn,core_catalog_name=genesis_workbench,core_schema_name=dev_srijit_nair_dbx_genesis_workbench_core"
-
-    context_str = context_str.replace("--var=","").replace("\"","")
-
-    ctx_items = {}
-    [(lambda x : ctx_items.update({x[0]:x[1]}) )(ctx_item.split("=")) for ctx_item in context_str.split(",")] 
-    
-    appContext = AppContext(
-        core_catalog_name=ctx_items["core_catalog_name"],
-        core_schema_name=ctx_items["core_schema_name"]
-    )
-
-    return appContext
 
 def execute_select_query(query)-> pd.DataFrame:
     with(db_connect()) as connection:

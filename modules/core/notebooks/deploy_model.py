@@ -1,10 +1,13 @@
 # Databricks notebook source
-# %pip install /Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/libraries/genesis_workbench-0.1.0-py3-none-any.whl --force-reinstall
+
+# COMMAND ----------
+#%pip databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0 
+#%pip install /Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/libraries/genesis_workbench-0.1.0-py3-none-any.whl --force-reinstall
 
 # %pip install databricks-sql-connector
 
 # dbutils.widgets.removeAll()
-# dbutils.library.restartPython()
+#dbutils.library.restartPython()
 
 # COMMAND ----------
 
