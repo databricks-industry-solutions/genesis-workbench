@@ -14,9 +14,9 @@ resources:
           max_retries: 0 
 
       environments:
-        - environment_key: Default
+        - environment_key: default
           spec:
-            client: '1'
+            client: '2'
             dependencies:
               - databricks-sdk==0.50.0
               - databricks-sql-connector==4.0.3

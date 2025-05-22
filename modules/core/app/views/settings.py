@@ -1,6 +1,6 @@
 import streamlit as st
 import os
-from genesis_workbench.workbench import get_app_context
+from utils.streamlit_helper import get_user_info, get_app_context
 
 st.title(":material/settings: Settings")
 
