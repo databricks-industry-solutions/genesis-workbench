@@ -40,6 +40,8 @@ echo ""
 echo "▶️ Adding libraries and context information to app"
 echo ""
 
+mkdir -p app/lib
+
 # Loop through all .whl files in the directory
 for file in library/genesis_workbench/dist/*.whl; do
   echo "Checking $file"
