@@ -1,6 +1,8 @@
 import streamlit as st
+import os
 from genesis_workbench.workbench import UserInfo, AppContext
 from databricks.sdk import WorkspaceClient
+from streamlit.components.v1 import html
 
 def get_user_info():
     headers = st.context.headers
@@ -41,3 +43,14 @@ def get_app_context() -> AppContext:
     )
 
     return appContext
+
+def open_run_window(job_id,run_id):
+    host_name = os.getenv("DATABRICKS_HOST")    
+    url = f"{host_name}/jobs/{job_id}/runs/{run_id}"
+    print(url)
+    open_script= """
+        <script type="text/javascript">
+            window.open('%s', '_blank').focus();
+        </script>
+    """ % (url)
+    html(open_script)

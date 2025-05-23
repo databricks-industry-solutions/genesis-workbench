@@ -17,9 +17,17 @@ export IS_TOKEN_AUTH="Y"
 #export SQL_WAREHOUSE="8f210e00850a2c16"
 #export DATABRICKS_HOSTNAME="https://adb-830292400663869.9.azuredatabricks.net"
 #export DATABRICKS_TOKEN="aaaa"
+
 source env.env
 
 rm lib/*.whl
+
+cd ..
+
+echo "Extra params: $EXTRA_PARAMS"
+databricks bundle deploy -t dev --var=$EXTRA_PARAMS
+
+cd app
 
 streamlit run home.py
 

@@ -30,12 +30,27 @@ variables:
 
   core_catalog_name:
     description: primary catalog where data, models, and files are stored for this project.
-    #default: genesis_workbench 
   
   core_schema_name:
     description: The schema where core components will be installed.
-    #default: dbx_genesis_workbench_core 
 
   module_registration_experiment_name:
     description: The experiment to which all registered modules are logged
     default: dbx_genesis_workbench_modules
+
+  bionemo_docker_image:
+    description: The docker image uri for bionemo
+
+  bionemo_docker_userid:
+    description: The userid for the decker registry
+
+  bionemo_docker_token:
+    description: The token for docker registry
+
+  bionemo_cluster_a10_nodetype:
+    description: The nodetype for bionemo A10 gpu cluster
+    default: g5.8xlarge
+
+  bionemo_cluster_dbr_version:
+    description: DBR Version of BioNeMo cluster
+    default: 15.4.x-scala2.12

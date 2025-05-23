@@ -43,14 +43,35 @@ monitoring_alerts_page = st.Page(
     icon=":material/monitoring:"
 )
 
-pg = st.navigation(pages=[
-    home_page,
-    single_cell_page,
-    protein_page,
-    small_molecules_page,
-    monitoring_alerts_page,
-    settings_page
-])
+bionemo_esm_page = st.Page(
+    page="views/bionemo/bionemo_esm.py",
+    title="ESMFold2",
+    icon=":material/genetics:"
+)
+
+bionemo_geneformer_page = st.Page(
+    page="views/bionemo/bionemo_geneformer.py",
+    title="Geneformer",
+    icon=":material/genetics:"
+)
+
+menu_pages = {
+    " ": [
+            home_page,
+            single_cell_page,
+            protein_page,
+            small_molecules_page,
+            monitoring_alerts_page,
+            settings_page
+        ],
+    "BioNeMo" : [
+        bionemo_esm_page,
+        bionemo_geneformer_page
+    ]    
+
+}
+
+pg = st.navigation(pages=menu_pages)
 
 
 
