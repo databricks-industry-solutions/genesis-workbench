@@ -20,11 +20,6 @@ import pandas as pd
 
 # COMMAND ----------
 
-dbutils.widgets.removeAll()
-
-
-# COMMAND ----------
-
 cleanup: bool = True
 work_dir = "/workdir"
 
@@ -36,16 +31,16 @@ dbutils.widgets.text("finetune_label", "esm_650m_ft_xyz", "A label using which t
 dbutils.widgets.text("core_catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("core_schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
 
-dbutils.widgets.text("task-type", "regression", "Task type")
-dbutils.widgets.text("mlp-ft-dropout", "0.25" , "Dropout")
-dbutils.widgets.text("mlp-hidden-size", "256", "Hidden size")
-dbutils.widgets.text("mlp-target-size", "1" , "Target size")
-dbutils.widgets.text("experiment-name", "sequence-level-regression" , "Experiment name")
-dbutils.widgets.text("num-steps", "50", "Num steps")
+dbutils.widgets.text("task_type", "regression", "Task type")
+dbutils.widgets.text("mlp_ft_dropout", "0.25" , "Dropout")
+dbutils.widgets.text("mlp_hidden_size", "256", "Hidden size")
+dbutils.widgets.text("mlp_target_size", "1" , "Target size")
+dbutils.widgets.text("experiment_name", "sequence_level_regression" , "Experiment name")
+dbutils.widgets.text("num_steps", "50", "Num steps")
 dbutils.widgets.text("lr", "5e-3","Learning rate")
-dbutils.widgets.text("lr-multiplier", "1e2" , "Learning rate multiplier")
-dbutils.widgets.text("scale-lr-layer", "regression_head" ,"Layers to scale Learning Rate")
-dbutils.widgets.text("micro-batch-size", "2" , "Micro batch size")
+dbutils.widgets.text("lr_multiplier", "1e2" , "Learning rate multiplier")
+#dbutils.widgets.text("scale_lr_layer", "regression_head" ,"Layers to scale Learning Rate")
+dbutils.widgets.text("micro_batch_size", "2" , "Micro batch size")
 dbutils.widgets.text("precision", "bf16-mixed", "Precision")
 
 catalog = dbutils.widgets.get("core_catalog")
@@ -55,16 +50,16 @@ train_data_volume_location = dbutils.widgets.get("train_data_location")
 validation_data_volume_location = dbutils.widgets.get("validation_data_location")
 should_use_lora = True if dbutils.widgets.get("should_use_lora")=="true" else False
 finetune_label = dbutils.widgets.get("finetune_label")
-task_type = dbutils.widgets.get("task-type")
-mlp_ft_dropout = float(dbutils.widgets.get("mlp-ft-dropout"))
-mlp_hidden_size = int(dbutils.widgets.get("mlp-hidden-size"))
-mlp_target_size = int(dbutils.widgets.get("mlp-target-size"))
-experiment_name = dbutils.widgets.get("experiment-name")
-num_steps = int(dbutils.widgets.get("num-steps"))
+task_type = dbutils.widgets.get("task_type")
+mlp_ft_dropout = float(dbutils.widgets.get("mlp_ft_dropout"))
+mlp_hidden_size = int(dbutils.widgets.get("mlp_hidden_size"))
+mlp_target_size = int(dbutils.widgets.get("mlp_target_size"))
+experiment_name = dbutils.widgets.get("experiment_name")
+num_steps = int(dbutils.widgets.get("num_steps"))
 lr = float(dbutils.widgets.get("lr"))
-lr_multiplier = float(dbutils.widgets.get("lr-multiplier"))
-scale_lr_layer = dbutils.widgets.get("scale-lr-layer")
-micro_batch_size = int(dbutils.widgets.get("micro-batch-size"))
+lr_multiplier = float(dbutils.widgets.get("lr_multiplier"))
+scale_lr_layer = "regression_head" if task_type=="regression" else "classification_head" #dbutils.widgets.get("scale-lr-layer")
+micro_batch_size = int(dbutils.widgets.get("micro_batch_size"))
 precision = dbutils.widgets.get("precision")
                                   
 
@@ -76,6 +71,8 @@ if os.path.exists(work_dir):
 os.makedirs(work_dir)
 os.makedirs(work_dir + "/data/train")
 os.makedirs(work_dir + "/data/val")
+os.makedirs(work_dir + "/ft_weights")
+ft_weights_directory = f"{work_dir}/ft_weights"
 ft_weights_volume_location = f"/Volumes/{catalog}/{schema}/model_weights/esm2/{esm_variant}/{finetune_label}"
 dbutils.fs.rm(ft_weights_volume_location, True)
 dbutils.fs.mkdirs(ft_weights_volume_location)

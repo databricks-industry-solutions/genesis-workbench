@@ -12,23 +12,9 @@ from genesis_workbench.models import (ModelCategory,
                                       get_gwb_model_info,
                                       deploy_model)
 
-from utils.streamlit_helper import get_user_info, get_app_context
+from utils.streamlit_helper import get_user_info, get_app_context, open_run_window
 
-from streamlit.components.v1 import html
 from io import StringIO
-
-
-def open_deploy_model_run_window(run_id):
-    host_name = os.getenv("DATABRICKS_HOST")
-    job_id = os.getenv("DEPLOY_MODEL_JOB_ID")
-    url = f"https://{host_name}#job/{job_id}/run/{run_id}"
-    print(url)
-    open_script= """
-        <script type="text/javascript">
-            window.open('%s', '_blank').focus();
-        </script>
-    """ % (url)
-    html(open_script)
 
 @st.dialog("Deploy Model", width="large")
 def display_deploy_model_dialog(selected_model_name):    
@@ -159,7 +145,8 @@ def display_deploy_model_dialog(selected_model_name):
         if deploy_started:
             st.success(f"Model deploy has started with a run id {run_id}.")                
             st.warning(f"It might take upto 30 minutes to complete")
-            view_deploy_run_btn = st.button("View Run", on_click=lambda: open_deploy_model_run_window(run_id))
+            job_id = os.getenv("DEPLOY_MODEL_JOB_ID")
+            view_deploy_run_btn = st.button("View Run", on_click=lambda: open_run_window(job_id,run_id))
 
 
 @st.dialog("Import model from Unity Catalog")
