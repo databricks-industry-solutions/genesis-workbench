@@ -28,6 +28,7 @@ targets:
       app_name: dev-${var.dev_user_prefix}-genesis-workbench
       sql_warehouse_id: 8f210e00850a2c16
       bionemo_docker_image: srijitnair254/bionemo_dbx_amd64:0.1
+      bionemo_docker_userid: srijitnair254
       bionemo_cluster_a10_nodetype: Standard_NV36ads_A10_v5
     workspace:
       root_path: ${var.current_working_directory}

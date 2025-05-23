@@ -9,6 +9,7 @@ resources:
 
       tasks:
         - task_key: bionemo_esm_finetune_task
+          job_cluster_key: job_cluster
           notebook_task:
             notebook_path: ../../notebooks/bionemo_esm_finetune.py
           max_retries: 0 
@@ -18,18 +19,6 @@ resources:
           default: ${var.core_catalog_name}
         - name: schema
           default: ${var.core_schema_name}
-        - name: gwb_model_id
-          default: '-1' 
-        - name: deployment_name
-          default: name
-        - name: deployment_description
-          default: description
-        - name: workload_type
-          default: "GPU_SMALL"
-        - name: workload_size
-          default: Small
-        - name: deploy_user
-          default: none
 
       job_clusters:
         - job_cluster_key: job_cluster
