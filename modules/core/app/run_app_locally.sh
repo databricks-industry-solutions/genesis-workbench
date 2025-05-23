@@ -6,6 +6,7 @@ poetry build
 
 cd ../../app
 
+mkdir -p lib
 yes | cp -rf ../library/genesis_workbench/dist/*.whl lib/
 
 pip uninstall -y -r requirements.txt
