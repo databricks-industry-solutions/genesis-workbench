@@ -17,11 +17,7 @@ resources:
         - environment_key: default
           spec:
             client: '2'
-            dependencies:
-              - databricks-sdk==0.50.0
-              - databricks-sql-connector==4.0.3
-              - mlflow==2.22.0
-              - ../../library/genesis_workbench/dist/*.whl
+
 
       parameters:
         - name: catalog
