@@ -1,16 +1,4 @@
 # Databricks notebook source
-
-# COMMAND ----------
-#%pip databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0 
-#%pip install /Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/libraries/genesis_workbench-0.1.0-py3-none-any.whl --force-reinstall
-
-# %pip install databricks-sql-connector
-
-# dbutils.widgets.removeAll()
-#dbutils.library.restartPython()
-
-# COMMAND ----------
-
 #some example data for reference
 gwb_model_id = 2
 input_adapter_str = """
@@ -48,8 +36,6 @@ sample_params_as_json = """
 
 # COMMAND ----------
 
-#parameters to the notebook
-
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
 dbutils.widgets.text("gwb_model_id", str(gwb_model_id), "Model Id")
@@ -63,6 +49,33 @@ dbutils.widgets.text("sample_params_as_json", sample_params_as_json, "Sample Par
 dbutils.widgets.text("workload_type", "CPU", "Endpoint Workload Type")
 dbutils.widgets.text("workload_size", "Medium", "Endpoint Workload Size")
 dbutils.widgets.text("deploy_user", "a@b.com", "User Id")
+
+catalog = dbutils.widgets.get("catalog")
+schema = dbutils.widgets.get("schema")
+
+
+# COMMAND ----------
+
+# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0
+
+# COMMAND ----------
+
+gwb_library_path = None
+libraries = dbutils.fs.ls(f"/Volumes/{catalog}/{schema}/libraries")
+for lib in libraries:
+    if(lib.name.startswith("genesis_workbench")):
+        gwb_library_path = lib.path.replace("dbfs:","")
+
+print(gwb_library_path)
+
+# COMMAND ----------
+
+# MAGIC %pip install {gwb_library_path} --force-reinstall
+# MAGIC dbutils.library.restartPython()
+
+# COMMAND ----------
+
+#parameters to the notebook
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
