@@ -84,3 +84,20 @@ CREATE TABLE model_deployments (
 """)
 
 
+# COMMAND ----------
+
+spark.sql("DROP TABLE IF EXISTS bionemo_weights")
+
+spark.sql(f"""
+CREATE TABLE bionemo_weights (
+    ft_label STRING,
+    model_type STRING,
+    experiment_name STRING,
+    run_id STRING,
+    weights_volume_location STRING,
+    created_by STRING,
+    created_datetime TIMESTAMP,
+    is_active BOOLEAN,
+    deactivated_timestamp TIMESTAMP
+)
+""")

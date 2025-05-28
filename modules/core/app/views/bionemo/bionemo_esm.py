@@ -31,7 +31,7 @@ with finetune_tab:
                 mlp_ft_dropout = st.number_input("Dropout:", value=0.25)
                 mlp_hidden_size = st.number_input("Hidden Size:", value=256)
                 mlp_target_size = st.number_input("Target Size:", value=1)
-                mlp_lr = st.number_input("Learning Rate:", value=5e3)
+                mlp_lr = st.number_input("Learning Rate:", value=5e-3)
                 mlp_lr_multiplier = st.number_input("Learning Rate Multiplier:", value=1e2)
 
     finetuning_started = False
