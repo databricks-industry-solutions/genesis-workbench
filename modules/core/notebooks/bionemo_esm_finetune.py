@@ -1,28 +1,4 @@
 # Databricks notebook source
-# MAGIC %md
-# MAGIC ### Import Required Libraries
-
-# COMMAND ----------
-
-# MAGIC %pip install databricks-sdk==0.53.0
-# MAGIC %restart_python
-
-# COMMAND ----------
-
-import os
-import shutil
-import pandas as pd
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ### Work Directory
-
-# COMMAND ----------
-
-cleanup: bool = True
-work_dir = "/workdir"
-
 dbutils.widgets.text("esm_variant", "650M", "ESM Variant")
 dbutils.widgets.text("train_data_location", "/Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/esm_finetune", "Training data location")
 dbutils.widgets.text("validation_data_location", "/Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/esm_finetune", "Validation data location")
@@ -45,6 +21,49 @@ dbutils.widgets.text("precision", "bf16-mixed", "Precision")
 
 catalog = dbutils.widgets.get("core_catalog")
 schema = dbutils.widgets.get("core_schema")
+                                  
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Import Required Libraries
+
+# COMMAND ----------
+
+# MAGIC %pip install databricks-sdk==0.53.0
+
+# COMMAND ----------
+
+gwb_library_path = None
+libraries = dbutils.fs.ls("/Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/libraries")
+for lib in libraries:
+    if(lib.name.startswith("genesis_workbench")):
+        gwb_library_path = lib.path.replace("dbfs:","")
+
+print(gwb_library_path)
+
+# COMMAND ----------
+
+# MAGIC %pip install {gwb_library_path} --force-reinstall
+# MAGIC dbutils.library.restartPython()
+
+# COMMAND ----------
+
+import os
+import shutil
+import pandas as pd
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Work Directory
+
+# COMMAND ----------
+
+cleanup: bool = True
+work_dir = "/workdir"
+catalog = dbutils.widgets.get("core_catalog")
+schema = dbutils.widgets.get("core_schema")
 esm_variant = dbutils.widgets.get("esm_variant")
 train_data_volume_location = dbutils.widgets.get("train_data_location")
 validation_data_volume_location = dbutils.widgets.get("validation_data_location")
@@ -61,7 +80,6 @@ lr_multiplier = float(dbutils.widgets.get("lr_multiplier"))
 scale_lr_layer = "regression_head" if task_type=="regression" else "classification_head" #dbutils.widgets.get("scale-lr-layer")
 micro_batch_size = int(dbutils.widgets.get("micro_batch_size"))
 precision = dbutils.widgets.get("precision")
-                                  
 
 # COMMAND ----------
 
@@ -172,7 +190,7 @@ download_data(validation_data_volume_location, workdir_val_data_file)
 
 # MAGIC %md
 # MAGIC #### Copy the weights back into volume
-
+# MAGIC
 
 # COMMAND ----------
 
@@ -188,6 +206,3 @@ for file in os.listdir(checkpoint_path):
     dbutils.fs.cp(last_checkpoint_path, ft_weights_volume_location, True) 
     print("Done")
     
-
-# COMMAND ----------
-
