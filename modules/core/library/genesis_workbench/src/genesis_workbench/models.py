@@ -81,7 +81,7 @@ def get_latest_model_version(model_name):
     model_version_infos = client.search_model_versions("name = '%s'" % model_name)
     return max([int(model_version_info.version) for model_version_info in model_version_infos])
 
-def get_available_models(model_category : ModelCategory,app_context:AppContext):
+def get_available_models(model_category : ModelCategory,app_context:AppContext) -> pd.DataFrame:
     
     """Gets all models that are available for deployment"""
     query = f"SELECT \
@@ -95,7 +95,7 @@ def get_available_models(model_category : ModelCategory,app_context:AppContext):
     result_df = execute_select_query(query)
     return result_df
 
-def get_deployed_models(model_category : ModelCategory, app_context:AppContext):
+def get_deployed_models(model_category : ModelCategory, app_context:AppContext)-> pd.DataFrame:
     """Gets all models that are available for deployment"""
     
     query = f"SELECT deployment_id, deployment_name, deployment_description, model_display_name, model_source_version, \
