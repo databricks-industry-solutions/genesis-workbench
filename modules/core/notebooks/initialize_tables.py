@@ -92,6 +92,7 @@ spark.sql(f"""
 CREATE TABLE bionemo_weights (
     ft_label STRING,
     model_type STRING,
+    variant STRING,
     experiment_name STRING,
     run_id STRING,
     weights_volume_location STRING,
