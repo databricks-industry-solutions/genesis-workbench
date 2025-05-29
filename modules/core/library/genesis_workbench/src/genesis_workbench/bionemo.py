@@ -17,6 +17,7 @@ class BionemoModelType(StrEnum):
 @dataclass
 class GWBBionemoFTInfo:
     """Class that contains info about available models"""    
+    ft_id: int
     ft_label:str
     model_type: BionemoModelType
     variant:str
@@ -77,7 +78,7 @@ def start_finetuning(user_info: UserInfo,
 def list_finetuned_weights(model_type: BionemoModelType, app_context: AppContext) -> pd.DataFrame:
     """Gets all finetuned model weight details for a model type"""
     
-    query = f"SELECT ft_label, model_type, variant, experiment_name, run_id, weights_volume_location, created_by, created_datetime \
+    query = f"SELECT ft_id, ft_label, model_type, variant, experiment_name, run_id, created_by, created_datetime \
             FROM \
                 {app_context.core_catalog_name}.{app_context.core_schema_name}.bionemo_weights \
             WHERE \
