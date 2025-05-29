@@ -1,28 +1,4 @@
 # Databricks notebook source
-# MAGIC %md
-# MAGIC ### Import Required Libraries
-
-# COMMAND ----------
-
-# MAGIC %pip install databricks-sdk==0.53.0
-# MAGIC %restart_python
-
-# COMMAND ----------
-
-import os
-import shutil
-import pandas as pd
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ### Work Directory
-
-# COMMAND ----------
-
-cleanup: bool = True
-work_dir = "/workdir"
-
 dbutils.widgets.text("esm_variant", "650M", "ESM Variant")
 dbutils.widgets.text("train_data_location", "/Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/esm_finetune", "Training data location")
 dbutils.widgets.text("validation_data_location", "/Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/esm_finetune", "Validation data location")
@@ -42,7 +18,51 @@ dbutils.widgets.text("lr_multiplier", "1e2" , "Learning rate multiplier")
 #dbutils.widgets.text("scale_lr_layer", "regression_head" ,"Layers to scale Learning Rate")
 dbutils.widgets.text("micro_batch_size", "2" , "Micro batch size")
 dbutils.widgets.text("precision", "bf16-mixed", "Precision")
+dbutils.widgets.text("user_email", "a@b.com", "User Email")
 
+catalog = dbutils.widgets.get("core_catalog")
+schema = dbutils.widgets.get("core_schema")
+                                  
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Import Required Libraries
+
+# COMMAND ----------
+
+# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0
+
+# COMMAND ----------
+
+gwb_library_path = None
+libraries = dbutils.fs.ls(f"/Volumes/{catalog}/{schema}/libraries")
+for lib in libraries:
+    if(lib.name.startswith("genesis_workbench")):
+        gwb_library_path = lib.path.replace("dbfs:","")
+
+print(gwb_library_path)
+
+# COMMAND ----------
+
+# MAGIC %pip install {gwb_library_path} --force-reinstall
+# MAGIC dbutils.library.restartPython()
+
+# COMMAND ----------
+
+import os
+import shutil
+import pandas as pd
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Work Directory
+
+# COMMAND ----------
+
+cleanup: bool = True
+work_dir = "/workdir"
 catalog = dbutils.widgets.get("core_catalog")
 schema = dbutils.widgets.get("core_schema")
 esm_variant = dbutils.widgets.get("esm_variant")
@@ -61,7 +81,7 @@ lr_multiplier = float(dbutils.widgets.get("lr_multiplier"))
 scale_lr_layer = "regression_head" if task_type=="regression" else "classification_head" #dbutils.widgets.get("scale-lr-layer")
 micro_batch_size = int(dbutils.widgets.get("micro_batch_size"))
 precision = dbutils.widgets.get("precision")
-                                  
+user_email = dbutils.widgets.get("user_email")
 
 # COMMAND ----------
 
@@ -145,6 +165,10 @@ download_data(validation_data_volume_location, workdir_val_data_file)
 
 # COMMAND ----------
 
+is_finetune_success = False
+
+# COMMAND ----------
+
 ! finetune_esm2 \
     --restore-from-checkpoint-path {pretrain_checkpoint_path} \
     --train-data-path {workdir_train_data_file} \
@@ -166,13 +190,19 @@ download_data(validation_data_volume_location, workdir_val_data_file)
     --scale-lr-layer {scale_lr_layer} \
     --result-dir {ft_weights_directory}  \
     --micro-batch-size {micro_batch_size} \
-    --precision {precision}
+    --precision {precision} \
+    --create-tensorboard-logger
+
+# COMMAND ----------
+
+# MAGIC %sh
+# MAGIC ls -al /
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC #### Copy the weights back into volume
-
+# MAGIC
 
 # COMMAND ----------
 
@@ -187,7 +217,53 @@ for file in os.listdir(checkpoint_path):
     print(f"Copying last checkpointed weights to {ft_weights_volume_location}")
     dbutils.fs.cp(last_checkpoint_path, ft_weights_volume_location, True) 
     print("Done")
+    is_finetune_success = True
     
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC #### Log the details in an MLflow experiment 
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC #### Record FT Run and Weight into
+
+# COMMAND ----------
+
+from genesis_workbench import bionemo
+
+# COMMAND ----------
+
+user_email = "srijit.nair@databricks.com"
+
+if is_finetune_success:
+    #update the model deployment table
+    spark.sql(f"""
+        INSERT INTO {catalog}.{schema}.bionemo_weights(
+            ft_label,
+            model_type,
+            variant,
+            experiment_name,
+            run_id,
+            weights_volume_location,
+            created_by,
+            created_datetime,
+            is_active,
+            deactivated_timestamp
+        ) VALUES (
+            '{finetune_label}',
+            'esm2',
+            '{esm_variant}',
+            '{experiment_name}',
+            0,
+            '{ft_weights_volume_location}',
+            '{user_email}',
+            CURRENT_TIMESTAMP(),
+            true,
+            NULL
+        )
+    """) 
+else:
+    print("No deployments made")

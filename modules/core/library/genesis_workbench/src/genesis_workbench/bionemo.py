@@ -1,10 +1,37 @@
 
 import os
-from databricks.sdk import WorkspaceClient
+import pandas as pd
+from dataclasses import dataclass, asdict
+from enum import StrEnum, auto
+from datetime import datetime
+from typing import Union, List
 from .workbench import (UserInfo, 
+                        AppContext,
                          execute_select_query, 
                          execute_parameterized_inserts,
                          execute_workflow)
+
+class BionemoModelType(StrEnum):
+    ESM2 = auto()
+
+@dataclass
+class GWBBionemoFTInfo:
+    """Class that contains info about available models"""    
+    ft_id: int
+    ft_label:str
+    model_type: BionemoModelType
+    variant:str
+    experiment_name:str
+    run_id:str
+    weights_volume_location:str
+    created_by:str
+    created_datetime:datetime
+    is_active:bool
+    deactivated_timestamp:datetime
+
+def get_variants(model_type: BionemoModelType) -> List[str]:
+    if model_type == BionemoModelType.ESM2:
+        return ["650M","3B"]
 
 def start_finetuning(user_info: UserInfo,
             esm_variant:str,
@@ -46,3 +73,16 @@ def start_finetuning(user_info: UserInfo,
     print(params)
     run_id = execute_workflow(bionemo_finetune_job_id,params)
     return run_id
+
+
+def list_finetuned_weights(model_type: BionemoModelType, app_context: AppContext) -> pd.DataFrame:
+    """Gets all finetuned model weight details for a model type"""
+    
+    query = f"SELECT ft_id, ft_label, model_type, variant, experiment_name, run_id, created_by, created_datetime \
+            FROM \
+                {app_context.core_catalog_name}.{app_context.core_schema_name}.bionemo_weights \
+            WHERE \
+                model_type = '{str(model_type)}' and is_active=true"
+    
+    result_df = execute_select_query(query)
+    return result_df
