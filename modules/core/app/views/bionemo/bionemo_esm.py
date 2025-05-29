@@ -67,9 +67,11 @@ def display_finetune_tab():
 
 def display_inference_tab():
     st.markdown("###### Run Inference")       
-    use_ft_weight =  st.toggle("Use Finetuned Weight") 
+    model_weight_source =  st.pills("Model:",["Base Model","Finetuned Weight"], 
+                                    selection_mode="single",
+                                    default="Base Model") 
 
-    if not use_ft_weight:
+    if model_weight_source == "Base Model":
         c1,c2 = st.columns([1,1])
         with c1:
             esm_variant_for_inference = st.selectbox("ESM Variant",get_variants(BionemoModelType.ESM2))
@@ -98,14 +100,10 @@ def display_inference_tab():
 #load data for page
 with st.spinner("Loading data"):
     if "finetuned_esm_weights_df" not in st.session_state:
-            finetuned_esm_weights_df = list_finetuned_weights(model_type=BionemoModelType.ESM2, app_context=get_app_context())
+            finetuned_esm_weights_df = list_finetuned_weights(model_type=BionemoModelType.ESM2, app_context=get_app_context())[["ft_id", "ft_label", "model_type", "variant", "created_by"]]
 
-            finetuned_esm_weights_df.columns = ["Label", "Model type", "Variant", "MLflow Experiment","Run Id", "Weights Location", "Created By" , "Create On"]
-            # available_models_df["model_labels"] = (available_models_df["model_id"].astype(str) + " - " 
-            #                                     + available_models_df["model_display_name"].astype(str) + " [ " 
-            #                                     + available_models_df["model_uc_name"].astype(str) + " v"
-            #                                     + available_models_df["model_uc_version"].astype(str) + " ]"
-            #                                     )
+            finetuned_esm_weights_df.columns = ["Id", "Label", "Model type", "Variant", "Created By"]
+
             st.session_state["finetuned_esm_weights_df"] = finetuned_esm_weights_df
 
     finetuned_esm_weights_df = st.session_state["finetuned_esm_weights_df"]
