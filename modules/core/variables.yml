@@ -22,7 +22,7 @@ variables:
   common_resource_tags:
     description: Resource tags
     default: 
-      - owner: genesis_workbench
+      - application: genesis_workbench
       - created_by: ${var.current_user}
 
   dev_user_prefix:

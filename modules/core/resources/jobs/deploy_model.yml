@@ -36,5 +36,6 @@ resources:
           default: Small
         - name: deploy_user
           default: none
-
+      
+      tags: ${var.common_resource_tags}
 
