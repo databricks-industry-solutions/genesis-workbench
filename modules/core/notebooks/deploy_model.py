@@ -1,6 +1,6 @@
 # Databricks notebook source
 #some example data for reference
-gwb_model_id = 2
+gwb_model_id = 1
 input_adapter_str = """
 from genesis_workbench.adapters import BaseAdapter
 
@@ -137,7 +137,8 @@ from databricks.sdk.service.serving import (
         EndpointCoreConfigInput,
         ServedEntityInput,
         AutoCaptureConfigInput,
-        ServingEndpointDetailed
+        ServingEndpointDetailed,
+        ServingModelWorkloadType
     )
 from databricks.sdk import errors
 from datetime import datetime, timedelta
@@ -147,14 +148,13 @@ def deploy_model(catalog_name: str,
                  schema_name : str,
                  fq_model_uc_name : str,
                  model_version: int,
-                 deployment_id: int,
                  workload_type: str,
                  workload_size:str) -> ServingEndpointDetailed:
 
     w = WorkspaceClient()
 
     model_name = fq_model_uc_name.split(".")[2]
-    endpoint_name = f"gwb_{model_name}_{deployment_id}"
+    endpoint_name = f"gwb_{model_name}_endpoint"
     scale_to_zero = True
 
     served_entities = [
@@ -162,7 +162,7 @@ def deploy_model(catalog_name: str,
             entity_name=fq_model_uc_name,
             entity_version=model_version,
             name=model_name,
-            workload_type=workload_type,
+            workload_type=ServingModelWorkloadType(workload_type),
             workload_size=workload_size,
             scale_to_zero_enabled=scale_to_zero,
         )
@@ -212,13 +212,10 @@ def process_model_with_adapters(core_catalog_name:str,
     if sample_params_as_json and sample_params_as_json != "none":
         params_input = json.loads(sample_params_as_json)
     
-    pip_requirements = [] #["databricks-sdk","databricks-sql-connector"]
+    pip_requirements = ["mlflow==2.22.0", "cloudpickle==3.0.0", "numpy==1.23.5", "pandas==1.5.3"]
     mlflow.set_registry_uri("databricks-uc")
     model_uri = f"models:/{model_uc_name}/{model_uc_version}"
     loaded_model = mlflow.pyfunc.load_model(model_uri)
-    # deps_file = mlflow.pyfunc.get_model_dependencies(model_uri)
-    # with open(deps_file) as f:
-    #     pip_requirements = f.read().splitlines()
 
     #create a wrapper around the mlflow model
     wrapped_model = GWBModel(model=loaded_model,
@@ -261,7 +258,7 @@ def process_model_with_adapters(core_catalog_name:str,
             signature=signature,
             input_example=input_data,
             registered_model_name=wrapped_model_name,
-            extra_pip_requirements = pip_requirements
+            pip_requirements = pip_requirements
         )
         model_version = get_latest_model_version(wrapped_model_name)
         model_uri = f"models:/{wrapped_model_name}/{model_version}"
@@ -312,7 +309,7 @@ if result_df.count() > 0:
    model_uri = f"models:/{model_uc_name}/{model_uc_version}"
    
    #deploy the model to model serving endpoint
-   deploy_result = deploy_model(catalog, schema, model_uc_name, model_uc_version, deploy_id, workload_type, workload_size)
+   deploy_result = deploy_model(catalog, schema, model_uc_name, model_uc_version, workload_type, workload_size)
    model_deployed = True
 else:
     print("No model found to deploy")
