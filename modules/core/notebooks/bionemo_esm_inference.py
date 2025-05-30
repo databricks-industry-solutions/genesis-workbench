@@ -1,23 +1,12 @@
 # Databricks notebook source
-dbutils.widgets.text("esm_variant", "650M", "ESM Variant")
-dbutils.widgets.text("train_data_location", "/Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/esm_finetune", "Training data location")
-dbutils.widgets.text("validation_data_location", "/Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/esm_finetune", "Validation data location")
-dbutils.widgets.text("should_use_lora", "false", "Should use LORA")
-dbutils.widgets.text("finetune_label", "esm_650m_ft_xyz", "A label using which these finetune weights are saved")
 dbutils.widgets.text("core_catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("core_schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
-
-dbutils.widgets.text("task_type", "regression", "Task type")
-dbutils.widgets.text("mlp_ft_dropout", "0.25" , "Dropout")
-dbutils.widgets.text("mlp_hidden_size", "256", "Hidden size")
-dbutils.widgets.text("mlp_target_size", "1" , "Target size")
-dbutils.widgets.text("experiment_name", "sequence_level_regression" , "Experiment name")
-dbutils.widgets.text("num_steps", "50", "Num steps")
-dbutils.widgets.text("lr", "5e-3","Learning rate")
-dbutils.widgets.text("lr_multiplier", "1e2" , "Learning rate multiplier")
-#dbutils.widgets.text("scale_lr_layer", "regression_head" ,"Layers to scale Learning Rate")
-dbutils.widgets.text("micro_batch_size", "2" , "Micro batch size")
-dbutils.widgets.text("precision", "bf16-mixed", "Precision")
+dbutils.widgets.text("is_base_model", "true", "Use Base Model?")
+dbutils.widgets.text("esm_variant", "650M", "ESM Variant")
+dbutils.widgets.text("task_type", "regression", "Task type: Regression or Classification")
+dbutils.widgets.text("finetune_run_id", "1", "Finetune Run Id")
+dbutils.widgets.text("data_location", "/Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/esm_finetune", "Training data location")
+dbutils.widgets.text("result_table", "/Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/esm_finetune", "Result table")
 dbutils.widgets.text("user_email", "a@b.com", "User Email")
 
 catalog = dbutils.widgets.get("core_catalog")
@@ -61,26 +50,15 @@ import pandas as pd
 
 # COMMAND ----------
 
-cleanup: bool = True
 work_dir = "/workdir"
 catalog = dbutils.widgets.get("core_catalog")
 schema = dbutils.widgets.get("core_schema")
+is_base_model = True if dbutils.widgets.get("is_base_model") == "true" else False
 esm_variant = dbutils.widgets.get("esm_variant")
-train_data_volume_location = dbutils.widgets.get("train_data_location")
-validation_data_volume_location = dbutils.widgets.get("validation_data_location")
-should_use_lora = True if dbutils.widgets.get("should_use_lora")=="true" else False
-finetune_label = dbutils.widgets.get("finetune_label")
 task_type = dbutils.widgets.get("task_type")
-mlp_ft_dropout = float(dbutils.widgets.get("mlp_ft_dropout"))
-mlp_hidden_size = int(dbutils.widgets.get("mlp_hidden_size"))
-mlp_target_size = int(dbutils.widgets.get("mlp_target_size"))
-experiment_name = dbutils.widgets.get("experiment_name")
-num_steps = int(dbutils.widgets.get("num_steps"))
-lr = float(dbutils.widgets.get("lr"))
-lr_multiplier = float(dbutils.widgets.get("lr_multiplier"))
-scale_lr_layer = "regression_head" if task_type=="regression" else "classification_head" #dbutils.widgets.get("scale-lr-layer")
-micro_batch_size = int(dbutils.widgets.get("micro_batch_size"))
-precision = dbutils.widgets.get("precision")
+finetune_run_id = dbutils.widgets.get("finetune_run_id")
+data_location = dbutils.widgets.get("data_location")
+result_table = dbutils.widgets.get("result_table")
 user_email = dbutils.widgets.get("user_email")
 
 # COMMAND ----------
@@ -88,15 +66,14 @@ user_email = dbutils.widgets.get("user_email")
 if os.path.exists(work_dir):
     shutil.rmtree(work_dir)
 
-os.makedirs(work_dir)
-os.makedirs(work_dir + "/data/train")
-os.makedirs(work_dir + "/data/val")
-os.makedirs(work_dir + "/ft_weights")
+data_dir = f"{work_dir}/data"
+results_dir = f"{work_dir}/results"
 ft_weights_directory = f"{work_dir}/ft_weights"
-ft_weights_volume_location = f"/Volumes/{catalog}/{schema}/model_weights/esm2/{esm_variant}/{finetune_label}"
-dbutils.fs.rm(ft_weights_volume_location, True)
-dbutils.fs.mkdirs(ft_weights_volume_location)
 
+os.makedirs(work_dir)
+os.makedirs(data_dir)
+os.makedirs(results_dir)
+os.makedirs(ft_weights_directory)
 
 # COMMAND ----------
 
@@ -105,15 +82,38 @@ dbutils.fs.mkdirs(ft_weights_volume_location)
 
 # COMMAND ----------
 
+from genesis_workbench.bionemo import BionemoModelType, GWBBionemoFTInfo
+
+def get_ft_run_details(run_id:int) -> GWBBionemoFTInfo:
+    query = f"SELECT * FROM {catalog}.{schema}.bionemo_weights WHERE ft_id = {run_id}"
+    df = spark.sql(query)
+    
+    if df.count() == 0:
+        raise Exception(f"Finetune run {run_id} not found")
+    run_info = df.toPandas().apply(lambda row: GWBBionemoFTInfo(**row), axis=1).tolist()[0]
+    return run_info
+
+
+# COMMAND ----------
+
 from bionemo.core.data.load import load
 
-pretrain_checkpoint_path = load(f"esm2/{esm_variant.lower()}:2.0")
-print(pretrain_checkpoint_path)
+model_weights_location = ""
+if is_base_model:    
+    model_weights_location = load(f"esm2/{esm_variant.lower()}:2.0")
+    print(model_weights_location)
+else:
+    run_info = get_ft_run_details(int(finetune_run_id))
+    weights_volume_location = run_info.weights_volume_location
+    shutil.rmtree(ft_weights_directory)
+    shutil.copytree(weights_volume_location, ft_weights_directory)
+    model_weights_location = ft_weights_directory
+    print(f"Copied weights from {weights_volume_location} to {ft_weights_directory}")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Fine-tuning
+# MAGIC ## Run Inference
 
 # COMMAND ----------
 
@@ -127,7 +127,7 @@ databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getConte
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ####Copy training and validation data locally
+# MAGIC ####Copy data locally
 
 # COMMAND ----------
 
@@ -150,58 +150,56 @@ def download_data(remote_path, local_file_name):
   df = pd.DataFrame(sequences, columns=["sequences", "labels"])
 
   # Save the DataFrame to a CSV file
-  data_path = os.path.join(work_dir, local_file_name)
-  print(f"Writing to {data_path}")
-  df.to_csv(data_path, index=False)
+  print(f"Writing to {local_file_name}")
+  df.to_csv(local_file_name, index=False)
 
 
 # COMMAND ----------
 
-workdir_train_data_file = f"{work_dir}/data/train/train.csv"
-workdir_val_data_file = f"{work_dir}/data/val/val.csv"
+workdir_data_file = f"{data_dir}/data.csv"
 
-download_data(train_data_volume_location, workdir_train_data_file)
-download_data(validation_data_volume_location, workdir_val_data_file)
+download_data(data_location, workdir_data_file)
 
-# COMMAND ----------
-
-is_finetune_success = False
 
 # COMMAND ----------
 
-! finetune_esm2 \
-    --restore-from-checkpoint-path {pretrain_checkpoint_path} \
-    --train-data-path {workdir_train_data_file} \
-    --valid-data-path {workdir_val_data_file} \
-    --config-class ESM2FineTuneSeqConfig \
-    --dataset-class InMemorySingleValueDataset \
-    --task-type {task_type} \
-    --mlp-ft-dropout {mlp_ft_dropout} \
-    --mlp-hidden-size {mlp_hidden_size} \
-    --mlp-target-size  {mlp_target_size} \
-    --experiment-name {experiment_name} \
-    --num-steps {num_steps} \
-    --num-gpus 1 \
-    --val-check-interval 10 \
-    --log-every-n-steps 10 \
-    --encoder-frozen \
-    --lr {lr} \
-    --lr-multiplier {lr_multiplier} \
-    --scale-lr-layer {scale_lr_layer} \
-    --result-dir {ft_weights_directory}  \
-    --micro-batch-size {micro_batch_size} \
-    --precision {precision} \
-    --create-tensorboard-logger
+in_inference_success = False
+
+# COMMAND ----------
+
+shutil.rmtree(ft_weights_directory)
+shutil.copytree(weights_volume_location, ft_weights_directory)
+
+# COMMAND ----------
+
+ft_weights_directory
 
 # COMMAND ----------
 
 # MAGIC %sh
-# MAGIC cat /workdir/ft_weights/sequence_level_regression/dev/
+# MAGIC ls -al '/workdir/ft_weights'
+# MAGIC
+
+# COMMAND ----------
+
+! infer_esm2 --checkpoint-path {model_weights_location} \
+             --config-class ESM2FineTuneSeqConfig \
+             --data-path {workdir_data_file} \
+             --results-path {results_dir} \
+             --micro-batch-size 3 \
+             --num-gpus 1 \
+             --precision "bf16-mixed" \
+             --include-embeddings \
+             --include-input-ids
+
+# COMMAND ----------
+
+!ls -al {results_dir}
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC #### Copy the weights back into volume
+# MAGIC #### Copy the results back into volume
 # MAGIC
 
 # COMMAND ----------
