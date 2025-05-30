@@ -90,10 +90,9 @@ def display_inference_tab():
     col1,col2 = st.columns([1,1])
     with col1:
         with st.form("run_bionemo_ft_inference_form", enter_to_submit=False ):
-            st.text_input("Data Location:","")
-            st.text_input("Result Schema Name:","")
-            st.text_input("Result Table Prefix:","")
-            
+            inf_task_type = st.selectbox("Task Type:",["regression","classification"])
+            inf_data_location = st.text_input("Data Location:","")
+            inf_result_location = st.text_input("Result Schema Name:","")
             st.form_submit_button("Run Inference")
 
 
