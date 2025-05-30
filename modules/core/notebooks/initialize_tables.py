@@ -90,6 +90,7 @@ spark.sql("DROP TABLE IF EXISTS bionemo_weights")
 
 spark.sql(f"""
 CREATE TABLE bionemo_weights (
+    ft_id BIGINT GENERATED ALWAYS AS IDENTITY,
     ft_label STRING,
     model_type STRING,
     variant STRING,
