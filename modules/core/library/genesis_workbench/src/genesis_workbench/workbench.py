@@ -1,6 +1,7 @@
 
 from databricks.sdk.core import Config, oauth_service_principal
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.errors import DatabricksError
 
 from databricks import sql
 
@@ -88,6 +89,43 @@ def execute_workflow(job_id: int, params: dict) -> str:
         job_parameters=params
     )
     return run.run_id
+
+def get_workflow_job_status(tag_key: str = "dev", tag_value: str = "guanyu_chen", max_runs: int = 5) -> dict:
+    w = WorkspaceClient()
+    result = {}
+
+    try:
+        for job in w.jobs.list():
+            tags = getattr(job.settings, "tags", {}) or {}
+            if tags.get(tag_key) == tag_value:
+                job_info = {
+                    "job_id": job.job_id,
+                    "name": job.settings.name,
+                    "tags": tags,
+                    "runs": []
+                }
+
+                try:
+                    runs = w.jobs.list_runs(job_id=job.job_id, limit=max_runs)
+                    for run in runs:
+                        run_info = {
+                            "run_id": run.run_id,
+                            "state": run.state.life_cycle_state,
+                            "result_state": run.state.result_state,
+                            "start_time": run.start_time,
+                            "end_time": run.end_time,
+                            "creator_user_name": run.creator_user_name,
+                        }
+                        job_info["runs"].append(run_info)
+                except DatabricksError as e:
+                    print(f"Error retrieving runs for job ID {job.job_id}: {e}")
+
+                result[job.settings.name] = job_info
+
+    except DatabricksError as e:
+        print(f"Error listing jobs: {e}")
+
+    return result
 
 
 
