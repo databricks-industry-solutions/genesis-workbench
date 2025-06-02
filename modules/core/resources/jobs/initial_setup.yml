@@ -34,4 +34,6 @@ resources:
           #default: ${resources.schemas.core_workbench.name}
           default: ${var.core_schema_name}
 
-      tags: ${var.common_resource_tags}
+      tags: 
+        application: genesis_workbench
+        created_by: ${var.current_user}
