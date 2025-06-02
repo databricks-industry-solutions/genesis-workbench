@@ -45,8 +45,11 @@ def get_app_context() -> AppContext:
     return appContext
 
 def open_run_window(job_id,run_id):
-    host_name = os.getenv("DATABRICKS_HOST")    
+    host_name = os.getenv("DATABRICKS_HOSTNAME")    
     url = f"{host_name}/jobs/{job_id}/runs/{run_id}"
+    if not url.startswith("https://"):
+        url = "https://" + url
+        
     print(url)
     open_script= """
         <script type="text/javascript">
