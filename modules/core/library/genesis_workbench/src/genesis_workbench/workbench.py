@@ -92,8 +92,8 @@ def execute_workflow(job_id: int, params: dict) -> str:
     return run.run_id
 
 def get_workflow_job_status(
-    tag_key: str = "dev",
-    tag_value: str = "guanyu_chen",
+    tag_key: str = "application",
+    tag_value: str = "genesis_workbench",
     days_back: int = 7,
     creator_filter: str = None
 ) -> dict:

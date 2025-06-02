@@ -13,7 +13,7 @@ def format_duration(duration: timedelta) -> str:
     return f"{hours}h {minutes}m"
 
 # --- Utility: Get Workflow Runs ---
-def get_workflow_runs_df(tag_key: str = "dev", tag_value: str = "genesis_workbench", days_back: int = 7) -> pd.DataFrame:
+def get_workflow_runs_df(tag_key: str = "application", tag_value: str = "genesis_workbench", days_back: int = 7) -> pd.DataFrame:
     user_info = get_user_info()
     creator = user_info.user_name if user_info else None
 
@@ -70,32 +70,31 @@ with dashboard_tab:
     st.subheader("Workflow Runs")
 
     with st.container():
-        col1, col2, col3 = st.columns([3, 5, 2])
+        col1, col2 = st.columns([10, 2])
         with col1:
-            st.markdown("**Days Back**")
-            days_back = st.selectbox("", options=[7, 15, 30], index=0, label_visibility="collapsed")
+            # Reduced spacing between label and pills
+            st.markdown(
+                "<div style='font-weight: 600; margin-bottom: -10px;'>Lookback Period</div>",
+                unsafe_allow_html=True
+            )
+            days_back = st.pills(
+                label="",
+                options=[7, 15, 30],
+                format_func=lambda x: f"{x} Days",
+                default=7  # Optional: set a default selection
+            )
         with col2:
-            st.markdown("**Tag Value**")
-            tag_value = st.text_input("", value="genesis_workbench", label_visibility="collapsed")
-        with col3:
             st.markdown("&nbsp;", unsafe_allow_html=True)
-            if st.button("Refresh"):
-                st.session_state["workflow_runs_df"] = get_workflow_runs_df(
-                    tag_value=tag_value,
-                    days_back=days_back
-                )
-
+            if st.button("Refresh", use_container_width=True):
+                st.session_state["workflow_runs_df"] = get_workflow_runs_df(days_back=days_back)
 
     # Load data
     with st.spinner("Fetching workflow runs..."):
         if "workflow_runs_df" not in st.session_state:
-            st.session_state["workflow_runs_df"] = get_workflow_runs_df(
-                tag_value=tag_value, days_back=days_back
-            )
+            st.session_state["workflow_runs_df"] = get_workflow_runs_df(days_back=days_back)
         df = st.session_state["workflow_runs_df"]
 
     if not df.empty:
-        # Add combined status column
         df["Status"] = df.apply(
             lambda row: combine_status(row["Lifecycle State"], row["Result State"]), axis=1
         )
