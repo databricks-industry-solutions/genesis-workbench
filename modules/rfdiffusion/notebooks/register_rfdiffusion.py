@@ -10,7 +10,7 @@ dbutils.widgets.text("model_name", "rfdiffusion", "Model Name")
 dbutils.widgets.text("experiment_name", "dbx_genesis_workbench_modules", "Experiment Name")
 dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id")
 dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
-dbutils.widgets.text("cache_dir", "cache_dir", "Cache dir")
+dbutils.widgets.text("cache_dir", "rfdiffussion_cache_dir", "Cache dir")
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
@@ -35,13 +35,21 @@ os.environ["DATABRICKS_TOKEN"]=databricks_token
 
 # COMMAND ----------
 
+# MAGIC %sh
+# MAGIC mkdir -p /rfd
+# MAGIC cd /rfd
+# MAGIC git clone https://github.com/RosettaCommons/RFdiffusion.git
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ## Download the RFDiffusion code and model weights to Unity Catalog
 
 # COMMAND ----------
 
 # MAGIC %sh
-# MAGIC cd /local_disk0/
+# MAGIC mkdir -p /rfd
+# MAGIC cd /rfd
 # MAGIC git clone https://github.com/RosettaCommons/RFdiffusion.git
 # MAGIC cd RFdiffusion
 # MAGIC mkdir models && cd models
@@ -55,13 +63,14 @@ os.environ["DATABRICKS_TOKEN"]=databricks_token
 
 # COMMAND ----------
 
-spark.sql("CREATE VOLUME IF NOT EXISTS protein_folding.rfdiffusion.repo_w_models")
+spark.sql(f"CREATE VOLUME IF NOT EXISTS {CATALOG}.{SCHEMA}.{CACHE_DIR}")
 
 # COMMAND ----------
 
-# MAGIC %sh
-# MAGIC cp -r /local_disk0/RFdiffusion /Volumes/protein_folding/rfdiffusion/repo_w_models/
+import shutil
+
+shutil.copytree("/rfd/RFdiffusion", f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}/rfd")
 
 # COMMAND ----------
 
-# MAGIC %sh ls /Volumes/protein_folding/rfdiffusion/repo_w_models/RFdiffusion
+# MAGIC %sh ls /Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}/RFdiffusion

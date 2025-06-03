@@ -174,17 +174,38 @@ def deploy_model(catalog_name: str,
         enabled=True,
     )
 
-    print(f"Creating endpoint: {endpoint_name}")
+    print(f"Checking if endpoint: {endpoint_name} exists")
     
-    endpoint_details = w.serving_endpoints.create_and_wait(
-        name=endpoint_name,
-        config=EndpointCoreConfigInput(
+    try:
+        # try to update the endpoint if already have one
+        existing_endpoint = w.serving_endpoints.get(endpoint_name)
+        print(f"Updating existing endpoint {endpoint_name}")
+        # may take some time to actually do the update
+        status = w.serving_endpoints.update_config_and_wait(
             name=endpoint_name,
             served_entities=served_entities,
-            auto_capture_config=auto_capture_config
-        ),
-        timeout = timedelta(minutes=60) #wait upto an hour
-    )
+            auto_capture_config=auto_capture_config,
+            timeout = timedelta(minutes=60)
+        )
+    except errors.platform.ResourceDoesNotExist as e:
+        # if no endpoint yet, make it, wait for it to spin up, and put model on endpoint
+        print(f"Creating new endpoint {endpoint_name}")
+        endpoint_details = w.serving_endpoints.create_and_wait(
+            name=endpoint_name,
+            config=EndpointCoreConfigInput(
+                name=endpoint_name,
+                served_entities=served_entities,
+                auto_capture_config=auto_capture_config
+            ),
+            timeout = timedelta(minutes=60) #wait upto an hour
+        )
+
+
+
+
+
+
+
 
     return endpoint_details
         
