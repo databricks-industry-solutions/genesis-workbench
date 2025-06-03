@@ -63,14 +63,12 @@ def combine_status(lifecycle, result):
 # --- Main UI ---
 st.title(":material/monitoring: Monitoring and Alerts")
 
-dashboard_tab, alerts_tab = st.tabs(["Dashboard", "Alerts"])
+job_runs, dashboard_tab, alerts_tab = st.tabs(["Workflow Runs", "Dashboard", "Alerts"])
 
 # --- Dashboard Tab ---
-with dashboard_tab:
-    st.subheader("Workflow Runs")
-
+with job_runs:
     with st.container():
-        col1, col2 = st.columns([10, 2])
+        col1, col2 = st.columns([10, 2], vertical_alignment="bottom")
         with col1:
             # Reduced spacing between label and pills
             days_back = st.pills(
@@ -93,7 +91,7 @@ with dashboard_tab:
     if not df.empty:
 
         st.divider()
-        
+
         df["Status"] = df.apply(
             lambda row: combine_status(row["Lifecycle State"], row["Result State"]), axis=1
         )
@@ -115,6 +113,11 @@ with dashboard_tab:
         )
     else:
         st.warning("No workflow runs found.")
+
+# --- Alerts Tab ---
+with dashboard_tab:
+    st.subheader("Dashboards")
+    st.info("Dashboards coming soon.")
 
 # --- Alerts Tab ---
 with alerts_tab:
