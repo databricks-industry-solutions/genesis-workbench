@@ -73,12 +73,8 @@ with dashboard_tab:
         col1, col2 = st.columns([10, 2])
         with col1:
             # Reduced spacing between label and pills
-            st.markdown(
-                "<div style='font-weight: 600; margin-bottom: -10px;'>Lookback Period</div>",
-                unsafe_allow_html=True
-            )
             days_back = st.pills(
-                label="",
+                label="Lookback Period",
                 options=[7, 15, 30],
                 format_func=lambda x: f"{x} Days",
                 default=7  # Optional: set a default selection
@@ -95,11 +91,19 @@ with dashboard_tab:
         df = st.session_state["workflow_runs_df"]
 
     if not df.empty:
+
+        st.divider()
+        
         df["Status"] = df.apply(
             lambda row: combine_status(row["Lifecycle State"], row["Result State"]), axis=1
         )
 
-        selected_job = st.selectbox("Select a job to filter:", options=df["Job Name"].unique())
+        latest_run_job_name = df.sort_values(by="Start Time", ascending=False).iloc[0]["Job Name"]
+
+        unique_job_names = df["Job Name"].unique().tolist()
+
+        selected_job = st.selectbox("Select a job to filter:", options=unique_job_names , index=unique_job_names.index(latest_run_job_name))
+        
         filtered_df = df[df["Job Name"] == selected_job]
 
         st.dataframe(
