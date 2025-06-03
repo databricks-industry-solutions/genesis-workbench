@@ -1,0 +1,73 @@
+resources:
+  jobs:
+    register_esm_fold:
+      name: register_esmfold
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: deploy_esm_task
+          job_cluster_key: job_cluster
+          notebook_task:
+            notebook_path: ../notebooks/register_esmfold.py
+          libraries:
+            - pypi:
+                package: databricks-sdk==0.50.0
+            - pypi:
+                package: databricks-sql-connector==4.0.2
+            - whl: ../dist/*.whl
+            - whl: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/libraries/genesis_workbench-0.1.0-py3-none-any.whl         
+
+
+      # environments:
+      #   - environment_key: default
+      #     spec:
+      #       client: '2'
+      #       dependencies:
+      #         - databricks-sdk==0.50.0
+      #         - databricks-sql-connector==4.0.2
+      #         - torch==2.3.1
+      #         - transformers==4.41.2
+      #         - accelerate==0.31.0
+      #         - mlflow==2.22.0
+      #         #- /Volumes/${var.core_catalog_name}/${var.core_schema_name}/libraries/*.whl
+      #         - ../dist/*.whl
+
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: model_name
+          default: esmfold
+        - name: cache_dir
+          default: ${resources.volumes.esm2_cache_dir.name}
+        - name: experiment_name
+          default: ${var.module_registration_experiment_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: user_email
+          default: ${var.current_user}
+
+
+
+      job_clusters:
+        - job_cluster_key: job_cluster
+          new_cluster:
+            num_workers: 0
+            node_type_id: 'Standard_DS4_v2' 
+            driver_node_type_id: 'Standard_DS4_v2' 
+            spark_version: '15.4.x-cpu-ml-scala2.12'
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+            
+            
