@@ -17,6 +17,7 @@ resources:
                 package: databricks-sdk==0.50.0
             - pypi:
                 package: databricks-sql-connector==4.0.2
+            - whl: ../dist/*.whl
             - whl: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/libraries/genesis_workbench-0.1.0-py3-none-any.whl         
 
 

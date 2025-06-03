@@ -1,5 +1,5 @@
 bundle:
-  name: genesis_workbench_esmfold
+  name: genesis_workbench_rfdiffusion
   databricks_cli_version: ">=0.236.*"
 
 include:

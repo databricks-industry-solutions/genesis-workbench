@@ -27,7 +27,7 @@ class ModelSource(StrEnum):
 
 class ModelCategory(StrEnum):
     SINGLE_CELL = auto()
-    PROTEIN_FOLDING = auto()
+    PROTEIN_STUDIES = auto()
     SMALL_MOLECULES = auto()
 
 class ModelDeployPlatform(StrEnum):
@@ -91,7 +91,7 @@ def get_available_models(model_category : ModelCategory,app_context:AppContext) 
             WHERE \
                 model_category = '{str(model_category)}' AND is_active=true"
     
-    
+    print(query)
     result_df = execute_select_query(query)
     return result_df
 
