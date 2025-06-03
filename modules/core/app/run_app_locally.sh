@@ -26,6 +26,9 @@ rm lib/*.whl
 cd ..
 
 echo "Extra params: $EXTRA_PARAMS"
+
+echo $EXTRA_PARAMS > app/extra_params.txt
+
 databricks bundle deploy -t dev --var=$EXTRA_PARAMS
 
 cd app
