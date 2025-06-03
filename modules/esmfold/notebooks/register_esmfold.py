@@ -205,7 +205,7 @@ app_context = AppContext(
     )
 
 import_model_from_uc(app_context,user_email=USER_EMAIL,
-                    model_category=ModelCategory.SINGLE_CELL,
+                    model_category=ModelCategory.PROTEIN_STUDIES,
                     model_uc_name=f"{CATALOG}.{SCHEMA}.{MODEL_NAME}",
                     model_uc_version=model_version,
                     model_name="ESMFold",
