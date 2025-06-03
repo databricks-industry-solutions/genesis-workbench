@@ -38,6 +38,7 @@ os.environ["DATABRICKS_TOKEN"]=databricks_token
 # MAGIC %sh
 # MAGIC mkdir -p /rfd
 # MAGIC cd /rfd
+# MAGIC rm -rf RFdiffusion
 # MAGIC git clone https://github.com/RosettaCommons/RFdiffusion.git
 
 # COMMAND ----------
@@ -48,10 +49,7 @@ os.environ["DATABRICKS_TOKEN"]=databricks_token
 # COMMAND ----------
 
 # MAGIC %sh
-# MAGIC mkdir -p /rfd
-# MAGIC cd /rfd
-# MAGIC git clone https://github.com/RosettaCommons/RFdiffusion.git
-# MAGIC cd RFdiffusion
+# MAGIC cd /rfd/RFdiffusion
 # MAGIC mkdir models && cd models
 # MAGIC wget http://files.ipd.uw.edu/pub/RFdiffusion/6f5902ac237024bdd0c176cb93063dc4/Base_ckpt.pt
 # MAGIC wget http://files.ipd.uw.edu/pub/RFdiffusion/e29311f6f1bf1af907f9ef9f44b8328b/Complex_base_ckpt.pt
@@ -69,7 +67,7 @@ spark.sql(f"CREATE VOLUME IF NOT EXISTS {CATALOG}.{SCHEMA}.{CACHE_DIR}")
 
 import shutil
 
-shutil.copytree("/rfd/RFdiffusion", f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}", dirs_exist_ok=True)
+shutil.copytree("/rfd/", f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}", dirs_exist_ok=True)
 
 # COMMAND ----------
 
@@ -354,12 +352,8 @@ artifacts={
 }
 
 model.load_context(mlflow.pyfunc.PythonModelContext(artifacts=artifacts, model_config=dict()))
-pdb = model.predict(100)
+pdb = model._run_inference(100)
 pdb
-
-# COMMAND ----------
-
-
 
 # COMMAND ----------
 
@@ -412,7 +406,7 @@ def extract_chain_reindex(structure, chain_id='A'):
 # COMMAND ----------
 
 model = RFDiffusionInpainting()
-repo_path = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/RFdiffusion/"
+repo_path = f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}/RFdiffusion/"
 artifacts={
     "script_path" : os.path.join(repo_path,"scripts"),
     "model_path" : os.path.join(repo_path,"models"),
@@ -428,3 +422,104 @@ pdbs = model._run_inference( extract_chain_reindex(structure), 12, 22 )
 # COMMAND ----------
 
 pdbs[0].split('\n')[:10]
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Begin the Model registration
+# MAGIC  - first set input examples (to keep with the model)
+# MAGIC  - and the model signatures
+
+# COMMAND ----------
+
+signature = mlflow.models.signature.ModelSignature(
+    inputs = Schema([ColSpec(type="string")]),
+    outputs = Schema([ColSpec(type="string")]),
+    params = None
+)
+
+
+context = mlflow.pyfunc.PythonModelContext(artifacts=artifacts, model_config=dict())
+input_example=[
+    {
+        'pdb':extract_chain_reindex(structure),
+        'start_idx' : 12,
+        'end_idx': 22 
+    }
+]
+inpaint_signature = mlflow.models.infer_signature(
+    input_example,
+    model.predict(context, input_example)
+)
+print(inpaint_signature)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Perform the model registration
+
+# COMMAND ----------
+
+mlflow.set_registry_uri("databricks-uc")
+
+repo_path = f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}/RFdiffusion/"
+
+with mlflow.start_run(run_name='rfdiffusion_unconditional'):
+    model_info = mlflow.pyfunc.log_model(
+        artifact_path="rfdiffusion",
+        python_model=RFDiffusionUnconditional(),
+        artifacts={
+            "script_path" : os.path.join(repo_path,"scripts"),
+            "model_path" : os.path.join(repo_path,"models"),
+            "example_path" : os.path.join(repo_path,"examples"),
+            "config_path" : os.path.join(repo_path,"config/inference"),
+        },
+        input_example=["100"],
+        signature=signature,
+        conda_env='rfd_env.yml',
+        registered_model_name=f"{CATALOG}.{SCHEMA}.rfdiffusion_unconditional"
+    )
+
+with mlflow.start_run(run_name='rfdiffusion_inpainting'):
+    model_info = mlflow.pyfunc.log_model(
+        artifact_path="rfdiffusion",
+        python_model=RFDiffusionInpainting(),
+        artifacts={
+            "script_path" : os.path.join(repo_path,"scripts"),
+            "model_path" : os.path.join(repo_path,"models"),
+            "example_path" : os.path.join(repo_path,"examples"),
+            "config_path" : os.path.join(repo_path,"config/inference"),
+        },
+        input_example=input_example,
+        signature=inpaint_signature,
+        conda_env='rfd_env.yml',
+        registered_model_name=f"{CATALOG}.{SCHEMA}.rfdiffusion_inpainting"
+    )
+
+# COMMAND ----------
+
+from genesis_workbench.models import (ModelCategory, 
+                                      import_model_from_uc,
+                                      get_latest_model_version)
+
+from genesis_workbench.workbench import AppContext
+
+# COMMAND ----------
+
+model_uc_name=f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
+model_version = get_latest_model_version(model_uc_name)
+model_uri = f"models:/{model_uc_name}/{model_version}"
+
+app_context = AppContext(
+        core_catalog_name=CATALOG,
+        core_schema_name=SCHEMA
+    )
+
+import_model_from_uc(app_context,user_email=USER_EMAIL,
+                    model_category=ModelCategory.PROTEIN_STUDIES,
+                    model_uc_name=f"{CATALOG}.{SCHEMA}.{MODEL_NAME}",
+                    model_uc_version=model_version,
+                    model_name="ESMFold",
+                    model_display_name="ESMFold",
+                    model_source_version="v2.0",
+                    model_description_url="https://github.com/facebookresearch/esm?tab=readme-ov-file#evolutionary-scale-modeling")

@@ -181,7 +181,7 @@ def deploy_model(catalog_name: str,
         existing_endpoint = w.serving_endpoints.get(endpoint_name)
         print(f"Updating existing endpoint {endpoint_name}")
         # may take some time to actually do the update
-        status = w.serving_endpoints.update_config_and_wait(
+        endpoint_details = w.serving_endpoints.update_config_and_wait(
             name=endpoint_name,
             served_entities=served_entities,
             auto_capture_config=auto_capture_config,
@@ -199,13 +199,6 @@ def deploy_model(catalog_name: str,
             ),
             timeout = timedelta(minutes=60) #wait upto an hour
         )
-
-
-
-
-
-
-
 
     return endpoint_details
         
