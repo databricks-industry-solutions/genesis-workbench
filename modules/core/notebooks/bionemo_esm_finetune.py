@@ -191,7 +191,9 @@ is_finetune_success = False
     --result-dir {ft_weights_directory}  \
     --micro-batch-size {micro_batch_size} \
     --precision {precision} \
-    --create-tensorboard-logger
+    --create-tensorboard-logger \
+    --train-database-path={work_dir}/train.db \
+    --valid-database-path={work_dir}/validation.db
 
 # COMMAND ----------
 

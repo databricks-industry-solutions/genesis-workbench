@@ -1,19 +1,7 @@
 # Databricks notebook source
-# COMMAND ----------
-
 #%pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.2 torch==2.3.1 transformers==4.41.2 accelerate==0.31.0 mlflow==2.22.0
 #%pip install /Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/libraries/genesis_workbench-0.1.0-py3-none-any.whl --force-reinstall
 #dbutils.library.restartPython()
-
-# COMMAND ----------
-
-import sys
-
-sys.path.append("../src")
-
-
-# COMMAND ----------
-from esmfold.esmfold import ESMFoldPyFunc
 
 # COMMAND ----------
 
@@ -36,6 +24,7 @@ CACHE_DIR = dbutils.widgets.get("cache_dir")
 print(f"Cache dir: {CACHE_DIR}")
 cache_full_path = f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}"
 print(f"Cache full path: {cache_full_path}")
+
 # COMMAND ----------
 
 import os
@@ -94,6 +83,61 @@ model = EsmForProteinFolding.from_pretrained(
 
 # COMMAND ----------
 
+class ESMFoldPyFunc(mlflow.pyfunc.PythonModel):
+    def load_context(self, context):
+        CACHE_DIR = context.artifacts["cache"]
+
+        self.tokenizer = transformers.AutoTokenizer.from_pretrained(
+            "facebook/esmfold_v1", cache_dir=CACHE_DIR
+        )
+        self.model = transformers.EsmForProteinFolding.from_pretrained(
+            "facebook/esmfold_v1", low_cpu_mem_usage=True, cache_dir=CACHE_DIR
+        )
+
+        self.model = self.model.cuda()
+        self.model.esm = self.model.esm.half()
+        torch.backends.cuda.matmul.allow_tf32 = True
+
+    def _post_process(self, outputs):
+        final_atom_positions = (
+            transformers.models.esm.openfold_utils.feats.atom14_to_atom37(
+                outputs["positions"][-1], outputs
+            )
+        )
+        outputs = {k: v.to("cpu").numpy() for k, v in outputs.items()}
+        final_atom_positions = final_atom_positions.cpu().numpy()
+        final_atom_mask = outputs["atom37_atom_exists"]
+        pdbs = []
+        for i in range(outputs["aatype"].shape[0]):
+            aa = outputs["aatype"][i]
+            pred_pos = final_atom_positions[i]
+            mask = final_atom_mask[i]
+            resid = outputs["residue_index"][i] + 1
+            pred = transformers.models.esm.openfold_utils.protein.Protein(
+                aatype=aa,
+                atom_positions=pred_pos,
+                atom_mask=mask,
+                residue_index=resid,
+                b_factors=outputs["plddt"][i],
+                chain_index=(
+                    outputs["chain_index"][i] if "chain_index" in outputs else None
+                ),
+            )
+            pdbs.append(transformers.models.esm.openfold_utils.protein.to_pdb(pred))
+        return pdbs
+
+    def predict(self, context, model_input: List[str], params=None) -> List[str]:
+        tokenized_input = self.tokenizer(
+            model_input, return_tensors="pt", add_special_tokens=False, padding=True
+        )["input_ids"]
+        tokenized_input = tokenized_input.cuda()
+        with torch.no_grad():
+            output = self.model(tokenized_input)
+        pdbs = self._post_process(output)
+        return pdbs
+
+# COMMAND ----------
+
 esmfold_model = ESMFoldPyFunc()
 
 # COMMAND ----------
@@ -128,8 +172,6 @@ del tokenizer
 
 mlflow.set_registry_uri("databricks-uc")
 
-
-
 with mlflow.start_run(run_name=f"register_{MODEL_NAME}"):
     model_info = mlflow.pyfunc.log_model(
         artifact_path="esmfold",
@@ -138,11 +180,12 @@ with mlflow.start_run(run_name=f"register_{MODEL_NAME}"):
             "cache": cache_full_path,
         },
         pip_requirements=[
+            
             "mlflow==2.15.1",
             "cloudpickle==2.2.1",
             "transformers>4.0",
             "torch>2.0",
-            "torchvision",  # required for torch (note torch+torchvision without cuda v specified defaults to 12.4 as of Jan 2024)
+            "torchvision", 
             "accelerate>0.31",
         ],
         input_example=test_input,
@@ -165,8 +208,8 @@ import_model_from_uc(app_context,user_email=USER_EMAIL,
                     model_category=ModelCategory.SINGLE_CELL,
                     model_uc_name=f"{CATALOG}.{SCHEMA}.{MODEL_NAME}",
                     model_uc_version=model_version,
-                    model_name="ESMFold2",
-                    model_display_name="ESMFold2",
+                    model_name="ESMFold",
+                    model_display_name="ESMFold",
                     model_source_version="v2.0",
                     model_description_url="https://github.com/facebookresearch/esm?tab=readme-ov-file#evolutionary-scale-modeling")
 

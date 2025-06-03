@@ -6,11 +6,11 @@ include:
   - variables.yml
   - resources/*.yml
     
-artifacts:
-  esmfold:
-    type: whl
-    build: poetry build
-    path: .
+# artifacts:
+#   esmfold:
+#     type: whl
+#     build: poetry build
+#     path: .
 
 targets:
   dev:
