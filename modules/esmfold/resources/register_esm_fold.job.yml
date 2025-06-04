@@ -57,9 +57,9 @@ resources:
         - job_cluster_key: job_cluster
           new_cluster:
             num_workers: 0
-            node_type_id: 'Standard_DS4_v2' 
-            driver_node_type_id: 'Standard_DS4_v2' 
-            spark_version: '15.4.x-cpu-ml-scala2.12'
+            node_type_id: 'Standard_NC4as_T4_v3' 
+            driver_node_type_id: 'Standard_NC4as_T4_v3' 
+            spark_version: '15.4.x-gpu-ml-scala2.12'
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             single_user_name: ${workspace.current_user.userName}
