@@ -76,6 +76,15 @@ class ModelDeploymentInfo:
     is_active: bool 
     deactivated_timestamp : datetime
 
+def set_mlflow_experiment(experiment_tag, user_email):    
+    w = WorkspaceClient()
+    mlflow_experiment_base_path = f"Users/{user_email}/mlflow_experiments"
+    w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")
+    experiment_path = f"/{mlflow_experiment_base_path}/{experiment_tag}"
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+    return mlflow.set_experiment(experiment_path)
+
 def get_latest_model_version(model_name):
     client = MlflowClient()
     model_version_infos = client.search_model_versions("name = '%s'" % model_name)

@@ -1,7 +1,6 @@
 import streamlit as st
 import os
 import json
-import time
 from io import StringIO
 
 from genesis_workbench.workbench import UserInfo, AppContext
@@ -72,7 +71,7 @@ def open_run_window(job_id,run_id):
 
 
 @st.dialog("Deploy Model", width="large")
-def display_deploy_model_dialog(selected_model_name):    
+def display_deploy_model_dialog(selected_model_name, success_callback = None, error_callback = None):    
     """Dialog to deploy a model to model serving"""
     model_info = None
     run_id = None
@@ -90,6 +89,8 @@ def display_deploy_model_dialog(selected_model_name):
         except Exception as e:
             st.error("Error getting model details.")
             model_info = None
+            if error_callback:
+                error_callback()
 
     if model_info:
         model_details = model_info.model_uc_name.split(".") 
@@ -180,10 +181,13 @@ def display_deploy_model_dialog(selected_model_name):
                                                 workload_size=workload_size)
 
                             deploy_started = True
+                            
                         except Exception as e:
                             print(e)
                             st.error("Error launching deploy job.")                
                             deploy_started = False
+                            if error_callback:
+                                error_callback()
                     else:
                         deploy_started = False
                     
@@ -194,16 +198,21 @@ def display_deploy_model_dialog(selected_model_name):
 
         if not validation_pass:
             st.error(error_message)
+            if error_callback:
+                error_callback()
 
         if deploy_started:
             st.success(f"Model deploy has started with a run id {run_id}.")                
             st.warning(f"It might take upto 30 minutes to complete")
             job_id = os.getenv("DEPLOY_MODEL_JOB_ID")
             view_deploy_run_btn = st.button("View Run", on_click=lambda: open_run_window(job_id,run_id))
+            if success_callback:
+                success_callback()
+
 
 
 @st.dialog("Import model from Unity Catalog")
-def display_import_model_uc_dialog(model_category: ModelCategory):    
+def display_import_model_uc_dialog(model_category: ModelCategory, success_callback = None, error_callback = None):    
     """Dialog to import a model from UC"""
     model_info = None
     model_info_error = False
@@ -236,6 +245,8 @@ def display_import_model_uc_dialog(model_category: ModelCategory):
     
     if(model_info_error):
         st.error("Error fetching model details.")        
+        if error_callback:
+            error_callback()
             
     if model_info:
         with st.form("import_model_uc_form_import", enter_to_submit=False):
@@ -267,12 +278,12 @@ def display_import_model_uc_dialog(model_category: ModelCategory):
     if uc_import_model_clicked:
         if model_import_error:
             st.error("Error importing model") 
+            if error_callback:
+                error_callback()
         else:
             st.success("Model Imported Successfully.")
-            with st.spinner("Refreshing data.."):
-                time.sleep(1)
-                del st.session_state["available_models_df"]
-                st.rerun()
+            if success_callback:
+                success_callback()
             #if st.button("Close"):
             #    if "import_button" in st.session_state:
             #        del st.session_state["import_button"]              
