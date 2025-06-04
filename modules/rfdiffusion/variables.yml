@@ -28,4 +28,4 @@ variables:
 
   cache_dir:
     description: The cache directory for ESM model
-    default: esm2_cache_dir
+    default: rfdiffusion_cache_dir

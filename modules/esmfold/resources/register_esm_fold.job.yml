@@ -11,7 +11,7 @@ resources:
         - task_key: deploy_esm_task
           job_cluster_key: job_cluster
           notebook_task:
-            notebook_path: ../notebooks/register_esmfold.py
+            notebook_path: ../notebooks/01_register_esmfold.py
           libraries:
             - pypi:
                 package: databricks-sdk==0.50.0

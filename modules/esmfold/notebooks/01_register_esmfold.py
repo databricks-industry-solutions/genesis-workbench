@@ -1,7 +1,6 @@
 # Databricks notebook source
-#%pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.2 torch==2.3.1 transformers==4.41.2 accelerate==0.31.0 mlflow==2.22.0
-#%pip install /Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/libraries/genesis_workbench-0.1.0-py3-none-any.whl --force-reinstall
-#dbutils.library.restartPython()
+# MAGIC %md
+# MAGIC ### Installing dependencies
 
 # COMMAND ----------
 
@@ -11,26 +10,57 @@ dbutils.widgets.text("model_name", "esmfold", "Model Name")
 dbutils.widgets.text("experiment_name", "dbx_genesis_workbench_modules", "Experiment Name")
 dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id")
 dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
-dbutils.widgets.text("cache_dir", "cache_dir", "Cache dir")
+dbutils.widgets.text("cache_dir", "esm2_cache_dir", "Cache dir")
 
-CATALOG = dbutils.widgets.get("catalog")
-SCHEMA = dbutils.widgets.get("schema")
-MODEL_NAME = dbutils.widgets.get("model_name")
-EXPERIMENT_NAME = dbutils.widgets.get("experiment_name")
-USER_EMAIL = dbutils.widgets.get("user_email")
-SQL_WAREHOUSE_ID = dbutils.widgets.get("sql_warehouse_id")
-CACHE_DIR = dbutils.widgets.get("cache_dir")
+catalog = dbutils.widgets.get("catalog")
+schema = dbutils.widgets.get("schema")
 
-print(f"Cache dir: {CACHE_DIR}")
-cache_full_path = f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}"
+# COMMAND ----------
+
+#requirements for genesis workbench library
+%pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.2 mlflow==2.22.0
+#requirements for current library
+%pip install -r ../requirements.txt
+
+# COMMAND ----------
+
+gwb_library_path = None
+libraries = dbutils.fs.ls(f"/Volumes/{catalog}/{schema}/libraries")
+for lib in libraries:
+    if(lib.name.startswith("genesis_workbench")):
+        gwb_library_path = lib.path.replace("dbfs:","")
+
+print(gwb_library_path)
+
+# COMMAND ----------
+
+# MAGIC %pip install {gwb_library_path} --force-reinstall
+# MAGIC dbutils.library.restartPython()
+
+# COMMAND ----------
+
+catalog = dbutils.widgets.get("catalog")
+schema = dbutils.widgets.get("schema")
+model_name = dbutils.widgets.get("model_name")
+experiment_name = dbutils.widgets.get("experiment_name")
+user_email = dbutils.widgets.get("user_email")
+sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
+cache_dir = dbutils.widgets.get("cache_dir")
+
+print(f"Cache dir: {cache_dir}")
+cache_full_path = f"/Volumes/{catalog}/{schema}/{cache_dir}"
 print(f"Cache full path: {cache_full_path}")
+
+# COMMAND ----------
+
+spark.sql(f"CREATE VOLUME IF NOT EXISTS {catalog}.{schema}.{cache_dir}")
 
 # COMMAND ----------
 
 import os
 
 databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
-os.environ["SQL_WAREHOUSE"]=SQL_WAREHOUSE_ID
+os.environ["SQL_WAREHOUSE"]=sql_warehouse_id
 os.environ["IS_TOKEN_AUTH"]="Y"
 os.environ["DATABRICKS_TOKEN"]=databricks_token
 
@@ -70,8 +100,8 @@ import os
 from typing import Any, Dict, List, Optional
 from genesis_workbench.models import (ModelCategory, 
                                       import_model_from_uc,
-                                      get_latest_model_version)
-
+                                      get_latest_model_version,
+                                      set_mlflow_experiment)
 from genesis_workbench.workbench import AppContext
 
 # COMMAND ----------
@@ -85,13 +115,13 @@ model = EsmForProteinFolding.from_pretrained(
 
 class ESMFoldPyFunc(mlflow.pyfunc.PythonModel):
     def load_context(self, context):
-        CACHE_DIR = context.artifacts["cache"]
+        cache_dir = context.artifacts["cache"]
 
         self.tokenizer = transformers.AutoTokenizer.from_pretrained(
-            "facebook/esmfold_v1", cache_dir=CACHE_DIR
+            "facebook/esmfold_v1", cache_dir=cache_dir
         )
         self.model = transformers.EsmForProteinFolding.from_pretrained(
-            "facebook/esmfold_v1", low_cpu_mem_usage=True, cache_dir=CACHE_DIR
+            "facebook/esmfold_v1", low_cpu_mem_usage=True, cache_dir=cache_dir
         )
 
         self.model = self.model.cuda()
@@ -171,8 +201,11 @@ del tokenizer
 # COMMAND ----------
 
 mlflow.set_registry_uri("databricks-uc")
+mlflow.set_tracking_uri("databricks")
 
-with mlflow.start_run(run_name=f"register_{MODEL_NAME}"):
+experiment = set_mlflow_experiment(experiment_tag=experiment_name, user_email=user_email)
+
+with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experiment_id):
     model_info = mlflow.pyfunc.log_model(
         artifact_path="esmfold",
         python_model=esmfold_model,
@@ -190,87 +223,25 @@ with mlflow.start_run(run_name=f"register_{MODEL_NAME}"):
         ],
         input_example=test_input,
         signature=signature,
-        registered_model_name=f"{CATALOG}.{SCHEMA}.{MODEL_NAME}",
+        registered_model_name=f"{catalog}.{schema}.{model_name}",
     )
 
 # COMMAND ----------
 
-model_uc_name=f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
+model_uc_name=f"{catalog}.{schema}.{model_name}"
 model_version = get_latest_model_version(model_uc_name)
 model_uri = f"models:/{model_uc_name}/{model_version}"
 
 app_context = AppContext(
-        core_catalog_name=CATALOG,
-        core_schema_name=SCHEMA
+        core_catalog_name=catalog,
+        core_schema_name=schema
     )
 
-import_model_from_uc(app_context,user_email=USER_EMAIL,
+import_model_from_uc(app_context,user_email=user_email,
                     model_category=ModelCategory.PROTEIN_STUDIES,
-                    model_uc_name=f"{CATALOG}.{SCHEMA}.{MODEL_NAME}",
+                    model_uc_name=f"{catalog}.{schema}.{model_name}",
                     model_uc_version=model_version,
                     model_name="ESMFold",
                     model_display_name="ESMFold",
-                    model_source_version="v2.0",
+                    model_source_version="v1.0",
                     model_description_url="https://github.com/facebookresearch/esm?tab=readme-ov-file#evolutionary-scale-modeling")
-
-# COMMAND ----------
-
-# from databricks.sdk import WorkspaceClient
-# from databricks.sdk.service.serving import (
-#     EndpointCoreConfigInput,
-#     ServedEntityInput,
-#     ServedModelInputWorkloadSize,
-#     ServedModelInputWorkloadType,
-#     AutoCaptureConfigInput,
-# )
-# from databricks.sdk import errors
-
-# w = WorkspaceClient()
-
-# endpoint_name = ENDPOINT_NAME
-
-# model_name = f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
-# versions = w.model_versions.list(model_name)
-# latest_version = max(versions, key=lambda v: v.version).version
-
-# print("version being served = ", latest_version)
-
-
-# served_entities = [
-#     ServedEntityInput(
-#         entity_name=model_name,
-#         entity_version=latest_version,
-#         name=MODEL_NAME,
-#         workload_type="GPU_SMALL",
-#         workload_size="Small",
-#         scale_to_zero_enabled=True,
-#     )
-# ]
-# auto_capture_config = AutoCaptureConfigInput(
-#     catalog_name=CATALOG,
-#     schema_name=SCHEMA,
-#     table_name_prefix=f"{MODEL_NAME}_serving",
-#     enabled=True,
-# )
-
-# try:
-#     # try to update the endpoint if already have one
-#     existing_endpoint = w.serving_endpoints.get(endpoint_name)
-#     # may take some time to actually do the update
-#     status = w.serving_endpoints.update_config(
-#         name=endpoint_name,
-#         served_entities=served_entities,
-#         auto_capture_config=auto_capture_config,
-#     )
-# except errors.platform.ResourceDoesNotExist as e:
-#     # if no endpoint yet, make it, wait for it to spin up, and put model on endpoint
-#     status = w.serving_endpoints.create_and_wait(
-#         name=endpoint_name,
-#         config=EndpointCoreConfigInput(
-#             name=endpoint_name,
-#             served_entities=served_entities,
-#             auto_capture_config=auto_capture_config,
-#         ),
-#     )
-
-# print(status)
