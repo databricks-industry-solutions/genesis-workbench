@@ -1,6 +1,7 @@
 
 import streamlit as st
 import pandas as pd
+import time
 from genesis_workbench.models import (ModelCategory, 
                                       get_available_models, 
                                       get_deployed_models)
@@ -9,6 +10,17 @@ from utils.streamlit_helper import (get_app_context,
                                     display_import_model_uc_dialog,
                                     display_deploy_model_dialog)
 
+def reset_available_models():
+    with st.spinner("Refreshing data.."):
+        time.sleep(1)
+        del st.session_state["available_single_cell_models_df"]
+        st.rerun()
+
+def reset_deployed_models():
+    with st.spinner("Refreshing data.."):
+        time.sleep(1)
+        del st.session_state["deployed_single_cell_models_df"]
+        st.rerun()
 
 def display_settings_tab(available_models_df,deployed_models_df):
 
@@ -26,7 +38,7 @@ def display_settings_tab(available_models_df,deployed_models_df):
         
         if import_button:
             if import_model_source=="Unity Catalog":
-                display_import_model_uc_dialog(ModelCategory.SINGLE_CELL)
+                display_import_model_uc_dialog(ModelCategory.SINGLE_CELL, success_callback=reset_available_models)
 
 
         st.markdown("###### Available Models:")

@@ -9,7 +9,7 @@ dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Sc
 dbutils.widgets.text("model_name", "rfdiffusion", "Model Name")
 dbutils.widgets.text("experiment_name", "dbx_genesis_workbench_modules", "Experiment Name")
 dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id")
-dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
+dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Id/Email")
 dbutils.widgets.text("cache_dir", "rfdiffussion_cache_dir", "Cache dir")
 
 CATALOG = dbutils.widgets.get("catalog")
@@ -460,11 +460,26 @@ print(inpaint_signature)
 
 # COMMAND ----------
 
+from databricks.sdk import WorkspaceClient
+
+def set_mlflow_experiment(experiment_tag, user_email):    
+    w = WorkspaceClient()
+    mlflow_experiment_base_path = f"Users/{user_email}/mlflow_experiments"
+    w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")
+    experiment_path = f"/{mlflow_experiment_base_path}/{experiment_tag}"
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+    return mlflow.set_experiment(experiment_path)
+
+# COMMAND ----------
+
 mlflow.set_registry_uri("databricks-uc")
 
 repo_path = f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}/RFdiffusion/"
 
-with mlflow.start_run(run_name='rfdiffusion_unconditional'):
+experiment = set_mlflow_experiment(experiment_tag=EXPERIMENT_NAME, user_email=USER_EMAIL)
+
+with mlflow.start_run(run_name='rfdiffusion_unconditional', experiment_id=experiment.experiment_id):
     model_info = mlflow.pyfunc.log_model(
         artifact_path="rfdiffusion",
         python_model=RFDiffusionUnconditional(),
@@ -480,7 +495,7 @@ with mlflow.start_run(run_name='rfdiffusion_unconditional'):
         registered_model_name=f"{CATALOG}.{SCHEMA}.rfdiffusion_unconditional"
     )
 
-with mlflow.start_run(run_name='rfdiffusion_inpainting'):
+with mlflow.start_run(run_name='rfdiffusion_inpainting', experiment_id=experiment.experiment_id):
     model_info = mlflow.pyfunc.log_model(
         artifact_path="rfdiffusion",
         python_model=RFDiffusionInpainting(),
@@ -495,31 +510,3 @@ with mlflow.start_run(run_name='rfdiffusion_inpainting'):
         conda_env='rfd_env.yml',
         registered_model_name=f"{CATALOG}.{SCHEMA}.rfdiffusion_inpainting"
     )
-
-# COMMAND ----------
-
-from genesis_workbench.models import (ModelCategory, 
-                                      import_model_from_uc,
-                                      get_latest_model_version)
-
-from genesis_workbench.workbench import AppContext
-
-# COMMAND ----------
-
-model_uc_name=f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
-model_version = get_latest_model_version(model_uc_name)
-model_uri = f"models:/{model_uc_name}/{model_version}"
-
-app_context = AppContext(
-        core_catalog_name=CATALOG,
-        core_schema_name=SCHEMA
-    )
-
-import_model_from_uc(app_context,user_email=USER_EMAIL,
-                    model_category=ModelCategory.PROTEIN_STUDIES,
-                    model_uc_name=f"{CATALOG}.{SCHEMA}.{MODEL_NAME}",
-                    model_uc_version=model_version,
-                    model_name="ESMFold",
-                    model_display_name="ESMFold",
-                    model_source_version="v2.0",
-                    model_description_url="https://github.com/facebookresearch/esm?tab=readme-ov-file#evolutionary-scale-modeling")

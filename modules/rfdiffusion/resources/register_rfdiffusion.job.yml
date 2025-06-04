@@ -1,49 +1,40 @@
 resources:
   jobs:
-    register_esm_fold:
-      name: register_esmfold
+    register_rfdiffusion:
+      name: register_rfdiffusion
 
       email_notifications:
         on_failure:
           - ${var.current_user}
 
       tasks:
-        - task_key: deploy_esm_task
+        #this task need 14.3 LTS L runtime
+        - task_key: register_rfdiffusion_task
           job_cluster_key: job_cluster
           notebook_task:
-            notebook_path: ../notebooks/01_register_esmfold.py
-          libraries:
-            - pypi:
-                package: databricks-sdk==0.50.0
-            - pypi:
-                package: databricks-sql-connector==4.0.2
-            - whl: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/libraries/genesis_workbench-0.1.0-py3-none-any.whl         
+            notebook_path: ../notebooks/01_register_rfdiffusion.py
 
+        #this task need serverless runtime with python 3.11
+        - task_key: import_rfdiffusion_task
+          depends_on: 
+            - task_key: register_rfdiffusion_task
+          notebook_task:
+            notebook_path: ../notebooks/02_import_model_gwb.py
 
-      # environments:
-      #   - environment_key: default
-      #     spec:
-      #       client: '2'
-      #       dependencies:
-      #         - databricks-sdk==0.50.0
-      #         - databricks-sql-connector==4.0.2
-      #         - torch==2.3.1
-      #         - transformers==4.41.2
-      #         - accelerate==0.31.0
-      #         - mlflow==2.22.0
-      #         #- /Volumes/${var.core_catalog_name}/${var.core_schema_name}/libraries/*.whl
-      #         - ../dist/*.whl
-
-
+      environments:
+        - environment_key: default
+          spec:
+            client: '2'
+            
       parameters:
         - name: catalog
           default: ${var.core_catalog_name}
         - name: schema
           default: ${var.core_schema_name}
         - name: model_name
-          default: esmfold
+          default: rfdiffusion
         - name: cache_dir
-          default: ${resources.volumes.esm2_cache_dir.name}
+          default: ${resources.volumes.rfdiffusion_cache_dir.name}
         - name: experiment_name
           default: ${var.module_registration_experiment_name}
         - name: sql_warehouse_id
@@ -51,15 +42,13 @@ resources:
         - name: user_email
           default: ${var.current_user}
 
-
-
       job_clusters:
         - job_cluster_key: job_cluster
           new_cluster:
             num_workers: 0
             node_type_id: 'Standard_NC4as_T4_v3' 
             driver_node_type_id: 'Standard_NC4as_T4_v3' 
-            spark_version: '15.4.x-gpu-ml-scala2.12'
+            spark_version: '14.3.x-gpu-ml-scala2.12'
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             single_user_name: ${workspace.current_user.userName}
