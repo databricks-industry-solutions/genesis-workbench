@@ -32,11 +32,6 @@ resources:
         - environment_key: default
           spec:
             client: '2'
-            compute:
-              - compute_key: "high_memory_serverless"
-                spec:
-                  kind: "serverless"
-                  compute_size: "2X-Large"  # 32GB, 8 cores memory?
             
       parameters:
         - name: catalog
