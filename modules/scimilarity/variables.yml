@@ -24,7 +24,7 @@ variables:
     
   module_registration_experiment_name:
     description: The experiment to which all registered modules are logged
-    default: dbx_genesis_workbench_modules
+    default: gwb_modules_mmt
 
   cache_dir:
     description: The cache directory for SCimilarity model
