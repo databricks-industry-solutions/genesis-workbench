@@ -1,4 +1,5 @@
 FROM nvcr.io/nvidia/clara/bionemo-framework:nightly
+#FROM nvcr.io/nvidia/clara/bionemo-framework:2.6.1
 
 # Disable NVIDIA repos to prevent accidental upgrades.
 # RUN cd /etc/apt/sources.list.d && \
@@ -102,3 +103,7 @@ RUN python -m venv --system-site-packages /databricks/python-lsp
 COPY python-lsp-requirements.txt /databricks/.
 
 RUN /databricks/python-lsp/bin/pip install -r /databricks/python-lsp-requirements.txt
+
+RUN rm /usr/local/lib/python3.12/dist-packages/bionemo/esm2/scripts/finetune_esm2.py
+
+COPY finetune_esm2.py /usr/local/lib/python3.12/dist-packages/bionemo/esm2/scripts

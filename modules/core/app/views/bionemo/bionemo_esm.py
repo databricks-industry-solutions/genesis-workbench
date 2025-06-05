@@ -108,7 +108,7 @@ with st.spinner("Loading data"):
     finetuned_esm_weights_df = st.session_state["finetuned_esm_weights_df"]
 
 
-st.title(":material/genetics: BioNeMo - ESMFold2")
+st.title(":material/genetics: BioNeMo - ESM2")
 
 settings_tab, finetune_tab, inference_tab = st.tabs(["Settings","Fine Tune", "Inference"])
 
