@@ -30,16 +30,6 @@ DB_SCHEMA = SCHEMA #"tests"
 # VOLUME_NAME | PROJECT 
 MODEL_FAMILY = CACHE_DIR #"scimilarity"
 
-# # Create widgets for catalog, db_schema, and model_family
-# dbutils.widgets.text("catalog", "mmt")#, "CATALOG")
-# dbutils.widgets.text("db_schema", "genesiswb")#, "DB_SCHEMA")
-# dbutils.widgets.text("model_family", "scimilarity")#, "MODEL_FAMILY")
-
-# # Get the values from the widgets
-# CATALOG = dbutils.widgets.get("catalog")
-# DB_SCHEMA = dbutils.widgets.get("db_schema")
-# MODEL_FAMILY = dbutils.widgets.get("model_family")
-
 print("CATALOG :", CATALOG)
 print("DB_SCHEMA :", DB_SCHEMA)
 print("MODEL_FAMILY :", MODEL_FAMILY)

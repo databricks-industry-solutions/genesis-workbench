@@ -1,10 +1,32 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC
 # MAGIC #### SETUP Requirements: 
 # MAGIC - Ref: https://genentech.github.io/scimilarity/install.html#conda-environment-setup
 # MAGIC - Requires: `python=3.10`
 # MAGIC - Databricks Runtime `14.3 LTS` supports `Python 3.10`
+
+# COMMAND ----------
+
+# DBTITLE 1,gwb_variablesNparams
+dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
+dbutils.widgets.text("schema", "dev_mmt_core_gwb", "Schema")
+dbutils.widgets.text("model_name", "SCimilarity", "Model Name") ## use this as a prefix for the model name ?
+dbutils.widgets.text("experiment_name", "gwb_modules_scimilarity", "Experiment Name")
+dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id") # ??
+dbutils.widgets.text("user_email", "may.merkletan@databricks.com", "User Id/Email")
+dbutils.widgets.text("cache_dir", "scimilarity", "Cache dir") ## VOLUME NAME | MODEL_FAMILY 
+
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
+MODEL_NAME = dbutils.widgets.get("model_name")
+EXPERIMENT_NAME = dbutils.widgets.get("experiment_name")
+USER_EMAIL = dbutils.widgets.get("user_email")
+SQL_WAREHOUSE_ID = dbutils.widgets.get("sql_warehouse_id")
+CACHE_DIR = dbutils.widgets.get("cache_dir")
+
+print(f"Cache dir: {CACHE_DIR}")
+cache_full_path = f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}"
+print(f"Cache full path: {cache_full_path}")
 
 # COMMAND ----------
 
@@ -36,8 +58,17 @@ tbb>=2021.6.0
 uv
 """
 
+# DBTITLE 1,CATALOG | SHCHEMA | VOLS
+CATALOG = CATALOG #"mmt"
+# DB_SCHEMA = "genesiswb"
+DB_SCHEMA = SCHEMA #"tests"
+
+# VOLUME_NAME | PROJECT 
+MODEL_FAMILY = CACHE_DIR #"scimilarity"
+
 # Define the volumes path
-scimilarity_ws_requirements_path = "/Volumes/mmt/genesiswb/scimilarity/workspace_requirements/requirements.txt"
+# scimilarity_ws_requirements_path = "/Volumes/mmt/genesiswb/scimilarity/workspace_requirements/requirements.txt"
+scimilarity_ws_requirements_path = f"/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}/workspace_requirements/requirements.txt"
 
 # Create the directory if it does not exist
 os.makedirs(os.path.dirname(scimilarity_ws_requirements_path), exist_ok=True)
@@ -100,21 +131,22 @@ numba.config.THREADING_LAYER = 'workqueue'  # Most compatible option
 # COMMAND ----------
 
 # DBTITLE 1,CATALOG | SHCHEMA | VOLS
-# CATALOG = "mmt"
+CATALOG = CATALOG #"mmt"
 # DB_SCHEMA = "genesiswb"
+DB_SCHEMA = SCHEMA #"tests"
 
-# # VOLUME_NAME | PROJECT 
-# MODEL_FAMILY = "scimilarity"
+# VOLUME_NAME | PROJECT 
+MODEL_FAMILY = CACHE_DIR #"scimilarity"
 
-# Create widgets for catalog, db_schema, and model_family
-dbutils.widgets.text("catalog", "mmt")#, "CATALOG")
-dbutils.widgets.text("db_schema", "genesiswb")#, "DB_SCHEMA")
-dbutils.widgets.text("model_family", "scimilarity")#, "MODEL_FAMILY")
+# # Create widgets for catalog, db_schema, and model_family
+# dbutils.widgets.text("catalog", "mmt")#, "CATALOG")
+# dbutils.widgets.text("db_schema", "genesiswb")#, "DB_SCHEMA")
+# dbutils.widgets.text("model_family", "scimilarity")#, "MODEL_FAMILY")
 
-# Get the values from the widgets
-CATALOG = dbutils.widgets.get("catalog")
-DB_SCHEMA = dbutils.widgets.get("db_schema")
-MODEL_FAMILY = dbutils.widgets.get("model_family")
+# # Get the values from the widgets
+# CATALOG = dbutils.widgets.get("catalog")
+# DB_SCHEMA = dbutils.widgets.get("db_schema")
+# MODEL_FAMILY = dbutils.widgets.get("model_family")
 
 print("CATALOG :", CATALOG)
 print("DB_SCHEMA :", DB_SCHEMA)
@@ -456,7 +488,7 @@ def score_model(databricks_instance, endpoint_name, dataset, params=None):
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC
+# MAGIC 
 
 # COMMAND ----------
 

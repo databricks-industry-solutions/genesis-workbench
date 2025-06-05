@@ -9,7 +9,7 @@ resources:
 
       tasks:
         #this task can use serverless (OR 14.3 LTS L runtime)
-        - task_key: register_scimilarity_task
+        - task_key: wget_scimilarity_task # register_scimilarity_task
           # job_cluster_key: job_cluster
           notebook_task:
             notebook_path: ../notebooks/01_wget_scimilarity.py
