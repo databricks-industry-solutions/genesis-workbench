@@ -7,21 +7,21 @@
 
 # COMMAND ----------
 
-# DBTITLE 1,gwb_variablesNparams
+# DBTITLE 1,(initial) gwb_variablesNparams
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_mmt_core_gwb", "Schema")
-dbutils.widgets.text("model_name", "SCimilarity", "Model Name") ## use this as a prefix for the model name ?
-dbutils.widgets.text("experiment_name", "gwb_modules_scimilarity", "Experiment Name")
-dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id") # ??
-dbutils.widgets.text("user_email", "may.merkletan@databricks.com", "User Id/Email")
+# dbutils.widgets.text("model_name", "SCimilarity", "Model Name") ## use this as a prefix for the model name ?
+# dbutils.widgets.text("experiment_name", "gwb_modules_scimilarity", "Experiment Name")
+# dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id") # ??
+# dbutils.widgets.text("user_email", "may.merkletan@databricks.com", "User Id/Email")
 dbutils.widgets.text("cache_dir", "scimilarity", "Cache dir") ## VOLUME NAME | MODEL_FAMILY 
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
-MODEL_NAME = dbutils.widgets.get("model_name")
-EXPERIMENT_NAME = dbutils.widgets.get("experiment_name")
-USER_EMAIL = dbutils.widgets.get("user_email")
-SQL_WAREHOUSE_ID = dbutils.widgets.get("sql_warehouse_id")
+# MODEL_NAME = dbutils.widgets.get("model_name")
+# EXPERIMENT_NAME = dbutils.widgets.get("experiment_name")
+# USER_EMAIL = dbutils.widgets.get("user_email")
+# SQL_WAREHOUSE_ID = dbutils.widgets.get("sql_warehouse_id")
 CACHE_DIR = dbutils.widgets.get("cache_dir")
 
 print(f"Cache dir: {CACHE_DIR}")
@@ -44,7 +44,7 @@ print(f"Cache full path: {cache_full_path}")
 
 # COMMAND ----------
 
-# DBTITLE 1,requirements for workspace
+# DBTITLE 1,CATALOG | SHCHEMA | VOLS
 import os
 
 # Create a requirements.txt file with the necessary dependencies
@@ -58,7 +58,6 @@ tbb>=2021.6.0
 uv
 """
 
-# DBTITLE 1,CATALOG | SHCHEMA | VOLS
 CATALOG = CATALOG #"mmt"
 # DB_SCHEMA = "genesiswb"
 DB_SCHEMA = SCHEMA #"tests"
@@ -125,8 +124,34 @@ numba.config.THREADING_LAYER = 'workqueue'  # Most compatible option
 
 # COMMAND ----------
 
+
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ##### Unity Catalog / Volumes Paths  
+
+# COMMAND ----------
+
+dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
+dbutils.widgets.text("schema", "dev_mmt_core_gwb", "Schema")
+dbutils.widgets.text("model_name", "SCimilarity", "Model Name") ## use this as a prefix for the model name ?
+dbutils.widgets.text("experiment_name", "gwb_modules_scimilarity", "Experiment Name")
+dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id") # ??
+dbutils.widgets.text("user_email", "may.merkletan@databricks.com", "User Id/Email")
+dbutils.widgets.text("cache_dir", "scimilarity", "Cache dir") ## VOLUME NAME | MODEL_FAMILY 
+
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
+MODEL_NAME = dbutils.widgets.get("model_name")
+EXPERIMENT_NAME = dbutils.widgets.get("experiment_name")
+USER_EMAIL = dbutils.widgets.get("user_email")
+SQL_WAREHOUSE_ID = dbutils.widgets.get("sql_warehouse_id")
+CACHE_DIR = dbutils.widgets.get("cache_dir")
+
+print(f"Cache dir: {CACHE_DIR}")
+cache_full_path = f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}"
+print(f"Cache full path: {cache_full_path}")
 
 # COMMAND ----------
 
@@ -167,6 +192,12 @@ sampledata_path = f"/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}/data/adams_eta
 print("model_path :", model_path)
 print("geneOrder_path :", geneOrder_path)
 print("sampledata_path :", sampledata_path)
+
+# COMMAND ----------
+
+# DBTITLE 1,check
+# display(dbutils.fs.ls("/Volumes/genesis_workbench/dev_mmt_core_gwb/scimilarity/model/"))
+
 
 # COMMAND ----------
 
@@ -488,7 +519,7 @@ def score_model(databricks_instance, endpoint_name, dataset, params=None):
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC 
+# MAGIC
 
 # COMMAND ----------
 
