@@ -21,6 +21,13 @@ resources:
           job_cluster_key: job_cluster
           notebook_task:
             notebook_path: ../notebooks/02_register_GeneOrder.py ###
+        
+        - task_key: register_GetEmbedding_task
+          depends_on: 
+            - task_key: wget_SCimilarity_task
+          job_cluster_key: job_cluster
+          notebook_task:
+            notebook_path: ../notebooks/03_register_CellEmbedding.py ###
 
         # #this task need serverless runtime with python 3.11
         # - task_key: import_rfdiffusion_task
