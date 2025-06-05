@@ -140,10 +140,11 @@ signature
 
 # DBTITLE 1,Specify MODEL_TYPE & experiment_name
 MODEL_TYPE = "GeneOrder"
+model_name = f"SCimilarity_{MODEL_TYPE}"  
 
 ## Set the experiment
 # experiment_dir = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}" ## TO UPDATE
-experiment_dir = f"{user_path}/mlflow_experiments/{EXPERIMENT_NAME}" 
+experiment_dir = f"{user_path}/mlflow_experiments/{EXPERIMENT_NAME}" ## same as MODEL_FAMILY from widget above
 print(experiment_dir)
 
 # experiment_name = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}/{MODEL_TYPE}"
@@ -201,7 +202,7 @@ with mlflow.start_run() as run:
                   },
         input_example=example_input,
         signature=signature
-        # registered_model_name=f"{CATALOG}.{SCHEMA}.{MODEL_TYPE}" ## to include directly wihout additonal load run_id checks
+        # registered_model_name=f"{CATALOG}.{SCHEMA}.{model_name}" ## to include directly wihout additonal load run_id checks
     )
 
     run_id = run.info.run_id
@@ -265,7 +266,7 @@ mlflow.register_model(model_uri=model_uri,
 # COMMAND ----------
 
 # DBTITLE 1,Associate model version with @: add_model_alias
-add_model_alias("SCimilarity_GeneOrder", "Champion")
+# add_model_alias(full_model_name, "Champion")
 
 # COMMAND ----------
 

@@ -298,10 +298,10 @@ import mlflow.pyfunc
 from mlflow.tracking.client import MlflowClient
 import time
 
-def add_model_alias(model_name, alias="Champion"):
+def add_model_alias(full_model_name, alias="Champion"):
     # Define the model name
     # full_model_name = f"{CATALOG}.{DB_SCHEMA}.{model_name}"
-    full_model_name = f"{CATALOG}.{DB_SCHEMA}.{MODEL_NAME}"
+    # full_model_name = f"{CATALOG}.{DB_SCHEMA}.{MODEL_NAME}"
 
     # Initialize the MLflow client
     client = MlflowClient()
