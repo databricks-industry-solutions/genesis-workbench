@@ -31,7 +31,7 @@ schema = dbutils.widgets.get("core_schema")
 
 # COMMAND ----------
 
-# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0
+# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0 psutil pynvml
 
 # COMMAND ----------
 
@@ -165,7 +165,45 @@ download_data(validation_data_volume_location, workdir_val_data_file)
 
 # COMMAND ----------
 
+import mlflow
+import os
+import pandas as pd
+from matplotlib import pyplot as plt
+import seaborn as sns
+from scipy import stats
+import tensorboard as tb
+from tensorboard.backend.event_processing import event_accumulator
+from genesis_workbench.models import set_mlflow_experiment
+
 is_finetune_success = False
+db_host = dbutils.notebook.entry_point.getDbutils().notebook().getContext().extraContext().apply('api_url')
+db_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
+os.environ["DATABRICKS_HOST"] = db_host
+os.environ["DATABRICKS_TOKEN"] = db_token
+os.environ["MLFLOW_ENABLE_SYSTEM_METRICS_LOGGING"] = "true"
+
+experiment = set_mlflow_experiment(experiment_tag=experiment_name, user_email="srijit.nair@databricks.com")
+mlflow.start_run(experiment_id=experiment.experiment_id, run_name=finetune_label)
+
+ft_params = {
+    "esm_variant": esm_variant,
+    "train_data_volume_location": train_data_volume_location,
+    "validation_data_volume_location": validation_data_volume_location,
+    "should_use_lora": should_use_lora,
+    "finetune_label": finetune_label,
+    "task_type": task_type,
+    "mlp_ft_dropout": mlp_ft_dropout,   
+    "mlp_hidden_size": mlp_hidden_size,
+    "mlp_target_size": mlp_target_size,
+    "num_steps": num_steps,
+    "lr": lr,
+    "lr_multiplier": lr_multiplier,
+    "scale_lr_layer": scale_lr_layer,
+    "micro_batch_size": micro_batch_size,
+    "precision": precision
+}
+
+mlflow.log_params(ft_params)
 
 # COMMAND ----------
 
@@ -191,14 +229,27 @@ is_finetune_success = False
     --result-dir {ft_weights_directory}  \
     --micro-batch-size {micro_batch_size} \
     --precision {precision} \
-    --create-tensorboard-logger \
-    --train-database-path={work_dir}/train.db \
-    --valid-database-path={work_dir}/validation.db
+    --create-tensorboard-logger 
+
 
 # COMMAND ----------
 
-# MAGIC %sh
-# MAGIC cat /workdir/ft_weights/sequence_level_regression/dev/
+ea = event_accumulator.EventAccumulator('/workdir/ft_weights/sequence_level_regression/dev', 
+                                        size_guidance={event_accumulator.SCALARS:0})
+tb_event_accum = ea.Reload()
+
+# COMMAND ----------
+
+for k in ea.scalars.Keys():        
+    print(f"Logging {k}")
+    for v in ea.Scalars(k):        
+        mlflow.log_metric(k, v.value, step=v.step+1)
+
+
+
+# COMMAND ----------
+
+mlflow.end_run()
 
 # COMMAND ----------
 
@@ -221,11 +272,6 @@ for file in os.listdir(checkpoint_path):
     print("Done")
     is_finetune_success = True
     
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC #### Log the details in an MLflow experiment 
 
 # COMMAND ----------
 
