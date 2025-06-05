@@ -142,7 +142,8 @@ signature
 MODEL_TYPE = "GeneOrder"
 
 ## Set the experiment
-experiment_dir = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}"
+# experiment_dir = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}" ## TO UPDATE
+experiment_dir = f"{user_path}/mlflow_experiments/{EXPERIMENT_NAME}" 
 print(experiment_dir)
 
 # experiment_name = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}/{MODEL_TYPE}"
@@ -298,18 +299,43 @@ add_model_alias("SCimilarity_GeneOrder", "Champion")
 
 # COMMAND ----------
 
+## NEED TO UPDATE PAT/SPs || MOVE TO UTILS? 
+import os
+
+databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None) ## emulating other modules | HOWEVER QuentinA mentioned debdemos/solacc advised not to use this -- could lead to issues FYI 
+os.environ["SQL_WAREHOUSE"]=SQL_WAREHOUSE_ID
+os.environ["IS_TOKEN_AUTH"]="Y"
+os.environ["DATABRICKS_TOKEN"]=databricks_token
+
+# COMMAND ----------
+
 # DBTITLE 1,Endpoint Deployment Parameters
+import os
+
 ## Databricks HOST & TOKEN info.
 # Get the API endpoint and token for the current notebook context
 DATABRICKS_HOST = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiUrl().get()
-# API_TOKEN = dbutils.secrets.get(scope="mmt", key="hls_fe_SP") ## for some reason this won't work for API inference 
-DATABRICKS_TOKEN = dbutils.secrets.get(scope="mmt", key="databricks_token")
 
-import os
-os.environ["DATABRICKS_TOKEN"] = DATABRICKS_TOKEN
+# API_TOKEN = dbutils.secrets.get(scope="mmt", key="hls_fe_SP") ## for some reason this won't work for API inference 
+# DATABRICKS_TOKEN = dbutils.secrets.get(scope="mmt", key="databricks_token")
+# os.environ["DATABRICKS_TOKEN"] = DATABRICKS_TOKEN
+
+### gwb--specific 
+databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None) ## emulating other modules | HOWEVER QuentinA mentioned debdemos/solacc advised not to use this -- could lead to issues FYI 
+
+os.environ["SQL_WAREHOUSE"]=SQL_WAREHOUSE_ID
+os.environ["IS_TOKEN_AUTH"]="Y"
+os.environ["DATABRICKS_TOKEN"]=databricks_token
+###
 
 ## databricks_instance -- this is NOT the same as dbutils derived DATABRICKS_HOST / workspace_url
-databricks_instance = "e2-demo-field-eng.cloud.databricks.com"  # Replace with your Databricks instance URL 
+# databricks_instance = "e2-demo-field-eng.cloud.databricks.com"  # Replace with your Databricks instance URL 
+# databricks_instance = "adb-830292400663869.9.azuredatabricks.net" # hls-field-temp
+# databricks_instance = ${var.current_working_directory}  
+# workspace:
+#       root_path: ${var.current_working_directory}
+#       host: https://adb-830292400663869.9.azuredatabricks.net
+
 
 ## UC namespace
 catalog_name = CATALOG #"mmt"

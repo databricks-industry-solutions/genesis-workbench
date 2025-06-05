@@ -124,10 +124,6 @@ numba.config.THREADING_LAYER = 'workqueue'  # Most compatible option
 
 # COMMAND ----------
 
-
-
-# COMMAND ----------
-
 # MAGIC %md
 # MAGIC ##### Unity Catalog / Volumes Paths  
 
