@@ -129,6 +129,7 @@ numba.config.THREADING_LAYER = 'workqueue'  # Most compatible option
 
 # COMMAND ----------
 
+# DBTITLE 1,gwb_variablesNparams
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_mmt_core_gwb", "Schema")
 dbutils.widgets.text("model_name", "SCimilarity", "Model Name") ## use this as a prefix for the model name ?
@@ -299,7 +300,8 @@ import time
 
 def add_model_alias(model_name, alias="Champion"):
     # Define the model name
-    full_model_name = f"mmt.genesiswb.{model_name}"
+    # full_model_name = f"{CATALOG}.{DB_SCHEMA}.{model_name}"
+    full_model_name = f"{CATALOG}.{DB_SCHEMA}.{MODEL_NAME}"
 
     # Initialize the MLflow client
     client = MlflowClient()
