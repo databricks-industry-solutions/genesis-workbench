@@ -1,4 +1,26 @@
 # Databricks notebook source
+dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
+dbutils.widgets.text("schema", "dev_mmt_core_gwb", "Schema")
+dbutils.widgets.text("model_name", "scimilarity", "Model Name") ## use this as a prefix for the model name ?
+dbutils.widgets.text("experiment_name", "gwb_modules_mmt", "Experiment Name")
+dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id") # ??
+dbutils.widgets.text("user_email", "may.merkletan@databricks.com", "User Id/Email")
+dbutils.widgets.text("cache_dir", "scimilarity", "Cache dir") ## VOLUME NAME | MODEL_FAMILY 
+
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
+MODEL_NAME = dbutils.widgets.get("model_name")
+EXPERIMENT_NAME = dbutils.widgets.get("experiment_name")
+USER_EMAIL = dbutils.widgets.get("user_email")
+SQL_WAREHOUSE_ID = dbutils.widgets.get("sql_warehouse_id")
+CACHE_DIR = dbutils.widgets.get("cache_dir")
+
+print(f"Cache dir: {CACHE_DIR}")
+cache_full_path = f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}"
+print(f"Cache full path: {cache_full_path}")
+
+# COMMAND ----------
+
 CATALOG = "mmt"
 # DB_SCHEMA = "genesiswb"
 DB_SCHEMA = "tests"
@@ -189,4 +211,3 @@ if __name__ == "__main__":
 
 
 # COMMAND ----------
-
