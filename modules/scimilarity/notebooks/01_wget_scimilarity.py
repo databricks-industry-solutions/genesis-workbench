@@ -2,8 +2,8 @@
 # DBTITLE 1,gwb_variablesNparams
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_mmt_core_gwb", "Schema")
-dbutils.widgets.text("model_name", "scimilarity", "Model Name") ## use this as a prefix for the model name ?
-dbutils.widgets.text("experiment_name", "gwb_modules_mmt", "Experiment Name")
+dbutils.widgets.text("model_name", "SCimilarity", "Model Name") ## use this as a prefix for the model name ?
+dbutils.widgets.text("experiment_name", "gwb_modules_scimilarity", "Experiment Name")
 dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id") # ??
 dbutils.widgets.text("user_email", "may.merkletan@databricks.com", "User Id/Email")
 dbutils.widgets.text("cache_dir", "scimilarity", "Cache dir") ## VOLUME NAME | MODEL_FAMILY 
@@ -212,5 +212,3 @@ if __name__ == "__main__":
     setup_scimilarity()
 
 # COMMAND ----------
-
-
