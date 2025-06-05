@@ -41,7 +41,7 @@ resources:
         - name: cache_dir
           default: ${resources.volumes.scimilarity.name} ###
         - name: experiment_name
-          default: ${var.gwb_modules_scimilarity} ### 
+          default: ${var.module_registration_experiment_name} ### 
         - name: sql_warehouse_id
           default: ${var.sql_warehouse_id}
         - name: user_email
