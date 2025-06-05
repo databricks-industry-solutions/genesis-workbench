@@ -178,6 +178,13 @@ class ScimilaritySetup:
         start_time = time.time()
         logger.info("Starting SCimilarity setup...")
         
+        if os.path.exists(self.model_tarball) and os.path.exists(self.sample_data_path):
+            logger.info("Files already exist. Skipping setup.")
+            return {
+                "model_dir": self.model_dir,
+                "sample_data_path": self.sample_data_path
+            }
+        
         model_dir = self.setup_model()
         sample_data_path = self.setup_sample_data()
         
@@ -191,14 +198,20 @@ class ScimilaritySetup:
         }
 
 # For use in DABs or as a module
-# def setup_scimilarity(base_dir=f"/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}"):
-def setup_scimilarity(base_dir=base_dir):
+def setup_scimilarity(base_dir=f"/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}", run_model_setup=True, run_data_setup=True):
     """Entry point function to call"""
     setup = ScimilaritySetup(base_dir)
-    return setup.run_full_setup()
+    
+    if run_model_setup and run_data_setup:
+        return setup.run_full_setup()
+    elif run_model_setup:
+        return {"model_dir": setup.setup_model()}
+    elif run_data_setup:
+        return {"sample_data_path": setup.setup_sample_data()}
+    else:
+        logger.info("No setup functions were run.")
+        return {}
 
 # If running directly (not imported)
 if __name__ == "__main__":
     setup_scimilarity()
-
-# COMMAND ----------
