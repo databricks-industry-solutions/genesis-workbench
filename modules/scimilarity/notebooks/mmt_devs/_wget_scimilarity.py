@@ -156,5 +156,3 @@ print("sampledata_path :", sampledata_path)
 
 # !ls -lah /Volumes/mmt/genesiswb/scimilarity/data/adams_etal_2020
 !ls -lah {f"/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}/data/adams_etal_2020"}
-
-# COMMAND ----------
