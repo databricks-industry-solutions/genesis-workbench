@@ -4,7 +4,7 @@ import json
 from datetime import timedelta
 
 from genesis_workbench.workbench import get_workflow_job_status
-from utils.streamlit_helper import get_user_info
+from utils.streamlit_helper import get_user_info, make_run_link
 
 def format_duration(duration: timedelta) -> str:
     total_seconds = int(duration.total_seconds())
@@ -104,12 +104,20 @@ with job_runs:
         
         filtered_df = df[df["Job Name"] == selected_job]
 
-        st.dataframe(
+        filtered_df["Run ID"] = filtered_df.apply(
+            lambda row: make_run_link(row["Job ID"], row["Run ID"]), axis=1
+        )
+
+        # Optional: format datetimes as strings
+        filtered_df["Start Time"] = filtered_df["Start Time"].dt.strftime('%Y-%m-%d %H:%M:%S')
+        filtered_df["End Time"] = filtered_df["End Time"].dt.strftime('%Y-%m-%d %H:%M:%S')
+
+        # Display table with HTML links
+        st.markdown(
             filtered_df[[
                 "Run ID", "Job Name", "Status", "Start Time", "End Time", "Duration", "Created By"
-            ]].sort_values(by="Start Time", ascending=False),
-            use_container_width=True,
-            hide_index=True
+            ]].sort_values(by="Start Time", ascending=False).to_html(escape=False, index=False),
+            unsafe_allow_html=True
         )
     else:
         st.warning("No workflow runs found.")
