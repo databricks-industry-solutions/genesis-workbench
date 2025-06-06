@@ -14,10 +14,10 @@ pip uninstall -y -r requirements.txt
 pip install -r requirements.txt
 
 #set the following variables
-export IS_TOKEN_AUTH="Y"
-#export SQL_WAREHOUSE="8f210e00850a2c16"
-#export DATABRICKS_HOSTNAME="https://adb-830292400663869.9.azuredatabricks.net"
-#export DATABRICKS_TOKEN="aaaa"
+# export IS_TOKEN_AUTH="Y"
+# export SQL_WAREHOUSE="8f210e00850a2c16"
+# export DATABRICKS_HOSTNAME="https://adb-830292400663869.9.azuredatabricks.net"
+# export DATABRICKS_TOKEN="xxx"
 
 source env.env
 
