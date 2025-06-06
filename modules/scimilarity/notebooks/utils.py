@@ -45,36 +45,38 @@ print(f"Cache full path: {cache_full_path}")
 # COMMAND ----------
 
 # DBTITLE 1,CATALOG | SHCHEMA | VOLS
-import os
+## causes concurrency conflicts wrt multiple tasks writing to Vols 
 
-# Create a requirements.txt file with the necessary dependencies
-requirements = """
-scimilarity==0.4.0
-typing_extensions>=4.14.0
-numpy==1.26.4
-pandas==1.5.3
-mlflow
-tbb>=2021.6.0
-uv
-"""
+# import os
 
-CATALOG = CATALOG #"mmt"
-# DB_SCHEMA = "genesiswb"
-DB_SCHEMA = SCHEMA #"tests"
+# # Create a requirements.txt file with the necessary dependencies
+# requirements = """
+# scimilarity==0.4.0
+# typing_extensions>=4.14.0
+# numpy==1.26.4
+# pandas==1.5.3
+# mlflow
+# tbb>=2021.6.0
+# uv
+# """
 
-# VOLUME_NAME | PROJECT 
-MODEL_FAMILY = CACHE_DIR #"scimilarity"
+# CATALOG = CATALOG #"mmt"
+# # DB_SCHEMA = "genesiswb"
+# DB_SCHEMA = SCHEMA #"tests"
 
-# Define the volumes path
-# scimilarity_ws_requirements_path = "/Volumes/mmt/genesiswb/scimilarity/workspace_requirements/requirements.txt"
-scimilarity_ws_requirements_path = f"/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}/workspace_requirements/requirements.txt"
+# # VOLUME_NAME | PROJECT 
+# MODEL_FAMILY = CACHE_DIR #"scimilarity"
 
-# Create the directory if it does not exist
-os.makedirs(os.path.dirname(scimilarity_ws_requirements_path), exist_ok=True)
+# # Define the volumes path
+# # scimilarity_ws_requirements_path = "/Volumes/mmt/genesiswb/scimilarity/workspace_requirements/requirements.txt"
+# scimilarity_ws_requirements_path = f"/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}/workspace_requirements/requirements.txt"
 
-# Write the requirements to a file in the volumes path
-with open(scimilarity_ws_requirements_path, 'w') as f:
-    f.write(requirements)
+# # Create the directory if it does not exist
+# os.makedirs(os.path.dirname(scimilarity_ws_requirements_path), exist_ok=True)
+
+# # Write the requirements to a file in the volumes path
+# with open(scimilarity_ws_requirements_path, 'w') as f:
+#     f.write(requirements)
 
 # COMMAND ----------
 
@@ -84,14 +86,34 @@ with open(scimilarity_ws_requirements_path, 'w') as f:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ##### pip install `requirements.txt` 
+# MAGIC ##### pip install `requirements` | `requirements.txt` 
 # MAGIC <!-- - to Volumes for easier `sys.append()` -->
 
 # COMMAND ----------
 
-# DBTITLE 1,notebook -- pip install
-# Install required packages/dependencies 
-%pip install -r {scimilarity_ws_requirements_path} --upgrade -v
+# DBTITLE 1,notebook -- pip install requirements.txt
+# # Install required packages/dependencies 
+# %pip install -r {scimilarity_ws_requirements_path} --upgrade -v
+
+# dbutils.library.restartPython()
+
+# COMMAND ----------
+
+# DBTITLE 1,[gwb] pip install from requirements list
+# Define the list of requirements
+requirements = [
+    "scimilarity==0.4.0",
+    "typing_extensions>=4.14.0",
+    "numpy==1.26.4",
+    "pandas==1.5.3",
+    "mlflow",
+    "tbb>=2021.6.0",
+    "uv"
+]
+
+# Install the required packages
+for package in requirements:
+    %pip install {package} --upgrade -v
 
 dbutils.library.restartPython()
 
