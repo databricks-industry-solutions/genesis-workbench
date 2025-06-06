@@ -69,8 +69,8 @@ resources:
           new_cluster:
             num_workers: 0
             ### NEED larger compute for SCimilarity
-            node_type_id: 'Standard_E32ads_v5' # CPU #'Standard_NC16as_T4_v3' ## Standard_NV36ads_A10_v5 #'Standard_NC4as_T4_v3'  
-            driver_node_type_id: 'Standard_E32ads_v5' # CPU #'Standard_NC16as_T4_v3' ## Standard_NV36ads_A10_v5 #'Standard_NC4as_T4_v3' 
+            node_type_id: 'Standard_E32ads_v5' # CPU 
+            driver_node_type_id: 'Standard_E32ads_v5' # CPU 
             # spark_version: '14.3.x-gpu-ml-scala2.12'
             spark_version: '14.3.x-cpu-ml-scala2.12'
             enable_elastic_disk: true
@@ -86,8 +86,8 @@ resources:
           new_cluster:
             num_workers: 0
             ### NEED larger compute for SCimilarity
-            node_type_id: 'Standard_E32ads_v5' # CPU #'Standard_NC16as_T4_v3' ## Standard_NV36ads_A10_v5 #'Standard_NC4as_T4_v3'  
-            driver_node_type_id: 'Standard_E32ads_v5' # CPU #'Standard_NC16as_T4_v3' ## Standard_NV36ads_A10_v5 #'Standard_NC4as_T4_v3' 
+            node_type_id: 'Standard_E32ads_v5' # CPU   
+            driver_node_type_id: 'Standard_E32ads_v5' # CPU 
             # spark_version: '14.3.x-gpu-ml-scala2.12'
             spark_version: '14.3.x-cpu-ml-scala2.12'
             enable_elastic_disk: true
@@ -102,9 +102,9 @@ resources:
         - job_cluster_key: job_cluster_search_nearest
           new_cluster:
             num_workers: 0
-            ### NEED larger compute for SCimilarity
-            node_type_id: 'Standard_E32ads_v5' # CPU ## Standard_NV36ads_A10_v5 #'Standard_NC16as_T4_v3'  
-            driver_node_type_id: 'Standard_E32ads_v5' # CPU ## Standard_NV36ads_A10_v5 #'Standard_NC16as_T4_v3' 
+            ### NEED larger RAM compute for SCimilarity: search_nearest
+            node_type_id: 'Standard_E48ads_v5' # CPU 
+            driver_node_type_id: 'Standard_E48ads_v5' # CPU  
             # spark_version: '14.3.x-gpu-ml-scala2.12'
             spark_version: '14.3.x-cpu-ml-scala2.12'
             enable_elastic_disk: true
@@ -131,5 +131,12 @@ resources:
         #       spark.master: local[*]
         #     custom_tags:
         #       ResourceClass: SingleNode
-            
-            
+
+
+
+        ## critical for model training
+        ## GPU options: ## Standard_NV36ads_A10_v5 #'Standard_NC16as_T4_v3' #110gigs #'Standard_NC4as_T4_v3'  
+        ## 14.3.x-gpu-ml-scala2.12
+
+        ## CPU options: # Standard_E48ads_v5 #384gigs # Standard_E32ads_v5 #256gigs 
+        ## 14.3.x-cpu-ml-scala2.12
