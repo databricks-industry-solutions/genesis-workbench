@@ -234,18 +234,13 @@ mlflow.log_params(ft_params)
 
 # COMMAND ----------
 
-ea = event_accumulator.EventAccumulator('/workdir/ft_weights/sequence_level_regression/dev', 
+ea = event_accumulator.EventAccumulator(f"{ft_weights_directory}/{experiment_name}/dev", 
                                         size_guidance={event_accumulator.SCALARS:0})
 tb_event_accum = ea.Reload()
-
-# COMMAND ----------
-
 for k in ea.scalars.Keys():        
     print(f"Logging {k}")
     for v in ea.Scalars(k):        
         mlflow.log_metric(k, v.value, step=v.step+1)
-
-
 
 # COMMAND ----------
 
