@@ -69,6 +69,12 @@ def open_run_window(job_id,run_id):
     """ % (url)
     html(open_script)
 
+def make_run_link(job_id, run_id):
+    host_name = os.getenv("DATABRICKS_HOST")
+    if not host_name.startswith("https://"):
+        host_name = "https://" + host_name
+    url = f"{host_name}/jobs/{job_id}/runs/{run_id}"
+    return f"<a href='{url}' target='_blank' style='color: #1E90FF;'>{run_id}</a>"
 
 @st.dialog("Deploy Model", width="large")
 def display_deploy_model_dialog(selected_model_name, success_callback = None, error_callback = None):    
