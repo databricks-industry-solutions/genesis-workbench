@@ -8,25 +8,25 @@
 # COMMAND ----------
 
 # DBTITLE 1,(initial) gwb_variablesNparams
-dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("schema", "dev_mmt_core_gwb", "Schema")
-# dbutils.widgets.text("model_name", "SCimilarity", "Model Name") ## use this as a prefix for the model name ?
-# dbutils.widgets.text("experiment_name", "gwb_modules_scimilarity", "Experiment Name")
-# dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id") # ??
-# dbutils.widgets.text("user_email", "may.merkletan@databricks.com", "User Id/Email")
-dbutils.widgets.text("cache_dir", "scimilarity", "Cache dir") ## VOLUME NAME | MODEL_FAMILY 
+# dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
+# dbutils.widgets.text("schema", "dev_mmt_core_gwb", "Schema")
+# # dbutils.widgets.text("model_name", "SCimilarity", "Model Name") ## use this as a prefix for the model name ?
+# # dbutils.widgets.text("experiment_name", "gwb_modules_scimilarity", "Experiment Name")
+# # dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id") # ??
+# # dbutils.widgets.text("user_email", "may.merkletan@databricks.com", "User Id/Email")
+# dbutils.widgets.text("cache_dir", "scimilarity", "Cache dir") ## VOLUME NAME | MODEL_FAMILY 
 
-CATALOG = dbutils.widgets.get("catalog")
-SCHEMA = dbutils.widgets.get("schema")
-# MODEL_NAME = dbutils.widgets.get("model_name")
-# EXPERIMENT_NAME = dbutils.widgets.get("experiment_name")
-# USER_EMAIL = dbutils.widgets.get("user_email")
-# SQL_WAREHOUSE_ID = dbutils.widgets.get("sql_warehouse_id")
-CACHE_DIR = dbutils.widgets.get("cache_dir")
+# CATALOG = dbutils.widgets.get("catalog")
+# SCHEMA = dbutils.widgets.get("schema")
+# # MODEL_NAME = dbutils.widgets.get("model_name")
+# # EXPERIMENT_NAME = dbutils.widgets.get("experiment_name")
+# # USER_EMAIL = dbutils.widgets.get("user_email")
+# # SQL_WAREHOUSE_ID = dbutils.widgets.get("sql_warehouse_id")
+# CACHE_DIR = dbutils.widgets.get("cache_dir")
 
-print(f"Cache dir: {CACHE_DIR}")
-cache_full_path = f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}"
-print(f"Cache full path: {cache_full_path}")
+# print(f"Cache dir: {CACHE_DIR}")
+# cache_full_path = f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}"
+# print(f"Cache full path: {cache_full_path}")
 
 # COMMAND ----------
 
@@ -86,7 +86,8 @@ print(f"Cache full path: {cache_full_path}")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ##### pip install `requirements` | `requirements.txt` 
+# MAGIC ##### pip install `requirements` 
+# MAGIC <!-- | `requirements.txt`  -->
 # MAGIC <!-- - to Volumes for easier `sys.append()` -->
 
 # COMMAND ----------
@@ -100,6 +101,8 @@ print(f"Cache full path: {cache_full_path}")
 # COMMAND ----------
 
 # DBTITLE 1,[gwb] pip install from requirements list
+## avoid concurrency issues wrt multiple tasks writing to Vols
+
 # Define the list of requirements
 requirements = [
     "scimilarity==0.4.0",
@@ -308,10 +311,6 @@ print("Initial Data Processing using SCimilarity Complete")
 
 # MAGIC %md
 # MAGIC #### Initiate `HelperFunctions`
-
-# COMMAND ----------
-
-
 
 # COMMAND ----------
 

@@ -156,7 +156,7 @@ signature
 # COMMAND ----------
 
 # DBTITLE 1,Specify MODEL_TYPE & experiment_name
-MODEL_TYPE = "GetEmbeddings"
+MODEL_TYPE = "GetEmbeddings" ##
 model_name = f"SCimilarity_{MODEL_TYPE}"  
 
 ## Set the experiment
@@ -240,6 +240,7 @@ else:
 mlflow.set_experiment(experiment_id=exp_id)
 
 # Save and log the model
+# with mlflow.start_run(run_name=f'{model_name}', experiment_id=experiment.experiment_id)
 with mlflow.start_run() as run:
     mlflow.pyfunc.log_model(        
         artifact_path=f"{MODEL_TYPE}",
@@ -273,7 +274,7 @@ loaded_model = mlflow.pyfunc.load_model(logged_model_run_uri) ##
 # COMMAND ----------
 
 # DBTITLE 1,access input_example from loaded_model
-loaded_model.input_example
+# loaded_model.input_example
 
 # COMMAND ----------
 

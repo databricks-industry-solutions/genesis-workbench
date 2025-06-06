@@ -139,7 +139,7 @@ signature
 # COMMAND ----------
 
 # DBTITLE 1,Specify MODEL_TYPE & experiment_name
-MODEL_TYPE = "GeneOrder"
+MODEL_TYPE = "GeneOrder" ##
 model_name = f"SCimilarity_{MODEL_TYPE}"  
 
 ## Set the experiment
@@ -193,6 +193,7 @@ else:
 mlflow.set_experiment(experiment_id=exp_id)
 
 # Save and log the model
+# with mlflow.start_run(run_name=f'{model_name}', experiment_id=experiment.experiment_id)
 with mlflow.start_run() as run:
     mlflow.pyfunc.log_model(
         artifact_path=f"{MODEL_TYPE}",
