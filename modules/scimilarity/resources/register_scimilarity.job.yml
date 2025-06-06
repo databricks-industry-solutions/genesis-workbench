@@ -69,9 +69,10 @@ resources:
           new_cluster:
             num_workers: 0
             ### NEED larger compute for SCimilarity
-            node_type_id: 'Standard_E32ads_v5' #'Standard_NC16as_T4_v3' ## Standard_NV36ads_A10_v5 #'Standard_NC4as_T4_v3'  
-            driver_node_type_id: 'Standard_E32ads_v5' #'Standard_NC16as_T4_v3' ## Standard_NV36ads_A10_v5 #'Standard_NC4as_T4_v3' 
-            spark_version: '14.3.x-gpu-ml-scala2.12'
+            node_type_id: 'Standard_E32ads_v5' # CPU #'Standard_NC16as_T4_v3' ## Standard_NV36ads_A10_v5 #'Standard_NC4as_T4_v3'  
+            driver_node_type_id: 'Standard_E32ads_v5' # CPU #'Standard_NC16as_T4_v3' ## Standard_NV36ads_A10_v5 #'Standard_NC4as_T4_v3' 
+            # spark_version: '14.3.x-gpu-ml-scala2.12'
+            spark_version: '14.3.x-cpu-ml-scala2.12'
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             single_user_name: ${workspace.current_user.userName}
@@ -85,9 +86,10 @@ resources:
           new_cluster:
             num_workers: 0
             ### NEED larger compute for SCimilarity
-            node_type_id: 'Standard_E32ads_v5' #'Standard_NC16as_T4_v3' ## Standard_NV36ads_A10_v5 #'Standard_NC4as_T4_v3'  
-            driver_node_type_id: 'Standard_E32ads_v5' #'Standard_NC16as_T4_v3' ## Standard_NV36ads_A10_v5 #'Standard_NC4as_T4_v3' 
-            spark_version: '14.3.x-gpu-ml-scala2.12'
+            node_type_id: 'Standard_E32ads_v5' # CPU #'Standard_NC16as_T4_v3' ## Standard_NV36ads_A10_v5 #'Standard_NC4as_T4_v3'  
+            driver_node_type_id: 'Standard_E32ads_v5' # CPU #'Standard_NC16as_T4_v3' ## Standard_NV36ads_A10_v5 #'Standard_NC4as_T4_v3' 
+            # spark_version: '14.3.x-gpu-ml-scala2.12'
+            spark_version: '14.3.x-cpu-ml-scala2.12'
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             single_user_name: ${workspace.current_user.userName}
@@ -101,9 +103,10 @@ resources:
           new_cluster:
             num_workers: 0
             ### NEED larger compute for SCimilarity
-            node_type_id: 'Standard_E32ads_v5' ## Standard_NV36ads_A10_v5 #'Standard_NC16as_T4_v3'  
-            driver_node_type_id: 'Standard_E32ads_v5' ## Standard_NV36ads_A10_v5 #'Standard_NC16as_T4_v3' 
-            spark_version: '14.3.x-gpu-ml-scala2.12'
+            node_type_id: 'Standard_E32ads_v5' # CPU ## Standard_NV36ads_A10_v5 #'Standard_NC16as_T4_v3'  
+            driver_node_type_id: 'Standard_E32ads_v5' # CPU ## Standard_NV36ads_A10_v5 #'Standard_NC16as_T4_v3' 
+            # spark_version: '14.3.x-gpu-ml-scala2.12'
+            spark_version: '14.3.x-cpu-ml-scala2.12'
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             single_user_name: ${workspace.current_user.userName}
