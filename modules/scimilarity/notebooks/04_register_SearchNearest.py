@@ -181,7 +181,7 @@ signature
 # COMMAND ----------
 
 # DBTITLE 1,Specify MODEL_TYPE & experiment_name
-MODEL_TYPE = "SearchNearest" ## 
+MODEL_TYPE = "Search_Nearest" ## 
 model_name = f"SCimilarity_{MODEL_TYPE}"  
 
 ## Set the experiment

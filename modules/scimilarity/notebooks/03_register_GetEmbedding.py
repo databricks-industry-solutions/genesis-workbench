@@ -156,7 +156,7 @@ signature
 # COMMAND ----------
 
 # DBTITLE 1,Specify MODEL_TYPE & experiment_name
-MODEL_TYPE = "GetEmbeddings" ##
+MODEL_TYPE = "Get_Embedding" ##
 model_name = f"SCimilarity_{MODEL_TYPE}"  
 
 ## Set the experiment
