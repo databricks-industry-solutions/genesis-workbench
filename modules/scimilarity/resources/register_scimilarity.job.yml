@@ -18,21 +18,21 @@ resources:
         - task_key: register_GeneOrder_task
           depends_on: 
             - task_key: wget_SCimilarity_task
-          job_cluster_key: job_cluster_T4_v3_geneorder
+          job_cluster_key: job_cluster_geneorder
           notebook_task:
             notebook_path: ../notebooks/02_register_GeneOrder.py ###
         
         - task_key: register_GetEmbedding_task
           depends_on: 
             - task_key: wget_SCimilarity_task
-          job_cluster_key: job_cluster_T4_v3_geneorder
+          job_cluster_key: job_cluster_geneorder
           notebook_task:
             notebook_path: ../notebooks/03_register_CellEmbedding.py ###
         
         - task_key: register_SearchNearest_task
           depends_on: 
             - task_key: wget_SCimilarity_task
-          job_cluster_key: job_cluster_T4_v3_searchnearest
+          job_cluster_key: job_cluster_searchnearest
           notebook_task:
             notebook_path: ../notebooks/04_register_SearchNearest.py ###
 
