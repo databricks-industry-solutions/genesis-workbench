@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dbboltz"
+version = "0.1.0"
+authors = [{name = "Peter Hawkins", email = "peter.hawkins@databricks.com"}]
+description = "boltz for mlflow integration and further msa options"
+dependencies = [
+  "requests>=2.25.1",
+  "boltz==0.4.0",
+  "rdkit",
+  "absl-py==1.0.0",
+  "transformers>=4.41",
+  "sentence-transformers>=2.7",
+  "pyspark",
+  "pandas",
+  "mlflow==2.15.1",
+  "cloudpickle==2.2.1",
+]
+
+[project.optional-dependencies]
+gpu = ["flash_attn==1.0.9"]
+cpu = []
+
+[tool.setuptools]
+#packages = ["dbboltz"]
+#package-dir = {"" = "src"}
+packages = { find = { where = ["src"] } }  # Auto-discovers pkg and subpkg
+
+[tool.setuptools.package-dir]
+"" = "src"  # Maps root package to src directory

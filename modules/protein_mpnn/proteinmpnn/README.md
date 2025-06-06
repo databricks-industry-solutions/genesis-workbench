@@ -1,0 +1,1 @@
+This codebase contains necessary modules to run proteinMPNN that have been slightly altered from the original so that they are easier to use directly from python rather than command line. They licensed under the MIT license as one can find in the LICENSE file in this directory.

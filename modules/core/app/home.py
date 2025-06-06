@@ -45,7 +45,7 @@ monitoring_alerts_page = st.Page(
 
 bionemo_esm_page = st.Page(
     page="views/bionemo/bionemo_esm.py",
-    title="[NVIDIA BioNeMo©] ESMFold2",
+    title="[NVIDIA BioNeMo©] ESM2",
     icon=":material/genetics:"
 )
 
