@@ -27,7 +27,7 @@ resources:
             - task_key: wget_SCimilarity_task
           job_cluster_key: job_cluster_get_embedding
           notebook_task:
-            notebook_path: ../notebooks/03_register_CellEmbedding.py ###
+            notebook_path: ../notebooks/03_register_GetEmbedding.py ###
         
         - task_key: register_SearchNearest_task
           depends_on: 
