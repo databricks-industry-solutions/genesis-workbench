@@ -37,9 +37,11 @@ resources:
             notebook_path: ../notebooks/04_register_SearchNearest.py ###
 
         #this task need serverless runtime with python 3.11
-        - task_key: import_scimilarity_models_task
+        - task_key: update_model_catalog_scimilarity_models_task
           depends_on: 
-            - task_key: register_GeneOrder_task, register_GetEmbedding_task, register_SearchNearest_task
+            - task_key: "register_GeneOrder_task"
+            - task_key: "register_GetEmbedding_task"
+            - task_key: "register_SearchNearest_task"
           notebook_task:
             notebook_path: ../notebooks/05_import_model_gwb.py
 
