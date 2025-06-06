@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from pandas.api.types import is_datetime64_any_dtype
 import json
 from datetime import timedelta
 
@@ -109,8 +110,12 @@ with job_runs:
         )
 
         # Optional: format datetimes as strings
-        filtered_df["Start Time"] = filtered_df["Start Time"].dt.strftime('%Y-%m-%d %H:%M:%S')
-        filtered_df["End Time"] = filtered_df["End Time"].dt.strftime('%Y-%m-%d %H:%M:%S')
+        # Safely format datetime columns with nulls
+        for col in ["Start Time", "End Time"]:
+            if is_datetime64_any_dtype(filtered_df[col]):
+                filtered_df[col] = filtered_df[col].apply(
+                    lambda x: x.strftime('%Y-%m-%d %H:%M:%S') if pd.notnull(x) else ""
+                )
 
         # Display table with HTML links
         st.markdown(
