@@ -17,7 +17,7 @@ resources:
         #this task need serverless runtime with python 3.11
         - task_key: import_protein_mpnn_task
           depends_on: 
-            - task_key: register_proteinmpnn
+            - task_key: register_proteinmpnn_task
           notebook_task:
             notebook_path: ../notebooks/02_import_model_gwb.py
 
