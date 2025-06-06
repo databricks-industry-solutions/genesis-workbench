@@ -18,21 +18,21 @@ resources:
         - task_key: register_GeneOrder_task
           depends_on: 
             - task_key: wget_SCimilarity_task
-          job_cluster_key: job_cluster_geneorder
+          job_cluster_key: job_cluster_gene_order
           notebook_task:
             notebook_path: ../notebooks/02_register_GeneOrder.py ###
         
         - task_key: register_GetEmbedding_task
           depends_on: 
             - task_key: wget_SCimilarity_task
-          job_cluster_key: job_cluster_geneorder
+          job_cluster_key: job_cluster_get_embedding
           notebook_task:
             notebook_path: ../notebooks/03_register_CellEmbedding.py ###
         
         - task_key: register_SearchNearest_task
           depends_on: 
             - task_key: wget_SCimilarity_task
-          job_cluster_key: job_cluster_searchnearest
+          job_cluster_key: job_cluster_search_nearest
           notebook_task:
             notebook_path: ../notebooks/04_register_SearchNearest.py ###
 
@@ -65,7 +65,7 @@ resources:
           default: ${var.current_user}
 
       job_clusters:
-        - job_cluster_key: job_cluster_geneorder
+        - job_cluster_key: job_cluster_gene_order
           new_cluster:
             num_workers: 0
             ### NEED larger compute for SCimilarity
@@ -81,7 +81,7 @@ resources:
             custom_tags:
               ResourceClass: SingleNode
         
-        - job_cluster_key: job_cluster_getembedding
+        - job_cluster_key: job_cluster_get_embedding
           new_cluster:
             num_workers: 0
             ### NEED larger compute for SCimilarity
@@ -97,7 +97,7 @@ resources:
             custom_tags:
               ResourceClass: SingleNode
         
-        - job_cluster_key: job_cluster_searchnearest
+        - job_cluster_key: job_cluster_search_nearest
           new_cluster:
             num_workers: 0
             ### NEED larger compute for SCimilarity
