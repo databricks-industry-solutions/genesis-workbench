@@ -1,3 +1,4 @@
+## FIRST DEPLOY CORE to set up Catalog Schema for User
 ### core
 
 ./deploy.sh core dev --var="dev_user_prefix=mmt,core_catalog_name=genesis_workbench,core_schema_name=dev_mmt_core_gwb,bionemo_docker_token=<bionemo_docker_token>"
@@ -5,6 +6,7 @@
 ./destroy.sh core dev --var="dev_user_prefix=mmt,core_catalog_name=genesis_workbench,core_schema_name=dev_mmt_core_gwb,bionemo_docker_token=<bionemo_docker_token>"
 
 
+## THEN work with modules 
 ### scimilarity
 
 ./deploy.sh scimilarity dev --var="dev_user_prefix=mmt,core_catalog_name=genesis_workbench,core_schema_name=dev_mmt_core_gwb"
