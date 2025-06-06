@@ -54,6 +54,7 @@ print("sampledata_path :", sampledata_path)
 
 # COMMAND ----------
 
+# DBTITLE 1,model and data reference urls
 # Downloading the pretrained models
 # You can download the following pretrained models for use with SCimilarity from Zenodo: https://zenodo.org/records/10685499
 
