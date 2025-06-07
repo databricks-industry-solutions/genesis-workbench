@@ -1,5 +1,8 @@
 # Databricks notebook source
-# DBTITLE 1,gwb_paramsNvariables
+## USE SERVERLESS 
+
+# COMMAND ----------
+
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 # dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
 dbutils.widgets.text("schema", "mmt_test", "Schema")
@@ -11,13 +14,58 @@ schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
-# DBTITLE 1,install standard dependencies
 # MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0
-# MAGIC # dbutils.library.restartPython() ## run after installing gwb wheel below
+# MAGIC # dbutils.library.restartPython()
 
 # COMMAND ----------
 
-# DBTITLE 1,extract gwb library from core app wheel file
+### TEMP FIX to update code because I can't get core to deploy
+
+# COMMAND ----------
+
+# DBTITLE 1,when empty
+# # Create the volume in Unity Catalog if it does not exist
+# spark.sql(f"""
+# CREATE VOLUME IF NOT EXISTS {catalog}.{schema}.libraries
+# COMMENT 'Volume for libraries'
+# """)
+
+# dbutils.fs.ls(f"dbfs:/Volumes/{catalog}/{schema}/libraries")
+
+# COMMAND ----------
+
+# DBTITLE 1,check files
+# # catalog
+# schema_SCN = "dev_srijit_nair_dbx_genesis_workbench_core"
+# dbutils.fs.ls(f"/Volumes/{catalog}/{schema_SCN}/libraries")
+
+# COMMAND ----------
+
+# DBTITLE 1,copy over libraries
+# # Define the source and destination paths
+# source_path = f"/Volumes/{catalog}/{schema_SCN}/libraries/genesis_workbench-0.1.0-py3-none-any.whl"
+# destination_path = f"/Volumes/{catalog}/{schema}/libraries/genesis_workbench-0.1.0-py3-none-any.whl"
+
+# # Create the volume in Unity Catalog if it does not exist
+# spark.sql(f"""
+# CREATE VOLUME IF NOT EXISTS {catalog}.{schema}.libraries
+# COMMENT 'Volume for libraries'
+# """)
+
+# # Create the volume path if it does not exist
+# volume_path = f"/Volumes/{catalog}/{schema}/libraries"
+# dbutils.fs.mkdirs(volume_path)
+
+# # Copy the file
+# dbutils.fs.cp(source_path, destination_path)
+
+# COMMAND ----------
+
+# DBTITLE 1,check destination
+# dbutils.fs.ls(destination_path)
+
+# COMMAND ----------
+
 gwb_library_path = None
 libraries = dbutils.fs.ls(f"/Volumes/{catalog}/{schema}/libraries")
 for lib in libraries:
@@ -28,13 +76,11 @@ print(gwb_library_path)
 
 # COMMAND ----------
 
-# DBTITLE 1,install gwb library & dependencies
 # MAGIC %pip install {gwb_library_path} --force-reinstall
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
 
-# DBTITLE 1,get UC variables & set env auth
 import os
 
 catalog = dbutils.widgets.get("catalog")
@@ -50,7 +96,6 @@ os.environ["DATABRICKS_TOKEN"]=databricks_token
 
 # COMMAND ----------
 
-# DBTITLE 1,import class/functions from gwb library
 from genesis_workbench.models import (ModelCategory, 
                                       import_model_from_uc,
                                       get_latest_model_version)
@@ -59,7 +104,6 @@ from genesis_workbench.workbench import AppContext
 
 # COMMAND ----------
 
-# DBTITLE 1,track UC registered models to add to catalog
 from databricks.sdk import WorkspaceClient
 
 w = WorkspaceClient()
@@ -70,13 +114,18 @@ models = w.registered_models.list(
     schema_name="mmt_test"
 )
 
+# for model in models:
+#     print(f"Model: {model.name}")
+#     print(f"Created: {model.created_at}")
+#     print("---")
+
 model_list = [model.name for model in models];
 
 model_list
 
 # COMMAND ----------
 
-# DBTITLE 1,scimilarity_gene_order
+# DBTITLE 1,gene_order
 model_uc_name=f"{catalog}.{schema}.scimilarity_gene_order"
 model_version = get_latest_model_version(model_uc_name)
 model_uri = f"models:/{model_uc_name}/{model_version}"
@@ -98,7 +147,6 @@ import_model_from_uc(app_context,user_email=user_email,
 
 # COMMAND ----------
 
-# DBTITLE 1,scimilarity_get_embedding
 model_uc_name=f"{catalog}.{schema}.scimilarity_get_embedding"
 model_version = get_latest_model_version(model_uc_name)
 model_uri = f"models:/{model_uc_name}/{model_version}"
@@ -120,7 +168,6 @@ import_model_from_uc(app_context,user_email=user_email,
 
 # COMMAND ----------
 
-# DBTITLE 1,scimilarity_search_nearest
 model_uc_name=f"{catalog}.{schema}.scimilarity_search_nearest"
 model_version = get_latest_model_version(model_uc_name)
 model_uri = f"models:/{model_uc_name}/{model_version}"

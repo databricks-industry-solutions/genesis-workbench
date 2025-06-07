@@ -63,10 +63,6 @@ print("sampledata_path :", sampledata_path)
 
 # COMMAND ----------
 
-# f"dbfs/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}/downloads"
-
-# COMMAND ----------
-
 # DBTITLE 1,create volume first
 ## CREATE/CHECK EXISTENCE OF VOLUMES FIRST 
 
