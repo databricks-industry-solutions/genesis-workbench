@@ -6,19 +6,10 @@
 # ./destroy.sh core dev --var="dev_user_prefix=mmt,core_catalog_name=genesis_workbench,core_schema_name=dev_mmt_core_gwb,bionemo_docker_token=<bionemo_docker_token>"
 
 
-[1] Deploy core module to set up Catalog Schema and relevant tables/files/libraries for User & deploy App module
-@folder_level: GENESIS_WORKBENCH/ if you go into subfolder, e.g. modules/core/ -- you have to run the deploy.sh from there with updates to cmd
-e.g. ./deploy.sh core dev --var="dev_user_prefix=mmt,core_catalog_name=genesis_workbench,core_schema_name=dev_mmt_core_test,bionemo_docker_token=<bionemo_docker_token>"
-
-[2] When App is ready, make sure to grant SP associated with App access to the Catalog Schema 
-
-[3] Deploy Model Module e.g. scimilarity, which will use the Catalog Schema created in step 1
-e.g ./deploy.sh scimilarity dev --var="dev_user_prefix=mmt,core_catalog_name=genesis_workbench,core_schema_name=dev_mmt_core_test" 
-
-[4] Deploy other modules as needed, e.g. data, etc.
+./deploy.sh core dev --var="dev_user_prefix=mmt,core_catalog_name=genesis_workbench,core_schema_name=dev_mmt_core_test,bionemo_docker_token=dckr_pat_qG9_JQMypgjPIIB04XWVYOLoFDA"
 
 
-## Deploying Model-related Modules 
+## THEN work with modules 
 ### scimilarity
 
 # ./deploy.sh scimilarity dev --var="dev_user_prefix=mmt,core_catalog_name=genesis_workbench,core_schema_name=dev_mmt_core_gwb"
