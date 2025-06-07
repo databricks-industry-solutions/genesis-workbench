@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "proteinmpnn"
+version = "0.1.0"
+authors = [{name = "Peter Hawkins", email = "peter.hawkins@databricks.com"}]
+description = "proteinMPNN adapted for pip install"
+dependencies = [
+  "mlflow==2.15.1",
+  "cloudpickle==2.2.1",
+]
+
+[tool.setuptools]
+packages = ["proteinmpnn"]
+package-dir = {"" = "src"}
