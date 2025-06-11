@@ -1,0 +1,5 @@
+scgpt==0.2.4
+wandb==0.19.11
+torch==2.7.0
+gdown==5.2.0
+wget==3.2
