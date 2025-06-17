@@ -9,11 +9,7 @@
 
 # COMMAND ----------
 
-mlflow.__version__
-
-# COMMAND ----------
-
-CATALOG, DB_SCHEMA, MODEL_FAMILY, MODEL_NAME, EXPERIMENT_NAME
+CATALOG, DB_SCHEMA, MODEL_FAMILY, EXPERIMENT_NAME
 
 # COMMAND ----------
 
@@ -118,7 +114,7 @@ from mlflow.models import infer_signature
 
 # Example input for the model
 example_input = pd.DataFrame({
-                                'input': ["get_gene_order"]  # Just to trigger getting GeneOrder list from model weights folder
+                              'input': ["get_gene_order"]  # Just to trigger getting GeneOrder list from model weights folder
                             })
 
 # Ensure the example output is in a serializable format
@@ -129,7 +125,7 @@ signature = infer_signature(example_input, example_output)
 
 # COMMAND ----------
 
-# example_input #, example_output
+# example_input , example_output
 
 # COMMAND ----------
 
@@ -142,17 +138,20 @@ signature
 
 # COMMAND ----------
 
+MODEL_NAME, MODEL_FAMILY, EXPERIMENT_NAME
+
+# COMMAND ----------
+
 # DBTITLE 1,Specify MODEL_TYPE & experiment_name
-MODEL_TYPE = "Gene_Order" ##
-# model_name = f"SCimilarity_{MODEL_TYPE}" 
-model_name = f"{MODEL_NAME}_{MODEL_TYPE}"  
+MODEL_TYPE = "Gene_Order" # 
+model_name = f"{MODEL_FAMILY}_{MODEL_TYPE}" # f"SCimilarity_{MODEL_TYPE}" 
 
 ## Set the experiment
-experiment_dir = f"{user_path}/mlflow_experiments/{EXPERIMENT_NAME}" ## same as MODEL_FAMILY from widget above
+experiment_dir = f"{user_path}/mlflow_experiments/{EXPERIMENT_NAME}" ## same as MODEL_FAMILY from widget in utils
 print(experiment_dir)
 
-# experiment_name = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}/{MODEL_TYPE}"
-experiment_name = f"{experiment_dir}/{MODEL_TYPE}"
+experiment_name = f"{experiment_dir}/{model_name}"
+# experiment_name = f"{experiment_dir}" # model_name will be designated as experiment runs
 print(experiment_name)
 
 # COMMAND ----------
@@ -194,20 +193,21 @@ if experiment is None:
 else:
     exp_id = experiment.experiment_id
 
-mlflow.set_experiment(experiment_id=exp_id)
+mlflow.set_experiment(experiment_id=exp_id) #
+
 
 # Save and log the model
-# with mlflow.start_run(run_name=f'{model_name}', experiment_id=experiment.experiment_id)
+# with mlflow.start_run(run_name=f'{model_name}', experiment_id=exp_id) as run:
 with mlflow.start_run() as run:
     mlflow.pyfunc.log_model(
-        artifact_path=f"{MODEL_TYPE}", # artifact_path --> "name" mlflow v3.0
+        # artifact_path=f"{MODEL_TYPE}",
+        name=f"{MODEL_TYPE}",
         python_model=model, 
         artifacts={
-                   "geneOrder_path": geneOrder_path ## defined in ./utils 
-                  },
+            "geneOrder_path": geneOrder_path
+        },
         input_example=example_input,
         signature=signature
-        # registered_model_name=f"{CATALOG}.{SCHEMA}.{model_name}" ## to include directly wihout additonal load run_id checks
     )
 
     run_id = run.info.run_id
@@ -217,6 +217,10 @@ with mlflow.start_run() as run:
 
 # MAGIC %md
 # MAGIC #### Check `run_id` logged Model & Predictions
+
+# COMMAND ----------
+
+# run_id #= "<include to save for debugging>"
 
 # COMMAND ----------
 
@@ -249,8 +253,8 @@ len(predictions)
 
 # DBTITLE 1,Model Info
 # Register the model
-# model_name = f"SCimilarity_{MODEL_TYPE}"  
-model_name = f"{MODEL_NAME}_{MODEL_TYPE}" 
+# model_name = f"SCimilarity_{MODEL_TYPE}" 
+model_name = f"{MODEL_FAMILY}_{MODEL_TYPE}"  
 full_model_name = f"{CATALOG}.{DB_SCHEMA}.{model_name}"
 model_uri = f"runs:/{run_id}/{MODEL_TYPE}"
 
@@ -297,15 +301,10 @@ mlflow.register_model(model_uri=model_uri,
 # MAGIC ### Deploy & Serve UC registered model: `SCimilarity_GeneOrder`
 # MAGIC
 # MAGIC ```
-# MAGIC ## AWS/Azure workload types&sizes
+# MAGIC ## workload types&sizes
 # MAGIC workload_type = "CPU"
 # MAGIC workload_size = "Small"
 # MAGIC ```
-
-# COMMAND ----------
-
-# DBTITLE 1,convert_input_example_to_serving_input
-# json.loads(mlflow.models.convert_input_example_to_serving_input(loaded_model.input_example))
 
 # COMMAND ----------
 

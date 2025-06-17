@@ -9,7 +9,6 @@
 
 # COMMAND ----------
 
-# DBTITLE 1,pinning mlflow == 2.22.0
 mlflow.__version__
 
 # COMMAND ----------
@@ -121,7 +120,8 @@ spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "false")
 # DBTITLE 1,Test model_input + params
 # Call the predict method
 searchNearest_output = model.predict(temp_context, model_input, params={"k": 100})
-
+# searchNearest_output = model.predict(temp_context, (model_input, params={"k": 100}))
+# searchNearest_output
 display(searchNearest_output)
 
 # COMMAND ----------
@@ -227,9 +227,9 @@ for folder in folders:
 # DBTITLE 1,specify mlflow requirements.txt
 import os
 
-# Create a requirements.txt file with the necessary dependencies & pinned versions
+# Create a requirements.txt file with the necessary dependencies
 requirements = """
-mlflow==2.22.0 
+mlflow==2.22.0
 cloudpickle==2.0.0
 scanpy==1.11.2
 numcodecs==0.13.1
@@ -279,16 +279,15 @@ mlflow.set_experiment(experiment_id=exp_id)
 # with mlflow.start_run(run_name=f'{model_name}', experiment_id=experiment.experiment_id)
 with mlflow.start_run() as run:
     mlflow.pyfunc.log_model(
-        artifact_path=f"{MODEL_TYPE}", # artifact_path --> "name" mlflow v3.0
+        artifact_path=f"{MODEL_TYPE}",
         python_model=model, 
         artifacts={
                     "model_path": model_path,   ## defined in ./utils          
                   },    
-        input_example = example_input, # without params -- has a default value in model signature OR to add separately during inference | (model_input, params) tuple formatting not quite right
-       
+        input_example = example_input, # without params -- has a default value in model signature OR to add separately during inference 
+        # input_example = (model_input, params), ## NOT as tuple?
         signature = signature, ## params defined in signature https://mlflow.org/docs/latest/model/signatures/#inference-params
         pip_requirements=SCimilarity_SearchNearest_requirements_path,     
-        
         # registered_model_name=f"{CATALOG}.{SCHEMA}.{model_name}" ## to include directly wihout additonal load run_id checks   
     )
 
@@ -297,12 +296,37 @@ with mlflow.start_run() as run:
 
 # COMMAND ----------
 
+params
+
+# COMMAND ----------
+
+# DBTITLE 1,TEST
+# Log the model with the serving input example
+with mlflow.start_run() as run:
+    mlflow.pyfunc.log_model(
+        artifact_path=f"{MODEL_TYPE}",
+        artifacts={
+            "model_path": model_path,   ## defined in ./utils          
+        },  
+        python_model=model,
+        input_example=(model_input, params),
+        signature=infer_signature(
+            model_input, 
+            # model.predict(model_input, params)
+            model.predict(temp_context, model_input, params={"k": 100})
+        ),
+        pip_requirements=SCimilarity_SearchNearest_requirements_path
+    )
+    run_id = run.info.run_id
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC #### Check `run_id` logged Model & Predictions
 
 # COMMAND ----------
 
-# run_id #= "<include to save for debugging>"
+run_id #0b9e16675adb44c5a2da8fdd38a83a8b
 
 # COMMAND ----------
 
@@ -321,14 +345,13 @@ loaded_model.input_example #, example_output
 # COMMAND ----------
 
 # DBTITLE 1,check params
-params = {"k": 10}  # Provide a default value for params
-# loaded_model.predict(loaded_model.input_example)
-loaded_model.predict(loaded_model.input_example, params=params)
+params = {"k": 5}  # Provide a default value for params
+# loaded_model.predict(loaded_model.input_example, params=params)
 
 # COMMAND ----------
 
-loaded_model.predict(loaded_model.input_example)
-# loaded_model.predict(loaded_model.input_example, params)
+# loaded_model.predict(loaded_model.input_example)
+loaded_model.predict((loaded_model.input_example, params))
 
 # COMMAND ----------
 
@@ -411,29 +434,21 @@ mlflow.register_model(model_uri=model_uri,
 # MAGIC # workload_type = "GPU_MEDIUM" ## deployment timeout!
 # MAGIC workload_type = "MULTIGPU_MEDIUM"  # 4xA10G
 # MAGIC workload_size = "Medium"
-# MAGIC ```    
-# MAGIC ---        
-# MAGIC         
-# MAGIC ```
-# MAGIC ## AzureDB workload types&sizes
-# MAGIC # https://learn.microsoft.com/en-us/azure/databricks/machine-learning/model-serving/create-manage-serving-endpoints
-# MAGIC workload_type = "GPU_Large" (A100), 
-# MAGIC workload_size = "Small" 0-4 concurrency 
 # MAGIC ```
 
 # COMMAND ----------
 
 # DBTITLE 1,format model_input + params for UI inferencing
-# dataset = model_input
+dataset = model_input
 
-# ds_dict = {'dataframe_split': dataset.to_dict(orient='split')} # includes "index":[0]
-# if params:
-#     ds_dict['params'] = params
+ds_dict = {'dataframe_split': dataset.to_dict(orient='split')} # includes "index":[0]
+if params:
+    ds_dict['params'] = params
 
 # COMMAND ----------
 
 # DBTITLE 1,example input for UI inferencing
-# json.dumps(ds_dict).replace("'",'"')
+json.dumps(ds_dict).replace("'",'"')
 
 # COMMAND ----------
 
@@ -442,26 +457,21 @@ mlflow.register_model(model_uri=model_uri,
 
 # COMMAND ----------
 
-# DBTITLE 1,convert serving input
-serving_input_example = json.loads(mlflow.models.convert_input_example_to_serving_input((model_input, params={"k": 5}) ) )
-
-serving_input_example
-
-# COMMAND ----------
-
-# DBTITLE 1,validate_serving_input by run_id
-## Validate the model input with parameters
-# model_uri_byrunid = f'runs:/{run_id}/Search_Nearest' #f"runs:/{run_id}/{MODEL_TYPE}"
-# mlflow.models.validate_serving_input(model_uri_byrunid, json.dumps(serving_input_example).replace("'",'"'))
+# Validate the model input with parameters
+model_uri_byrunid = 'runs:/0b9e16675adb44c5a2da8fdd38a83a8b/Search_Nearest' #f"runs:/{run_id}/model"
+mlflow.models.validate_serving_input(model_uri_byrunid, serving_input_example)
 
 # COMMAND ----------
 
-# DBTITLE 1,get model_uri
-# import mlflow
+import mlflow
 
-## Assumes model registered to Unity Catalog
+# Register the model to Unity Catalog
+# model_uri = "runs:/<run_id>/model"
+# mlflow.register_model(model_uri, "SCimilarity_SearchNearest", signature=signature)
+# print(model_uri)
 
-# Sift for model latest version 
+
+# Validate the model input with parameters
 model_versions = mlflow.search_model_versions(filter_string="name = 'genesis_workbench.dev_mmt_core_test.SCimilarity_Search_Nearest'")
 model_version = model_versions[0].version
 print(model_version)
@@ -471,16 +481,32 @@ print(model_uri)
 
 # COMMAND ----------
 
-# DBTITLE 1,validate_serving_input
-mlflow.models.validate_serving_input(
-    model_uri, 
-    serving_input_example
-)
+# infer_signature(model_input = (model_input, params))
+
+# json.dumps(serving_input_example).replace("'",'"')
+# json.dumps(json.loads(mlflow.models.convert_input_example_to_serving_input((model_input, params)))).replace("'",'"')
+
+infer_signature(model_input= model_input )
+
+# COMMAND ----------
+
+# DBTITLE 1,test serving input
+params={"k": 5}
+serving_input_example = json.loads(mlflow.models.convert_input_example_to_serving_input((model_input, params)))
+
+serving_input_example
 
 # COMMAND ----------
 
 # DBTITLE 1,formatting with ""
-# json.dumps(serving_input_example).replace("'",'"')
+json.dumps(serving_input_example).replace("'",'"')
+
+# COMMAND ----------
+
+mlflow.models.validate_serving_input(
+    model_uri, 
+    serving_input_example
+)
 
 # COMMAND ----------
 

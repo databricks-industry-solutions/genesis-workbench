@@ -9,11 +9,7 @@
 
 # COMMAND ----------
 
-mlflow.__version__
-
-# COMMAND ----------
-
-CATALOG, DB_SCHEMA, MODEL_FAMILY, MODEL_NAME, EXPERIMENT_NAME
+CATALOG, DB_SCHEMA, MODEL_FAMILY, EXPERIMENT_NAME
 
 # COMMAND ----------
 
@@ -144,10 +140,10 @@ signature
 
 # DBTITLE 1,Specify MODEL_TYPE & experiment_name
 MODEL_TYPE = "Gene_Order" ##
-# model_name = f"SCimilarity_{MODEL_TYPE}" 
-model_name = f"{MODEL_NAME}_{MODEL_TYPE}"  
+model_name = f"SCimilarity_{MODEL_TYPE}"  
 
 ## Set the experiment
+# experiment_dir = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}" ## TO UPDATE
 experiment_dir = f"{user_path}/mlflow_experiments/{EXPERIMENT_NAME}" ## same as MODEL_FAMILY from widget above
 print(experiment_dir)
 
@@ -200,7 +196,7 @@ mlflow.set_experiment(experiment_id=exp_id)
 # with mlflow.start_run(run_name=f'{model_name}', experiment_id=experiment.experiment_id)
 with mlflow.start_run() as run:
     mlflow.pyfunc.log_model(
-        artifact_path=f"{MODEL_TYPE}", # artifact_path --> "name" mlflow v3.0
+        artifact_path=f"{MODEL_TYPE}",
         python_model=model, 
         artifacts={
                    "geneOrder_path": geneOrder_path ## defined in ./utils 
@@ -217,6 +213,10 @@ with mlflow.start_run() as run:
 
 # MAGIC %md
 # MAGIC #### Check `run_id` logged Model & Predictions
+
+# COMMAND ----------
+
+# run_id #= "<include to save for debugging>"
 
 # COMMAND ----------
 
@@ -249,8 +249,7 @@ len(predictions)
 
 # DBTITLE 1,Model Info
 # Register the model
-# model_name = f"SCimilarity_{MODEL_TYPE}"  
-model_name = f"{MODEL_NAME}_{MODEL_TYPE}" 
+model_name = f"SCimilarity_{MODEL_TYPE}"  
 full_model_name = f"{CATALOG}.{DB_SCHEMA}.{model_name}"
 model_uri = f"runs:/{run_id}/{MODEL_TYPE}"
 
@@ -297,15 +296,10 @@ mlflow.register_model(model_uri=model_uri,
 # MAGIC ### Deploy & Serve UC registered model: `SCimilarity_GeneOrder`
 # MAGIC
 # MAGIC ```
-# MAGIC ## AWS/Azure workload types&sizes
+# MAGIC ## workload types&sizes
 # MAGIC workload_type = "CPU"
 # MAGIC workload_size = "Small"
 # MAGIC ```
-
-# COMMAND ----------
-
-# DBTITLE 1,convert_input_example_to_serving_input
-# json.loads(mlflow.models.convert_input_example_to_serving_input(loaded_model.input_example))
 
 # COMMAND ----------
 

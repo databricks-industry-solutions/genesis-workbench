@@ -38,7 +38,7 @@
 ## zarr>=2.6.1
 ## numpy==1.26.4
 ## pandas==1.5.3
-# mlflow
+# mlflow==2.22.0 ## pin to this for now since v3 has breaking changes... 
 # tbb>=2021.6.0
 # uv
 
@@ -109,7 +109,7 @@ requirements = [
     "typing_extensions>=4.14.0",
     "numpy==1.26.4",
     "pandas==1.5.3",
-    "mlflow",
+    "mlflow==2.22.0",
     "tbb>=2021.6.0",
     "uv"
 ]
@@ -155,20 +155,27 @@ numba.config.THREADING_LAYER = 'workqueue'  # Most compatible option
 # COMMAND ----------
 
 # DBTITLE 1,gwb_variablesNparams
+## for nb devs -- these get overwritten wrt deployment args
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("schema", "dev_mmt_core_gwb", "Schema")
+dbutils.widgets.text("schema", "dev_mmt_core_test", "Schema") 
+
 dbutils.widgets.text("model_name", "SCimilarity", "Model Name") ## use this as a prefix for the model name ?
 dbutils.widgets.text("experiment_name", "gwb_modules_scimilarity", "Experiment Name")
+# dbutils.widgets.text("experiment_name", "gwb_modules", "Experiment Name") ## mlflow expt folder_name
+
 dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id") # ??
 dbutils.widgets.text("user_email", "may.merkletan@databricks.com", "User Id/Email")
+
 dbutils.widgets.text("cache_dir", "scimilarity", "Cache dir") ## VOLUME NAME | MODEL_FAMILY 
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
+
 MODEL_NAME = dbutils.widgets.get("model_name")
 EXPERIMENT_NAME = dbutils.widgets.get("experiment_name")
 USER_EMAIL = dbutils.widgets.get("user_email")
 SQL_WAREHOUSE_ID = dbutils.widgets.get("sql_warehouse_id")
+
 CACHE_DIR = dbutils.widgets.get("cache_dir")
 
 print(f"Cache dir: {CACHE_DIR}")
@@ -179,21 +186,12 @@ print(f"Cache full path: {cache_full_path}")
 
 # DBTITLE 1,CATALOG | SHCHEMA | VOLS
 CATALOG = CATALOG #"mmt"
-# DB_SCHEMA = "genesiswb"
-DB_SCHEMA = SCHEMA #"tests"
+DB_SCHEMA = SCHEMA #"tests" | "genesiswb"
 
 # VOLUME_NAME | PROJECT 
-MODEL_FAMILY = CACHE_DIR #"scimilarity"
+MODEL_FAMILY = CACHE_DIR ## CACHE_DIR #"scimilarity"
 
-# # Create widgets for catalog, db_schema, and model_family
-# dbutils.widgets.text("catalog", "mmt")#, "CATALOG")
-# dbutils.widgets.text("db_schema", "genesiswb")#, "DB_SCHEMA")
-# dbutils.widgets.text("model_family", "scimilarity")#, "MODEL_FAMILY")
-
-# # Get the values from the widgets
-# CATALOG = dbutils.widgets.get("catalog")
-# DB_SCHEMA = dbutils.widgets.get("db_schema")
-# MODEL_FAMILY = dbutils.widgets.get("model_family")
+# MODEL_NAME #"SCimilarity" |
 
 print("CATALOG :", CATALOG)
 print("DB_SCHEMA :", DB_SCHEMA)
