@@ -4,6 +4,7 @@
 # MAGIC - Ref: https://genentech.github.io/scimilarity/install.html#conda-environment-setup
 # MAGIC - Requires: `python=3.10`
 # MAGIC - Databricks Runtime `14.3 LTS` supports `Python 3.10`
+# MAGIC - MLflow: `2.22.0`; NB: `v3.0` has breaking changes wrt `runs` --> `models` vs `artifact_paths` --> `name` etc.
 
 # COMMAND ----------
 
@@ -44,7 +45,7 @@
 
 # COMMAND ----------
 
-# DBTITLE 1,CATALOG | SHCHEMA | VOLS
+# DBTITLE 1,CATALOG | SCHEMA | VOLS
 ## causes concurrency conflicts wrt multiple tasks writing to Vols 
 
 # import os
@@ -184,14 +185,14 @@ print(f"Cache full path: {cache_full_path}")
 
 # COMMAND ----------
 
-# DBTITLE 1,CATALOG | SHCHEMA | VOLS
+# DBTITLE 1,CATALOG | SCHEMA | VOLS
 CATALOG = CATALOG #"mmt"
 DB_SCHEMA = SCHEMA #"tests" | "genesiswb"
 
 # VOLUME_NAME | PROJECT 
 MODEL_FAMILY = CACHE_DIR ## CACHE_DIR #"scimilarity"
 
-# MODEL_NAME #"SCimilarity" |
+# MODEL_NAME #"SCimilarity" 
 
 print("CATALOG :", CATALOG)
 print("DB_SCHEMA :", DB_SCHEMA)
@@ -446,14 +447,14 @@ def check_endpoint_status(endpoint_name, max_checks=20, sleep_time=30):
 
 # COMMAND ----------
 
-# DBTITLE 1,[1] create_tf_serving_json | score_model
+# DBTITLE 1,[1] create_serving_json | score_model
 # import os 
 # import json
 # import requests
 
 ## databricks_instance = "e2-demo-field-eng.cloud.databricks.com"
 
-# def create_tf_serving_json(data):
+# def create_serving_json(data):
 #     if isinstance(data, dict):
 #         return {'inputs': {name: data[name].tolist() if hasattr(data[name], 'tolist') else data[name] for name in data.keys()}}
       
@@ -470,7 +471,7 @@ def check_endpoint_status(endpoint_name, max_checks=20, sleep_time=30):
 #         'Authorization': f'Bearer {os.environ.get("DATABRICKS_TOKEN")}',
 #         'Content-Type': 'application/json'
 #     }
-#     ds_dict = {'dataframe_split': dataset.to_dict(orient='split')} if isinstance(dataset, pd.DataFrame) else create_tf_serving_json(dataset)
+#     ds_dict = {'dataframe_split': dataset.to_dict(orient='split')} if isinstance(dataset, pd.DataFrame) else create_serving_json(dataset)
 
 #     data_json = json.dumps(ds_dict, allow_nan=True)
     
@@ -479,24 +480,20 @@ def check_endpoint_status(endpoint_name, max_checks=20, sleep_time=30):
 
 # COMMAND ----------
 
-# DBTITLE 1,[2] create_tf_serving_json | score_model
+# DBTITLE 1,[2] create_serving_json | score_model
 import os
 import json
 import requests
+import pandas as pd
 
-## databricks_instance = "e2-demo-field-eng.cloud.databricks.com"
-
-def create_tf_serving_json(data, params=None):
+def create_serving_json(data, params=None):
     result = {}
     if isinstance(data, dict):
         result['inputs'] = {name: data[name].tolist() if hasattr(data[name], 'tolist') else data[name] for name in data.keys()}
-        
     elif isinstance(data, list):
         result['inputs'] = data
-    
     if params:
         result['params'] = params
-    
     return result
 
 def score_model(databricks_instance, endpoint_name, dataset, params=None):
@@ -512,15 +509,15 @@ def score_model(databricks_instance, endpoint_name, dataset, params=None):
         if params:
             ds_dict['params'] = params
     else:
-        ds_dict = create_tf_serving_json(dataset, params)
+        ds_dict = create_serving_json(dataset, params)
     
     data_json = json.dumps(ds_dict, allow_nan=True)
-    response = requests.request(method='POST', headers=headers, url=url, data=data_json)
+    response = requests.post(url, headers=headers, data=data_json)
     
-    # Debug information
-    print(f"Response status code: {response.status_code}")
-    print(f"Response headers: {response.headers}")
-    print(f"Response text: {response.text}")
+    ### Debug information
+    # print(f"Response status code: {response.status_code}")
+    # print(f"Response headers: {response.headers}")
+    # print(f"Response text: {response.text}")
     
     # Check if the response is successful and contains JSON
     if response.status_code == 200:
@@ -532,6 +529,21 @@ def score_model(databricks_instance, endpoint_name, dataset, params=None):
     else:
         print(f"Request failed with status code: {response.status_code}")
         return {"error": f"HTTP {response.status_code}", "response_text": response.text}
+
+
+## Example usage
+
+# DATABRICKS_TOKEN = dbutils.secrets.get("<scope>", "<secret-key>")
+# os.environ["DATABRICKS_TOKEN"] = DATABRICKS_TOKEN
+
+# databricks_instance = "e2-demo-field-eng.cloud.databricks.com"
+# databricks_instance = "adb-830292400663869.9.azuredatabricks.net"
+
+# endpoint_name = "mmt_scimilarity_gene_order"
+# example_input = pd.DataFrame({"input": ["get_gene_order"]})
+
+# result = score_model(databricks_instance, endpoint_name, example_input)
+# display(result)
 
 # COMMAND ----------
 

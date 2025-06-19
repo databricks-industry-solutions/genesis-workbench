@@ -2,7 +2,8 @@
 # DBTITLE 1,gwb_paramsNvariables
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 # dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
-dbutils.widgets.text("schema", "mmt_test", "Schema")
+# dbutils.widgets.text("schema", "mmt_test", "Schema") 
+dbutils.widgets.text("schema", "dev_mmt_core_test", "Schema") #dev_mmt_core_test# gets overwritten during DAB deployment 
 dbutils.widgets.text("user_email", "may.merkletan@databricks.com", "User Id/Email")
 dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
 
@@ -29,8 +30,11 @@ print(gwb_library_path)
 # COMMAND ----------
 
 # DBTITLE 1,install gwb library & dependencies
-# MAGIC %pip install {gwb_library_path} --force-reinstall
-# MAGIC dbutils.library.restartPython()
+try:
+    %pip install {gwb_library_path} --force-reinstall
+    dbutils.library.restartPython()
+except Exception as e:
+    print(f"An error occurred: {e}")
 
 # COMMAND ----------
 

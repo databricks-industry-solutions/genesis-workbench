@@ -208,8 +208,8 @@ pandas==1.5.3
 numpy==1.26.4 
 """
 
-# MODEL_TYPE = "GetEmbeddings"
-model_name = f"SCimilarity_{MODEL_TYPE}"  #
+# MODEL_TYPE = "Get_Embeddings"
+# model_name = f"SCimilarity_{MODEL_TYPE}"  #
 model_name = f"{MODEL_NAME}_{MODEL_TYPE}" 
 
 # Define the path to save the requirements file in the UV volumes
@@ -368,7 +368,7 @@ mlflow.register_model(model_uri=model_uri,
 # MAGIC ```
 # MAGIC ## AzureDB workload types&sizes
 # MAGIC # https://learn.microsoft.com/en-us/azure/databricks/machine-learning/model-serving/create-manage-serving-endpoints
-# MAGIC workload_type = "CPU" # seems to work else "GPU_SMALL" 
+# MAGIC workload_type = "CPU" # seems to work else "GPU_LARGE" 
 # MAGIC workload_size = "Small" 0-4 concurrency 
 # MAGIC ```
 

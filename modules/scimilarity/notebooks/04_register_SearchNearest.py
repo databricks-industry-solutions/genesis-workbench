@@ -238,8 +238,8 @@ pandas==1.5.3
 numpy==1.26.4 
 """
 
-# model_name = "{MODEL_FAMILY}_{MODEL_NAME}" 
-model_name = "SCimilarity_SearchNearest"  # to update class func
+# model_name = "SCimilarity_Search_Nearest"  # to update class func
+model_name = f"{MODEL_NAME}_{MODEL_TYPE}" 
 
 # Define the path to save the requirements file in the UV volumes
 SCimilarity_SearchNearest_requirements_path = f"/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}/mlflow_requirements/{model_name}/requirements.txt"
