@@ -134,7 +134,8 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
-        
+
+             
         # - job_cluster_key: job_cluster_A10_v5
         #   new_cluster:
         #     num_workers: 0
@@ -159,3 +160,5 @@ resources:
 
         ## singleNode CPU options: # Standard_E48ads_v5 #384gigs # Standard_E32ads_v5 #256gigs 
         ## 14.3.x-cpu-ml-scala2.12
+
+      tags: ${var.common_resource_tags}

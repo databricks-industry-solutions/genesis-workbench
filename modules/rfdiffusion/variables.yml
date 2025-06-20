@@ -10,6 +10,13 @@ variables:
   dev_user_prefix:
     description: A prefix for resources in dev environment
 
+  common_resource_tags:
+    description: Resource tags
+    default: 
+      application: genesis_workbench
+      module: rfdiffusion
+      created_by: ${var.current_user}
+
   core_catalog_name:
     description: primary catalog where data, models, and files are stored for this project.
     #default: genesis_workbench 

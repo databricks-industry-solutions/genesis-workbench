@@ -287,18 +287,29 @@ result[0]
 
 # COMMAND ----------
 
-registered_model_name = f"{CATALOG}.{SCHEMA}.boltz"
+from genesis_workbench.models import (ModelCategory, 
+                                      import_model_from_uc,
+                                      get_latest_model_version,
+                                      set_mlflow_experiment)
+
+from genesis_workbench.workbench import AppContext
 
 # COMMAND ----------
 
 from mlflow.types.schema import ColSpec, Schema
-mlflow.set_registry_uri("databricks-uc")
 from mlflow.models.signature import infer_signature
+
+registered_model_name = f"{CATALOG}.{SCHEMA}.boltz"
 
 signature = infer_signature([model_input], result)
 print(signature)
 
-with mlflow.start_run(run_name='boltz'):
+mlflow.set_tracking_uri("databricks")
+mlflow.set_registry_uri("databricks-uc")
+
+experiment = set_mlflow_experiment(experiment_tag=experiment_name, user_email=user_email)
+
+with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experiment_id):
     model_info = mlflow.pyfunc.log_model(
         artifact_path="model",
         python_model=Boltz(),
@@ -320,13 +331,6 @@ os.environ["SQL_WAREHOUSE"]=SQL_WAREHOUSE_ID
 os.environ["IS_TOKEN_AUTH"]="Y"
 os.environ["DATABRICKS_TOKEN"]=databricks_token
 
-# COMMAND ----------
-
-from genesis_workbench.models import (ModelCategory, 
-                                      import_model_from_uc,
-                                      get_latest_model_version)
-
-from genesis_workbench.workbench import AppContext
 
 # COMMAND ----------
 
