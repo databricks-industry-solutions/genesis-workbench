@@ -22,9 +22,9 @@ variables:
   common_resource_tags:
     description: Resource tags
     default: 
-      application: genesis_workbench
-      module: core
-      created_by: ${var.current_user}
+      - application: genesis_workbench
+      - module: core
+      - created_by: ${var.current_user}
 
   dev_user_prefix:
     description: A prefix for resources in dev environment

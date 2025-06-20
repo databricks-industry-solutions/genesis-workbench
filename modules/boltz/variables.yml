@@ -13,9 +13,9 @@ variables:
   common_resource_tags:
     description: Resource tags
     default: 
-      application: genesis_workbench
-      module: boltz
-      created_by: ${var.current_user}
+      - application: genesis_workbench
+      - module: boltz
+      - created_by: ${var.current_user}
 
   core_catalog_name:
     description: primary catalog where data, models, and files are stored for this project.
