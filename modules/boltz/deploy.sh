@@ -27,5 +27,5 @@ echo ""
 echo "▶️ Running model registration job"
 echo ""
 
-databricks bundle run -t $ENV register_proteinmpnn $EXTRA_PARAMS
+databricks bundle run -t $ENV register_boltz $EXTRA_PARAMS
 

@@ -46,5 +46,7 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
+
+      tags: ${var.common_resource_tags}
             
             
