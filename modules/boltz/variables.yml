@@ -14,7 +14,7 @@ variables:
     description: Resource tags
     default: 
       application: genesis_workbench
-      module: rfdiffusion
+      module: boltz
       created_by: ${var.current_user}
 
   core_catalog_name:
@@ -35,4 +35,4 @@ variables:
 
   cache_dir:
     description: The cache directory for ESM model
-    default: rfdiffusion_cache_dir
+    default: boltz

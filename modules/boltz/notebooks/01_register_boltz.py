@@ -6,7 +6,7 @@
 
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
-dbutils.widgets.text("model_name", "rfdiffusion", "Model Name")
+dbutils.widgets.text("model_name", "boltz", "Model Name")
 dbutils.widgets.text("experiment_name", "dbx_genesis_workbench_modules", "Experiment Name")
 dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
 dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Id/Email")
@@ -102,8 +102,13 @@ def download(cache: Path) -> None:
 # COMMAND ----------
 
 import os
-os.makedirs(WEIGHTS_VOLUME_LOCATION)
-os.makedirs(BINARIES_VOLUME_LOCATION)
+
+if not os.path.exists(WEIGHTS_VOLUME_LOCATION):
+  os.makedirs(WEIGHTS_VOLUME_LOCATION)
+
+if not os.path.exists(BINARIES_VOLUME_LOCATION):
+  os.makedirs(BINARIES_VOLUME_LOCATION)
+  
 download(Path(WEIGHTS_VOLUME_LOCATION))
 
 # COMMAND ----------
@@ -133,10 +138,6 @@ os.environ["BINARIES_VOLUME_LOCATION"] = BINARIES_VOLUME_LOCATION
 
 # COMMAND ----------
 
-
-
-# COMMAND ----------
-
 # MAGIC %md
 # MAGIC ## Log and register Boltz-1 model on Unity Catalog
 # MAGIC
@@ -145,9 +146,10 @@ os.environ["BINARIES_VOLUME_LOCATION"] = BINARIES_VOLUME_LOCATION
 # COMMAND ----------
 
 import mlflow
-mlflow.autolog(disable=True)
 from dbboltz.boltz import run_boltz, Boltz
 import yaml
+
+mlflow.autolog(disable=True)
 
 # COMMAND ----------
 
@@ -161,6 +163,10 @@ model_config = get_model_config()
 
 # COMMAND ----------
 
+model_config
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ### Initialize the model
 
@@ -169,7 +175,7 @@ model_config = get_model_config()
 model = Boltz()
 context = mlflow.pyfunc.PythonModelContext(
     artifacts = {
-        'CACHE_DIR': '/Volumes/protein_folding/boltz/weights'
+        "CACHE_DIR": f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}"
     },
     model_config = model_config
 )
@@ -281,24 +287,66 @@ result[0]
 
 # COMMAND ----------
 
+from genesis_workbench.models import (ModelCategory, 
+                                      import_model_from_uc,
+                                      get_latest_model_version,
+                                      set_mlflow_experiment)
+
+from genesis_workbench.workbench import AppContext
+
+# COMMAND ----------
+
 from mlflow.types.schema import ColSpec, Schema
-mlflow.set_registry_uri("databricks-uc")
 from mlflow.models.signature import infer_signature
+
+registered_model_name = f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
 
 signature = infer_signature([model_input], result)
 print(signature)
 
-with mlflow.start_run(run_name='boltz'):
+mlflow.set_tracking_uri("databricks")
+mlflow.set_registry_uri("databricks-uc")
+
+experiment = set_mlflow_experiment(experiment_tag=EXPERIMENT_NAME, user_email=USER_EMAIL)
+
+with mlflow.start_run(run_name=f"{MODEL_NAME}", experiment_id=experiment.experiment_id):
     model_info = mlflow.pyfunc.log_model(
         artifact_path="model",
         python_model=Boltz(),
         artifacts={
-            'CACHE_DIR': '/Volumes/protein_folding/boltz/weights',
-            'repo_path': '/local_disk0/dbboltz'
+            "CACHE_DIR": f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}",
+            "repo_path": "/local_disk0/dbboltz"
         },
         model_config=model_config,
         input_example=[model_input],
         signature=signature,
-        conda_env='../envs/conda_env.yaml',
-        registered_model_name="protein_folding.boltz.boltz"
+        conda_env="conda_env.yml",
+        registered_model_name=registered_model_name
     )
+
+# COMMAND ----------
+
+databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
+os.environ["SQL_WAREHOUSE"]=SQL_WAREHOUSE_ID
+os.environ["IS_TOKEN_AUTH"]="Y"
+os.environ["DATABRICKS_TOKEN"]=databricks_token
+
+
+# COMMAND ----------
+
+model_version = get_latest_model_version(registered_model_name)
+model_uri = f"models:/{registered_model_name}/{model_version}"
+
+app_context = AppContext(
+        core_catalog_name=CATALOG,
+        core_schema_name=SCHEMA
+    )
+
+import_model_from_uc(app_context,user_email=USER_EMAIL,
+                    model_category=ModelCategory.PROTEIN_STUDIES,
+                    model_uc_name=registered_model_name,
+                    model_uc_version=model_version,
+                    model_name=MODEL_NAME,
+                    model_display_name="Boltz-1",
+                    model_source_version="v1.0.0",
+                    model_description_url="https://huggingface.co/boltz-community/boltz-1")
