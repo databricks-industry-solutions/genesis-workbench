@@ -314,7 +314,7 @@ from genesis_workbench.workbench import AppContext
 from mlflow.types.schema import ColSpec, Schema
 from mlflow.models.signature import infer_signature
 
-registered_model_name = f"{CATALOG}.{SCHEMA}.boltz"
+registered_model_name = f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
 
 signature = infer_signature([model_input], result)
 print(signature)
@@ -322,9 +322,9 @@ print(signature)
 mlflow.set_tracking_uri("databricks")
 mlflow.set_registry_uri("databricks-uc")
 
-experiment = set_mlflow_experiment(experiment_tag=experiment_name, user_email=user_email)
+experiment = set_mlflow_experiment(experiment_tag=EXPERIMENT_NAME, user_email=USER_EMAIL)
 
-with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experiment_id):
+with mlflow.start_run(run_name=f"{MODEL_NAME}", experiment_id=experiment.experiment_id):
     model_info = mlflow.pyfunc.log_model(
         artifact_path="model",
         python_model=Boltz(),
@@ -363,7 +363,7 @@ import_model_from_uc(app_context,user_email=USER_EMAIL,
                     model_category=ModelCategory.PROTEIN_STUDIES,
                     model_uc_name=registered_model_name,
                     model_uc_version=model_version,
-                    model_name="boltz",
+                    model_name=MODEL_NAME,
                     model_display_name="Boltz-1",
                     model_source_version="v1.0.0",
                     model_description_url="https://huggingface.co/boltz-community/boltz-1")
