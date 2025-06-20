@@ -23,6 +23,7 @@ variables:
     description: Resource tags
     default: 
       - application: genesis_workbench
+      - module: core
       - created_by: ${var.current_user}
 
   dev_user_prefix:

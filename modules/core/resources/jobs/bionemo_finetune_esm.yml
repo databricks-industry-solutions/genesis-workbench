@@ -42,8 +42,6 @@ resources:
             custom_tags:
               ResourceClass: SingleNode
 
-      tags: 
-        application: genesis_workbench
-        created_by: ${var.current_user}
+      tags: ${var.common_resource_tags}
 
 
