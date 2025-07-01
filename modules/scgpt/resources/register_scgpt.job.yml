@@ -11,7 +11,7 @@ resources:
         - task_key: deploy_scgpt_task
           job_cluster_key: job_cluster
           notebook_task:
-            notebook_path: ../notebooks/register_scgpt.py
+            notebook_path: ../notebooks/01_register_scgpt.py
           libraries:
             - pypi:
                 package: databricks-sdk==0.50.0
@@ -39,8 +39,8 @@ resources:
         - name: catalog
           default: ${var.core_catalog_name}
         - name: schema
-          #default: ${var.core_schema_name}
-          default: ${var.module_schema_name}
+          default: ${var.core_schema_name}
+          #default: ${var.module_schema_name}
         - name: model_name
           default: scgpt
         - name: cache_dir
