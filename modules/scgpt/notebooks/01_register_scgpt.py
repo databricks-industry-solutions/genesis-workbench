@@ -5,8 +5,8 @@
 # COMMAND ----------
 
 # DBTITLE 1,[gwb] pip install from requirements list
-%cat ./requirements.txt
-%pip install -r ./requirements.txt
+%cat ../requirements.txt
+%pip install -r ../requirements.txt
 dbutils.library.restartPython()
 
 # COMMAND ----------
@@ -571,7 +571,7 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
         #         },
         #     ],
         # },
-        pip_requirements="requirements.txt",  # Specify the path to the requirements file
+        pip_requirements="../requirements.txt",  # Specify the path to the requirements file
         # extra_pip_requirements=[f"{package_path}geneformer-0.1.0-py3-none-any.whl"], # only one can be specified, pip or extra_pip
         signature=signature,
         #: provide input_example using tuple (input_data, params).

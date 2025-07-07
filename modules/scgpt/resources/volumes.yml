@@ -3,5 +3,5 @@ resources:
     scgpt_cache_dir:
       name: ${var.cache_dir}
       catalog_name: ${var.core_catalog_name}
-      schema_name: ${var.core_schema_name} # TODO: this value might need to change.
+      schema_name: ${var.core_schema_name}
       volume_type: MANAGED

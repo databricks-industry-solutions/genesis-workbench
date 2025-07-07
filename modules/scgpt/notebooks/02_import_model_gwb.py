@@ -14,7 +14,9 @@ dbutils.widgets.text("cache_dir", "scgpt_cache_dir", "Cache dir")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
-
+user_email = dbutils.widgets.get("user_email")
+sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
+model_name = dbutils.widgets.get("model_name")
 # COMMAND ----------
 
 # MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0
@@ -84,13 +86,13 @@ print(gwb_library_path)
 
 # COMMAND ----------
 
-import os
-
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 user_email = dbutils.widgets.get("user_email")
 sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
+model_name = dbutils.widgets.get("model_name")
 
+import os
 databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
 os.environ["SQL_WAREHOUSE"]=sql_warehouse_id
 os.environ["IS_TOKEN_AUTH"]="Y"

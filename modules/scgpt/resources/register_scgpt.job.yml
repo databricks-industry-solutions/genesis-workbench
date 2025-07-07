@@ -8,18 +8,28 @@ resources:
           - ${var.current_user}
 
       tasks:
-        - task_key: deploy_scgpt_task
-          job_cluster_key: job_cluster
+        - task_key: register_scgpt_task
+          job_cluster_key: job_cluster_get_embedding
           notebook_task:
             notebook_path: ../notebooks/01_register_scgpt.py
-          libraries:
-            - pypi:
-                package: databricks-sdk==0.50.0
-            - pypi:
-                package: databricks-sql-connector==4.0.2
-            - whl: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/libraries/genesis_workbench-0.1.0-py3-none-any.whl         
+#          libraries:
+#            - pypi:
+#                package: databricks-sdk==0.50.0
+#            - pypi:
+#                package: databricks-sql-connector==4.0.2
+#            - whl: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/libraries/genesis_workbench-0.1.0-py3-none-any.whl
 
+        #this task need serverless runtime with python 3.11
+        - task_key: update_model_catalog_scgpt_models_task
+          depends_on:
+            - task_key: "register_scgpt_task"
+          notebook_task:
+            notebook_path: ../notebooks/02_import_model_gwb.py
 
+      environments: ## serverless
+        - environment_key: default
+          spec:
+            client: '2'
       # environments:
       #   - environment_key: default
       #     spec:
@@ -52,10 +62,8 @@ resources:
         - name: user_email
           default: ${var.current_user}
 
-
-
       job_clusters:
-        - job_cluster_key: job_cluster
+        - job_cluster_key: job_cluster_get_embedding
           new_cluster:
             num_workers: 0
             node_type_id: 'Standard_NC4as_T4_v3'
@@ -69,5 +77,28 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
-            
-            
+
+#      job_clusters:
+#        - job_cluster_key: job_cluster
+#          new_cluster:
+#            num_workers: 0
+#            node_type_id: 'Standard_NC4as_T4_v3'
+#            driver_node_type_id: 'Standard_NC4as_T4_v3'
+#            spark_version: '15.4.x-gpu-ml-scala2.12'
+#            enable_elastic_disk: true
+#            data_security_mode: SINGLE_USER
+#            single_user_name: ${workspace.current_user.userName}
+#            spark_conf:
+#              spark.databricks.cluster.profile: singleNode
+#              spark.master: local[*]
+#            custom_tags:
+#              ResourceClass: SingleNode
+
+        ## critical for model training
+        ## singleNode GPU options: ## Standard_NV36ads_A10_v5 #440gigs #'Standard_NC16as_T4_v3' #110gigs #'Standard_NC4as_T4_v3'
+        ## 14.3.x-gpu-ml-scala2.12
+
+        ## singleNode CPU options: # Standard_E48ads_v5 #384gigs # Standard_E32ads_v5 #256gigs
+        ## 14.3.x-cpu-ml-scala2.12
+
+      tags: ${var.common_resource_tags}
