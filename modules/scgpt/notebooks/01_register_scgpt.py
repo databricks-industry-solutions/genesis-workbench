@@ -4,6 +4,13 @@
 
 # COMMAND ----------
 
+# DBTITLE 1,[gwb] pip install from requirements list
+%cat ./requirements.txt
+%pip install -r ./requirements.txt
+dbutils.library.restartPython()
+
+# COMMAND ----------
+
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_yyang_genesis_workbench", "Schema")
 dbutils.widgets.text("model_name", "scgpt", "Model Name")
@@ -12,31 +19,6 @@ dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id")
 dbutils.widgets.text("user_email", "yang.yang@databricks.com", "User Id/Email")
 dbutils.widgets.text("cache_dir", "scgpt_cache_dir", "Cache dir")
 
-catalog = dbutils.widgets.get("catalog")
-schema = dbutils.widgets.get("schema")
-
-# COMMAND ----------
-
-#requirements for genesis workbench library
-# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.2 mlflow==2.22.0
-#requirements for current library
-# MAGIC %pip install -r ../requirements.txt
-
-# COMMAND ----------
-
-gwb_library_path = None
-core_schema = "dev_srijit_nair_dbx_genesis_workbench_core" # TODO: this is hard coded; later need to parameterize.
-libraries = dbutils.fs.ls(f"/Volumes/{catalog}/{core_schema}/libraries")
-for lib in libraries:
-    if(lib.name.startswith("genesis_workbench")):
-        gwb_library_path = lib.path.replace("dbfs:","")
-
-print(gwb_library_path)
-
-# COMMAND ----------
-
-# MAGIC %pip install {gwb_library_path} --force-reinstall
-# MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
 
@@ -87,16 +69,21 @@ print(f"Model dir: {model_dir}")
 # [link](https://drive.google.com/drive/folders/1kkug5C7NjvXIwQGGaGoqXTk_Lb_pDrBU?usp=sharing) |
 id = "1kkug5C7NjvXIwQGGaGoqXTk_Lb_pDrBU"
 # gdown.download(id=id, )
-gdown.download_folder(id=id, output=f"{model_dir}/")
+gdown_return = gdown.download_folder(id=id, output=f"{model_dir}/")
+
+model_dir = gdown_return[0].rsplit('/', 1)[0]
+print(f"Model dir: {model_dir}")
 
 
 # COMMAND ----------
 #: downnload data
 import wget
 import os
+file_url = "https://figshare.com/ndownloader/files/25717328"
 file_path = f'{cache_full_path}/data/'
 os.makedirs(os.path.dirname(file_path), exist_ok=True)
 file_path = f'{cache_full_path}/data/file.h5ad'
+print(f"Dataset dir: {file_path}")
 
 wget.download(file_url, str(file_path))
 
@@ -125,9 +112,13 @@ os.environ["DATABRICKS_TOKEN"]=databricks_token
 import sys
 import os
 import json
+import pandas as pd
+import numpy as np
+
 sys.path.insert(0, "../")
 import scgpt
 import scanpy
+from scanpy import AnnData
 from scgpt.tasks import GeneEmbedding
 from scgpt.tokenizer.gene_tokenizer import GeneVocab
 from scgpt.model import TransformerModel
@@ -139,15 +130,10 @@ import torch
 import scipy
 
 os.environ["KMP_WARNINGS"] = "off"
-warnings.filterwarnings("ignore")
+# warnings.filterwarnings("ignore")
 
 from typing import TypedDict, Dict, List, Tuple, Any, Optional
 
-from genesis_workbench.models import (ModelCategory, 
-                                      import_model_from_uc,
-                                      get_latest_model_version,
-                                      set_mlflow_experiment)
-from genesis_workbench.workbench import AppContext
 
 # COMMAND ----------
 
@@ -363,16 +349,16 @@ class TransformerModelWrapper(mlflow.pyfunc.PythonModel):
 
 # DBTITLE 1,Setting Up Model Directory and File Paths
 #
-model_config_file = model_dir / "args.json"
-model_file = model_dir / "best_model.pt"
-vocab_file = model_dir / "vocab.json"
+model_config_file = f"{model_dir}/args.json"
+model_file = f"{model_dir}/best_model.pt"
+vocab_file = f"{model_dir}/vocab.json"
 
 
 print(model_dir)
 print(model_config_file)
 print(model_file)
 print(vocab_file)
-
+print(f"Dataset dir: {file_path}")
 
 # COMMAND ----------
 
@@ -534,6 +520,19 @@ params = {
     "n_layers_cls": 3
     }
 
+
+from databricks.sdk import WorkspaceClient
+import mlflow
+def set_mlflow_experiment(experiment_tag, user_email):
+    w = WorkspaceClient()
+    mlflow_experiment_base_path = f"Users/{user_email}/mlflow_experiments"
+    w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")
+    experiment_path = f"/{mlflow_experiment_base_path}/{experiment_tag}"
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+    return mlflow.set_experiment(experiment_path)
+
+
 experiment = set_mlflow_experiment(experiment_tag=experiment_name, user_email=user_email)
 
 with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experiment_id) as run:
@@ -549,26 +548,30 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
             "model_config_file": str(model_config_file),
             "vocab_file": str(vocab_file),
         },
-        conda_env = {
-            'name': 'mlflow-env',
-            'channels': ['conda-forge'],
-            'dependencies': [
-                'python=3.11.11',
-                'pip',
-                'conda=25.5.0',
-                {
-                    'pip': [
-                        'mlflow==2.22.0',
-                        'scgpt==0.2.4',
-                        #'flash-attn==2.7.4.post1', # ref:https://github.com/Dao-AILab/flash-attention/issues/246
-                        # 'fastparquet==0.4.1 --no-build-isolation',
-                        'wandb==0.19.11',
-                        'torch==2.7.0'
-                    ],
-                },
-            ],
-        },
-        # pip_requirements="requirements.txt",  # Specify the path to the requirements file
+        # conda_env = {
+        #     'name': 'mlflow-env',
+        #     'channels': ['conda-forge'],
+        #     'dependencies': [
+        #         'python=3.11.11',
+        #         'pip',
+        #         'conda=25.5.0',
+        #         {
+        #             'pip': [
+        #                 "--extra-index-url https://download.pytorch.org/whl/cu118",
+        #                 "torch==2.0.1+cu118",
+        #                 "torchvision==0.15.2+cu118",
+        #                 "scgpt==0.2.4",
+        #                 "wandb==0.19.11",
+        #                 "gdown==5.2.0",
+        #                 "wget==3.2",
+        #                 "ipython==8.15.0",
+        #                 "cloudpickle==2.2.1",
+        #                 "https://github.com/Dao-AILab/flash-attention/releases/download/v2.5.8/flash_attn-2.5.8+cu118torch2.0cxx11abiFALSE-cp311-cp311-linux_x86_64.whl"
+        #             ],
+        #         },
+        #     ],
+        # },
+        pip_requirements="requirements.txt",  # Specify the path to the requirements file
         # extra_pip_requirements=[f"{package_path}geneformer-0.1.0-py3-none-any.whl"], # only one can be specified, pip or extra_pip
         signature=signature,
         #: provide input_example using tuple (input_data, params).
@@ -620,27 +623,27 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
 # # DBTITLE 1,validate_serving_input
 # mlflow.models.validate_serving_input(f"models:/{registered_model_name}/18", serving_input_example) # input_data and params are passed as a whole to the validate_serving_input
 #
-
-
-# COMMAND ----------
-
-model_uc_name = registered_model_name
-model_version = get_latest_model_version(model_uc_name)
-model_uri = f"models:/{model_uc_name}/{model_version}"
-
-app_context = AppContext(
-        core_catalog_name=catalog,
-        core_schema_name=schema
-    )
-
-import_model_from_uc(app_context,user_email=user_email,
-                    model_category=ModelCategory.SINGLE_CELL, # TODO: might need to change
-                    model_uc_name=f"{catalog}.{schema}.{model_name}",
-                    model_uc_version=model_version,
-                    model_name="scgpt",
-                    model_display_name="scgpt",
-                    model_source_version="v0.2.4",
-                    model_description_url="https://github.com/bowang-lab/scGPT/blob/main/README.md")
+#
+#
+# # COMMAND ----------
+#
+# model_uc_name = registered_model_name
+# model_version = get_latest_model_version(model_uc_name)
+# model_uri = f"models:/{model_uc_name}/{model_version}"
+#
+# app_context = AppContext(
+#         core_catalog_name=catalog,
+#         core_schema_name=schema
+#     )
+#
+# import_model_from_uc(app_context,user_email=user_email,
+#                     model_category=ModelCategory.SINGLE_CELL,
+#                     model_uc_name=f"{catalog}.{schema}.{model_name}",
+#                     model_uc_version=model_version,
+#                     model_name="scgpt",
+#                     model_display_name="scgpt",
+#                     model_source_version="v0.2.4",
+#                     model_description_url="https://github.com/bowang-lab/scGPT/blob/main/README.md")
 
 # COMMAND ----------
 # MAGIC %md
