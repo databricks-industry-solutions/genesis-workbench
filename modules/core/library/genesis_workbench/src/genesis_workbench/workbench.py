@@ -53,13 +53,20 @@ def get_warehouse_details_from_id(warehouse_id) -> WarehouseInfo:
 def db_connect():
     warehouse_id = os.getenv("SQL_WAREHOUSE")
     warehouse_details = get_warehouse_details_from_id(warehouse_id)
+
+    print(f"SQL Warehouse Id: {warehouse_id}")
+
     os.environ["DATABRICKS_HOSTNAME"] = warehouse_details.hostname
 
     if os.getenv("IS_TOKEN_AUTH","")=="Y":
-        return sql.connect(server_hostname = os.getenv("DATABRICKS_HOSTNAME"),
+        print(f"Connecting to  warehouse: {warehouse_details.http_path}, warehouse host: {warehouse_details.hostname} using a token")
+
+        return sql.connect(server_hostname = warehouse_details.hostname,
             http_path = warehouse_details.http_path,
             access_token = os.getenv("DATABRICKS_TOKEN"))
     else:
+        print(f"Connecting to warehouse: {warehouse_details.http_path}, warehouse host: {warehouse_details.hostname} using oauth")
+
         return sql.connect(server_hostname = warehouse_details.hostname,
             http_path = warehouse_details.http_path,
             credentials_provider = credential_provider)

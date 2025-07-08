@@ -53,6 +53,8 @@ def get_app_context() -> AppContext:
         core_schema_name=ctx_items["core_schema_name"]
     )
 
+    print(f"App context: {appContext}")
+
     return appContext
 
 def open_run_window(job_id,run_id):

@@ -9,8 +9,66 @@ from utils.streamlit_helper import (get_app_context,
                                     display_import_model_uc_dialog,
                                     display_deploy_model_dialog)
 
+from utils.molstar_tools import (
+                    html_as_iframe,
+                    molstar_html_singlebody,
+                    molstar_html_multibody)
+
+from utils.protein_design import make_designs, align_designed_pdbs
+
+import streamlit.components.v1 as components
+
+import logging
 
 st.title(":material/biotech: Protein Structure Prediction")
+
+def get_progress_callback(status_generation
+        #status_parsing,status_esm_init,status_rfdiffusion,status_proteinmpnn,status_esm_preds
+        ) :
+    def report_progress (progress_report: dict):
+        # status_parsing.progress(progress_report["status_parsing"], text="Parsing Sequence")
+        # status_esm_init.progress(progress_report["status_esm_init"], text="Generating structure using ESMFold")
+        # status_rfdiffusion.progress(progress_report["status_rfdiffusion"], text="Generating protein using RFdiffusion")
+        # status_proteinmpnn.progress(progress_report["status_proteinmpnn"], text="Predicting sequences using ProteinMPNN")
+        # status_esm_preds.progress(progress_report["status_esm_preds"],text="Generating structure for new protein using ESMFold")
+        status_text = ""
+        if progress_report["status_parsing"] < 100:
+            status_text = "Parsing Sequence"
+            progress = 20
+        elif progress_report["status_esm_init"] < 100:
+            status_text = "Generating original structure using ESMFold"
+            progress = 40
+        elif progress_report["status_rfdiffusion"] < 100:
+            status_text = "Generating protein backbone for the new region using RFdiffusion"
+            progress = 60
+        elif progress_report["status_proteinmpnn"] < 100:
+            status_text = "Infering sequences of backbones using ProteinMPNN"
+            progress = 80
+        elif progress_report["status_esm_preds"] < 100:
+            status_text = "Generating new protein using ESMFold and aligning to original"
+            progress = 90
+        else:
+            status_text = "Generation complete"
+            progress = 100
+        status_generation.progress(progress, status_text)
+
+    return report_progress
+
+
+def design_tab_fn(sequence: str, progress_callback=None) -> str:
+    
+    n_rf_diffusion: int = 1
+    logging.info("design: make designs")
+    designed_pdbs = make_designs(sequence, progress_callback=progress_callback)
+    logging.info("design: align")
+    print(designed_pdbs)
+    # logging.info([k for k in designed_pdbs.keys()])
+    # logging.info([v[:10] for v in designed_pdbs.values()])
+    aligned_structures = align_designed_pdbs(designed_pdbs)
+    logging.info("design: get html for designs")           
+    html =  molstar_html_multibody(aligned_structures)
+    return html
+
 
 def display_protein_studies_settings(available_models_df,deployed_models_df):
 
@@ -62,7 +120,46 @@ with st.spinner("Loading data"):
         st.session_state["deployed_protein_models_df"] = deployed_protein_models_df
     deployed_protein_models_df = st.session_state["deployed_protein_models_df"]
 
-settings, esm, alpha = st.tabs(["Settings","Protein Design", "Protein Folding"])
+settings_tab, protein_design_tab, proptein_folding_tab = st.tabs(["Settings","Protein Design", "Protein Folding"])
 
-with settings:
+with settings_tab:
     display_protein_studies_settings(available_protein_models_df, deployed_protein_models_df)
+
+with protein_design_tab:
+    st.markdown("#### Protein Structure Design with ESMfold, RFDiffusion and ProteinMPNN")
+    c1,c2,c3 = st.columns([3,1,1], vertical_alignment="bottom")
+    with c1:
+        input_sequence = st.text_area("Provide an input sequence where the region between square braces is to be replaced/in-painted by new designs:"
+                                      ,"MAQVKLQESGGGLVQPGGSLRLSCASSVPIFAITVMGWYRQAPGKQRELVAGIKRSGD[TNYADS]VKGRFTISRDDAKNTVFLQMNSLTTEDTAVYYCNAQILSWMGGTDYWGQGTQVTVSSGQAGQ"
+                                      , help="Example: `CASRRSG[FTYPGF]FFEQYF`")
+    with c2:
+        generate_btn = st.button("Generate")
+        clear_btn = st.button("Clear")
+
+    mol_viewer = st.container()
+    if generate_btn:
+        with st.spinner("Generating.."):
+            with mol_viewer:
+                # status_parsing = st.progress(0, text="Parsing Sequence")
+                # status_esm_init = st.progress(0, text="Generating structure using ESMFold")
+                # status_rfdiffusion = st.progress(0, text="Generating protein using RFdiffusion")
+                # status_proteinmpnn = st.progress(0, text="Predicting sequences using ProteinMPNN")
+                # status_esm_preds = st.progress(0, text="Generating structure for new protein using ESMFold")
+                status_generation = st.progress(0, text="Generating Sequence")
+
+                html =  design_tab_fn(input_sequence, progress_callback=get_progress_callback(
+                    # status_parsing,
+                    # status_esm_init,
+                    # status_rfdiffusion,
+                    # status_proteinmpnn,
+                    # status_esm_preds
+                    status_generation
+                ))
+                components.html(html, height=700)
+                
+            
+    if clear_btn:
+        mol_viewer.empty()
+    
+        
+
