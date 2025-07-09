@@ -14,3 +14,4 @@ poetry.lock
 env.env
 temp.*
 /temp
+mlruns

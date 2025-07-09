@@ -14,7 +14,9 @@ from utils.molstar_tools import (
                     molstar_html_singlebody,
                     molstar_html_multibody)
 
-from utils.protein_design import make_designs, align_designed_pdbs
+from utils.protein_design import (make_designs, 
+                                  hit_esmfold,
+                                  align_designed_pdbs)
 
 import streamlit.components.v1 as components
 
@@ -54,6 +56,10 @@ def get_progress_callback(status_generation
 
     return report_progress
 
+def esmfold_btn_fn(protein : str) -> str:
+    pdb = hit_esmfold(protein)
+    html =  molstar_html_multibody(pdb)
+    return html
 
 def design_tab_fn(sequence: str, progress_callback=None) -> str:
     
@@ -120,21 +126,73 @@ with st.spinner("Loading data"):
         st.session_state["deployed_protein_models_df"] = deployed_protein_models_df
     deployed_protein_models_df = st.session_state["deployed_protein_models_df"]
 
-settings_tab, protein_design_tab, proptein_folding_tab = st.tabs(["Settings","Protein Design", "Protein Folding"])
+settings_tab, protein_structure_prediction_tab, protein_design_tab = st.tabs(["Settings", "Protein Structure Prediction", "Protein Design"])
 
 with settings_tab:
     display_protein_studies_settings(available_protein_models_df, deployed_protein_models_df)
 
+
+with protein_structure_prediction_tab:
+    st.markdown("###### Predict Protein Structure")
+
+    view_model_choice =  st.pills("Model:",["ESMFold","AlphaFold2"], 
+                                selection_mode="single",
+                                default="ESMFold") 
+
+    if view_model_choice=="ESMFold":
+        c1,c2,c3 = st.columns([3,1,1], vertical_alignment="bottom")
+        with c1:
+            view_esmfold_input_sequence = st.text_area("Provide an input sequence to infer the structure:"
+                                        ,"MTYKLILNGKTLKGETTTEAVDAATAEKVFKQYANDNGVDGEWTYDAATKTFTVTE", key="view_esmfold_input_sequence")
+        with c2:
+            view_structure_esmfold_btn = st.button("View", key="view_structure_esmfold_btn")
+            clear_view_esmfold_btn = st.button("Clear", key="clear_view_esmfold_btn")
+
+        prot_viewer = st.container()
+        if view_structure_esmfold_btn:
+            with st.spinner("Generating structure.."):
+                with prot_viewer:
+                    html =  esmfold_btn_fn(view_esmfold_input_sequence)
+                    components.html(html, height=700)
+                            
+        if clear_view_esmfold_btn:
+            prot_viewer.empty()
+             
+
+    if view_model_choice=="AlphaFold2":
+        st.write("Runs a workflow to do MSA and template search and then perform structure prediction")
+        c1,c2 = st.columns([3,1], vertical_alignment="bottom")
+        with c1:
+            view_alphafold_input_sequence = st.text_area("Provide an input sequence to infer the structure:"
+                                        ,"MTYKLILNGKTLKGETTTEAVDAATAEKVFKQYANDNGVDGEWTYDAATKTFTVTE", key="view_alphafold_input_sequence")
+        
+        c1,c2,c3,c4 = st.columns([1,1,1,3], vertical_alignment="bottom")
+        with c1:
+            view_alphafold_run_label = st.text_input("Run label:","",placeholder="my_run_123")
+        with c2:
+            view_alphafold_run_experiment = st.text_input("MLflow Experiment:","",placeholder="structure_prediction_alphafold")
+        with c3:
+            view_structure_alphafold_btn = st.button("Start Job", key="view_structure_alphafold_btn")
+        
+        st.divider()
+        st.markdown("###### Search Past Runs:")
+        c1,c2,c3 = st.columns([1,1,3], vertical_alignment="bottom")
+        with c1:
+            search_alphafold_run_label = st.text_input("Run label:","",placeholder="my_run_123", key="search_alphafold_run_label")
+        with c3:
+            search_alphafold_run_button= st.button("Search", key="search_alphafold_run_button")
+
+
 with protein_design_tab:
-    st.markdown("#### Protein Structure Design with ESMfold, RFDiffusion and ProteinMPNN")
+    st.markdown("###### Protein Structure Design with ESMfold, RFDiffusion and ProteinMPNN")
     c1,c2,c3 = st.columns([3,1,1], vertical_alignment="bottom")
     with c1:
-        input_sequence = st.text_area("Provide an input sequence where the region between square braces is to be replaced/in-painted by new designs:"
+        gen_input_sequence = st.text_area("Provide an input sequence where the region between square braces is to be replaced/in-painted by new designs:"
                                       ,"MAQVKLQESGGGLVQPGGSLRLSCASSVPIFAITVMGWYRQAPGKQRELVAGIKRSGD[TNYADS]VKGRFTISRDDAKNTVFLQMNSLTTEDTAVYYCNAQILSWMGGTDYWGQGTQVTVSSGQAGQ"
                                       , help="Example: `CASRRSG[FTYPGF]FFEQYF`")
     with c2:
         generate_btn = st.button("Generate")
-        clear_btn = st.button("Clear")
+        clear_btn = st.button("Clear", key="clear_gen_btn")
 
     mol_viewer = st.container()
     if generate_btn:
@@ -147,7 +205,7 @@ with protein_design_tab:
                 # status_esm_preds = st.progress(0, text="Generating structure for new protein using ESMFold")
                 status_generation = st.progress(0, text="Generating Sequence")
 
-                html =  design_tab_fn(input_sequence, progress_callback=get_progress_callback(
+                html =  design_tab_fn(gen_input_sequence, progress_callback=get_progress_callback(
                     # status_parsing,
                     # status_esm_init,
                     # status_rfdiffusion,
