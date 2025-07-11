@@ -39,3 +39,11 @@ variables:
   module_registration_experiment_name:
     description: The experiment to which all registered modules are logged
     default: dbx_genesis_workbench_modules
+  
+  azure_node_type:
+    description: compute node for Azure 
+    default: Standard_DS4_v2
+
+  aws_node_type:
+    description: compute node for AWS
+    default: i3-xlarge

@@ -19,6 +19,7 @@ include:
 sync:
   paths:
     - .
+    - ../app
   
 targets:
   dev:
