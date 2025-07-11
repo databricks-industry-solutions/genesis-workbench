@@ -1,7 +1,7 @@
 resources:
   jobs:
-    alphafold2_downloads:
-      name: alphafold2_downloads
+    alphafold_downloads:
+      name: alphafold_downloads
       email_notifications:
         on_success:
           - ${var.current_user}
@@ -15,7 +15,7 @@ resources:
       tasks:
         - task_key: download_mgnifyPLUS
           notebook_task:
-            notebook_path: ../notebooks/download_mgnify_smallbfd_pdb70_pdbseqres
+            notebook_path: ../notebooks/download_mgnify_smallbfd_pdb70_pdbseqres.py
             source: WORKSPACE
           job_cluster_key: download_mgnifyPLUS_cluster
           health:
@@ -26,7 +26,7 @@ resources:
           
         - task_key: download_params
           notebook_task:
-            notebook_path: ../notebooks/download_params
+            notebook_path: ../notebooks/download_params.py
             source: WORKSPACE
           job_cluster_key: download_params_cluster
           timeout_seconds: 7200
@@ -38,7 +38,7 @@ resources:
           
         - task_key: download_uniprot
           notebook_task:
-            notebook_path: ../notebooks/download_uniprot
+            notebook_path: ../notebooks/download_uniprot.py
             source: WORKSPACE
           job_cluster_key: download_uniprot_cluster
           timeout_seconds: 21600
@@ -50,7 +50,7 @@ resources:
           
         - task_key: download_unirefs
           notebook_task:
-            notebook_path: ../notebooks/download_uniref90_uniref30
+            notebook_path: ../notebooks/download_uniref90_uniref30.py
             source: WORKSPACE
           job_cluster_key: download_unirefs_cluster
           timeout_seconds: 36000
@@ -62,7 +62,7 @@ resources:
           
         - task_key: pdb_mmcif
           notebook_task:
-            notebook_path: ../notebooks/download_pdb_mmcif
+            notebook_path: ../notebooks/download_pdb_mmcif.py
             source: WORKSPACE
           job_cluster_key: pdb_mmcif_cluster
           health:
