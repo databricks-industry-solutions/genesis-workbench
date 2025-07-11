@@ -23,6 +23,7 @@
 
 # COMMAND ----------
 
+<<<<<<< HEAD
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
 dbutils.widgets.text("volume", "alphafold", "Volume")
@@ -41,6 +42,8 @@ USER_EMAIL = dbutils.widgets.get("user_email")
 
 # COMMAND ----------
 
+=======
+>>>>>>> 27cc16e (added alphafold download workflow)
 # DBTITLE 1,prepare conda and dependencies
 # MAGIC %sh
 # MAGIC
@@ -67,7 +70,13 @@ USER_EMAIL = dbutils.widgets.get("user_email")
 
 # DBTITLE 1,prepare input files
 import os
+<<<<<<< HEAD
 from datetime import datetime
+=======
+
+dbutils.widgets.text("run_name", "")
+dbutils.widgets.text("protein", "")
+>>>>>>> 27cc16e (added alphafold download workflow)
 
 def write_monomer(f,protein):
     f.writelines(['>protein\n',protein])
@@ -85,6 +94,7 @@ def write(f,protein,mode):
     else:
         raise ValueError('no mode {} is avaliable, only monomer or multimer'.format(mode))
 
+<<<<<<< HEAD
 mode = 'multimer' if ':' in PROTEIN_SEQUENCE else 'monomer'
 
 tmpdir = '/local_disk0/'
@@ -112,6 +122,27 @@ os.environ['AF_MODE'] = mode
 
 print(os.environ['BASEDIR'])
 print(os.environ['OUTDIR'])
+=======
+protein = dbutils.widgets.get("protein")
+run_name = dbutils.widgets.get("run_name")
+mode = 'multimer' if ':' in protein else 'monomer'
+
+tmpdir = '/local_disk0/'
+tmp_file = os.path.join(tmpdir,run_name+'.fasta') 
+with open(tmp_file,'w') as f:
+    write(f,protein,mode)
+os.environ['AF_FASTA_FILE'] = tmp_file
+
+os.environ['AF_MODE'] = mode
+
+outdir = os.path.join(
+    "/Volumes/protein_folding/alphafold/results/",
+    run_name
+)
+if not os.path.exists(outdir):
+    os.mkdir(outdir)
+
+>>>>>>> 27cc16e (added alphafold download workflow)
 print(os.environ['AF_MODE'])
 print(os.environ['AF_FASTA_FILE'])
 
@@ -126,7 +157,11 @@ print(os.environ['AF_FASTA_FILE'])
 
 # DBTITLE 1,chemical properties file to alphafold lib
 # MAGIC %sh
+<<<<<<< HEAD
 # MAGIC cp $BASEDIR/common/stereo_chemical_props.txt /miniconda3/envs/alphafold_env/lib/python3.8/site-packages/alphafold/common
+=======
+# MAGIC cp /Volumes/protein_folding/alphafold/datasets/common/stereo_chemical_props.txt /miniconda3/envs/alphafold_env/lib/python3.8/site-packages/alphafold/common
+>>>>>>> 27cc16e (added alphafold download workflow)
 
 # COMMAND ----------
 
@@ -139,10 +174,19 @@ print(os.environ['AF_FASTA_FILE'])
 
 # DBTITLE 1,run alphafold folding-only
 # MAGIC %sh
+<<<<<<< HEAD
 # MAGIC
 # MAGIC echo "Base directory: $BASEDIR"
 # MAGIC
 # MAGIC echo "Out directory: $OUTDIR"
+=======
+# MAGIC # Where databases etc are stored
+# MAGIC BASEDIR="/Volumes/protein_folding/alphafold/datasets"
+# MAGIC
+# MAGIC # Choose output_path
+# MAGIC OUTDIR="/Volumes/protein_folding/alphafold/results/"
+# MAGIC echo $OUTDIR
+>>>>>>> 27cc16e (added alphafold download workflow)
 # MAGIC
 # MAGIC FLAGS="--data_dir=${BASEDIR}\
 # MAGIC  --fasta_paths=${AF_FASTA_FILE}\
