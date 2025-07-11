@@ -31,4 +31,4 @@ variables:
 
   model_volume:
     description: The volume directory for the model and associated files
-    default: alphafold_cache_dir
+    default: alphafold
