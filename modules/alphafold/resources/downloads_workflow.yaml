@@ -1,0 +1,169 @@
+resources:
+  jobs:
+    alphafold2_downloads:
+      name: alphafold2_downloads
+      email_notifications:
+        on_success:
+          - ${var.current_user}
+        on_failure:
+          - ${var.current_user}
+        no_alert_for_skipped_runs: true
+      notification_settings:
+        no_alert_for_skipped_runs: true
+        no_alert_for_canceled_runs: true
+
+      tasks:
+        - task_key: download_mgnifyPLUS
+          notebook_task:
+            notebook_path: ../notebooks/download_mgnify_smallbfd_pdb70_pdbseqres
+            source: WORKSPACE
+          job_cluster_key: download_mgnifyPLUS_cluster
+          health:
+            rules:
+              - metric: RUN_DURATION_SECONDS
+                op: GREATER_THAN
+                value: 14400
+          
+        - task_key: download_params
+          notebook_task:
+            notebook_path: ../notebooks/download_params
+            source: WORKSPACE
+          job_cluster_key: download_params_cluster
+          timeout_seconds: 7200
+          health:
+            rules:
+              - metric: RUN_DURATION_SECONDS
+                op: GREATER_THAN
+                value: 3600
+          
+        - task_key: download_uniprot
+          notebook_task:
+            notebook_path: ../notebooks/download_uniprot
+            source: WORKSPACE
+          job_cluster_key: download_uniprot_cluster
+          timeout_seconds: 21600
+          health:
+            rules:
+              - metric: RUN_DURATION_SECONDS
+                op: GREATER_THAN
+                value: 14400
+          
+        - task_key: download_unirefs
+          notebook_task:
+            notebook_path: ../notebooks/download_uniref90_uniref30
+            source: WORKSPACE
+          job_cluster_key: download_unirefs_cluster
+          timeout_seconds: 36000
+          health:
+            rules:
+              - metric: RUN_DURATION_SECONDS
+                op: GREATER_THAN
+                value: 12600
+          
+        - task_key: pdb_mmcif
+          notebook_task:
+            notebook_path: ../notebooks/download_pdb_mmcif
+            source: WORKSPACE
+          job_cluster_key: pdb_mmcif_cluster
+          health:
+            rules:
+              - metric: RUN_DURATION_SECONDS
+                op: GREATER_THAN
+                value: 43200
+                
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: model_name
+          default: alphafold2
+        - name: model_volume
+          default: ${resources.volumes.alphafold_volume.name}
+        - name: user_email
+          default: ${var.current_user}
+              
+      job_clusters:
+        - job_cluster_key: download_params_cluster
+          new_cluster:
+            cluster_name: ""
+            spark_version: 15.4.x-scala2.12
+            spark_conf:
+              spark.master: local[*, 4]
+              spark.databricks.cluster.profile: singleNode
+            node_type_id: Standard_F8
+            driver_node_type_id: Standard_F8
+            custom_tags:
+              ResourceClass: SingleNode
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            num_workers: 0
+
+        - job_cluster_key: download_unirefs_cluster
+          new_cluster:
+            cluster_name: ""
+            spark_version: 15.4.x-scala2.12
+            spark_conf:
+              spark.master: local[*, 4]
+              spark.databricks.cluster.profile: singleNode
+            node_type_id: Standard_F8
+            driver_node_type_id: Standard_F8
+            custom_tags:
+              ResourceClass: SingleNode
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            num_workers: 0
+
+        - job_cluster_key: download_mgnifyPLUS_cluster
+          new_cluster:
+            cluster_name: ""
+            spark_version: 15.4.x-scala2.12
+            spark_conf:
+              spark.master: local[*, 4]
+              spark.databricks.cluster.profile: singleNode
+            node_type_id: Standard_F8
+            driver_node_type_id: Standard_F8
+            custom_tags:
+              ResourceClass: SingleNode
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            num_workers: 0
+
+        - job_cluster_key: download_uniprot_cluster
+          new_cluster:
+            cluster_name: ""
+            spark_version: 15.4.x-scala2.12
+            spark_conf:
+              spark.master: local[*, 4]
+              spark.databricks.cluster.profile: singleNode
+            node_type_id: Standard_F8
+            driver_node_type_id: Standard_F8
+            custom_tags:
+              ResourceClass: SingleNode
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            num_workers: 0
+
+        - job_cluster_key: pdb_mmcif_cluster
+          new_cluster:
+            spark_version: 15.4.x-scala2.12
+            spark_conf:
+              spark.master: local[*, 4]
+              spark.databricks.cluster.profile: singleNode
+            node_type_id: Standard_F8
+            driver_node_type_id: Standard_F8
+            custom_tags:
+              ResourceClass: SingleNode            
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            num_workers: 0
+      
+      tags: ${var.common_resource_tags}
+
+      queue:
+        enabled: true
