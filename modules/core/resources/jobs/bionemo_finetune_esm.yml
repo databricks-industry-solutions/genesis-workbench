@@ -1,0 +1,47 @@
+resources:
+  jobs:
+    bionemo_esm_finetune:
+      name: bionemo_esm_finetune_job
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: bionemo_esm_finetune_task
+          job_cluster_key: job_cluster
+          notebook_task:
+            notebook_path: ../../notebooks/bionemo_esm_finetune.py
+          max_retries: 0 
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+
+      job_clusters:
+        - job_cluster_key: job_cluster
+          new_cluster:
+            num_workers: 0
+            node_type_id: ${var.bionemo_cluster_a10_nodetype}
+            driver_node_type_id: ${var.bionemo_cluster_a10_nodetype}
+            spark_version: ${var.bionemo_cluster_dbr_version}
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            docker_image:
+              url: ${var.bionemo_docker_image}  
+              basic_auth:
+                username: ${var.bionemo_docker_userid}
+                password: ${var.bionemo_docker_token}
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.databricks.unityCatalog.volumes.enabled: true
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+
+      tags: ${var.common_resource_tags}
+
+

@@ -8,10 +8,10 @@ resources:
           - ${var.current_user}
 
       tasks:
-        - task_key: notebook_task
+        - task_key: deploy_esm_task
           job_cluster_key: job_cluster
           notebook_task:
-            notebook_path: ../notebooks/esmfold.py
+            notebook_path: ../notebooks/01_register_esmfold.py
 
       parameters:
         - name: catalog
@@ -20,14 +20,33 @@ resources:
           default: ${var.core_schema_name}
         - name: model_name
           default: esmfold
+        - name: cache_dir
+          default: ${resources.volumes.esm2_cache_dir.name}
         - name: experiment_name
           default: ${var.module_registration_experiment_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: user_email
+          default: ${var.current_user}
+
+
 
       job_clusters:
         - job_cluster_key: job_cluster
           new_cluster:
-            spark_version: 15.4.x-cpu-ml-scala2.12
-            node_type_id: Standard_D3_v2
-            autoscale:
-                min_workers: 1
-                max_workers: 4
+            num_workers: 0
+            node_type_id: 'Standard_NC4as_T4_v3' 
+            driver_node_type_id: 'Standard_NC4as_T4_v3' 
+            spark_version: '15.4.x-gpu-ml-scala2.12'
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+
+      tags: ${var.common_resource_tags}
+            
+            

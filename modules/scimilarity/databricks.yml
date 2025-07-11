@@ -1,0 +1,38 @@
+bundle:
+  name: genesis_workbench_scimilarity
+  databricks_cli_version: ">=0.236.*"
+
+include:
+  - variables.yml
+  - resources/*.yml
+    
+# artifacts:
+#   esmfold:
+#     type: whl
+#     build: poetry build
+#     path: .
+
+targets:
+  dev:
+    mode: development
+    default: true
+    variables:
+      module_registration_experiment_name: "[dev mmt] gwb_modules_scimilarity"
+      sql_warehouse_id: 8f210e00850a2c16
+    workspace:
+      root_path: ${var.current_working_directory}
+      host: https://adb-830292400663869.9.azuredatabricks.net
+    permissions:
+      - user_name: ${var.current_user}
+        level: CAN_MANAGE
+
+  prod:
+    mode: production
+    workspace:
+      host: https://adb-830292400663869.9.azuredatabricks.net
+      root_path: ${var.current_working_directory}
+    permissions:
+      - user_name: ${var.current_user}
+        level: CAN_MANAGE
+    run_as:
+      user_name: ${var.current_user}

@@ -1,5 +1,138 @@
 import streamlit as st
+import pandas as pd
+from pandas.api.types import is_datetime64_any_dtype
+import json
+from datetime import timedelta
 
+from genesis_workbench.workbench import get_workflow_job_status
+from utils.streamlit_helper import get_user_info, make_run_link
+
+def format_duration(duration: timedelta) -> str:
+    total_seconds = int(duration.total_seconds())
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, _ = divmod(remainder, 60)
+    return f"{hours}h {minutes}m"
+
+# --- Utility: Get Workflow Runs ---
+def get_workflow_runs_df(tag_key: str = "application", tag_value: str = "genesis_workbench", days_back: int = 7) -> pd.DataFrame:
+    user_info = get_user_info()
+    creator = user_info.user_name if user_info else None
+
+    job_status_dict = get_workflow_job_status(
+        tag_key=tag_key,
+        tag_value=tag_value,
+        days_back=days_back,
+        creator_filter=creator
+    )
+
+    records = []
+    for job_name, job_data in job_status_dict.items():
+        for run in job_data.get("runs", []):
+            start_time = pd.to_datetime(run["start_time"], unit="ms") if run.get("start_time") else None
+            end_time = pd.to_datetime(run["end_time"], unit="ms") if run.get("end_time") else None
+            duration = end_time - start_time if start_time and end_time else None
+
+            record = {
+                "Job Name": job_name,
+                "Job ID": job_data["job_id"],
+                "Tags": json.dumps(job_data.get("tags", {})),
+                "Run ID": run["run_id"],
+                "Lifecycle State": run["state"].value if run.get("state") else None,
+                "Result State": run["result_state"].value if run.get("result_state") else None,
+                "Start Time": start_time,
+                "End Time": end_time,
+                "Duration": format_duration(duration) if duration else "In Progress",
+                "Created By": run.get("creator_user_name"),
+            }
+            records.append(record)
+    return pd.DataFrame(records)
+
+# --- Status Indicator Logic ---
+def combine_status(lifecycle, result):
+    if lifecycle == "RUNNING":
+        return "🟡 Running"
+    if result == "SUCCESS":
+        return "🟢 Success"
+    if result == "FAILED":
+        return "🔴 Failed"
+    if lifecycle == "PENDING":
+        return "🟡 Pending"
+    if lifecycle == "TERMINATED" and result is None:
+        return "⚪️ Terminated"
+    return f"⚪️ {result or lifecycle}"
+
+# --- Main UI ---
 st.title(":material/monitoring: Monitoring and Alerts")
 
-dashboard_tab, alerts_tab = st.tabs(["Dashboard","Alerts"])
+job_runs, dashboard_tab, alerts_tab = st.tabs(["Workflow Runs", "Dashboard", "Alerts"])
+
+# --- Dashboard Tab ---
+with job_runs:
+    with st.container():
+        col1, col2 = st.columns([10, 2], vertical_alignment="bottom")
+        with col1:
+            # Reduced spacing between label and pills
+            days_back = st.pills(
+                label="Lookback Period",
+                options=[7, 15, 30],
+                format_func=lambda x: f"{x} Days",
+                default=7  # Optional: set a default selection
+            )
+        with col2:
+            st.markdown("&nbsp;", unsafe_allow_html=True)
+            if st.button("Refresh", use_container_width=True):
+                st.session_state["workflow_runs_df"] = get_workflow_runs_df(days_back=days_back)
+
+    # Load data
+    with st.spinner("Fetching workflow runs..."):
+        if "workflow_runs_df" not in st.session_state:
+            st.session_state["workflow_runs_df"] = get_workflow_runs_df(days_back=days_back)
+        df = st.session_state["workflow_runs_df"]
+
+    if not df.empty:
+
+        st.divider()
+
+        df["Status"] = df.apply(
+            lambda row: combine_status(row["Lifecycle State"], row["Result State"]), axis=1
+        )
+
+        latest_run_job_name = df.sort_values(by="Start Time", ascending=False).iloc[0]["Job Name"]
+
+        unique_job_names = df["Job Name"].unique().tolist()
+
+        selected_job = st.selectbox("Select a job to filter:", options=unique_job_names , index=unique_job_names.index(latest_run_job_name))
+        
+        filtered_df = df[df["Job Name"] == selected_job]
+
+        filtered_df["Run ID"] = filtered_df.apply(
+            lambda row: make_run_link(row["Job ID"], row["Run ID"]), axis=1
+        )
+
+        # Optional: format datetimes as strings
+        # Safely format datetime columns with nulls
+        for col in ["Start Time", "End Time"]:
+            if is_datetime64_any_dtype(filtered_df[col]):
+                filtered_df[col] = filtered_df[col].apply(
+                    lambda x: x.strftime('%Y-%m-%d %H:%M:%S') if pd.notnull(x) else ""
+                )
+
+        # Display table with HTML links
+        st.markdown(
+            filtered_df[[
+                "Run ID", "Job Name", "Status", "Start Time", "End Time", "Duration", "Created By"
+            ]].sort_values(by="Start Time", ascending=False).to_html(escape=False, index=False),
+            unsafe_allow_html=True
+        )
+    else:
+        st.warning("No workflow runs found.")
+
+# --- Alerts Tab ---
+with dashboard_tab:
+    st.subheader("Dashboards")
+    st.info("Dashboards coming soon.")
+
+# --- Alerts Tab ---
+with alerts_tab:
+    st.subheader("Alerts")
+    st.info("Alerts functionality coming soon.")

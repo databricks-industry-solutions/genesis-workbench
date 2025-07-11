@@ -1,0 +1,38 @@
+variables:
+  current_user:
+    description: User deploying the bundle. Can apply to service principals as well.
+    default: ${workspace.current_user.userName}
+  
+  current_working_directory:
+    description: Working directory or bundle root.
+    default: /Users/${var.current_user}/.bundle/${bundle.name}/${bundle.target}
+
+  dev_user_prefix:
+    description: A prefix for resources in dev environment
+
+  common_resource_tags:
+    description: Resource tags
+    default: 
+      application: genesis_workbench
+      module: protein_mpnn
+      created_by: ${var.current_user}
+
+  core_catalog_name:
+    description: primary catalog where data, models, and files are stored for this project.
+    #default: genesis_workbench 
+  
+  core_schema_name:
+    description: The schema where core components will be installed.
+    #default: dbx_genesis_workbench_core 
+
+  sql_warehouse_id:
+    description: Id of the SQL Warehouse that will be used by the app
+    default: 0000
+    
+  module_registration_experiment_name:
+    description: The experiment to which all registered modules are logged
+    default: dbx_genesis_workbench_modules
+
+  cache_dir:
+    description: The cache directory for ESM model
+    default: protein_mpnn_cache_dir

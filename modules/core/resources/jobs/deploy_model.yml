@@ -14,14 +14,10 @@ resources:
           max_retries: 0 
 
       environments:
-        - environment_key: Default
+        - environment_key: default
           spec:
-            client: '1'
-            dependencies:
-              - databricks-sdk==0.50.0
-              - databricks-sql-connector==4.0.3
-              - mlflow==2.22.0
-              - ../../library/genesis_workbench/dist/*.whl
+            client: '2'
+
 
       parameters:
         - name: catalog
@@ -40,5 +36,6 @@ resources:
           default: Small
         - name: deploy_user
           default: none
-
+      
+      tags: ${var.common_resource_tags}
 

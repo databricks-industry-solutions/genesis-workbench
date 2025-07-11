@@ -1,0 +1,7 @@
+resources:
+  volumes:
+    model_weights:
+      name: model_weights
+      catalog_name: ${var.core_catalog_name}
+      schema_name: ${var.core_schema_name}
+      volume_type: MANAGED

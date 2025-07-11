@@ -11,6 +11,7 @@ env:
     valueFrom: "sql_warehouse"
   - name: DEPLOY_MODEL_JOB_ID
     valueFrom: "deploy_model_job"
-
+  - name: BIONEMO_ESM_FINETUNE_JOB_ID
+    valueFrom: "bionemo_esm_finetune_job"
 
 
