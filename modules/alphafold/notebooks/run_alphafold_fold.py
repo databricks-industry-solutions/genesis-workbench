@@ -23,6 +23,24 @@
 
 # COMMAND ----------
 
+dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
+dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
+dbutils.widgets.text("volume", "alphafold", "Volume")
+dbutils.widgets.text("experiment_name", "alphafold2", "Experiment")
+dbutils.widgets.text("run_name", "my_run", "Run Name")
+dbutils.widgets.text("protein_sequence", "MTYKLILNGKTLKGETTTEAVDAATAEKVFKQYANDNGVDGEWTYDAATKTFTVTE", "Protein Sequence")
+dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Email")
+
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
+VOLUME = dbutils.widgets.get("volume")
+EXPERIMENT_NAME = dbutils.widgets.get("experiment_name")
+RUN_NAME = dbutils.widgets.get("run_name")
+PROTEIN_SEQUENCE = dbutils.widgets.get("protein_sequence")
+USER_EMAIL = dbutils.widgets.get("user_email")
+
+# COMMAND ----------
+
 <<<<<<< HEAD
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
@@ -77,6 +95,7 @@ from datetime import datetime
 dbutils.widgets.text("run_name", "")
 dbutils.widgets.text("protein", "")
 >>>>>>> 27cc16e (added alphafold download workflow)
+from datetime import datetime
 
 def write_monomer(f,protein):
     f.writelines(['>protein\n',protein])
@@ -126,13 +145,29 @@ print(os.environ['OUTDIR'])
 protein = dbutils.widgets.get("protein")
 run_name = dbutils.widgets.get("run_name")
 mode = 'multimer' if ':' in protein else 'monomer'
+mode = 'multimer' if ':' in PROTEIN_SEQUENCE else 'monomer'
 
 tmpdir = '/local_disk0/'
-tmp_file = os.path.join(tmpdir,run_name+'.fasta') 
+tmp_file = os.path.join(tmpdir,RUN_NAME+'.fasta') 
 with open(tmp_file,'w') as f:
-    write(f,protein,mode)
-os.environ['AF_FASTA_FILE'] = tmp_file
+    write(f,PROTEIN_SEQUENCE,mode)
 
+# Where databases etc are stored
+BASEDIR=f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/datasets"
+
+# Get the current datetime object
+now = datetime.now()
+formatted_datetime = now.strftime("%Y%m%d_%H%M%S")
+#Where results are stored
+OUTDIR = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/results/{RUN_NAME}/{formatted_datetime}"
+
+if not os.path.exists(OUTDIR):
+    os.makedirs(OUTDIR)
+
+os.environ['BASEDIR'] = BASEDIR
+os.environ['OUTDIR'] = OUTDIR
+
+os.environ['AF_FASTA_FILE'] = tmp_file
 os.environ['AF_MODE'] = mode
 
 outdir = os.path.join(
@@ -143,6 +178,8 @@ if not os.path.exists(outdir):
     os.mkdir(outdir)
 
 >>>>>>> 27cc16e (added alphafold download workflow)
+print(os.environ['BASEDIR'])
+print(os.environ['OUTDIR'])
 print(os.environ['AF_MODE'])
 print(os.environ['AF_FASTA_FILE'])
 
@@ -162,6 +199,7 @@ print(os.environ['AF_FASTA_FILE'])
 =======
 # MAGIC cp /Volumes/protein_folding/alphafold/datasets/common/stereo_chemical_props.txt /miniconda3/envs/alphafold_env/lib/python3.8/site-packages/alphafold/common
 >>>>>>> 27cc16e (added alphafold download workflow)
+# MAGIC cp $BASEDIR/common/stereo_chemical_props.txt /miniconda3/envs/alphafold_env/lib/python3.8/site-packages/alphafold/common
 
 # COMMAND ----------
 
@@ -183,10 +221,13 @@ print(os.environ['AF_FASTA_FILE'])
 # MAGIC # Where databases etc are stored
 # MAGIC BASEDIR="/Volumes/protein_folding/alphafold/datasets"
 # MAGIC
+# MAGIC echo "Base directory: $BASEDIR"
+# MAGIC
 # MAGIC # Choose output_path
 # MAGIC OUTDIR="/Volumes/protein_folding/alphafold/results/"
 # MAGIC echo $OUTDIR
 >>>>>>> 27cc16e (added alphafold download workflow)
+# MAGIC echo "Out directory: $OUTDIR"
 # MAGIC
 # MAGIC FLAGS="--data_dir=${BASEDIR}\
 # MAGIC  --fasta_paths=${AF_FASTA_FILE}\
