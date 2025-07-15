@@ -25,11 +25,12 @@ protein_page = st.Page(
     icon=":material/biotech:"
 )
 
-small_molecules_page = st.Page(
-    page="views/small_molecules.py",
-    title="Small Molecules",
-    icon=":material/vaccines:"
-)
+
+# small_molecules_page = st.Page(
+#     page="views/small_molecules.py",
+#     title="Small Molecules",
+#     icon=":material/vaccines:"
+# )
 
 settings_page = st.Page(
     page="views/settings.py",
@@ -45,24 +46,24 @@ monitoring_alerts_page = st.Page(
 
 bionemo_esm_page = st.Page(
     page="views/bionemo/bionemo_esm.py",
-    title="[NVIDIA BioNeMo©] ESM2",
+    title="NVIDIA BioNeMo©",
     icon=":material/genetics:"
 )
 
-bionemo_geneformer_page = st.Page(
-    page="views/bionemo/bionemo_geneformer.py",
-    title="[NVIDIA BioNeMo©] Geneformer",
-    icon=":material/genetics:"
-)
+# bionemo_geneformer_page = st.Page(
+#     page="views/bionemo/bionemo_geneformer.py",
+#     title="[NVIDIA BioNeMo©] Geneformer",
+#     icon=":material/genetics:"
+# )
 
 menu_pages = {
     "Workbench": [
         home_page,
         single_cell_page,
         protein_page,
-        small_molecules_page,
+        # small_molecules_page,
         bionemo_esm_page,
-        bionemo_geneformer_page
+        # bionemo_geneformer_page
     ],
     "Management" : [
         monitoring_alerts_page,

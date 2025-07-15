@@ -164,7 +164,7 @@ with protein_structure_prediction_tab:
         c1,c2 = st.columns([3,1], vertical_alignment="bottom")
         with c1:
             view_alphafold_input_sequence = st.text_area("Provide an input sequence to infer the structure:"
-                                        ,"MTYKLILNGKTLKGETTTEAVDAATAEKVFKQYANDNGVDGEWTYDAATKTFTVTE", key="view_alphafold_input_sequence")
+                                        ,"QVQLVESGGGLVQAGGSLRLACIASGRTFHSYVMAWFRQAPGKEREFVAAISWSSTPTYYGESVKGRFTISRDNAKNTVYLQMNRLKPEDTAVYFCAADRGESYYYTRPTEYEFWGQGTQVTVSS", key="view_alphafold_input_sequence")
         
         c1,c2,c3,c4 = st.columns([1,1,1,3], vertical_alignment="bottom")
         with c1:
@@ -185,14 +185,22 @@ with protein_structure_prediction_tab:
 
 with protein_design_tab:
     st.markdown("###### Protein Structure Design with ESMfold, RFDiffusion and ProteinMPNN")
-    c1,c2,c3 = st.columns([3,1,1], vertical_alignment="bottom")
+    c1,c2,c3 = st.columns([2,1,1], vertical_alignment="bottom")
     with c1:
         gen_input_sequence = st.text_area("Provide an input sequence where the region between square braces is to be replaced/in-painted by new designs:"
                                       ,"MAQVKLQESGGGLVQPGGSLRLSCASSVPIFAITVMGWYRQAPGKQRELVAGIKRSGD[TNYADS]VKGRFTISRDDAKNTVFLQMNSLTTEDTAVYYCNAQILSWMGGTDYWGQGTQVTVSSGQAGQ"
-                                      , help="Example: `CASRRSG[FTYPGF]FFEQYF`")
+                                      , height=180, help="Example: `CASRRSG[FTYPGF]FFEQYF`")
+    
     with c2:
-        generate_btn = st.button("Generate")
-        clear_btn = st.button("Clear", key="clear_gen_btn")
+        protein_design_mlflow_experiment = st.text_input("MLflow Experiment:")
+        protein_design_mlflow_run = st.text_input("Run Name:")
+
+        c11,c12, c13 = st.columns([1,1,1])
+        with c11:
+            generate_btn = st.button("Generate")
+
+        with c12:
+            clear_btn = st.button("Clear", key="clear_gen_btn")
 
     mol_viewer = st.container()
     if generate_btn:
@@ -214,7 +222,6 @@ with protein_design_tab:
                     status_generation
                 ))
                 components.html(html, height=700)
-                
             
     if clear_btn:
         mol_viewer.empty()
