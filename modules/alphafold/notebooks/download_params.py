@@ -11,7 +11,3 @@
 # MAGIC   echo "Copying to $MODEL_VOLUME"
 # MAGIC   cp -r /local_disk0/downloads/params $MODEL_VOLUME/datasets/
 # MAGIC fi
-
-# COMMAND ----------
-
-

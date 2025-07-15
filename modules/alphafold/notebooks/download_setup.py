@@ -6,7 +6,7 @@
 
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
-dbutils.widgets.text("model_volume", "alphafold_cache_dir", "Model Volume")
+dbutils.widgets.text("model_volume", "alphafold", "Model Volume")
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
