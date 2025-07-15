@@ -20,8 +20,8 @@ dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Sc
 dbutils.widgets.text("volume", "alphafold", "Volume")
 dbutils.widgets.text("experiment_name", "alphafold2", "Experiment")
 dbutils.widgets.text("run_name", "my_run", "Run Name")
-dbutils.widgets.text("protein_sequence", "MTYKLILNGKTLKGETTTEAVDAATAEKVFKQYANDNGVDGEWTYDAATKTFTVTE", "Protein Sequence")
-dbutils.widgets.text("user_email", "a@b.com", "User Email")
+dbutils.widgets.text("protein_sequence", "QVQLVESGGGLVQAGGSLRLACIASGRTFHSYVMAWFRQAPGKEREFVAAISWSSTPTYYGESVKGRFTISRDNAKNTVYLQMNRLKPEDTAVYFCAADRGESYYYTRPTEYEFWGQGTQVTVSS", "Protein Sequence")
+dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Email")
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
@@ -158,18 +158,25 @@ print(os.environ['AF_FASTA_FILE'])
 # MAGIC
 # MAGIC source /miniconda3/bin/activate
 # MAGIC conda activate alphafold_env
+# MAGIC
+# MAGIC echo ""
+# MAGIC echo "===Running alphafold"
 # MAGIC python ../scripts/run_alphafold_split.py ${FLAGS}
+# MAGIC echo ""
+# MAGIC echo "===Run complete, Copying results"
 # MAGIC
 # MAGIC cp ${AF_FASTA_FILE} "${OUTDIR}/$(basename "$AF_FASTA_FILE" .fasta)/"
 
 # COMMAND ----------
 
+import os
 import mlflow
 from databricks.sdk import WorkspaceClient
 
 def set_mlflow_experiment(experiment_tag, user_email):    
     w = WorkspaceClient()
     mlflow_experiment_base_path = f"Users/{user_email}/mlflow_experiments"
+    print(f"Creating directory /Workspace/{mlflow_experiment_base_path}")
     w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")
     experiment_path = f"/{mlflow_experiment_base_path}/{experiment_tag}"
     mlflow.set_registry_uri("databricks-uc")
@@ -182,6 +189,9 @@ experiment = set_mlflow_experiment(EXPERIMENT_NAME, USER_EMAIL)
 
 with mlflow.start_run(experiment_id=experiment.experiment_id, run_name=RUN_NAME) as run:
   mlflow.log_param("protein_sequence", PROTEIN_SEQUENCE)
-  mlflow.log_metric("mode", mode)
-  mlflow.log_metric("results_directory", OUTDIR)
-  mlflow.log_metric("fasta_file", os.environ['AF_FASTA_FILE'])"
+  mlflow.log_param("mode", mode)
+  mlflow.log_param("results_directory", OUTDIR)
+  mlflow.log_param("fasta_file", os.environ['AF_FASTA_FILE'])
+
+  dbutils.jobs.taskValues.set("run_id", run.info.run_id)
+  

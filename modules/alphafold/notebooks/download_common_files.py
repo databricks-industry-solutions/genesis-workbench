@@ -1,7 +1,7 @@
 # Databricks notebook source
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
-dbutils.widgets.text("model_volume", "alphafold_cache_dir", "Model Volume")
+dbutils.widgets.text("model_volume", "alphafold", "Model Volume")
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
@@ -23,5 +23,5 @@ spark.sql(f"CREATE VOLUME IF NOT EXISTS {CATALOG}.{SCHEMA}.{MODEL_VOLUME}")
 # MAGIC wget -q -P /local_disk0/common/ \
 # MAGIC   https://git.scicore.unibas.ch/schwede/openstructure/-/raw/7102c63615b64735c4941278d92b554ec94415f8/modules/mol/alg/src/stereo_chemical_props.txt
 # MAGIC
-# MAGIC mkdir -p /$MODEL_VOLUME/datasets/common
-# MAGIC cp /local_disk0/common/stereo_chemical_props.txt $MODEL_VOLUME/datasets/common
+# MAGIC mkdir -p $MODEL_VOLUME/datasets/common
+# MAGIC cp /local_disk0/common/stereo_chemical_props.txt $MODEL_VOLUME/datasets/common/
