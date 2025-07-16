@@ -6,8 +6,11 @@ from genesis_workbench.models import (ModelCategory,
                                       deploy_model)
 
 from utils.streamlit_helper import (get_app_context, 
+                                    get_user_info,                                    
                                     display_import_model_uc_dialog,
-                                    display_deploy_model_dialog)
+                                    display_deploy_model_dialog,
+                                    open_mlflow_experiment_window,
+                                    UserInfo)
 
 from utils.molstar_tools import (
                     html_as_iframe,
@@ -61,19 +64,27 @@ def esmfold_btn_fn(protein : str) -> str:
     html =  molstar_html_multibody(pdb)
     return html
 
-def design_tab_fn(sequence: str, progress_callback=None) -> str:
-    
+def design_tab_fn(sequence: str, mlflow_experiment:str, mlflow_run_name:str, progress_callback=None) -> str:
+    user_info = get_user_info()    
     n_rf_diffusion: int = 1
     logging.info("design: make designs")
-    designed_pdbs = make_designs(sequence, progress_callback=progress_callback)
-    logging.info("design: align")
-    print(designed_pdbs)
+    output = make_designs(sequence=sequence, 
+                                 mlflow_experiment_name=mlflow_experiment,
+                                 mlflow_run_name=mlflow_run_name,
+                                 user_email=user_info.user_email,
+                                 n_rfdiffusion_hits=n_rf_diffusion,
+                                 progress_callback=progress_callback)
+    
+    designed_pdbs = {"initial" : output["initial"],
+                     "designed" : output["designed"] }
+    
+    logging.info("design: align")    
     # logging.info([k for k in designed_pdbs.keys()])
     # logging.info([v[:10] for v in designed_pdbs.values()])
     aligned_structures = align_designed_pdbs(designed_pdbs)
     logging.info("design: get html for designs")           
     html =  molstar_html_multibody(aligned_structures)
-    return html
+    return html , output['experiment_id'],  output['run_id']
 
 
 def display_protein_studies_settings(available_models_df,deployed_models_df):
@@ -204,24 +215,42 @@ with protein_design_tab:
 
     mol_viewer = st.container()
     if generate_btn:
-        with st.spinner("Generating.."):
-            with mol_viewer:
-                # status_parsing = st.progress(0, text="Parsing Sequence")
-                # status_esm_init = st.progress(0, text="Generating structure using ESMFold")
-                # status_rfdiffusion = st.progress(0, text="Generating protein using RFdiffusion")
-                # status_proteinmpnn = st.progress(0, text="Predicting sequences using ProteinMPNN")
-                # status_esm_preds = st.progress(0, text="Generating structure for new protein using ESMFold")
-                status_generation = st.progress(0, text="Generating Sequence")
+        is_valid = True
+        if (gen_input_sequence.strip() == "" or 
+            "[" not in gen_input_sequence or
+            "]" not in gen_input_sequence):
+            is_valid = False
+            st.error("Enter a valid sequence with the region to be replaced marked by square braces")
 
-                html =  design_tab_fn(gen_input_sequence, progress_callback=get_progress_callback(
-                    # status_parsing,
-                    # status_esm_init,
-                    # status_rfdiffusion,
-                    # status_proteinmpnn,
-                    # status_esm_preds
-                    status_generation
-                ))
-                components.html(html, height=700)
+        if (protein_design_mlflow_experiment.strip() == ""  or 
+            protein_design_mlflow_run.strip() == ""):
+            is_valid = False
+            st.error("Enter an mlflow experiment and run name")
+
+        if is_valid:
+
+            with st.spinner("Generating.."):
+                with mol_viewer:
+                    # status_parsing = st.progress(0, text="Parsing Sequence")
+                    # status_esm_init = st.progress(0, text="Generating structure using ESMFold")
+                    # status_rfdiffusion = st.progress(0, text="Generating protein using RFdiffusion")
+                    # status_proteinmpnn = st.progress(0, text="Predicting sequences using ProteinMPNN")
+                    # status_esm_preds = st.progress(0, text="Generating structure for new protein using ESMFold")
+                    status_generation = st.progress(0, text="Generating Sequence")
+
+                    html, experiment_id, run_id = design_tab_fn(sequence=gen_input_sequence, 
+                                          mlflow_experiment=protein_design_mlflow_experiment,
+                                          mlflow_run_name=protein_design_mlflow_run,
+                                          progress_callback=get_progress_callback(
+                        # status_parsing,
+                        # status_esm_init,
+                        # status_rfdiffusion,
+                        # status_proteinmpnn,
+                        # status_esm_preds
+                        status_generation
+                    ))
+                    view_mlflow_experiment_btn = st.button("View MLflow Experiment", on_click=lambda: open_mlflow_experiment_window(experiment_id))
+                    components.html(html, height=700)
             
     if clear_btn:
         mol_viewer.empty()
