@@ -179,17 +179,20 @@ with protein_structure_prediction_tab:
         
         c1,c2,c3,c4 = st.columns([1,1,1,3], vertical_alignment="bottom")
         with c1:
-            view_alphafold_run_label = st.text_input("Run label:","",placeholder="my_run_123")
+            view_alphafold_run_experiment = st.text_input("MLflow Experiment:","",placeholder="structure_prediction_alphafold")            
         with c2:
-            view_alphafold_run_experiment = st.text_input("MLflow Experiment:","",placeholder="structure_prediction_alphafold")
+            view_alphafold_run_label = st.text_input("Run Name:","",placeholder="my_run_123")
         with c3:
             view_structure_alphafold_btn = st.button("Start Job", key="view_structure_alphafold_btn")
         
         st.divider()
         st.markdown("###### Search Past Runs:")
         c1,c2,c3 = st.columns([1,1,3], vertical_alignment="bottom")
+
         with c1:
-            search_alphafold_run_label = st.text_input("Run label:","",placeholder="my_run_123", key="search_alphafold_run_label")
+            search_alphafold_run_experiment = st.text_input("MLflow Experiment:","",key="search_alphafold_run_experiment")            
+        with c2:
+            search_alphafold_run_name = st.text_input("Run Name:","", key="search_alphafold_run_name")
         with c3:
             search_alphafold_run_button= st.button("Search", key="search_alphafold_run_button")
 
@@ -203,7 +206,7 @@ with protein_design_tab:
                                       , height=180, help="Example: `CASRRSG[FTYPGF]FFEQYF`")
     
     with c2:
-        protein_design_mlflow_experiment = st.text_input("MLflow Experiment:")
+        protein_design_mlflow_experiment = st.text_input("MLflow Experiment:", value="gwb_protein_design")
         protein_design_mlflow_run = st.text_input("Run Name:")
 
         c11,c12, c13 = st.columns([1,1,1])
