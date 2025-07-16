@@ -76,8 +76,8 @@ class ModelDeploymentInfo:
     is_active: bool 
     deactivated_timestamp : datetime
 
-def set_mlflow_experiment(experiment_tag, user_email):    
-    w = WorkspaceClient()
+def set_mlflow_experiment(experiment_tag, user_email, host=None, token=None): 
+    w = WorkspaceClient() if not (host and token) else WorkspaceClient(host=host, token=token)
     mlflow_experiment_base_path = f"Users/{user_email}/mlflow_experiments"
     w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")
     experiment_path = f"/{mlflow_experiment_base_path}/{experiment_tag}"

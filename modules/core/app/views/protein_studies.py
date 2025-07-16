@@ -25,7 +25,7 @@ import streamlit.components.v1 as components
 
 import logging
 
-st.title(":material/biotech: Protein Structure Prediction")
+st.title(":material/biotech: Protein Studies")
 
 def get_progress_callback(status_generation
         #status_parsing,status_esm_init,status_rfdiffusion,status_proteinmpnn,status_esm_preds
