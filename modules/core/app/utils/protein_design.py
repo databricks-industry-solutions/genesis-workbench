@@ -10,6 +10,8 @@ from Bio.PDB import PDBParser
 from Bio import PDB
 import tempfile
 
+from genesis_workbench.models import set_mlflow_experiment
+
 from .structure_utils import select_and_align
 
 logging.basicConfig(level=logging.INFO)
@@ -29,6 +31,12 @@ def hit_model_endpoint(endpoint_name, inputs) -> str:
             name=endpoint_name,
             inputs=inputs
         )
+
+        print("*****************")
+        print(response)
+        print("*****************")
+
+
         logger.info("Received response from model endpoint")
         return response.predictions
     except Exception as e:
@@ -89,86 +97,102 @@ def parse_sequence(sequence):
     }
 
 @mlflow.trace(span_type="TOOL")
-def make_designs(sequence, n_rfdiffusion_hits=1, progress_callback=lambda x: print(x)):
+def make_designs(sequence, 
+                 mlflow_experiment_name:str,
+                 mlflow_run_name:str,
+                 user_email:str,
+                 n_rfdiffusion_hits=1, 
+                 progress_callback=lambda x: print(x) ):
     #callback arguments: {status_parsing: aa, status_esm_init: bb, status_rfdiffusion: cc, status_proteinmpnn : dd,status_esm_preds:ee}
     #
-    progress_report = {
-        "status_parsing": 0, 
-        "status_esm_init": 0, 
-        "status_rfdiffusion": 0, 
-        "status_proteinmpnn" : 0,
-        "status_esm_preds":0
-    }
 
-    seq_details = parse_sequence(sequence)
+    experiment = set_mlflow_experiment(mlflow_experiment_name, user_email)
+    mlflow_run_id = 0
 
-    logger.debug("======Seq details:")
-    logger.debug(seq_details)
-    logger.debug("======")
-    progress_report["status_parsing"] = 100
-    progress_callback(progress_report)
-    
-    esmfold_initial = hit_esmfold(seq_details['sequence'])
+    with mlflow.start_run(run_name=mlflow_run_name, experiment_id=experiment.experiment_id) as run:
 
-    logger.debug("======esmfold_initial:")
-    logger.debug(esmfold_initial)
-    logger.debug("======")
-    progress_report["status_esm_init"] = 100
-    progress_callback(progress_report)
+        mlflow_run_id = run.info.run_id
+        mlflow.log_param("sequence",sequence)
+        mlflow.log_param("n_rfdiffusion_hits",n_rfdiffusion_hits)
 
+        progress_report = {
+            "status_parsing": 0, 
+            "status_esm_init": 0, 
+            "status_rfdiffusion": 0, 
+            "status_proteinmpnn" : 0,
+            "status_esm_preds":0
+        }
 
-    # take the output and modify so that bewteen start and end idx residues are replaced with Glycine and only CA kept
-    with tempfile.NamedTemporaryFile(suffix='.pdb') as f:
-        with open(f.name, 'w') as fw:
-            fw.write(esmfold_initial)
-        structure = PDBParser().get_structure("esmfold", f.name)
-    
-    modified_pdb_text = extract_chain_reindex(
-        structure, 
-        chain_id='A'
-    )
+        seq_details = parse_sequence(sequence)
+        mlflow.log_param("seq_details", json.dumps(seq_details))
+        progress_report["status_parsing"] = 100
+        progress_callback(progress_report)
 
-    logger.debug("======modified_pdb_text:")
-    logger.debug(modified_pdb_text)
-    logger.debug("======")
+        esmfold_initial = hit_esmfold(seq_details['sequence'])
+        mlflow.log_dict({"predictions":esmfold_initial}, "esmfold_initial_predictions.json")
 
-    # now pass that modified structure to rfdifffusion as string
-    designed_pdb_strs = []
-    for i in range(n_rfdiffusion_hits):
-        designed_pdb = hit_rfdiffusion({
-            'pdb': modified_pdb_text,
-            'start_idx': seq_details['start_idx'],
-            'end_idx': seq_details['end_idx'],
-        })
-        designed_pdb_strs.append(designed_pdb)
+        progress_report["status_esm_init"] = 100
+        progress_callback(progress_report)
+
+        # take the output and modify so that bewteen start and end idx residues are replaced with Glycine and only CA kept
+        with tempfile.NamedTemporaryFile(suffix='.pdb') as f:
+            with open(f.name, 'w') as fw:
+                fw.write(esmfold_initial)
+            structure = PDBParser().get_structure("esmfold", f.name)
         
-        progress_report["status_rfdiffusion"] = int( ( (i+1)/n_rfdiffusion_hits) * 100 )
-        progress_callback(progress_report)
+        modified_pdb_text = extract_chain_reindex(
+            structure, 
+            chain_id='A'
+        )
+
+        mlflow.log_dict({"modified_pdb_text":modified_pdb_text}, "modified_pdb_text.json")
 
 
+        # now pass that modified structure to rfdifffusion as string
+        designed_pdb_strs = []
+        for i in range(n_rfdiffusion_hits):
+            designed_pdb = hit_rfdiffusion({
+                'pdb': modified_pdb_text,
+                'start_idx': seq_details['start_idx'],
+                'end_idx': seq_details['end_idx'],
+            })
+            designed_pdb_strs.append(designed_pdb)
+            
+            progress_report["status_rfdiffusion"] = int( ( (i+1)/n_rfdiffusion_hits) * 100 )
+            progress_callback(progress_report)
 
-    all_seqs = []
-    n=1
-    for pdb_ in designed_pdb_strs:
-        all_seqs.extend(hit_proteinmpnn(pdb_))
 
-        progress_report["status_proteinmpnn"] = int( ( n/ len(designed_pdb_strs) ) * 100 )
-        progress_callback(progress_report)
-        n+=1
-    
-    all_pdbs = []
-    n=1
-    for s in all_seqs:
-        all_pdbs.append(hit_esmfold(s))
+        mlflow.log_dict({"designed_pdb_strs":designed_pdb_strs}, "designed_pdb_strs.json")
 
-        progress_report["status_esm_preds"] = int( ( n/ len(all_seqs) ) * 100 )
-        progress_callback(progress_report)
-        n+=1
+        all_seqs = []
+        n=1
+        for pdb_ in designed_pdb_strs:
+            all_seqs.extend(hit_proteinmpnn(pdb_))
 
-    return {
-        'initial': esmfold_initial,
-        'designed': all_pdbs
-    }
+            progress_report["status_proteinmpnn"] = int( ( n/ len(designed_pdb_strs) ) * 100 )
+            progress_callback(progress_report)
+            n+=1
+        
+        mlflow.log_dict({"protein_mpnn_seqs":all_seqs}, "protein_mpnn_seqs.json")
+
+
+        all_pdbs = []
+        n=1
+        for s in all_seqs:
+            all_pdbs.append(hit_esmfold(s))
+
+            progress_report["status_esm_preds"] = int( ( n/ len(all_seqs) ) * 100 )
+            progress_callback(progress_report)
+            n+=1
+
+        mlflow.log_dict({"all_pdb_results":all_pdbs}, "all_pdb_results.json")
+
+        return {
+            'initial': esmfold_initial,
+            'designed': all_pdbs,
+            'experiment_id' : experiment.experiment_id,
+            'run_id': mlflow_run_id
+        }
 
 def align_designed_pdbs(designed_pdbs):
     with tempfile.TemporaryDirectory() as tmpdir:
