@@ -1,4 +1,3 @@
-# Databricks notebook source
 import os
 import requests
 import json
