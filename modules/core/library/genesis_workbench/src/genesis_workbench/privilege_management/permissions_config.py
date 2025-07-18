@@ -12,30 +12,38 @@ class WorkflowConfig:
 
     name: str
     description: str
-    resources: List[str]
+    submodules: List[str]
     default_admin_privileges: List[str]
     default_user_privileges: List[str]
 
+
+mapvar = {
+    "single_cell": ["settings", "embeddings"],
+    "protein_studies": ["settings", "protein_structure_prediction", "protein_design"],
+    "nvidia_bionemo": ["settings", "esm2_finetune", "esm2_inference"],
+    "monitoring_alerts": ["workflows", "dashboard", "alerts"],
+    "master_settings": ["settings"],
+}
 
 WORKFLOW_TYPES = {
     "protein": WorkflowConfig(
         name="protein",
         description="Protein folding and analysis workflows",
-        resources=["model", "inference_endpoint", "training_job", "output_tables"],
+        submodules=["settings", "protein_structure_prediction", "protein_design"],
         default_admin_privileges=["OWNER", "SELECT", "MODIFY", "EXECUTE"],
         default_user_privileges=["SELECT", "EXECUTE"],
     ),
     "bionemo": WorkflowConfig(
         name="bionemo",
         description="NVIDIA BioNeMo model workflows",
-        resources=["model", "inference_endpoint", "training_job", "output_tables"],
+        submodules=["model", "inference_endpoint", "training_job", "output_tables"],
         default_admin_privileges=["OWNER", "SELECT", "MODIFY", "EXECUTE"],
         default_user_privileges=["SELECT", "EXECUTE"],
     ),
     "single_cell": WorkflowConfig(
         name="single_cell",
         description="Single cell analysis workflows",
-        resources=[
+        submodules=[
             "embeddings",
             "settings",
             "model",
@@ -48,7 +56,7 @@ WORKFLOW_TYPES = {
     "small_molecules": WorkflowConfig(
         name="small_molecules",
         description="Small molecule analysis workflows",
-        resources=["model", "inference_endpoint", "training_job", "output_tables"],
+        submodules=["model", "inference_endpoint", "training_job", "output_tables"],
         default_admin_privileges=["OWNER", "SELECT", "MODIFY", "EXECUTE"],
         default_user_privileges=["SELECT", "EXECUTE"],
     ),

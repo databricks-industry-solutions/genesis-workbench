@@ -1,8 +1,7 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # Genesis Workbench Permissions Setup
-# MAGIC
-# MAGIC This notebook demonstrates how to set up and configure the permissions control system for Genesis Workbench.
+# MAGIC # TODO: set this notebook up to run as a job when the app is first setup, and parameterize catalog and schema names
 # MAGIC
 # MAGIC ## Overview
 # MAGIC
@@ -362,69 +361,8 @@ print(f"User access to single_cell workflow: {user_access}")
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## Step 11: Setup Completion Summary
-# MAGIC
-# MAGIC Summary of what was configured.
-
-# COMMAND ----------
-
-print("🎉 PERMISSIONS SETUP COMPLETE! 🎉")
-print("\n" + "=" * 50)
-print("SUMMARY")
-print("=" * 50)
-print(f"✓ Catalog: {catalog_name}")
-print(f"✓ Schema: {schema_name}")
-print(f"✓ Environment: {environment}")
-print(f"✓ Permissions table created with Delta optimizations")
-print(f"✓ Default permissions configured for {len(WORKFLOW_TYPES)} workflows")
-print(f"✓ {len(grant_statements)} GRANT statements generated")
-print(f"✓ Permission checking functions ready for application integration")
-
-print("\n" + "=" * 50)
-print("NEXT STEPS")
-print("=" * 50)
-print("1. Integrate permission checking into your Databricks application")
-print("2. Set up monitoring alerts for permission changes")
-print("3. Configure group membership in your identity provider")
-print("4. Test with real users before production deployment")
-print("5. Set up automated backups of the permissions table")
-
-print("\n" + "=" * 50)
-print("USAGE IN YOUR APPLICATION")
-print("=" * 50)
-print("from permissions_manager import check_user_permission")
-print("")
-print("# Check if user can access a workflow")
-print("has_access = check_user_permission(")
-print("    workflow_type='protein',")
-print("    resource='model',")
-print("    user_groups=['genesis-users'],")
-print("    required_privilege='SELECT'")
-print(")")
-print("")
-print("# Use has_access to show/hide UI elements")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Cleanup (Optional)
-# MAGIC
-# MAGIC Uncomment the cell below to clean up the permissions table if needed.
-
-# COMMAND ----------
-
 # # WARNING: This will delete all permissions data!
 # # Uncomment only if you want to start over
 #
 # # spark.sql(f"DROP TABLE IF EXISTS {catalog_name}.{schema_name}.permissions_control")
 # # print("⚠️  Permissions table dropped!")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Resources
-# MAGIC
-# MAGIC - [Unity Catalog Permissions Documentation](https://docs.databricks.com/security/unity-catalog/manage-privileges/index.html)
-# MAGIC - [Delta Table Optimizations](https://docs.databricks.com/delta/optimizations/index.html)
-# MAGIC - [Databricks Groups and Service Principals](https://docs.databricks.com/administration-guide/users-groups/index.html)
