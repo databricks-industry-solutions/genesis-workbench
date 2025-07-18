@@ -28,9 +28,14 @@ def get_user_info():
         # Display user information
         user_display_name = current_user.display_name
 
+
+    user_email = headers.get("X-Forwarded-Email")
+    if not user_email or user_email.strip() == "":
+        user_email = os.environ["USER_EMAIL"]
+
     return UserInfo(
         user_name=user_name,
-        user_email=headers.get("X-Forwarded-Email"),
+        user_email = user_email,
         user_id=headers.get("X-Forwarded-User"),
         user_access_token = headers.get("X-Forwarded-Access-Token"),
         user_display_name = user_display_name if user_display_name != "" else user_name
@@ -53,11 +58,27 @@ def get_app_context() -> AppContext:
         core_schema_name=ctx_items["core_schema_name"]
     )
 
+    print(f"App context: {appContext}")
+
     return appContext
 
 def open_run_window(job_id,run_id):
     host_name = os.getenv("DATABRICKS_HOSTNAME")    
     url = f"{host_name}/jobs/{job_id}/runs/{run_id}"
+    if not url.startswith("https://"):
+        url = "https://" + url
+        
+    print(url)
+    open_script= """
+        <script type="text/javascript">
+            window.open('%s', '_blank').focus();
+        </script>
+    """ % (url)
+    html(open_script)
+
+def open_mlflow_experiment_window(exeriment_id):
+    host_name = os.getenv("DATABRICKS_HOSTNAME")    
+    url = f"{host_name}/ml/experiments/{exeriment_id}/runs"
     if not url.startswith("https://"):
         url = "https://" + url
         
