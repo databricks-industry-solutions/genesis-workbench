@@ -116,7 +116,9 @@ def get_deployed_models(model_category : ModelCategory, app_context:AppContext)-
                 models.model_id = model_deployments.model_id \
             WHERE \
                 model_category = '{str(model_category)}' and model_deployments.is_active=true \
-            ORDER BY model_id DESC "
+            ORDER BY deployment_id DESC "
+    
+    print(query)
     
     result_df = execute_select_query(query)
     return result_df
