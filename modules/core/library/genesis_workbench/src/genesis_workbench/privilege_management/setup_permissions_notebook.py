@@ -141,8 +141,6 @@ display(
 # Set up default permissions for all workflows
 setup_default_permissions(catalog_name=catalog_name, schema_name=schema_name)
 
-print("✓ Default permissions configured!")
-
 # COMMAND ----------
 
 # MAGIC %md
