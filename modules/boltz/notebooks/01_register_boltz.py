@@ -7,7 +7,6 @@
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
 dbutils.widgets.text("model_name", "boltz", "Model Name")
-dbutils.widgets.text("model_name", "boltz", "Model Name")
 dbutils.widgets.text("experiment_name", "dbx_genesis_workbench_modules", "Experiment Name")
 dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
 dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Id/Email")
@@ -110,13 +109,6 @@ if not os.path.exists(WEIGHTS_VOLUME_LOCATION):
 if not os.path.exists(BINARIES_VOLUME_LOCATION):
   os.makedirs(BINARIES_VOLUME_LOCATION)
   
-
-if not os.path.exists(WEIGHTS_VOLUME_LOCATION):
-  os.makedirs(WEIGHTS_VOLUME_LOCATION)
-
-if not os.path.exists(BINARIES_VOLUME_LOCATION):
-  os.makedirs(BINARIES_VOLUME_LOCATION)
-  
 download(Path(WEIGHTS_VOLUME_LOCATION))
 
 # COMMAND ----------
@@ -159,8 +151,6 @@ import yaml
 
 mlflow.autolog(disable=True)
 
-mlflow.autolog(disable=True)
-
 # COMMAND ----------
 
 def get_model_config():
@@ -177,10 +167,6 @@ model_config
 
 # COMMAND ----------
 
-model_config
-
-# COMMAND ----------
-
 # MAGIC %md
 # MAGIC ### Initialize the model
 
@@ -189,7 +175,6 @@ model_config
 model = Boltz()
 context = mlflow.pyfunc.PythonModelContext(
     artifacts = {
-        "CACHE_DIR": f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}"
         "CACHE_DIR": f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}"
     },
     model_config = model_config
@@ -329,8 +314,6 @@ with mlflow.start_run(run_name=f"{MODEL_NAME}", experiment_id=experiment.experim
         artifact_path="model",
         python_model=Boltz(),
         artifacts={
-            "CACHE_DIR": f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}",
-            "repo_path": "/local_disk0/dbboltz"
             "CACHE_DIR": f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}",
             "repo_path": "/local_disk0/dbboltz"
         },
