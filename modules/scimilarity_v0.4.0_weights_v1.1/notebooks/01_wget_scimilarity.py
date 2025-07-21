@@ -57,6 +57,7 @@ print("sampledata_path :", sampledata_path)
 ## using serverless compute for this
 
 ## REF https://genentech.github.io/scimilarity/install.html
+# https://genentech.github.io/scimilarity/news.html#version-0-4-0-may-05-2025
 
 # COMMAND ----------
 
@@ -65,6 +66,9 @@ print("sampledata_path :", sampledata_path)
 
 # Downloading the pretrained models
 # You can download the following pretrained models for use with SCimilarity from Zenodo: https://zenodo.org/records/10685499
+# Version 1.1
+# 10.5281/zenodo.10685499
+# Feb 20, 2024
 
 # For Sample Query data. We will use Adams et al., 2020 healthy and IPF lung scRNA-seq data. Download tutorial data.
 # https://zenodo.org/records/13685881
