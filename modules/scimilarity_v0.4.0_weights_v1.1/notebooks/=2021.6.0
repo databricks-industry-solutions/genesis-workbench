@@ -1,9 +1,0 @@
-Using pip 22.3.1 from /local_disk0/.ephemeral_nfs/envs/pythonEnv-7f2ef4c5-e28f-43b7-a205-5e9523788b56/lib/python3.10/site-packages/pip (python 3.10)
-Collecting tbb
-  Downloading tbb-2022.2.0-py2.py3-none-manylinux_2_28_x86_64.whl (6.4 MB)
-     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.4/6.4 MB 32.6 MB/s eta 0:00:00
-Collecting tcmlib==1.*
-  Downloading tcmlib-1.4.0-py2.py3-none-manylinux_2_28_x86_64.whl (2.7 MB)
-     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.7/2.7 MB 60.4 MB/s eta 0:00:00
-Installing collected packages: tcmlib, tbb
-Successfully installed tbb-2022.2.0 tcmlib-1.4.0
