@@ -34,7 +34,7 @@
 # DBTITLE 1,Requirements & noted version
 # scimilarity==0.4.0
 # typing_extensions>=4.14.0 #>=4.0.0 
-## scanpy==1.11.1
+## scanpy==1.11.2
 ## numcodecs==0.13.1
 ## zarr>=2.6.1
 ## numpy==1.26.4
@@ -108,9 +108,12 @@
 requirements = [
     "scimilarity==0.4.0",
     "typing_extensions>=4.14.0",
+    "scanpy==1.11.2", #
+    "numcodecs==0.13.1", #
     "numpy==1.26.4",
     "pandas==1.5.3",
     "mlflow==2.22.0",
+    "cloudpickle==2.0.0", #
     "tbb>=2021.6.0",
     "uv"
 ]
@@ -557,7 +560,7 @@ import mlflow
 from mlflow.tracking.client import MlflowClient
 from typing import Optional, List
 
-def delete_model_versions(model_name, delete_all=False, specific_versions:Optional[List[int]]=None):
+def delete_model_versions(CATALOG, DB_SCHEMA, model_name, delete_all=False, specific_versions:Optional[List[int]]=None):
     """
     Delete all versions or specific versions of a registered model.
 
@@ -578,6 +581,11 @@ def delete_model_versions(model_name, delete_all=False, specific_versions:Option
         # Delete all versions of the model
         for model_version_info in model_version_infos:
             client.delete_model_version(name=full_model_name, version=model_version_info.version)
+        
+        # Delete the registered model
+        client.delete_registered_model(name=full_model_name)
+        print(f"Deleted model '{full_model_name}' and all its versions.")
+
     else:
         if specific_versions is None:
             raise ValueError("specific_versions must be provided if delete_all is False")
@@ -585,14 +593,12 @@ def delete_model_versions(model_name, delete_all=False, specific_versions:Option
         for version in specific_versions:
             client.delete_model_version(name=full_model_name, version=version)
 
-    # Delete the registered model
-    client.delete_registered_model(name=full_model_name)
-
-    print(f"Deleted model '{full_model_name}' and all its versions.")
+        print(f"Deleted model '{full_model_name}' and version {specific_versions}.")
 
 # Example usage
 # delete_model_versions("SCimilarity_GeneOrder", delete_all=True)
-# delete_model_versions("SCimilarity_GeneOrder", delete_all=False, specific_versions=["3", "4", "5"])
+# delete_model_versions("SCimilarity_GeneOrder", delete_all=False, specific_versions=["3", "4", "5"])  
+
 
 # COMMAND ----------
 

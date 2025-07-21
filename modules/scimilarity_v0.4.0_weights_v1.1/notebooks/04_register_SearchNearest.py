@@ -303,6 +303,7 @@ with mlflow.start_run() as run:
 # COMMAND ----------
 
 # run_id #= "<include to save for debugging>"
+# run_id = "ccf483b373d643818dad1966a01febfe"
 
 # COMMAND ----------
 
@@ -424,16 +425,20 @@ mlflow.register_model(model_uri=model_uri,
 # COMMAND ----------
 
 # DBTITLE 1,format model_input + params for UI inferencing
-# dataset = model_input
+dataset = model_input
 
-# ds_dict = {'dataframe_split': dataset.to_dict(orient='split')} # includes "index":[0]
-# if params:
-#     ds_dict['params'] = params
+ds_dict = {'dataframe_split': dataset.to_dict(orient='split')} # includes "index":[0]
+
+ds_dict['dataframe_split'].pop('index', None)  # Remove the index key if it exists
+
+if params:
+    ds_dict['params'] = params
 
 # COMMAND ----------
 
 # DBTITLE 1,example input for UI inferencing
-# json.dumps(ds_dict).replace("'",'"')
+serving_input = json.dumps(ds_dict).replace("'",'"')
+serving_input
 
 # COMMAND ----------
 
@@ -442,47 +447,15 @@ mlflow.register_model(model_uri=model_uri,
 
 # COMMAND ----------
 
-# DBTITLE 1,convert serving input
-serving_input_example = json.loads(mlflow.models.convert_input_example_to_serving_input((model_input, params={"k": 5}) ) )
-
-serving_input_example
-
-# COMMAND ----------
-
-# DBTITLE 1,validate_serving_input by run_id
-## Validate the model input with parameters
-# model_uri_byrunid = f'runs:/{run_id}/Search_Nearest' #f"runs:/{run_id}/{MODEL_TYPE}"
-# mlflow.models.validate_serving_input(model_uri_byrunid, json.dumps(serving_input_example).replace("'",'"'))
-
-# COMMAND ----------
-
 # DBTITLE 1,get model_uri
-# import mlflow
+# # import mlflow
 
-## Assumes model registered to Unity Catalog
+# ## Assumes model registered to Unity Catalog
 
-# Sift for model latest version 
-model_versions = mlflow.search_model_versions(filter_string="name = 'genesis_workbench.dev_mmt_core_test.SCimilarity_Search_Nearest'")
-model_version = model_versions[0].version
-print(model_version)
+# # Sift for model latest version 
+# model_versions = mlflow.search_model_versions(filter_string="name = 'genesis_workbench.dev_mmt_core_test.SCimilarity_Search_Nearest'")
+# model_version = model_versions[0].version
+# print(model_version)
 
-model_uri = f"models:/genesis_workbench.dev_mmt_core_test.SCimilarity_Search_Nearest/{model_version}"
-print(model_uri)
-
-# COMMAND ----------
-
-# DBTITLE 1,validate_serving_input
-mlflow.models.validate_serving_input(
-    model_uri, 
-    serving_input_example
-)
-
-# COMMAND ----------
-
-# DBTITLE 1,formatting with ""
-# json.dumps(serving_input_example).replace("'",'"')
-
-# COMMAND ----------
-
-# DBTITLE 1,format for UI testing
-# {"dataframe_split": {"columns": ["embedding"], "data": [[[0.15414905548095703, 0.008094907738268375, 0.007071635220199823, 0.11320031434297562, -0.026421433314681053, -0.017847076058387756, -0.050769757479429245, 0.0011923464480787516, 0.07798487693071365, -0.0037108196411281824, -0.17938534915447235, -0.00048449428868480027, 0.008351461961865425, 0.00436738133430481, 0.004908162634819746, -0.04016988351941109, -0.011811239644885063, 0.01156391017138958, -0.08166099339723587, 0.0016855493886396289, 0.015247324481606483, 0.01507434993982315, -0.028049129992723465, -0.005492009688168764, -0.12355209141969681, -0.0036010832991451025, 0.047126781195402145, 0.006535788998007774, -0.1449105143547058, -0.011237618513405323, 0.0017997613176703453, 0.004101550206542015, -0.009247836656868458, 0.013190013356506824, 0.04192541167140007, 0.2575031518936157, -0.0009331763722002506, -0.3935891389846802, -0.001351714483462274, 0.005353549961000681, 0.08716312795877457, -0.0016448496608063579, -0.08964385092258453, -0.0020443156827241182, 0.04125256836414337, 0.019619246944785118, -0.07807464152574539, -0.0030157300643622875, -0.03305833414196968, -0.012753852643072605, 0.000960676814429462, 0.0073832436464726925, -0.008370054885745049, -0.005742344539612532, 0.008405598811805248, 0.008876177482306957, 0.021073365584015846, 0.006765063386410475, 0.005318768788129091, 0.00022301881108433008, 0.484632283449173, 0.005790474358946085, -0.07760076224803925, 0.006920183077454567, 0.008430126123130322, 0.0013455881271511316, 0.007747098337858915, 0.4135277569293976, -0.0064574358984827995, -0.0014662531903013587, 0.0041463314555585384, -0.0016529171261936426, -0.011401004157960415, 0.003924323245882988, 0.0028761629946529865, 0.030747858807444572, 0.06868356466293335, 0.013429392129182816, 0.11059071123600006, -0.003301289165392518, 0.007821581326425076, -0.012643265537917614, 0.0006877025007270277, -0.018326250836253166, 0.017164602875709534, 0.00879678688943386, -0.29134342074394226, 0.03959014266729355, 0.011093120090663433, 0.0011855672346428037, 0.003105160780251026, 0.17362508177757263, 0.001208254136145115, -0.0011200892040506005, -0.012471795082092285, -0.012863625772297382, 0.005789272021502256, -0.030835509300231934, -0.013879021629691124, -0.010378285311162472, 0.06195586547255516, -0.11314791440963745, -0.0007368993246927857, -0.03829241916537285, -0.000894454657100141, 0.09568962454795837, -0.07871696352958679, 0.007398643530905247, -0.0059407963417470455, 0.011188282631337643, 0.0020390390418469906, -0.15420489013195038, 0.00025915916194207966, 0.011638288386166096, -0.001341450959444046, 0.005878814030438662, 0.002971096197143197, 0.002188683021813631, -0.0017645112238824368, 0.007092277053743601, -0.014363318681716919, 0.007801887113600969, -0.012165924534201622, 0.001045985845848918, 0.013607310131192207, -0.001561938552185893, 0.016956763342022896, -0.12390629202127457]]]}, "params": {"k": 5}}
+# model_uri = f"models:/genesis_workbench.dev_mmt_core_test.SCimilarity_Search_Nearest/{model_version}"
+# print(model_uri)

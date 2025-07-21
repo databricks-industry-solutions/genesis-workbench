@@ -1,8 +1,6 @@
 # Databricks notebook source
 # DBTITLE 1,gwb_paramsNvariables
-dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
-# dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
-# dbutils.widgets.text("schema", "mmt_test", "Schema") 
+dbutils.widgets.text("catalog", "genesis_workbench", "Catalog") 
 dbutils.widgets.text("schema", "dev_mmt_core_test", "Schema") #dev_mmt_core_test# gets overwritten during DAB deployment 
 dbutils.widgets.text("user_email", "may.merkletan@databricks.com", "User Id/Email")
 dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
@@ -97,7 +95,7 @@ import_model_from_uc(app_context,user_email=user_email,
                     model_uc_version=model_version,
                     model_name="SCimilarity_Gene_Order",
                     model_display_name="SCimilarity:GeneOrder",
-                    model_source_version="v0.4.0",
+                    model_source_version="v0.4.0_weights_v1.1",
                     model_description_url="https://genentech.github.io/scimilarity/index.html")
 
 # COMMAND ----------
@@ -119,7 +117,7 @@ import_model_from_uc(app_context,user_email=user_email,
                     model_uc_version=model_version,
                     model_name="SCimilarity_Get_Embedding",
                     model_display_name="SCimilarity:GetEmbedding",
-                    model_source_version="v0.4.0",
+                    model_source_version="v0.4.0_weights_v1.1",
                     model_description_url="https://genentech.github.io/scimilarity/index.html")
 
 # COMMAND ----------
@@ -141,5 +139,5 @@ import_model_from_uc(app_context,user_email=user_email,
                     model_uc_version=model_version,
                     model_name="SCimilarity_Search_Nearest",
                     model_display_name="SCimilarity:SearchNearest",
-                    model_source_version="v0.4.0",
+                    model_source_version="v0.4.0_weights_v1.1",
                     model_description_url="https://genentech.github.io/scimilarity/index.html")

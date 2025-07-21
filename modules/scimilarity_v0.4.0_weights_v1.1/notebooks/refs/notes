@@ -1,0 +1,75 @@
+#########################################################################
+## FIRST DEPLOY CORE to set up Catalog Schema for User ??? NOT ABLE TO REDEPLOY...
+### core
+
+# ./deploy.sh core dev --var="dev_user_prefix=mmt,core_catalog_name=genesis_workbench,core_schema_name=dev_mmt_core_gwb,bionemo_docker_token=<bionemo_docker_token>"
+
+# ./destroy.sh core dev --var="dev_user_prefix=mmt,core_catalog_name=genesis_workbench,core_schema_name=dev_mmt_core_gwb,bionemo_docker_token=<bionemo_docker_token>"
+
+
+[1] Deploy core module to set up Catalog Schema and relevant tables/files/libraries for User & deploy App module
+@folder_level: GENESIS_WORKBENCH/ if you go into subfolder, e.g. modules/core/ -- you have to run the deploy.sh from there with updates to cmd
+e.g. ./deploy.sh core dev --var="dev_user_prefix=mmt,core_catalog_name=genesis_workbench,core_schema_name=dev_mmt_core_test,bionemo_docker_token=<bionemo_docker_token>"
+
+[2] When App is ready, make sure to grant SP associated with App access to the Catalog Schema 
+
+[3] Deploy Model Module e.g. scimilarity, which will use the Catalog Schema created in step 1
+e.g ./deploy.sh scimilarity dev --var="dev_user_prefix=mmt,core_catalog_name=genesis_workbench,core_schema_name=dev_mmt_core_test" 
+
+[4] Deploy other modules as needed, e.g. data, etc.
+
+#########################################################################
+[terraform assumes you don't already have the volume for module created...] 
+
+▶️ Deploying bundle
+
+Uploading bundle files to /Users/may.merkletan@databricks.com/.bundle/genesis_workbench_scimilarity/dev/files...
+Deploying resources...
+Updating deployment state...
+Deployment complete!
+Error: terraform apply: exit status 1
+
+Error: cannot create volume: Volume 'genesis_workbench.dev_mmt_core_test.scimilarity' already exists
+
+  with databricks_volume.scimilarity,
+  on bundle.tf.json line 224, in resource.databricks_volume.scimilarity:
+ 224:       }
+
+#########################################################################
+## Deploying Model-related Modules 
+### scimilarity
+
+# ./deploy.sh scimilarity dev --var="dev_user_prefix=mmt,core_catalog_name=genesis_workbench,core_schema_name=dev_mmt_core_test"
+
+# ./destroy.sh scimilarity dev --var="dev_user_prefix=mmt,core_catalog_name=genesis_workbench,core_schema_name=dev_mmt_core_test"
+
+(gwb) may.merkletan@MTXRM6N94W genesis-workbench % ./deploy.sh {MODULE NAME: scimilarity} dev --var="dev_user_prefix={USER_INITIALS},core_catalog_name=genesis_workbench,core_schema_name={THIS WILL OVERRIDE widgetvalue}}"      
+(gwb) may.merkletan@MTXRM6N94W genesis-workbench % ./deploy.sh scimilarity dev --var="dev_user_prefix=mmt,core_catalog_name=genesis_workbench,core_schema_name=mmt_test"   
+
+
+
+#########################################################################
+## Serving Endpoint NOTES
+
+genesis_workbench.dev_mmt_core_test.scimilarity_search_nearest
+Version 1
+scimilarity_search_nearest-1
+Ready
+(Scaled to zero)
+GPU Large (A100), Small 0-4 concurrency (0-73.4 DBU) 
+
+genesis_workbench.dev_mmt_core_test.scimilarity_get_embedding
+Version 1
+scimilarity_get_embedding-1
+Ready
+(Scaled to zero)
+GPU Large (A100), Small 0-4 concurrency (0-73.4 DBU)
+
+genesis_workbench.dev_mmt_core_test.scimilarity_gene_order
+Version 1
+scimilarity_gene_order-1
+Ready
+(Scaled to zero)
+CPU, Small 0-4 concurrency (0-4 DBU)
+
+#########################################################################
