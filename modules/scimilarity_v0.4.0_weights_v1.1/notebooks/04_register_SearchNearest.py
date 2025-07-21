@@ -303,6 +303,7 @@ with mlflow.start_run() as run:
 # COMMAND ----------
 
 # run_id #= "<include to save for debugging>"
+# run_id = "ccf483b373d643818dad1966a01febfe"
 
 # COMMAND ----------
 
@@ -424,16 +425,20 @@ mlflow.register_model(model_uri=model_uri,
 # COMMAND ----------
 
 # DBTITLE 1,format model_input + params for UI inferencing
-# dataset = model_input
+dataset = model_input
 
-# ds_dict = {'dataframe_split': dataset.to_dict(orient='split')} # includes "index":[0]
-# if params:
-#     ds_dict['params'] = params
+ds_dict = {'dataframe_split': dataset.to_dict(orient='split')} # includes "index":[0]
+
+ds_dict['dataframe_split'].pop('index', None)  # Remove the index key if it exists
+
+if params:
+    ds_dict['params'] = params
 
 # COMMAND ----------
 
 # DBTITLE 1,example input for UI inferencing
-# json.dumps(ds_dict).replace("'",'"')
+serving_input = json.dumps(ds_dict).replace("'",'"')
+serving_input
 
 # COMMAND ----------
 
@@ -442,40 +447,26 @@ mlflow.register_model(model_uri=model_uri,
 
 # COMMAND ----------
 
-# DBTITLE 1,convert serving input
-serving_input_example = json.loads(mlflow.models.convert_input_example_to_serving_input((model_input, params={"k": 5}) ) )
-
-serving_input_example
-
-# COMMAND ----------
-
-# DBTITLE 1,validate_serving_input by run_id
-## Validate the model input with parameters
-# model_uri_byrunid = f'runs:/{run_id}/Search_Nearest' #f"runs:/{run_id}/{MODEL_TYPE}"
-# mlflow.models.validate_serving_input(model_uri_byrunid, json.dumps(serving_input_example).replace("'",'"'))
-
-# COMMAND ----------
-
 # DBTITLE 1,get model_uri
-# import mlflow
+# # import mlflow
 
-## Assumes model registered to Unity Catalog
+# ## Assumes model registered to Unity Catalog
 
-# Sift for model latest version 
-model_versions = mlflow.search_model_versions(filter_string="name = 'genesis_workbench.dev_mmt_core_test.SCimilarity_Search_Nearest'")
-model_version = model_versions[0].version
-print(model_version)
+# # Sift for model latest version 
+# model_versions = mlflow.search_model_versions(filter_string="name = 'genesis_workbench.dev_mmt_core_test.SCimilarity_Search_Nearest'")
+# model_version = model_versions[0].version
+# print(model_version)
 
-model_uri = f"models:/genesis_workbench.dev_mmt_core_test.SCimilarity_Search_Nearest/{model_version}"
-print(model_uri)
+# model_uri = f"models:/genesis_workbench.dev_mmt_core_test.SCimilarity_Search_Nearest/{model_version}"
+# print(model_uri)
 
 # COMMAND ----------
 
 # DBTITLE 1,validate_serving_input
-mlflow.models.validate_serving_input(
-    model_uri, 
-    serving_input_example
-)
+# mlflow.models.validate_serving_input(
+#     model_uri, 
+#     serving_input
+# )
 
 # COMMAND ----------
 
