@@ -34,7 +34,7 @@
 # DBTITLE 1,Requirements & noted version
 # scimilarity==0.4.0
 # typing_extensions>=4.14.0 #>=4.0.0 
-## scanpy==1.11.1
+## scanpy==1.11.2
 ## numcodecs==0.13.1
 ## zarr>=2.6.1
 ## numpy==1.26.4
@@ -106,13 +106,6 @@
 
 # Define the list of requirements
 requirements = [
-    # "scimilarity==0.4.0",
-    # "typing_extensions>=4.14.0",
-    # "numpy==1.26.4",
-    # "pandas==1.5.3",
-    # "mlflow==2.22.0",
-    # "tbb>=2021.6.0",
-    # "uv"
     "scimilarity==0.4.0",
     "typing_extensions>=4.14.0",
     "scanpy==1.11.2", #
