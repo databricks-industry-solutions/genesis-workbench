@@ -97,7 +97,7 @@ import_model_from_uc(app_context,user_email=user_email,
                     model_uc_version=model_version,
                     model_name="SCimilarity_Gene_Order",
                     model_display_name="SCimilarity:GeneOrder",
-                    model_source_version="v0.4.0",
+                    model_source_version="v0.4.0_weights_v1.1",
                     model_description_url="https://genentech.github.io/scimilarity/index.html")
 
 # COMMAND ----------
@@ -119,7 +119,7 @@ import_model_from_uc(app_context,user_email=user_email,
                     model_uc_version=model_version,
                     model_name="SCimilarity_Get_Embedding",
                     model_display_name="SCimilarity:GetEmbedding",
-                    model_source_version="v0.4.0",
+                    model_source_version="v0.4.0_weights_v1.1",
                     model_description_url="https://genentech.github.io/scimilarity/index.html")
 
 # COMMAND ----------
@@ -141,5 +141,5 @@ import_model_from_uc(app_context,user_email=user_email,
                     model_uc_version=model_version,
                     model_name="SCimilarity_Search_Nearest",
                     model_display_name="SCimilarity:SearchNearest",
-                    model_source_version="v0.4.0",
+                    model_source_version="v0.4.0_weights_v1.1",
                     model_description_url="https://genentech.github.io/scimilarity/index.html")
