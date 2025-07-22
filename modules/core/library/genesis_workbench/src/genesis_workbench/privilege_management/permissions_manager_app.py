@@ -1,33 +1,37 @@
 """
-App-Compatible Permissions Manager Module for Genesis Workbench
-Provides functions for managing permissions control in Unity Catalog from Databricks Apps.
-Uses serverless SQL warehouse instead of Spark for app compatibility.
+App Permissions Manager for Genesis Workbench
+Manages module and submodule access permissions for the Databricks app.
+Uses SQL warehouse for database operations and Databricks Identity API for user groups.
 """
 
 import logging
 import re
-from typing import List, Dict, Optional, Union, Any
+import requests
+from typing import List, Dict, Optional, Set
 from databricks import sql
 import os
 from datetime import datetime
 from permissions_config import (
-    WORKFLOW_TYPES,
+    MODULES,
     USER_TYPES,
-    AVAILABLE_PRIVILEGES,
+    PERMISSION_TYPES,
+    ACCESS_LEVELS,
     DEFAULT_GROUPS,
     DEFAULT_CATALOG,
     DEFAULT_SCHEMA,
     PERMISSIONS_TABLE_NAME,
     PERMISSIONS_TABLE_COMMENT,
     DELTA_TABLE_PROPERTIES,
+    DATABRICKS_API_VERSION,
+    DATABRICKS_SCIM_API_VERSION,
 )
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class PermissionsManagerApp:
-    """App-compatible permissions manager using SQL warehouse connection."""
+class AppPermissionsManager:
+    """App-specific permissions manager for Genesis Workbench modules and submodules."""
 
     def __init__(
         self,
@@ -39,7 +43,7 @@ class PermissionsManagerApp:
         table_name: str = PERMISSIONS_TABLE_NAME,
     ):
         """
-        Initialize the permissions manager with SQL warehouse connection.
+        Initialize the app permissions manager.
 
         Args:
             server_hostname: Databricks workspace hostname
@@ -66,34 +70,15 @@ class PermissionsManagerApp:
             )
 
     def _sanitize_sql_identifier(self, identifier: str) -> str:
-        """
-        Sanitize SQL identifiers to prevent injection attacks.
-
-        Args:
-            identifier: The identifier to sanitize
-
-        Returns:
-            Sanitized identifier
-        """
-        # Allow only alphanumeric characters, underscores, and dots
+        """Sanitize SQL identifiers to prevent injection attacks."""
         if not re.match(r"^[a-zA-Z0-9_\.]+$", identifier):
             raise ValueError(f"Invalid SQL identifier: {identifier}")
         return identifier
 
     def _sanitize_sql_string(self, value: str) -> str:
-        """
-        Sanitize SQL string values to prevent injection attacks.
-
-        Args:
-            value: The string value to sanitize
-
-        Returns:
-            Sanitized string value
-        """
-        # Escape single quotes and validate basic patterns
+        """Sanitize SQL string values to prevent injection attacks."""
         if "'" in value:
             value = value.replace("'", "''")
-        # Additional validation for dangerous patterns
         dangerous_patterns = [
             r";\s*(drop|delete|update|insert)",
             r"union\s+select",
@@ -110,20 +95,10 @@ class PermissionsManagerApp:
     def _execute_sql(
         self,
         query: str,
-        parameters: Optional[Dict[str, Any]] = None,
+        parameters: Optional[Dict] = None,
         fetch_results: bool = True,
-    ) -> List[Dict[str, Any]]:
-        """
-        Execute SQL query with proper error handling and connection management.
-
-        Args:
-            query: SQL query to execute
-            parameters: Optional query parameters
-            fetch_results: Whether to fetch and return results
-
-        Returns:
-            Query results as list of dictionaries
-        """
+    ) -> List[Dict]:
+        """Execute SQL query with proper error handling."""
         connection = None
         cursor = None
 
@@ -167,36 +142,69 @@ class PermissionsManagerApp:
             if connection:
                 connection.close()
 
-    def create_permissions_table(
-        self,
-        catalog_name: Optional[str] = None,
-        schema_name: Optional[str] = None,
-        table_name: Optional[str] = None,
-    ) -> None:
+    def get_current_user_groups(self) -> List[str]:
         """
-        Create the permissions control table with optimal Delta table properties.
+        Fetch the current user's groups using Databricks Identity Management API.
 
-        Args:
-            catalog_name: Name of the Unity Catalog
-            schema_name: Name of the schema
-            table_name: Name of the permissions table
+        Returns:
+            List of group names the current user belongs to
         """
-        catalog = self._sanitize_sql_identifier(catalog_name or self.catalog_name)
-        schema = self._sanitize_sql_identifier(schema_name or self.schema_name)
-        table = self._sanitize_sql_identifier(table_name or self.table_name)
+        try:
+            # Get current user info first
+            user_url = f"https://{self.server_hostname}/api/2.0/preview/scim/v2/Me"
+            headers = {
+                "Authorization": f"Bearer {self.access_token}",
+                "Content-Type": "application/json",
+            }
 
-        # Build table properties string
+            response = requests.get(user_url, headers=headers)
+            response.raise_for_status()
+            user_data = response.json()
+
+            user_id = user_data.get("id")
+            if not user_id:
+                logger.warning("Could not get current user ID")
+                return []
+
+            # Get user's groups
+            groups_url = f"https://{self.server_hostname}/api/2.0/preview/scim/v2/Users/{user_id}"
+            response = requests.get(groups_url, headers=headers)
+            response.raise_for_status()
+            user_details = response.json()
+
+            groups = []
+            if "groups" in user_details:
+                for group in user_details["groups"]:
+                    groups.append(group.get("display", ""))
+
+            logger.info(f"Found {len(groups)} groups for current user")
+            return groups
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching user groups from API: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error fetching user groups: {e}")
+            return []
+
+    def create_permissions_table(self) -> None:
+        """Create the app permissions table with access level support."""
+        catalog = self._sanitize_sql_identifier(self.catalog_name)
+        schema = self._sanitize_sql_identifier(self.schema_name)
+        table = self._sanitize_sql_identifier(self.table_name)
+
         table_props = ",\n  ".join(
             [f"'{k}' = '{v}'" for k, v in DELTA_TABLE_PROPERTIES.items()]
         )
 
         create_table_sql = f"""
         CREATE OR REPLACE TABLE {catalog}.{schema}.{table} (
-            workflow_type STRING NOT NULL COMMENT 'Workflow type (protein, bionemo, single_cell, small_molecules)',
-            resource STRING NOT NULL COMMENT 'Specific resource name within the workflow',
-            user_type STRING NOT NULL COMMENT 'User type (admin, user, service_principal)',
-            privilege STRING NOT NULL COMMENT 'Granted privilege level',
-            groups ARRAY<STRING> NOT NULL COMMENT 'Associated Databricks groups',
+            module_name STRING NOT NULL COMMENT 'Module name (e.g., protein_studies, nvidia_bionemo)',
+            submodule_name STRING COMMENT 'Submodule name (null for module-level access)',
+            permission_type STRING NOT NULL COMMENT 'Type of permission (module_access, submodule_access)',
+            user_type STRING NOT NULL COMMENT 'User type (admin, user)',
+            access_level STRING NOT NULL COMMENT 'Access level (view, full) - admins always have full',
+            groups ARRAY<STRING> NOT NULL COMMENT 'Databricks groups with this permission',
             is_active BOOLEAN DEFAULT true COMMENT 'Whether this permission is active',
             created_at TIMESTAMP DEFAULT current_timestamp() COMMENT 'Creation timestamp',
             updated_at TIMESTAMP DEFAULT current_timestamp() COMMENT 'Last update timestamp',
@@ -210,335 +218,156 @@ class PermissionsManagerApp:
         )
         """
 
-        self._execute_sql(create_table_sql, fetch_results=False)
-        logger.info(
-            f"Successfully created permissions table: {catalog}.{schema}.{table}"
-        )
+        try:
+            self._execute_sql(create_table_sql, fetch_results=False)
+            logger.info(
+                f"Successfully created permissions table: {catalog}.{schema}.{table}"
+            )
+        except Exception as e:
+            logger.error(f"Error creating permissions table: {e}")
+            raise
 
-    def insert_permission(
+    def grant_module_access(
         self,
-        workflow_type: str,
-        resource: str,
-        user_type: str,
-        privilege: str,
+        module_name: str,
         groups: List[str],
-        catalog_name: Optional[str] = None,
-        schema_name: Optional[str] = None,
-        table_name: Optional[str] = None,
-        is_active: bool = True,
+        user_type: str = "user",
+        access_level: str = "view",
+        submodule_name: Optional[str] = None,
     ) -> None:
         """
-        Insert a new permission record.
+        Grant access to a module or submodule for specified groups.
 
         Args:
-            workflow_type: Type of workflow (protein, bionemo, etc.)
-            resource: Specific resource name
-            user_type: Type of user (admin, user, service_principal)
-            privilege: Privilege level to grant
-            groups: List of group names
-            catalog_name: Catalog name
-            schema_name: Schema name
-            table_name: Table name
-            is_active: Whether the permission is active
+            module_name: Name of the module
+            groups: List of group names to grant access
+            user_type: Type of user (admin, user)
+            access_level: Level of access (view, full) - ignored for admins who always get full
+            submodule_name: Optional submodule name for submodule-specific access
         """
         # Validate inputs
-        if workflow_type not in WORKFLOW_TYPES:
-            raise ValueError(f"Invalid workflow_type: {workflow_type}")
+        if module_name not in MODULES:
+            raise ValueError(f"Invalid module: {module_name}")
         if user_type not in USER_TYPES:
             raise ValueError(f"Invalid user_type: {user_type}")
-        if privilege not in AVAILABLE_PRIVILEGES:
-            raise ValueError(f"Invalid privilege: {privilege}")
+        if access_level not in ACCESS_LEVELS:
+            raise ValueError(f"Invalid access_level: {access_level}")
+        if submodule_name and submodule_name not in MODULES[module_name].submodules:
+            raise ValueError(
+                f"Invalid submodule: {submodule_name} for module: {module_name}"
+            )
 
-        catalog = self._sanitize_sql_identifier(catalog_name or self.catalog_name)
-        schema = self._sanitize_sql_identifier(schema_name or self.schema_name)
-        table = self._sanitize_sql_identifier(table_name or self.table_name)
+        # Admins always get full access
+        if user_type == "admin":
+            access_level = "full"
 
-        # Sanitize string inputs
-        workflow_type = self._sanitize_sql_string(workflow_type)
-        resource = self._sanitize_sql_string(resource)
-        user_type = self._sanitize_sql_string(user_type)
-        privilege = self._sanitize_sql_string(privilege)
-        groups_sanitized = [self._sanitize_sql_string(g) for g in groups]
+        # Sanitize inputs
+        module = self._sanitize_sql_string(module_name)
+        user_t = self._sanitize_sql_string(user_type)
+        access_l = self._sanitize_sql_string(access_level)
+        submodule = (
+            self._sanitize_sql_string(submodule_name) if submodule_name else None
+        )
 
-        groups_array = "array(" + ",".join([f"'{g}'" for g in groups_sanitized]) + ")"
+        permission_type = "submodule_access" if submodule_name else "module_access"
+        groups_sql = ",".join([f"'{self._sanitize_sql_string(g)}'" for g in groups])
 
         insert_sql = f"""
-        INSERT INTO {catalog}.{schema}.{table}
-        (workflow_type, resource, user_type, privilege, groups, is_active)
-        VALUES ('{workflow_type}', '{resource}', '{user_type}', '{privilege}', 
-                {groups_array}, {is_active})
+        INSERT INTO {self.catalog_name}.{self.schema_name}.{self.table_name}
+        (module_name, submodule_name, permission_type, user_type, access_level, groups)
+        VALUES ('{module}', {f"'{submodule}'" if submodule else "NULL"}, '{permission_type}', '{user_t}', '{access_l}', array({groups_sql}))
         """
 
-        self._execute_sql(insert_sql, fetch_results=False)
-        logger.info(
-            f"Successfully inserted permission: {workflow_type}.{resource} for {user_type}"
-        )
+        try:
+            self._execute_sql(insert_sql, fetch_results=False)
+            target = (
+                f"{module_name}.{submodule_name}" if submodule_name else module_name
+            )
+            logger.info(
+                f"Successfully granted {access_level} {permission_type} to {target} for groups: {groups}"
+            )
+        except Exception as e:
+            logger.error(f"Error granting module access: {e}")
+            raise
 
-    def update_permission_groups(
+    def check_user_module_access(
         self,
-        workflow_type: str,
-        resource: str,
-        user_type: str,
-        new_groups: List[str],
-        catalog_name: Optional[str] = None,
-        schema_name: Optional[str] = None,
-        table_name: Optional[str] = None,
-    ) -> None:
-        """
-        Update groups for an existing permission.
-
-        Args:
-            workflow_type: Type of workflow
-            resource: Specific resource name
-            user_type: Type of user
-            new_groups: New list of groups to assign
-            catalog_name: Catalog name
-            schema_name: Schema name
-            table_name: Table name
-        """
-        catalog = self._sanitize_sql_identifier(catalog_name or self.catalog_name)
-        schema = self._sanitize_sql_identifier(schema_name or self.schema_name)
-        table = self._sanitize_sql_identifier(table_name or self.table_name)
-
-        # Sanitize inputs
-        workflow_type = self._sanitize_sql_string(workflow_type)
-        resource = self._sanitize_sql_string(resource)
-        user_type = self._sanitize_sql_string(user_type)
-        new_groups_sanitized = [self._sanitize_sql_string(g) for g in new_groups]
-
-        groups_array = (
-            "array(" + ",".join([f"'{g}'" for g in new_groups_sanitized]) + ")"
-        )
-
-        update_sql = f"""
-        UPDATE {catalog}.{schema}.{table}
-        SET groups = {groups_array},
-            updated_at = current_timestamp(),
-            updated_by = current_user()
-        WHERE workflow_type = '{workflow_type}' 
-          AND resource = '{resource}' 
-          AND user_type = '{user_type}'
-          AND is_active = true
-        """
-
-        self._execute_sql(update_sql, fetch_results=False)
-        logger.info(
-            f"Successfully updated groups for: {workflow_type}.{resource}.{user_type}"
-        )
-
-    def add_group_to_permission(
-        self,
-        workflow_type: str,
-        resource: str,
-        user_type: str,
-        group_to_add: str,
-        catalog_name: Optional[str] = None,
-        schema_name: Optional[str] = None,
-        table_name: Optional[str] = None,
-    ) -> None:
-        """
-        Add a group to an existing permission.
-
-        Args:
-            workflow_type: Type of workflow
-            resource: Specific resource name
-            user_type: Type of user
-            group_to_add: Group name to add
-            catalog_name: Catalog name
-            schema_name: Schema name
-            table_name: Table name
-        """
-        catalog = self._sanitize_sql_identifier(catalog_name or self.catalog_name)
-        schema = self._sanitize_sql_identifier(schema_name or self.schema_name)
-        table = self._sanitize_sql_identifier(table_name or self.table_name)
-
-        # Sanitize inputs
-        workflow_type = self._sanitize_sql_string(workflow_type)
-        resource = self._sanitize_sql_string(resource)
-        user_type = self._sanitize_sql_string(user_type)
-        group_to_add = self._sanitize_sql_string(group_to_add)
-
-        update_sql = f"""
-        UPDATE {catalog}.{schema}.{table}
-        SET groups = array_union(groups, array('{group_to_add}')),
-            updated_at = current_timestamp(),
-            updated_by = current_user()
-        WHERE workflow_type = '{workflow_type}' 
-          AND resource = '{resource}' 
-          AND user_type = '{user_type}'
-          AND is_active = true
-        """
-
-        self._execute_sql(update_sql, fetch_results=False)
-        logger.info(
-            f"Successfully added group {group_to_add} to: {workflow_type}.{resource}.{user_type}"
-        )
-
-    def remove_group_from_permission(
-        self,
-        workflow_type: str,
-        resource: str,
-        user_type: str,
-        group_to_remove: str,
-        catalog_name: Optional[str] = None,
-        schema_name: Optional[str] = None,
-        table_name: Optional[str] = None,
-    ) -> None:
-        """
-        Remove a group from an existing permission.
-
-        Args:
-            workflow_type: Type of workflow
-            resource: Specific resource name
-            user_type: Type of user
-            group_to_remove: Group name to remove
-            catalog_name: Catalog name
-            schema_name: Schema name
-            table_name: Table name
-        """
-        catalog = self._sanitize_sql_identifier(catalog_name or self.catalog_name)
-        schema = self._sanitize_sql_identifier(schema_name or self.schema_name)
-        table = self._sanitize_sql_identifier(table_name or self.table_name)
-
-        # Sanitize inputs
-        workflow_type = self._sanitize_sql_string(workflow_type)
-        resource = self._sanitize_sql_string(resource)
-        user_type = self._sanitize_sql_string(user_type)
-        group_to_remove = self._sanitize_sql_string(group_to_remove)
-
-        update_sql = f"""
-        UPDATE {catalog}.{schema}.{table}
-        SET groups = array_remove(groups, '{group_to_remove}'),
-            updated_at = current_timestamp(),
-            updated_by = current_user()
-        WHERE workflow_type = '{workflow_type}' 
-          AND resource = '{resource}' 
-          AND user_type = '{user_type}'
-          AND is_active = true
-        """
-
-        self._execute_sql(update_sql, fetch_results=False)
-        logger.info(
-            f"Successfully removed group {group_to_remove} from: {workflow_type}.{resource}.{user_type}"
-        )
-
-    def get_permissions_by_group(
-        self,
-        group_name: str,
-        catalog_name: Optional[str] = None,
-        schema_name: Optional[str] = None,
-        table_name: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
-        """
-        Get all permissions for a specific group.
-
-        Args:
-            group_name: Name of the group
-            catalog_name: Catalog name
-            schema_name: Schema name
-            table_name: Table name
-
-        Returns:
-            List of permission dictionaries
-        """
-        catalog = self._sanitize_sql_identifier(catalog_name or self.catalog_name)
-        schema = self._sanitize_sql_identifier(schema_name or self.schema_name)
-        table = self._sanitize_sql_identifier(table_name or self.table_name)
-
-        group_name = self._sanitize_sql_string(group_name)
-
-        query_sql = f"""
-        SELECT workflow_type, resource, user_type, privilege, groups, created_at, updated_at
-        FROM {catalog}.{schema}.{table}
-        WHERE array_contains(groups, '{group_name}') AND is_active = true
-        ORDER BY workflow_type, resource, user_type
-        """
-
-        permissions = self._execute_sql(query_sql)
-        logger.info(f"Found {len(permissions)} permissions for group: {group_name}")
-        return permissions
-
-    def get_permissions_by_workflow(
-        self,
-        workflow_type: str,
-        catalog_name: Optional[str] = None,
-        schema_name: Optional[str] = None,
-        table_name: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
-        """
-        Get all permissions for a specific workflow type.
-
-        Args:
-            workflow_type: Type of workflow
-            catalog_name: Catalog name
-            schema_name: Schema name
-            table_name: Table name
-
-        Returns:
-            List of permission dictionaries
-        """
-        catalog = self._sanitize_sql_identifier(catalog_name or self.catalog_name)
-        schema = self._sanitize_sql_identifier(schema_name or self.schema_name)
-        table = self._sanitize_sql_identifier(table_name or self.table_name)
-
-        workflow_type = self._sanitize_sql_string(workflow_type)
-
-        query_sql = f"""
-        SELECT workflow_type, resource, user_type, privilege, groups, created_at, updated_at
-        FROM {catalog}.{schema}.{table}
-        WHERE workflow_type = '{workflow_type}' AND is_active = true
-        ORDER BY resource, user_type
-        """
-
-        permissions = self._execute_sql(query_sql)
-        logger.info(
-            f"Found {len(permissions)} permissions for workflow: {workflow_type}"
-        )
-        return permissions
-
-    def check_user_permission(
-        self,
-        workflow_type: str,
-        resource: str,
         user_groups: List[str],
-        required_privilege: str = "SELECT",
-        catalog_name: Optional[str] = None,
-        schema_name: Optional[str] = None,
-        table_name: Optional[str] = None,
+        module_name: str,
+        submodule_name: Optional[str] = None,
+        required_access_level: str = "view",
     ) -> bool:
         """
-        Check if a user has the required permission for a specific resource.
+        Check if user has access to a module or submodule at the required level.
 
         Args:
-            workflow_type: Type of workflow
-            resource: Specific resource name
             user_groups: List of groups the user belongs to
-            required_privilege: Required privilege level
-            catalog_name: Catalog name
-            schema_name: Schema name
-            table_name: Table name
+            module_name: Name of the module to check
+            submodule_name: Optional submodule name
+            required_access_level: Required access level (view, full)
 
         Returns:
-            True if user has permission, False otherwise
+            True if user has access, False otherwise
         """
-        catalog = self._sanitize_sql_identifier(catalog_name or self.catalog_name)
-        schema = self._sanitize_sql_identifier(schema_name or self.schema_name)
-        table = self._sanitize_sql_identifier(table_name or self.table_name)
+        if not user_groups:
+            return False
 
-        # Sanitize inputs
-        workflow_type = self._sanitize_sql_string(workflow_type)
-        resource = self._sanitize_sql_string(resource)
-        required_privilege = self._sanitize_sql_string(required_privilege)
-        user_groups_sanitized = [self._sanitize_sql_string(g) for g in user_groups]
+        module = self._sanitize_sql_string(module_name)
+        submodule = (
+            self._sanitize_sql_string(submodule_name) if submodule_name else None
+        )
 
-        groups_list = ",".join([f"'{g}'" for g in user_groups_sanitized])
+        # For submodule access, user needs both module access and submodule access
+        if submodule_name:
+            # Check module access first
+            module_access = self._check_access_query(
+                user_groups, module, None, required_access_level
+            )
+            if not module_access:
+                return False
+            # Then check submodule access
+            return self._check_access_query(
+                user_groups, module, submodule, required_access_level
+            )
+        else:
+            # Just check module access
+            return self._check_access_query(
+                user_groups, module, None, required_access_level
+            )
+
+    def _check_access_query(
+        self,
+        user_groups: List[str],
+        module_name: str,
+        submodule_name: Optional[str],
+        required_access_level: str,
+    ) -> bool:
+        """Helper method to execute access check query with access level."""
+        groups_list = ",".join(
+            [f"'{self._sanitize_sql_string(g)}'" for g in user_groups]
+        )
+
+        submodule_condition = (
+            f"AND submodule_name = '{submodule_name}'"
+            if submodule_name
+            else "AND submodule_name IS NULL"
+        )
+
+        # Check for required access level or higher
+        # If user has 'full' access, they can do anything
+        # If user has 'view' access, they can only view
+        access_condition = (
+            f"AND (access_level = 'full' OR access_level = '{required_access_level}')"
+            if required_access_level == "view"
+            else "AND access_level = 'full'"
+        )
 
         query_sql = f"""
-        SELECT COUNT(*) as permission_count
-        FROM {catalog}.{schema}.{table}
-        WHERE workflow_type = '{workflow_type}'
-          AND resource = '{resource}'
-          AND privilege = '{required_privilege}'
+        SELECT COUNT(*) as access_count
+        FROM {self.catalog_name}.{self.schema_name}.{self.table_name}
+        WHERE module_name = '{module_name}'
+          {submodule_condition}
+          {access_condition}
           AND is_active = true
           AND EXISTS (
             SELECT 1 FROM VALUES ({groups_list}) as t(group_name)
@@ -546,229 +375,229 @@ class PermissionsManagerApp:
           )
         """
 
-        result = self._execute_sql(query_sql)
-        count = result[0]["permission_count"] if result else 0
-        has_permission = count > 0
-        logger.info(
-            f"User permission check: {workflow_type}.{resource} - {has_permission}"
-        )
-        return has_permission
+        try:
+            result = self._execute_sql(query_sql)
+            count = result[0]["access_count"] if result else 0
+            return count > 0
+        except Exception as e:
+            logger.error(f"Error checking access: {e}")
+            return False
 
-    def generate_grant_statements(
-        self,
-        catalog_name: Optional[str] = None,
-        schema_name: Optional[str] = None,
-        table_name: Optional[str] = None,
-    ) -> List[str]:
+    def get_accessible_modules(
+        self, user_groups: List[str]
+    ) -> Dict[str, Dict[str, str]]:
         """
-        Generate GRANT statements from the permissions control table.
+        Get all modules and submodules accessible to the user with their access levels.
 
         Args:
-            catalog_name: Catalog name
-            schema_name: Schema name
-            table_name: Table name
+            user_groups: List of groups the user belongs to
 
         Returns:
-            List of GRANT statements
+            Dictionary with module names as keys and dicts of submodules with access levels as values
+            Example: {"protein_studies": {"settings": "full", "prediction": "view"}}
         """
-        catalog = self._sanitize_sql_identifier(catalog_name or self.catalog_name)
-        schema = self._sanitize_sql_identifier(schema_name or self.schema_name)
-        table = self._sanitize_sql_identifier(table_name or self.table_name)
+        accessible = {}
+
+        for module_name in MODULES:
+            # Check module access (view level minimum)
+            if self.check_user_module_access(user_groups, module_name, None, "view"):
+                accessible[module_name] = {}
+
+                # Determine module access level
+                module_access_level = (
+                    "full"
+                    if self.check_user_module_access(
+                        user_groups, module_name, None, "full"
+                    )
+                    else "view"
+                )
+                accessible[module_name]["_module_access"] = module_access_level
+
+                # Check each submodule
+                for submodule in MODULES[module_name].submodules:
+                    if self.check_user_module_access(
+                        user_groups, module_name, submodule, "view"
+                    ):
+                        # Determine submodule access level
+                        submodule_access_level = (
+                            "full"
+                            if self.check_user_module_access(
+                                user_groups, module_name, submodule, "full"
+                            )
+                            else "view"
+                        )
+                        accessible[module_name][submodule] = submodule_access_level
+
+        return accessible
+
+    def get_permissions_for_group(self, group_name: str) -> List[Dict]:
+        """Get all permissions for a specific group."""
+        group = self._sanitize_sql_string(group_name)
 
         query_sql = f"""
-        SELECT DISTINCT
-            CONCAT('GRANT ', privilege, ' ON ', workflow_type, '.', resource, ' TO `', group_name, '`;') AS grant_statement
-        FROM {catalog}.{schema}.{table}
-        LATERAL VIEW EXPLODE(groups) AS group_name
-        WHERE is_active = true
-        ORDER BY grant_statement
+        SELECT module_name, submodule_name, permission_type, user_type, access_level, created_at, updated_at
+        FROM {self.catalog_name}.{self.schema_name}.{self.table_name}
+        WHERE array_contains(groups, '{group}') AND is_active = true
+        ORDER BY module_name, submodule_name
         """
 
-        result = self._execute_sql(query_sql)
-        statements = [row["grant_statement"] for row in result]
-        logger.info(f"Generated {len(statements)} GRANT statements")
-        return statements
+        try:
+            result = self._execute_sql(query_sql)
+            logger.info(f"Found {len(result)} permissions for group: {group_name}")
+            return result
+        except Exception as e:
+            logger.error(f"Error getting permissions for group: {e}")
+            raise
 
-    def audit_permission_changes(
+    def update_access_level(
         self,
-        days_back: int = 30,
-        catalog_name: Optional[str] = None,
-        schema_name: Optional[str] = None,
-        table_name: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
-        """
-        Audit recent permission changes.
-
-        Args:
-            days_back: Number of days to look back
-            catalog_name: Catalog name
-            schema_name: Schema name
-            table_name: Table name
-
-        Returns:
-            List of audit records
-        """
-        catalog = self._sanitize_sql_identifier(catalog_name or self.catalog_name)
-        schema = self._sanitize_sql_identifier(schema_name or self.schema_name)
-        table = self._sanitize_sql_identifier(table_name or self.table_name)
-
-        # Validate days_back is a positive integer
-        if not isinstance(days_back, int) or days_back <= 0:
-            raise ValueError("days_back must be a positive integer")
-
-        query_sql = f"""
-        SELECT 
-            workflow_type,
-            resource,
-            user_type,
-            privilege,
-            groups,
-            created_by,
-            updated_by,
-            created_at,
-            updated_at
-        FROM {catalog}.{schema}.{table}
-        WHERE updated_at >= current_date() - INTERVAL {days_back} DAYS
-        ORDER BY updated_at DESC
-        """
-
-        changes = self._execute_sql(query_sql)
-        logger.info(
-            f"Found {len(changes)} permission changes in the last {days_back} days"
-        )
-        return changes
-
-    def deactivate_permission(
-        self,
-        workflow_type: str,
-        resource: str,
-        user_type: str,
-        catalog_name: Optional[str] = None,
-        schema_name: Optional[str] = None,
-        table_name: Optional[str] = None,
+        module_name: str,
+        group_name: str,
+        new_access_level: str,
+        submodule_name: Optional[str] = None,
     ) -> None:
-        """
-        Deactivate a permission (soft delete).
+        """Update the access level for a group's permission."""
+        if new_access_level not in ACCESS_LEVELS:
+            raise ValueError(f"Invalid access_level: {new_access_level}")
 
-        Args:
-            workflow_type: Type of workflow
-            resource: Specific resource name
-            user_type: Type of user
-            catalog_name: Catalog name
-            schema_name: Schema name
-            table_name: Table name
-        """
-        catalog = self._sanitize_sql_identifier(catalog_name or self.catalog_name)
-        schema = self._sanitize_sql_identifier(schema_name or self.schema_name)
-        table = self._sanitize_sql_identifier(table_name or self.table_name)
+        module = self._sanitize_sql_string(module_name)
+        group = self._sanitize_sql_string(group_name)
+        access_level = self._sanitize_sql_string(new_access_level)
+        submodule = (
+            self._sanitize_sql_string(submodule_name) if submodule_name else None
+        )
 
-        # Sanitize inputs
-        workflow_type = self._sanitize_sql_string(workflow_type)
-        resource = self._sanitize_sql_string(resource)
-        user_type = self._sanitize_sql_string(user_type)
+        submodule_condition = (
+            f"AND submodule_name = '{submodule}'"
+            if submodule_name
+            else "AND submodule_name IS NULL"
+        )
 
         update_sql = f"""
-        UPDATE {catalog}.{schema}.{table}
-        SET is_active = false,
+        UPDATE {self.catalog_name}.{self.schema_name}.{self.table_name}
+        SET access_level = '{access_level}',
             updated_at = current_timestamp(),
             updated_by = current_user()
-        WHERE workflow_type = '{workflow_type}'
-          AND resource = '{resource}'
-          AND user_type = '{user_type}'
+        WHERE module_name = '{module}'
+          {submodule_condition}
+          AND array_contains(groups, '{group}')
           AND is_active = true
         """
 
-        self._execute_sql(update_sql, fetch_results=False)
-        logger.info(
-            f"Successfully deactivated permission: {workflow_type}.{resource}.{user_type}"
+        try:
+            self._execute_sql(update_sql, fetch_results=False)
+            target = (
+                f"{module_name}.{submodule_name}" if submodule_name else module_name
+            )
+            logger.info(
+                f"Successfully updated access level to {new_access_level} for {target} and group: {group_name}"
+            )
+        except Exception as e:
+            logger.error(f"Error updating access level: {e}")
+            raise
+
+    def revoke_access(
+        self,
+        module_name: str,
+        group_name: str,
+        submodule_name: Optional[str] = None,
+    ) -> None:
+        """Revoke access for a group to a module or submodule."""
+        module = self._sanitize_sql_string(module_name)
+        group = self._sanitize_sql_string(group_name)
+        submodule = (
+            self._sanitize_sql_string(submodule_name) if submodule_name else None
         )
 
+        submodule_condition = (
+            f"AND submodule_name = '{submodule}'"
+            if submodule_name
+            else "AND submodule_name IS NULL"
+        )
 
-# Convenience functions for easy app integration
-def create_permissions_manager(
-    server_hostname: Optional[str] = None,
-    http_path: Optional[str] = None,
-    access_token: Optional[str] = None,
-    catalog_name: str = DEFAULT_CATALOG,
-    schema_name: str = DEFAULT_SCHEMA,
-    table_name: str = PERMISSIONS_TABLE_NAME,
-) -> PermissionsManagerApp:
-    """
-    Factory function to create a PermissionsManagerApp instance.
+        update_sql = f"""
+        UPDATE {self.catalog_name}.{self.schema_name}.{self.table_name}
+        SET groups = array_remove(groups, '{group}'),
+            updated_at = current_timestamp(),
+            updated_by = current_user()
+        WHERE module_name = '{module}'
+          {submodule_condition}
+          AND is_active = true
+        """
 
-    Args:
-        server_hostname: Databricks workspace hostname
-        http_path: SQL warehouse HTTP path
-        access_token: Databricks access token
-        catalog_name: Default catalog name
-        schema_name: Default schema name
-        table_name: Default table name
+        try:
+            self._execute_sql(update_sql, fetch_results=False)
+            target = (
+                f"{module_name}.{submodule_name}" if submodule_name else module_name
+            )
+            logger.info(
+                f"Successfully revoked access to {target} for group: {group_name}"
+            )
+        except Exception as e:
+            logger.error(f"Error revoking access: {e}")
+            raise
 
-    Returns:
-        PermissionsManagerApp instance
-    """
-    return PermissionsManagerApp(
-        server_hostname=server_hostname,
-        http_path=http_path,
-        access_token=access_token,
-        catalog_name=catalog_name,
-        schema_name=schema_name,
-        table_name=table_name,
-    )
+    def setup_admin_permissions(self, admin_user: str) -> None:
+        """
+        Set up initial admin permissions for all modules and submodules.
+
+        Args:
+            admin_user: Username or service principal to grant admin access
+        """
+        logger.info(f"Setting up admin permissions for user: {admin_user}")
+
+        # Create a group for this admin user if needed
+        admin_group = f"genesis-admin-{admin_user.replace('@', '-').replace('.', '-')}"
+
+        for module_name, module_config in MODULES.items():
+            try:
+                # Grant module access (admins always get full access)
+                self.grant_module_access(
+                    module_name=module_name,
+                    groups=[admin_group],
+                    user_type="admin",
+                    access_level="full",  # Will be enforced in grant_module_access
+                )
+
+                # Grant access to all submodules
+                for submodule in module_config.submodules:
+                    self.grant_module_access(
+                        module_name=module_name,
+                        groups=[admin_group],
+                        user_type="admin",
+                        access_level="full",
+                        submodule_name=submodule,
+                    )
+
+            except Exception as e:
+                logger.warning(f"Permission may already exist for {module_name}: {e}")
+
+        logger.info("Admin permissions setup completed!")
 
 
-# Standalone functions for direct app usage
-def get_permissions_by_group_standalone(
-    group_name: str,
-    server_hostname: Optional[str] = None,
-    http_path: Optional[str] = None,
-    access_token: Optional[str] = None,
-    catalog_name: str = DEFAULT_CATALOG,
-    schema_name: str = DEFAULT_SCHEMA,
-    table_name: str = PERMISSIONS_TABLE_NAME,
-) -> List[Dict[str, Any]]:
-    """Standalone function to get permissions by group."""
-    manager = create_permissions_manager(
-        server_hostname, http_path, access_token, catalog_name, schema_name, table_name
-    )
-    return manager.get_permissions_by_group(group_name)
+# Standalone functions for backwards compatibility and ease of use
+def create_permissions_manager(**kwargs) -> AppPermissionsManager:
+    """Create an AppPermissionsManager instance."""
+    return AppPermissionsManager(**kwargs)
 
 
-def check_user_permission_standalone(
-    workflow_type: str,
-    resource: str,
+def get_user_accessible_modules(
+    user_groups: List[str], **kwargs
+) -> Dict[str, Dict[str, str]]:
+    """Get accessible modules for user groups with access levels."""
+    manager = AppPermissionsManager(**kwargs)
+    return manager.get_accessible_modules(user_groups)
+
+
+def check_user_access(
     user_groups: List[str],
-    required_privilege: str = "SELECT",
-    server_hostname: Optional[str] = None,
-    http_path: Optional[str] = None,
-    access_token: Optional[str] = None,
-    catalog_name: str = DEFAULT_CATALOG,
-    schema_name: str = DEFAULT_SCHEMA,
-    table_name: str = PERMISSIONS_TABLE_NAME,
+    module_name: str,
+    submodule_name: Optional[str] = None,
+    required_access_level: str = "view",
+    **kwargs,
 ) -> bool:
-    """Standalone function to check user permissions."""
-    manager = create_permissions_manager(
-        server_hostname, http_path, access_token, catalog_name, schema_name, table_name
+    """Check if user has access to module/submodule at required level."""
+    manager = AppPermissionsManager(**kwargs)
+    return manager.check_user_module_access(
+        user_groups, module_name, submodule_name, required_access_level
     )
-    return manager.check_user_permission(
-        workflow_type, resource, user_groups, required_privilege
-    )
-
-
-def add_group_to_permission_standalone(
-    workflow_type: str,
-    resource: str,
-    user_type: str,
-    group_to_add: str,
-    server_hostname: Optional[str] = None,
-    http_path: Optional[str] = None,
-    access_token: Optional[str] = None,
-    catalog_name: str = DEFAULT_CATALOG,
-    schema_name: str = DEFAULT_SCHEMA,
-    table_name: str = PERMISSIONS_TABLE_NAME,
-) -> None:
-    """Standalone function to add group to permission."""
-    manager = create_permissions_manager(
-        server_hostname, http_path, access_token, catalog_name, schema_name, table_name
-    )
-    manager.add_group_to_permission(workflow_type, resource, user_type, group_to_add)

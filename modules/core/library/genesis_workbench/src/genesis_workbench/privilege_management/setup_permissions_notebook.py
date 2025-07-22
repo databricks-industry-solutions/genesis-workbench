@@ -1,48 +1,40 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # Genesis Workbench Permissions Setup
-# MAGIC # TODO: set this notebook up to run as a job when the app is first setup, and parameterize catalog and schema names
+# MAGIC # Genesis Workbench App Permissions Setup
+# MAGIC
+# MAGIC This notebook sets up the permissions system for the Genesis Workbench application.
+# MAGIC It creates the permissions table and configures initial admin access.
 # MAGIC
 # MAGIC ## Overview
 # MAGIC
-# MAGIC The permissions system manages access control for different workflows:
-# MAGIC - **protein**: Protein folding and analysis workflows
-# MAGIC - **bionemo**: NVIDIA BioNeMo model workflows
+# MAGIC The permissions system manages access to modules and submodules:
+# MAGIC - **protein_studies**: Protein folding and analysis workflows
+# MAGIC - **nvidia_bionemo**: NVIDIA BioNeMo model workflows
 # MAGIC - **single_cell**: Single cell analysis workflows
-# MAGIC - **small_molecules**: Small molecule analysis workflows
+# MAGIC - **monitoring_alerts**: Monitoring and alerting workflows
+# MAGIC - **master_settings**: Administrative settings (admin only)
 # MAGIC
-# MAGIC ## User Types
-# MAGIC - **admin**: Full administrative access
-# MAGIC - **user**: Regular user access
-# MAGIC - **service_principal**: Automated process access
+# MAGIC ## User Types & Access Levels
+# MAGIC - **admin**: Full access to all modules and submodules
+# MAGIC - **user**: Module-specific access based on group membership
+# MAGIC   - **view**: Read-only access - can view but not modify
+# MAGIC   - **full**: Full access - can view and modify
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Configuration
+# MAGIC ## Configuration Widgets
 # MAGIC
-# MAGIC Set up the catalog and schema for the permissions system.
+# MAGIC Configure the catalog, schema, and initial admin user.
 
 # COMMAND ----------
-
-# Note: dbutils, spark, and display are globally available in Databricks notebooks
-# These imports are for type hints and linting support only
-try:
-    from pyspark.sql import SparkSession
-    from pyspark.dbutils import DBUtils
-
-    # dbutils and spark are automatically available in Databricks
-    # These variables are defined in the Databricks runtime
-    dbutils  # type: ignore
-    spark  # type: ignore
-    display  # type: ignore
-except (ImportError, NameError):
-    # For local development/testing
-    pass
 
 # Create widgets for configuration
 dbutils.widgets.text("catalog_name", "genesis_workbench", "Catalog Name")
 dbutils.widgets.text("schema_name", "permissions", "Schema Name")
+dbutils.widgets.text(
+    "initial_admin_user", "", "Initial Admin User (leave empty to use current user)"
+)
 dbutils.widgets.dropdown(
     "environment", "dev", ["dev", "staging", "prod"], "Environment"
 )
@@ -50,19 +42,26 @@ dbutils.widgets.dropdown(
 # Get values from widgets
 catalog_name = dbutils.widgets.get("catalog_name")
 schema_name = dbutils.widgets.get("schema_name")
+initial_admin_user = dbutils.widgets.get("initial_admin_user")
 environment = dbutils.widgets.get("environment")
 
-print(f"Setting up permissions for:")
+# Determine admin user
+if initial_admin_user.strip():
+    admin_user = initial_admin_user.strip()
+else:
+    # Use current user as admin
+    admin_user = spark.sql("SELECT current_user() as user").collect()[0]["user"]
+
+print(f"Setting up app permissions for:")
 print(f"  Catalog: {catalog_name}")
 print(f"  Schema: {schema_name}")
 print(f"  Environment: {environment}")
+print(f"  Initial Admin User: {admin_user}")
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ## Import Required Modules
-# MAGIC
-# MAGIC Import the permissions manager and configuration modules.
 
 # COMMAND ----------
 
@@ -71,25 +70,19 @@ import os
 from typing import List, Dict
 
 # Import our custom modules
-from permissions_manager import (
-    create_permissions_table,
-    setup_default_permissions,
-    insert_permission,
-    get_permissions_by_workflow,
-    get_permissions_by_group,
-    check_user_permission,
-    generate_grant_statements,
-    audit_permission_changes,
-)
-
+from permissions_manager_app import AppPermissionsManager
 from permissions_config import (
-    WORKFLOW_TYPES,
+    MODULES,
     USER_TYPES,
-    AVAILABLE_PRIVILEGES,
+    PERMISSION_TYPES,
+    ACCESS_LEVELS,
     DEFAULT_GROUPS,
+    DEFAULT_CATALOG,
+    DEFAULT_SCHEMA,
+    PERMISSIONS_TABLE_NAME,
 )
 
-print("Successfully imported permissions management modules!")
+print("Successfully imported app permissions modules!")
 
 # COMMAND ----------
 
@@ -101,266 +94,255 @@ print("Successfully imported permissions management modules!")
 # COMMAND ----------
 
 # Create catalog if it doesn't exist
-spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog_name}")
-print(f"✓ Catalog '{catalog_name}' ready")
+try:
+    spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog_name}")
+    print(f"✓ Catalog '{catalog_name}' ready")
+except Exception as e:
+    print(f"Note: Catalog creation failed (may already exist or lack permissions): {e}")
 
 # Create schema if it doesn't exist
-spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog_name}.{schema_name}")
-print(f"✓ Schema '{catalog_name}.{schema_name}' ready")
+try:
+    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog_name}.{schema_name}")
+    print(f"✓ Schema '{catalog_name}.{schema_name}' ready")
+except Exception as e:
+    print(f"Error creating schema: {e}")
+    raise
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 2: Create Permissions Table
+# MAGIC ## Step 2: Initialize Permissions Manager
 # MAGIC
-# MAGIC Create the main permissions control table with optimal Delta table properties.
+# MAGIC Set up the permissions manager for app usage.
 
 # COMMAND ----------
 
-# Create the permissions table
-create_permissions_table(catalog_name=catalog_name, schema_name=schema_name)
+# Initialize the permissions manager
+# Note: In a Databricks app, these would come from environment variables
+# For the setup notebook, we'll use the current session
+try:
+    # Get connection details from current Databricks environment
+    server_hostname = spark.conf.get("spark.databricks.workspaceUrl", "")
 
-print(f"✓ Permissions table created successfully!")
-
-# Verify table structure
-display(
-    spark.sql(
-        f"DESCRIBE TABLE EXTENDED {catalog_name}.{schema_name}.permissions_control"
+    # For setup purposes, we'll create a basic manager instance
+    # The actual app will use proper credentials
+    permissions_manager = AppPermissionsManager(
+        catalog_name=catalog_name,
+        schema_name=schema_name,
+        table_name=PERMISSIONS_TABLE_NAME,
     )
-)
+    print("✓ Permissions manager initialized")
+except Exception as e:
+    print(f"Note: Full manager initialization failed (expected in setup): {e}")
+    print("Will create table using Spark SQL directly")
+    permissions_manager = None
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 3: Set Up Default Permissions
+# MAGIC ## Step 3: Create Permissions Table
 # MAGIC
-# MAGIC Configure default permissions for all workflow types and user types.
+# MAGIC Create the app permissions table with access level support.
 
 # COMMAND ----------
 
-# Set up default permissions for all workflows
-setup_default_permissions(catalog_name=catalog_name, schema_name=schema_name)
+if permissions_manager:
+    try:
+        permissions_manager.create_permissions_table()
+        print("✓ Permissions table created using manager")
+    except Exception as e:
+        print(f"Manager table creation failed: {e}")
+        permissions_manager = None
 
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Step 4: Verify Permissions Setup
-# MAGIC
-# MAGIC Check that permissions have been set up correctly.
-
-# COMMAND ----------
-
-# Check permissions for each workflow type
-print("=== Permissions Summary ===")
-for workflow_name in WORKFLOW_TYPES.keys():
-    permissions = get_permissions_by_workflow(
-        workflow_type=workflow_name, catalog_name=catalog_name, schema_name=schema_name
+# Fallback: Create table using Spark SQL
+if not permissions_manager:
+    table_sql = f"""
+    CREATE OR REPLACE TABLE {catalog_name}.{schema_name}.{PERMISSIONS_TABLE_NAME} (
+        module_name STRING NOT NULL COMMENT 'Module name (e.g., protein_studies, nvidia_bionemo)',
+        submodule_name STRING COMMENT 'Submodule name (null for module-level access)',
+        permission_type STRING NOT NULL COMMENT 'Type of permission (module_access, submodule_access)',
+        user_type STRING NOT NULL COMMENT 'User type (admin, user)',
+        access_level STRING NOT NULL COMMENT 'Access level (view, full) - admins always have full',
+        groups ARRAY<STRING> NOT NULL COMMENT 'Databricks groups with this permission',
+        is_active BOOLEAN DEFAULT true COMMENT 'Whether this permission is active',
+        created_at TIMESTAMP DEFAULT current_timestamp() COMMENT 'Creation timestamp',
+        updated_at TIMESTAMP DEFAULT current_timestamp() COMMENT 'Last update timestamp',
+        created_by STRING DEFAULT current_user() COMMENT 'User who created this permission',
+        updated_by STRING DEFAULT current_user() COMMENT 'User who last updated this permission'
     )
-    print(f"\n{workflow_name.upper()} Workflow:")
-    for perm in permissions:
+    USING DELTA
+    COMMENT 'Application permissions management for Genesis Workbench modules and submodules'
+    TBLPROPERTIES (
+        'delta.autoOptimize.optimizeWrite' = 'true',
+        'delta.autoOptimize.autoCompact' = 'true',
+        'delta.feature.allowColumnDefaults' = 'supported'
+    )
+    """
+
+    try:
+        spark.sql(table_sql)
         print(
-            f"  - {perm['resource']} | {perm['user_type']} | {perm['privilege']} | {perm['groups']}"
+            f"✓ Permissions table created: {catalog_name}.{schema_name}.{PERMISSIONS_TABLE_NAME}"
         )
+    except Exception as e:
+        print(f"Error creating permissions table: {e}")
+        raise
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 5: Display All Permissions
+# MAGIC ## Step 4: Set Up Initial Admin Permissions
 # MAGIC
-# MAGIC View all permissions in the system.
+# MAGIC Grant the initial admin user full access to all modules and submodules.
 
 # COMMAND ----------
 
-# Display all permissions
-permissions_df = spark.sql(
-    f"""
-    SELECT 
-        workflow_type,
-        resource,
-        user_type,
-        privilege,
-        groups,
-        is_active,
-        created_at,
-        updated_at
-    FROM {catalog_name}.{schema_name}.permissions_control
-    WHERE is_active = true
-    ORDER BY workflow_type, resource, user_type
-"""
-)
+# Create admin group name based on the admin user
+admin_group = f"genesis-admin-{admin_user.replace('@', '-').replace('.', '-')}"
 
-display(permissions_df)
+print(f"Setting up admin permissions for user: {admin_user}")
+print(f"Using admin group: {admin_group}")
+
+# Insert admin permissions for all modules
+for module_name, module_config in MODULES.items():
+    try:
+        # Grant module access (admins always get full access)
+        module_insert_sql = f"""
+        INSERT INTO {catalog_name}.{schema_name}.{PERMISSIONS_TABLE_NAME}
+        (module_name, submodule_name, permission_type, user_type, access_level, groups)
+        VALUES ('{module_name}', NULL, 'module_access', 'admin', 'full', array('{admin_group}'))
+        """
+        spark.sql(module_insert_sql)
+        print(f"  ✓ Granted full module access: {module_name}")
+
+        # Grant access to all submodules
+        for submodule in module_config.submodules:
+            submodule_insert_sql = f"""
+            INSERT INTO {catalog_name}.{schema_name}.{PERMISSIONS_TABLE_NAME}
+            (module_name, submodule_name, permission_type, user_type, access_level, groups)
+            VALUES ('{module_name}', '{submodule}', 'submodule_access', 'admin', 'full', array('{admin_group}'))
+            """
+            spark.sql(submodule_insert_sql)
+            print(f"    ✓ Granted full submodule access: {module_name}.{submodule}")
+
+    except Exception as e:
+        print(f"  Warning: Permission may already exist for {module_name}: {e}")
+
+print("✓ Initial admin permissions setup completed!")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 6: Add Custom Permissions (Optional)
+# MAGIC ## Step 5: Verify Setup
 # MAGIC
-# MAGIC Add any custom permissions specific to your environment.
+# MAGIC Check that the permissions table was created correctly and contains the expected data.
 
 # COMMAND ----------
 
-# Example: Add a custom group for contractors
-if environment == "dev":
-    print("Adding development-specific permissions...")
-
-    # Add contractors group to single_cell workflow
-    insert_permission(
-        workflow_type="single_cell",
-        resource="output_tables",
-        user_type="user",
-        privilege="SELECT",
-        groups=["contractors", "external-users"],
-        catalog_name=catalog_name,
-        schema_name=schema_name,
+# Verify table exists and show structure
+try:
+    table_info = spark.sql(
+        f"DESCRIBE TABLE {catalog_name}.{schema_name}.{PERMISSIONS_TABLE_NAME}"
     )
+    print("✓ Table structure:")
+    display(table_info)
+except Exception as e:
+    print(f"Error describing table: {e}")
 
-    print("✓ Development permissions added!")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Step 7: Test Permission Checking
-# MAGIC
-# MAGIC Test the permission checking functionality.
-
-# COMMAND ----------
-
-# Test permission checking for different users
-test_cases = [
-    {
-        "description": "Admin user accessing protein model",
-        "workflow_type": "protein",
-        "resource": "model",
-        "user_groups": ["genesis-admin-group"],
-        "required_privilege": "OWNER",
-    },
-    {
-        "description": "Regular user accessing single_cell output",
-        "workflow_type": "single_cell",
-        "resource": "output_tables",
-        "user_groups": ["genesis-users"],
-        "required_privilege": "SELECT",
-    },
-    {
-        "description": "Contractor accessing protein model (should fail)",
-        "workflow_type": "protein",
-        "resource": "model",
-        "user_groups": ["contractors"],
-        "required_privilege": "OWNER",
-    },
-]
-
-print("=== Permission Check Tests ===")
-for test in test_cases:
-    has_permission = check_user_permission(
-        workflow_type=test["workflow_type"],
-        resource=test["resource"],
-        user_groups=test["user_groups"],
-        required_privilege=test["required_privilege"],
-        catalog_name=catalog_name,
-        schema_name=schema_name,
-    )
-
-    status = "✓ PASS" if has_permission else "✗ FAIL"
-    print(f"{status} - {test['description']}")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Step 8: Generate Grant Statements
-# MAGIC
-# MAGIC Generate Unity Catalog GRANT statements from the permissions table.
-
-# COMMAND ----------
-
-# Generate GRANT statements
-grant_statements = generate_grant_statements(
-    catalog_name=catalog_name, schema_name=schema_name
-)
-
-print("=== Generated GRANT Statements ===")
-for statement in grant_statements[:10]:  # Show first 10
-    print(statement)
-
-if len(grant_statements) > 10:
-    print(f"... and {len(grant_statements) - 10} more statements")
-
-print(f"\nTotal statements generated: {len(grant_statements)}")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Step 9: Audit and Monitoring
-# MAGIC
-# MAGIC Check recent permission changes and set up monitoring.
-
-# COMMAND ----------
-
-# Audit recent permission changes
-recent_changes = audit_permission_changes(
-    days_back=7, catalog_name=catalog_name, schema_name=schema_name
-)
-
-print(f"=== Recent Permission Changes (Last 7 Days) ===")
-print(f"Found {len(recent_changes)} changes")
-
-for change in recent_changes[:5]:  # Show first 5
-    print(
-        f"- {change['workflow_type']}.{change['resource']} | {change['user_type']} | {change['updated_at']}"
-    )
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Step 10: Application Integration Examples
-# MAGIC
-# MAGIC Examples of how to integrate with your Databricks application.
-
-# COMMAND ----------
-
-
-# Example function for application integration
-def user_has_workflow_access(
-    user_groups: List[str], workflow_type: str
-) -> Dict[str, bool]:
+# Show current permissions
+try:
+    permissions_data = spark.sql(
+        f"""
+        SELECT 
+            module_name,
+            submodule_name,
+            permission_type,
+            user_type,
+            access_level,
+            groups,
+            created_at
+        FROM {catalog_name}.{schema_name}.{PERMISSIONS_TABLE_NAME}
+        ORDER BY module_name, submodule_name
     """
-    Check if a user has access to different aspects of a workflow.
-    This is what your application would call to determine UI visibility.
-    """
-    access_check = {}
+    )
 
-    # Check different privilege levels
-    privileges_to_check = ["SELECT", "EXECUTE", "MODIFY", "OWNER"]
+    count = permissions_data.count()
+    print(f"✓ Permissions table contains {count} records")
 
-    for privilege in privileges_to_check:
-        access_check[privilege.lower()] = check_user_permission(
-            workflow_type=workflow_type,
-            resource="model",  # Check against model resource
-            user_groups=user_groups,
-            required_privilege=privilege,
-            catalog_name=catalog_name,
-            schema_name=schema_name,
-        )
+    if count > 0:
+        print("Current permissions:")
+        display(permissions_data)
+    else:
+        print("Warning: No permissions found in table")
 
-    return access_check
-
-
-# Test with different user types
-print("=== Application Integration Examples ===")
-
-# Admin user
-admin_access = user_has_workflow_access(["genesis-admin-group"], "protein")
-print(f"Admin access to protein workflow: {admin_access}")
-
-# Regular user
-user_access = user_has_workflow_access(["genesis-users"], "single_cell")
-print(f"User access to single_cell workflow: {user_access}")
+except Exception as e:
+    print(f"Error querying permissions: {e}")
 
 # COMMAND ----------
 
-# # WARNING: This will delete all permissions data!
-# # Uncomment only if you want to start over
-#
-# # spark.sql(f"DROP TABLE IF EXISTS {catalog_name}.{schema_name}.permissions_control")
-# # print("⚠️  Permissions table dropped!")
+# MAGIC %md
+# MAGIC ## Step 6: Access Level Examples
+# MAGIC
+# MAGIC Show how to grant different access levels to user groups.
+
+# COMMAND ----------
+
+print("=" * 50)
+print("ACCESS LEVEL EXAMPLES")
+print("=" * 50)
+print()
+print("To grant permissions via the app UI or programmatically:")
+print()
+print("# Grant view access to a module")
+print("INSERT INTO permissions_table VALUES (..., 'user', 'view', ...)")
+print()
+print("# Grant full access to a submodule")
+print("INSERT INTO permissions_table VALUES (..., 'user', 'full', ...)")
+print()
+print("Available access levels:")
+for level, description in ACCESS_LEVELS.items():
+    print(f"  • {level}: {description}")
+print()
+print("Note: Admins always receive 'full' access regardless of specified level")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Step 7: Setup Summary
+# MAGIC
+# MAGIC Display a summary of the setup process.
+
+# COMMAND ----------
+
+print("=" * 60)
+print("GENESIS WORKBENCH APP PERMISSIONS SETUP COMPLETE")
+print("=" * 60)
+print(f"Catalog: {catalog_name}")
+print(f"Schema: {schema_name}")
+print(f"Table: {PERMISSIONS_TABLE_NAME}")
+print(f"Environment: {environment}")
+print(f"Initial Admin: {admin_user}")
+print(f"Admin Group: {admin_group}")
+print()
+print("Available Modules:")
+for module_name, module_config in MODULES.items():
+    print(f"  • {module_config.display_name} ({module_name})")
+    for submodule in module_config.submodules:
+        print(f"    - {submodule}")
+print()
+print("Access Levels:")
+for level, description in ACCESS_LEVELS.items():
+    print(f"  • {level}: {description}")
+print()
+print("Next Steps:")
+print("1. Deploy the Genesis Workbench app")
+print("2. Configure app environment variables:")
+print("   - DATABRICKS_SERVER_HOSTNAME")
+print("   - DATABRICKS_HTTP_PATH")
+print("   - DATABRICKS_TOKEN")
+print("3. Use the app UI to manage user permissions with access levels")
+print(
+    "4. Users will automatically get their group memberships from Databricks Identity API"
+)
+print("5. Grant 'view' or 'full' access levels based on user needs")
+print("=" * 60)

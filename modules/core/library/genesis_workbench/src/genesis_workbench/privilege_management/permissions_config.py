@@ -1,95 +1,95 @@
 """
-Configuration file for the Genesis Workbench permissions control system.
+Configuration file for the Genesis Workbench app permissions system.
+Defines modules and submodules that users can access in the web application.
 """
 
-from typing import List
+from typing import List, Dict
 from dataclasses import dataclass
 
 
 @dataclass
-class WorkflowConfig:
-    """Configuration for a specific workflow type."""
+class ModuleConfig:
+    """Configuration for a Genesis Workbench module."""
 
     name: str
+    display_name: str
     description: str
     submodules: List[str]
-    default_admin_privileges: List[str]
-    default_user_privileges: List[str]
 
 
-mapvar = {
-    "single_cell": ["settings", "embeddings"],
-    "protein_studies": ["settings", "protein_structure_prediction", "protein_design"],
-    "nvidia_bionemo": ["settings", "esm2_finetune", "esm2_inference"],
-    "monitoring_alerts": ["workflows", "dashboard", "alerts"],
-    "master_settings": ["settings"],
-}
-
-WORKFLOW_TYPES = {
-    "protein_studies": WorkflowConfig(
+# Define all available modules and their submodules
+MODULES = {
+    "protein_studies": ModuleConfig(
         name="protein_studies",
+        display_name="Protein Studies",
         description="Protein folding and analysis workflows",
         submodules=["settings", "protein_structure_prediction", "protein_design"],
-        default_admin_privileges=["OWNER", "SELECT", "MODIFY", "EXECUTE"],
-        default_user_privileges=["SELECT", "EXECUTE"],
     ),
-    "nvidia_bionemo": WorkflowConfig(
+    "nvidia_bionemo": ModuleConfig(
         name="nvidia_bionemo",
+        display_name="NVIDIA BioNeMo",
         description="NVIDIA BioNeMo model workflows",
-        submodules=["settings", "inference_endpoint", "training_job", "output_tables"],
-        default_admin_privileges=["OWNER", "SELECT", "MODIFY", "EXECUTE"],
-        default_user_privileges=["SELECT", "EXECUTE"],
+        submodules=["settings", "esm2_finetune", "esm2_inference"],
     ),
-    "single_cell": WorkflowConfig(
+    "single_cell": ModuleConfig(
         name="single_cell",
+        display_name="Single Cell Analysis",
         description="Single cell analysis workflows",
-        submodules=["embeddings", "settings"],
-        default_admin_privileges=["OWNER", "SELECT", "MODIFY", "EXECUTE"],
-        default_user_privileges=["SELECT", "EXECUTE"],
+        submodules=["settings", "embeddings"],
     ),
-    "monitoring_alerts": WorkflowConfig(
+    "monitoring_alerts": ModuleConfig(
         name="monitoring_alerts",
+        display_name="Monitoring & Alerts",
         description="Monitoring and alerting workflows",
         submodules=["workflows", "dashboard", "alerts"],
-        default_admin_privileges=["OWNER", "SELECT", "MODIFY", "EXECUTE"],
-        default_user_privileges=["SELECT", "EXECUTE"],
     ),
-    "master_settings": WorkflowConfig(
+    "master_settings": ModuleConfig(
         name="master_settings",
-        description="Master settings workflows",
+        display_name="Master Settings",
+        description="Administrative settings and configuration",
         submodules=["settings"],
-        default_admin_privileges=["OWNER", "SELECT", "MODIFY", "EXECUTE"],
-        default_user_privileges=["SELECT", "EXECUTE"],
     ),
 }
 
+# Permission types - simplified for app usage
+PERMISSION_TYPES = {
+    "module_access": "Access to view and use a module",
+    "submodule_access": "Access to specific submodule functionality",
+}
+
+# Access levels for granular permissions
+ACCESS_LEVELS = {
+    "view": "Read-only access - can view but not modify",
+    "full": "Full access - can view and modify",
+}
+
+# User types
 USER_TYPES = {
     "admin": "Administrative users with full access",
-    "user": "Regular users with limited access",
-    "service_principal": "Service principals for automated processes",
+    "user": "Regular users with module-specific access",
 }
 
-AVAILABLE_PRIVILEGES = {
-    "OWNER": "Full ownership of the resource",
-    "SELECT": "Read access to the resource",
-    "MODIFY": "Write/modify access to the resource",
-    "EXECUTE": "Execute access for functions/procedures",
-    "USE_CATALOG": "Use catalog permission",
-    "USE_SCHEMA": "Use schema permission",
-    "CREATE_SCHEMA": "Create schema permission",
-    "CREATE_TABLE": "Create table permission",
-    "CREATE_FUNCTION": "Create function permission",
-}
-
+# Default groups
 DEFAULT_GROUPS = {
     "admin": ["genesis-admin-group"],
     "user": ["genesis-users"],
 }
 
+# Database configuration
 DEFAULT_CATALOG = "genesis_workbench"
 DEFAULT_SCHEMA = "permissions"
-
-PERMISSIONS_TABLE_NAME = "permissions_control"
+PERMISSIONS_TABLE_NAME = "app_permissions"
 PERMISSIONS_TABLE_COMMENT = (
-    "Centralized permissions management table for Genesis Workbench."
+    "Application permissions management for Genesis Workbench modules and submodules"
 )
+
+# Delta table properties for performance
+DELTA_TABLE_PROPERTIES = {
+    "delta.autoOptimize.optimizeWrite": "true",
+    "delta.autoOptimize.autoCompact": "true",
+    "delta.feature.allowColumnDefaults": "supported",
+}
+
+# Databricks Identity Management API configuration
+DATABRICKS_API_VERSION = "2.0"
+DATABRICKS_SCIM_API_VERSION = "2.0"
