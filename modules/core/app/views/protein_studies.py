@@ -71,7 +71,7 @@ def design_tab_fn(sequence: str, mlflow_experiment:str, mlflow_run_name:str, pro
     output = make_designs(sequence=sequence, 
                                  mlflow_experiment_name=mlflow_experiment,
                                  mlflow_run_name=mlflow_run_name,
-                                 user_email=user_info.user_email,
+                                 user_info=user_info,
                                  n_rfdiffusion_hits=n_rf_diffusion,
                                  progress_callback=progress_callback)
     

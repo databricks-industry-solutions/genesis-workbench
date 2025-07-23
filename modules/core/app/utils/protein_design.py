@@ -3,6 +3,8 @@ import requests
 import json
 import logging
 import mlflow
+from dataclasses import dataclass, asdict
+
 from databricks.sdk import WorkspaceClient
 
 from Bio.PDB import PDBList
@@ -11,6 +13,7 @@ from Bio import PDB
 import tempfile
 
 from genesis_workbench.models import set_mlflow_experiment
+from genesis_workbench.workbench import UserInfo
 
 from .structure_utils import select_and_align
 
@@ -100,13 +103,18 @@ def parse_sequence(sequence):
 def make_designs(sequence, 
                  mlflow_experiment_name:str,
                  mlflow_run_name:str,
-                 user_email:str,
+                 user_info: UserInfo,
                  n_rfdiffusion_hits=1, 
                  progress_callback=lambda x: print(x) ):
-    #callback arguments: {status_parsing: aa, status_esm_init: bb, status_rfdiffusion: cc, status_proteinmpnn : dd,status_esm_preds:ee}
-    #
+    
+    #get the hostname and user token
+    host_name = os.environ["DATABRICKS_HOST"]
 
-    experiment = set_mlflow_experiment(mlflow_experiment_name, user_email)
+    experiment = set_mlflow_experiment(experiment_tag = mlflow_experiment_name,
+                                       user_email = user_info.user_email,
+                                       host = host_name,
+                                       token = user_info.user_access_token
+                                       )
     mlflow_run_id = 0
 
     with mlflow.start_run(run_name=mlflow_run_name, experiment_id=experiment.experiment_id) as run:

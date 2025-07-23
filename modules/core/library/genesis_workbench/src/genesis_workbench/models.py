@@ -76,10 +76,15 @@ class ModelDeploymentInfo:
     is_active: bool 
     deactivated_timestamp : datetime
 
-def set_mlflow_experiment(experiment_tag, user_email, host=None, token=None): 
-    w = WorkspaceClient() if not (host and token) else WorkspaceClient(host=host, token=token)
+def set_mlflow_experiment(experiment_tag, user_email, host=None, token=None):     
+    if host and not host.startswith("https://"):
+        host = f"https://{host}"    
+
+    w = WorkspaceClient() if not token else WorkspaceClient(host=host, token=token, auth_type="pat")
+
     mlflow_experiment_base_path = f"Users/{user_email}/mlflow_experiments"
     w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")
+
     experiment_path = f"/{mlflow_experiment_base_path}/{experiment_tag}"
     mlflow.set_registry_uri("databricks-uc")
     mlflow.set_tracking_uri("databricks")
