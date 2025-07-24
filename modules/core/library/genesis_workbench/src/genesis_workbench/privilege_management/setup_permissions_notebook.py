@@ -29,7 +29,8 @@
 
 # COMMAND ----------
 
-# Create widgets for configuration
+# Create widgets for configuration - these will be parameterized via DAB workflow resources
+# DAB task parameters will override these default values at runtime
 dbutils.widgets.text("catalog_name", "genesis_workbench", "Catalog Name")
 dbutils.widgets.text("schema_name", "permissions", "Schema Name")
 dbutils.widgets.text(
@@ -45,7 +46,7 @@ schema_name = dbutils.widgets.get("schema_name")
 initial_admin_user = dbutils.widgets.get("initial_admin_user")
 environment = dbutils.widgets.get("environment")
 
-# Determine admin user
+# Determine admin user - can be configured via DAB variables and passed as environment variable
 if initial_admin_user.strip():
     admin_user = initial_admin_user.strip()
 else:
@@ -182,7 +183,7 @@ if not permissions_manager:
     try:
         spark.sql(table_sql)
         print(
-            f"✓ Permissions table created: {catalog_name}.{schema_name}.{PERMISSIONS_TABLE_NAME}"
+            f"Permissions table created: {catalog_name}.{schema_name}.{PERMISSIONS_TABLE_NAME}"
         )
     except Exception as e:
         print(f"Error creating permissions table: {e}")

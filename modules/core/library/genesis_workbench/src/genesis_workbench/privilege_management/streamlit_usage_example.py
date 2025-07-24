@@ -5,7 +5,16 @@ This example shows how to integrate the app permissions system with Streamlit
 to control access to different modules and submodules based on user groups and access levels.
 """
 
-import streamlit as st
+try:
+    import streamlit as st
+except ImportError:
+    # Streamlit not available in Databricks environment
+    # This file is for reference only when deploying to external Streamlit environments
+    raise ImportError(
+        "Streamlit is not available in Databricks environment. "
+        "This file is for external Streamlit deployments only."
+    )
+
 import os
 from typing import List, Dict, Optional
 from permissions_manager_app import (

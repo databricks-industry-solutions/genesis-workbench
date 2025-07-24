@@ -70,26 +70,24 @@ USER_TYPES = {
 }
 
 # Default groups
+# TODO: Pull these from variables.yml
 DEFAULT_GROUPS = {
     "admin": ["genesis-admin-group"],
     "user": ["genesis-users"],
 }
 
-# Database configuration
-DEFAULT_CATALOG = "genesis_workbench"
-DEFAULT_SCHEMA = "permissions"
+DEFAULT_CATALOG = "genesis_workbench"  # TODO: Can this be parameterized from the DAB deploy? I don't think so, probably need to make sure we're instead building a workflow resource for the setup notebook and configuring the job to parameterize widgets in the notebook.
+DEFAULT_SCHEMA = "permissions"  # TODO: Can this be parameterized from the DAB deploy? I don't think so, probably need to make sure we're instead building a workflow resource for the setup notebook and configuring the job to parameterize widgets in the notebook.
 PERMISSIONS_TABLE_NAME = "app_permissions"
 PERMISSIONS_TABLE_COMMENT = (
     "Application permissions management for Genesis Workbench modules and submodules"
 )
 
-# Delta table properties for performance
 DELTA_TABLE_PROPERTIES = {
     "delta.autoOptimize.optimizeWrite": "true",
     "delta.autoOptimize.autoCompact": "true",
     "delta.feature.allowColumnDefaults": "supported",
 }
 
-# Databricks Identity Management API configuration
 DATABRICKS_API_VERSION = "2.0"
 DATABRICKS_SCIM_API_VERSION = "2.0"

@@ -63,3 +63,7 @@ variables:
   default_user_group:
     description: The default user group for the app
     default: genesis-users
+
+  admin_user:
+    description: The admin user for the app
+    default: ${var.current_user}
