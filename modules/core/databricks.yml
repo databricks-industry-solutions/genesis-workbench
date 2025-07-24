@@ -6,7 +6,7 @@ include:
   - variables.yml
   - resources/jobs/*.yml
   - resources/schemas/*.yml
-  - resources/*.yml
+  - resources/app.yml
   - resources/volumes/*.yml
   - resources/experiments/*.yml
     
@@ -19,7 +19,6 @@ include:
 sync:
   paths:
     - .
-    - app
   
 targets:
   dev:
