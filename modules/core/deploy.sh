@@ -85,7 +85,7 @@ echo ""
 echo "▶️ Validating bundle"
 echo ""
 
-databricks bundle validate $EXTRA_PARAMS
+databricks bundle validate -t $ENV $EXTRA_PARAMS
 
 echo ""
 echo "▶️ Deploying bundle"

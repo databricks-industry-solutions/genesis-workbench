@@ -9,7 +9,12 @@
 
 # COMMAND ----------
 
-CATALOG, DB_SCHEMA, MODEL_FAMILY
+# DBTITLE 1,pinning mlflow == 2.22.0
+mlflow.__version__
+
+# COMMAND ----------
+
+CATALOG, DB_SCHEMA, MODEL_FAMILY, MODEL_NAME, EXPERIMENT_NAME
 
 # COMMAND ----------
 
@@ -97,7 +102,7 @@ model.load_context(temp_context)
 
 # COMMAND ----------
 
-# DBTITLE 1,Specify model_input
+# DBTITLE 1,Specify example model_input
 ## Create a DataFrame containing the embeddings
 
 # cell_embeddings.dtype #dtype('float32')
@@ -113,7 +118,7 @@ spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "false")
 
 # COMMAND ----------
 
-# DBTITLE 1,Test model_input
+# DBTITLE 1,Test model_input + params
 # Call the predict method
 searchNearest_output = model.predict(temp_context, model_input, params={"k": 100})
 
@@ -121,7 +126,7 @@ display(searchNearest_output)
 
 # COMMAND ----------
 
-# searchNearest_output
+model.predict(temp_context, model_input, params={"k": 100})
 
 # COMMAND ----------
 
@@ -132,13 +137,12 @@ display(searchNearest_output)
 
 # COMMAND ----------
 
-# DBTITLE 1,params
+# DBTITLE 1,specify params
 # import json
 
 params: dict[str, Any] = dict({"k": 100})
 params.values()
 
-# pd.DataFrame([json.dumps(params)], columns=["params"])
 
 # COMMAND ----------
 
@@ -158,19 +162,19 @@ example_input = model_input ## we will add params separately to keep it simple..
 example_output = searchNearest_output
 
 # Create a Dict for params
-params: dict[str, Any] = dict({"k": 100})
+params: dict[str, Any] = dict({"k": 100}) ## could take any dict and if none provided defaults to example provided
 
 
 # Infer the model signature
 signature = infer_signature(
-    model_input=model_input, #example_input,
-    model_output=example_output,
+    model_input = model_input, #example_input,
+    model_output = example_output,
     params=params
 )
 
 # COMMAND ----------
 
-example_input, example_output
+# example_input, example_output
 
 # COMMAND ----------
 
@@ -185,10 +189,13 @@ signature
 # COMMAND ----------
 
 # DBTITLE 1,Specify MODEL_TYPE & experiment_name
-MODEL_TYPE = "SearchNearest"
+MODEL_TYPE = "Search_Nearest" ## 
+# model_name = f"SCimilarity_{MODEL_TYPE}"  
+model_name = f"{MODEL_NAME}_{MODEL_TYPE}"  
 
 ## Set the experiment
-experiment_dir = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}"
+# experiment_dir = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}" ## TO UPDATE
+experiment_dir = f"{user_path}/mlflow_experiments/{EXPERIMENT_NAME}" ## same as MODEL_FAMILY from widget above
 print(experiment_dir)
 
 # experiment_name = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}/{MODEL_TYPE}"
@@ -220,8 +227,9 @@ for folder in folders:
 # DBTITLE 1,specify mlflow requirements.txt
 import os
 
-# Create a requirements.txt file with the necessary dependencies
+# Create a requirements.txt file with the necessary dependencies & pinned versions
 requirements = """
+mlflow==2.22.0 
 cloudpickle==2.0.0
 scanpy==1.11.2
 numcodecs==0.13.1
@@ -230,8 +238,8 @@ pandas==1.5.3
 numpy==1.26.4 
 """
 
-# model_name = "{MODEL_FAMILY}_{MODEL_NAME}" 
-model_name = "SCimilarity_SearchNearest"  # to update class func
+# model_name = "SCimilarity_Search_Nearest"  # to update class func
+model_name = f"{MODEL_NAME}_{MODEL_TYPE}" 
 
 # Define the path to save the requirements file in the UV volumes
 SCimilarity_SearchNearest_requirements_path = f"/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}/mlflow_requirements/{model_name}/requirements.txt"
@@ -268,17 +276,20 @@ else:
 mlflow.set_experiment(experiment_id=exp_id)
 
 # Save and log the model
+# with mlflow.start_run(run_name=f'{model_name}', experiment_id=experiment.experiment_id)
 with mlflow.start_run() as run:
     mlflow.pyfunc.log_model(
-        artifact_path="searchNearest_model",
+        artifact_path=f"{MODEL_TYPE}", # artifact_path --> "name" mlflow v3.0
         python_model=model, 
         artifacts={
-                    "model_path": model_path,            
-                  },
-        # input_example = model_input, # without params -- to add separately during inference? 
-        input_example = example_input, 
+                    "model_path": model_path,   ## defined in ./utils          
+                  },    
+        input_example = example_input, # without params -- has a default value in model signature OR to add separately during inference | (model_input, params) tuple formatting not quite right
+       
         signature = signature, ## params defined in signature https://mlflow.org/docs/latest/model/signatures/#inference-params
-        pip_requirements=SCimilarity_SearchNearest_requirements_path,        
+        pip_requirements=SCimilarity_SearchNearest_requirements_path,     
+        
+        # registered_model_name=f"{CATALOG}.{SCHEMA}.{model_name}" ## to include directly wihout additonal load run_id checks   
     )
 
     run_id = run.info.run_id
@@ -291,9 +302,14 @@ with mlflow.start_run() as run:
 
 # COMMAND ----------
 
+# run_id #= "<include to save for debugging>"
+# run_id = "ccf483b373d643818dad1966a01febfe"
+
+# COMMAND ----------
+
 # DBTITLE 1,load MLflow Logged model + test
 import mlflow
-logged_model_run_uri = f'runs:/{run_id}/searchNearest_model'
+logged_model_run_uri = f'runs:/{run_id}/{MODEL_TYPE}'
 
 # Load model as a PyFuncModel.
 loaded_model = mlflow.pyfunc.load_model(logged_model_run_uri) ## 
@@ -301,24 +317,31 @@ loaded_model = mlflow.pyfunc.load_model(logged_model_run_uri) ##
 # COMMAND ----------
 
 # DBTITLE 1,access input_example from loaded_model
-loaded_model.input_example
+loaded_model.input_example #, example_output
 
 # COMMAND ----------
 
-# DBTITLE 1,params
-params['k'], params
+# DBTITLE 1,check params
+params = {"k": 10}  # Provide a default value for params
+# loaded_model.predict(loaded_model.input_example)
+loaded_model.predict(loaded_model.input_example, params=params)
+
+# COMMAND ----------
+
+loaded_model.predict(loaded_model.input_example)
+# loaded_model.predict(loaded_model.input_example, params)
 
 # COMMAND ----------
 
 # DBTITLE 1,Test logged + loaded model prediction with params
 # loaded_model.predict(loaded_model.input_example, params={"k": 100})
+# predictions = loaded_model.predict(loaded_model.input_example)
+
 predictions = loaded_model.predict(loaded_model.input_example, params)
 predictions
 
-# predictions = loaded_model.predict(loaded_model.input_example)
+# predictions = loaded_model.predict(loaded_model.input_example) # mlflow registered default params will kick-in 
 # print(predictions)
-
-# loaded_model.predict(loaded_model.input_example) ## with k-hardcoded
 
 # COMMAND ----------
 
@@ -327,16 +350,11 @@ predictions
 
 # COMMAND ----------
 
-# DBTITLE 1,test
-# run_id ="a0c7afe8d7894511a25e36f06f0a3101"
-
-# COMMAND ----------
-
 # DBTITLE 1,Model Info
 # Register the model
-model_name = "SCimilarity_SearchNearest"  # to update class func
-full_model_name = f"mmt.genesiswb.{model_name}"
-model_uri = f"runs:/{run_id}/searchNearest_model"
+model_name = f"{MODEL_NAME}_{MODEL_TYPE}" 
+full_model_name = f"{CATALOG}.{DB_SCHEMA}.{model_name}"
+model_uri = f"runs:/{run_id}/{MODEL_TYPE}"
 
 model_name, full_model_name, model_uri
 
@@ -352,7 +370,7 @@ mlflow.register_model(model_uri=model_uri,
 # COMMAND ----------
 
 # DBTITLE 1,Associate model version with alias
-add_model_alias("SCimilarity_SearchNearest", "Champion")
+# add_model_alias(full_model_name, "Champion")
 
 # COMMAND ----------
 
@@ -387,208 +405,57 @@ add_model_alias("SCimilarity_SearchNearest", "Champion")
 
 # MAGIC %md 
 # MAGIC ### Deploy & Serve UC registered model: `SCimilarity_SearchNearest`
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC #### Deployment Parameters for Endpoint Config
-
-# COMMAND ----------
-
-## Databricks HOST & TOKEN info.
-# Get the API endpoint and token for the current notebook context
-DATABRICKS_HOST = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiUrl().get()
-# API_TOKEN = dbutils.secrets.get(scope="mmt", key="hls_fe_SP") ## for some reason this won't work for API inference 
-DATABRICKS_TOKEN = dbutils.secrets.get(scope="mmt", key="databricks_token")
-
-import os
-os.environ["DATABRICKS_TOKEN"] = DATABRICKS_TOKEN
-
-## databricks_instance -- this is NOT the same as dbutils derived DATABRICKS_HOST / workspace_url
-databricks_instance = "e2-demo-field-eng.cloud.databricks.com"  # Replace with your Databricks instance URL 
-
-## UC namespace
-catalog_name = CATALOG #"mmt"
-schema_name = DB_SCHEMA #"genesiswb"
-# model_name = "SCimilarity_{MODLE_TYPE}" # "SCimilarity_GetEmbeddings" 
-full_model_name = f"{CATALOG}.{DB_SCHEMA}.{model_name}"
-
-## model info. 
-registered_model_name = full_model_name #f"{catalog_name}.{schema_name}.{model_name}"
-
-latest_model_version = get_latest_model_version(registered_model_name)
-general_model_name = f"{model_name}-{latest_model_version}" 
-
-## endpoint names
-endpoint_base_name = f"gwb_{model_name}"
-endpoint_name = f"{endpoint_base_name}_mmt" #-mlflowsdk" # endpoint name
-
-## workload types&sizes
-# https://docs.databricks.com/api/workspace/servingendpoints/create#config-served_models-workload_type
-# workload_type = "GPU_MEDIUM" ## deployment timeout!
-workload_type = "MULTIGPU_MEDIUM"  # 4xA10G
-workload_size = "Medium"
-
-## show configs
-config_list = [
-    f"catalog: {catalog_name}",
-    f"schema: {schema_name}",
-    f"host: {DATABRICKS_HOST}",
-    f"token: {DATABRICKS_TOKEN}",
-    f"workload_type: {workload_type}",
-    f"workload_size: {workload_size}",
-    f"general_model_name: {general_model_name}",
-    f"registered_model_name: {registered_model_name}",
-    f"latest_model_version: {latest_model_version}",
-    f"endpoint_name: {endpoint_name}"
-]
-
-[print(config) for config in config_list];
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC #### Endpoint Config Specs
-
-# COMMAND ----------
-
-# DBTITLE 1,client endpoint_config
-from mlflow.deployments import get_deploy_client
-
-client = get_deploy_client("databricks")
-
-# Define the full API request payload
-endpoint_config = {
-    "name": general_model_name,
-    "served_models": [
-        {                
-            "model_name": registered_model_name,
-            "model_version": latest_model_version,
-            "workload_size": workload_size,  # defines concurrency: Small/Medium/Large
-            "workload_type": workload_type,  #"MULTIGPU_MEDIUM",  ## defines compute: GPU_SMALL/GPU_MEDIUM/MULTIGPU_MEDIUM/GPU_LARGE
-            "scale_to_zero_enabled": True,
-            "tracing_enabled": True
-        }
-    ],
-    "routes": [
-        {
-            "served_model_name": general_model_name,
-            "traffic_percentage": 100
-        }
-    ],
-    "auto_capture_config": {
-        "catalog_name": catalog_name,
-        "schema_name": schema_name,
-        # "table_name_prefix": f"{endpoint_base_name}_unique_prefix",  # Specify a unique table prefix
-        "enabled": True
-    },
-    "tags": [
-        {"key": "project", "value": f"{schema_name}"},
-        {"key": "removeAfter", "value": "2025-12-31"}
-    ]
-}
-
-# Ensure endpoint_name is valid
-endpoint_name = endpoint_name[:63]  # Truncate to 63 characters if necessary
-endpoint_name = ''.join(e for e in endpoint_name if e.isalnum() or e in ['-', '_'])  # Remove invalid characters
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC #### Create or update the endpoint
-
-# COMMAND ----------
-
-# DBTITLE 1,Create or update the endpoint
-# Create or update the endpoint
-try:
-    # Check if endpoint exists
-    existing_endpoint = client.get_endpoint(endpoint_name)
-    print(f"Endpoint {endpoint_name} exists, updating configuration...")
-    client.update_endpoint_config(endpoint_name, config=endpoint_config)
-except Exception as e:
-    if "RESOURCE_DOES_NOT_EXIST" in str(e):
-        print(f"Creating new endpoint {endpoint_name}...")
-        client.create_endpoint(endpoint_name, config=endpoint_config)
-    else:
-        raise
-
-# COMMAND ----------
-
-# DBTITLE 1,get endpoint link
-databricks_instance = "e2-demo-field-eng.cloud.databricks.com"  # Replace with your Databricks instance URL -- this is NOT the same as workspace_url derived with dbutils 
-
-endpoint_url = get_endpoint_link(databricks_instance, model_name, latest_model_version);
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC #### Check Endpoint Status 
-
-# COMMAND ----------
-
-# DBTITLE 1,check for endpoint updates
-check_endpoint_status(endpoint_name, max_checks=20, sleep_time=30) 
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC #### For endpoint status test/debug
-
-# COMMAND ----------
-
-# DBTITLE 1,check status
-# from mlflow.deployments import get_deploy_client
-
-# client = get_deploy_client("databricks")
-# endpoint_status = client.get_endpoint(endpoint_name)
-
-# COMMAND ----------
-
-# endpoint_status
-
-# COMMAND ----------
-
-# endpoint_status['state']
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ### Test Endpoint 
-
-# COMMAND ----------
-
-# model_input, example_output
-
-# COMMAND ----------
-
-# DBTITLE 1,try score_model with params
-params={"k": 10}
-
-# result = score_model(your_dataframe, params={"k": 10})
-result = score_model(databricks_instance, endpoint_name, model_input, params)
-result 
-
-# COMMAND ----------
-
-# DBTITLE 1,test extract predictions results_metadata
-# pd.DataFrame(result["predictions"][0]["results_metadata"]) #.keys()
-
-# COMMAND ----------
-
-# MAGIC %md
 # MAGIC
+# MAGIC ```
+# MAGIC ## AWS workload types&sizes
+# MAGIC # https://docs.databricks.com/api/workspace/servingendpoints/create#config-served_models-workload_type
+# MAGIC # workload_type = "GPU_MEDIUM" ## deployment timeout!
+# MAGIC workload_type = "MULTIGPU_MEDIUM"  # 4xA10G
+# MAGIC workload_size = "Medium"
+# MAGIC ```    
+# MAGIC ---        
+# MAGIC         
+# MAGIC ```
+# MAGIC ## AzureDB workload types&sizes
+# MAGIC # https://learn.microsoft.com/en-us/azure/databricks/machine-learning/model-serving/create-manage-serving-endpoints
+# MAGIC workload_type = "GPU_Large" (A100), 
+# MAGIC workload_size = "Small" 0-4 concurrency 
+# MAGIC ```
 
 # COMMAND ----------
 
 # DBTITLE 1,format model_input + params for UI inferencing
-# dataset = model_input
+dataset = model_input
 
-# ds_dict = {'dataframe_split': dataset.to_dict(orient='split')}
-# if params:
-#     ds_dict['params'] = params
+ds_dict = {'dataframe_split': dataset.to_dict(orient='split')} # includes "index":[0]
+
+ds_dict['dataframe_split'].pop('index', None)  # Remove the index key if it exists
+
+if params:
+    ds_dict['params'] = params
 
 # COMMAND ----------
 
-# DBTITLE 1,for UI inference testing
-# ds_dict
+# DBTITLE 1,example input for UI inferencing
+serving_input = json.dumps(ds_dict).replace("'",'"')
+serving_input
+
+# COMMAND ----------
+
+# DBTITLE 1,search_model_versions
+# mlflow.search_model_versions(filter_string="name = 'genesis_workbench.dev_mmt_core_test.SCimilarity_Search_Nearest'")
+
+# COMMAND ----------
+
+# DBTITLE 1,get model_uri
+# # import mlflow
+
+# ## Assumes model registered to Unity Catalog
+
+# # Sift for model latest version 
+# model_versions = mlflow.search_model_versions(filter_string="name = 'genesis_workbench.dev_mmt_core_test.SCimilarity_Search_Nearest'")
+# model_version = model_versions[0].version
+# print(model_version)
+
+# model_uri = f"models:/genesis_workbench.dev_mmt_core_test.SCimilarity_Search_Nearest/{model_version}"
+# print(model_uri)
