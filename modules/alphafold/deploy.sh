@@ -28,4 +28,3 @@ echo "▶️ Running model file downloads"
 echo ""
 
 databricks bundle run -t $ENV alphafold_downloads $EXTRA_PARAMS
-

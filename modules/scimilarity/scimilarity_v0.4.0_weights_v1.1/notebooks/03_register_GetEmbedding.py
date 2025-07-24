@@ -9,7 +9,12 @@
 
 # COMMAND ----------
 
-CATALOG, DB_SCHEMA, MODEL_FAMILY, EXPERIMENT_NAME
+# DBTITLE 1,pinning mlflow == 2.22.0
+mlflow.__version__
+
+# COMMAND ----------
+
+CATALOG, DB_SCHEMA, MODEL_FAMILY, MODEL_NAME, EXPERIMENT_NAME
 
 # COMMAND ----------
 
@@ -100,7 +105,7 @@ model.load_context(temp_context)
 # X_vals.shape # (1, 28231) -- 1d array
 
 # model_input = pd.DataFrame([{'subsample_query_array': X_vals.toarray().astype(np.float64)[0]}])
-model_input = pd.DataFrame([{'subsample_query_array': X_vals.toarray()[0].tolist() }]) ## better?
+model_input = pd.DataFrame([{'subsample_query_array': X_vals.toarray()[0].tolist() }]) ## simpler
 
 model_input
 
@@ -157,14 +162,13 @@ signature
 
 # DBTITLE 1,Specify MODEL_TYPE & experiment_name
 MODEL_TYPE = "Get_Embedding" ##
-model_name = f"SCimilarity_{MODEL_TYPE}"  
+# model_name = f"SCimilarity_{MODEL_TYPE}"  
+model_name = f"{MODEL_NAME}_{MODEL_TYPE}"
 
 ## Set the experiment
-# experiment_dir = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}" ## TO UPDATE
 experiment_dir = f"{user_path}/mlflow_experiments/{EXPERIMENT_NAME}" ## same as MODEL_FAMILY from widget above
 print(experiment_dir)
 
-# experiment_name = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}/{MODEL_TYPE}"
 experiment_name = f"{experiment_dir}/{MODEL_TYPE}"
 print(experiment_name)
 
@@ -195,6 +199,7 @@ import os
 
 # Create a requirements.txt file with the necessary dependencies
 requirements = """
+mlflow==2.22.0
 cloudpickle==2.0.0
 scanpy==1.11.2
 numcodecs==0.13.1
@@ -203,8 +208,9 @@ pandas==1.5.3
 numpy==1.26.4 
 """
 
-# MODEL_TYPE = "GetEmbeddings"
-model_name = f"SCimilarity_{MODEL_TYPE}"  #
+# MODEL_TYPE = "Get_Embeddings"
+# model_name = f"SCimilarity_{MODEL_TYPE}"  #
+model_name = f"{MODEL_NAME}_{MODEL_TYPE}" 
 
 # Define the path to save the requirements file in the UV volumes
 SCimilarity_GetEmbeddings_requirements_path = f"/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}/mlflow_requirements/{model_name}/requirements.txt"
@@ -243,7 +249,7 @@ mlflow.set_experiment(experiment_id=exp_id)
 # with mlflow.start_run(run_name=f'{model_name}', experiment_id=experiment.experiment_id)
 with mlflow.start_run() as run:
     mlflow.pyfunc.log_model(        
-        artifact_path=f"{MODEL_TYPE}",
+        artifact_path=f"{MODEL_TYPE}", # artifact_path --> "name" mlflow v3.0
         python_model=model,
         artifacts={
             "model_path": model_path,  ## defined in ./utils 
@@ -251,6 +257,7 @@ with mlflow.start_run() as run:
         input_example=model_input, #example_input
         signature=signature,
         pip_requirements=SCimilarity_GetEmbeddings_requirements_path,
+        
         # registered_model_name=f"{CATALOG}.{SCHEMA}.{model_name}" ## to include directly wihout additonal load run_id checks
     )
 
@@ -279,7 +286,7 @@ loaded_model = mlflow.pyfunc.load_model(logged_model_run_uri) ##
 # COMMAND ----------
 
 # DBTITLE 1,Test logged + loaded model prediction
-loaded_model.predict(loaded_model.input_example) 
+# loaded_model.predict(loaded_model.input_example) 
 
 # predictions = loaded_model.predict(loaded_model.input_example)
 # print(predictions)
@@ -292,8 +299,9 @@ loaded_model.predict(loaded_model.input_example)
 # COMMAND ----------
 
 # DBTITLE 1,Model Info
-# Register the model
-model_name = f"SCimilarity_{MODEL_TYPE}"  
+## Register the model
+# model_name = f"SCimilarity_{MODEL_TYPE}"  
+model_name = f"{MODEL_NAME}_{MODEL_TYPE}" 
 full_model_name = f"{CATALOG}.{DB_SCHEMA}.{model_name}"
 model_uri = f"runs:/{run_id}/{MODEL_TYPE}"
 
@@ -348,12 +356,27 @@ mlflow.register_model(model_uri=model_uri,
 # MAGIC ### Deploy & Serve UC registered model: `SCimilarity_GetEmbeddings`
 # MAGIC
 # MAGIC ```
-# MAGIC ## workload types&sizes
+# MAGIC ## AWS workload types&sizes
 # MAGIC # https://docs.databricks.com/api/workspace/servingendpoints/create#config-served_models-workload_type
 # MAGIC # workload_type = "GPU_MEDIUM" ## deployment timeout!
 # MAGIC workload_type = "MULTIGPU_MEDIUM"  # 4xA10G
 # MAGIC workload_size = "Medium"
 # MAGIC ```
+# MAGIC
+# MAGIC ---        
+# MAGIC         
+# MAGIC ```
+# MAGIC ## AzureDB workload types&sizes
+# MAGIC # https://learn.microsoft.com/en-us/azure/databricks/machine-learning/model-serving/create-manage-serving-endpoints
+# MAGIC workload_type = "CPU" # seems to work else "GPU_LARGE" 
+# MAGIC workload_size = "Small" 0-4 concurrency 
+# MAGIC ```
+
+# COMMAND ----------
+
+# DBTITLE 1,convert_input_example_to_serving_input
+# serving_input_example = json.loads(mlflow.models.convert_input_example_to_serving_input(model_input))
+# serving_input_example
 
 # COMMAND ----------
 

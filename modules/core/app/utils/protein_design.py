@@ -224,4 +224,3 @@ def align_designed_pdbs(designed_pdbs):
             aligned_structures.append(init_structure_str)  
         aligned_structures.append(true_structure_str) 
     return aligned_structures
-

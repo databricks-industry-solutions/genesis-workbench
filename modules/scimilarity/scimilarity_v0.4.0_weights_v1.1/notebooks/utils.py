@@ -4,6 +4,7 @@
 # MAGIC - Ref: https://genentech.github.io/scimilarity/install.html#conda-environment-setup
 # MAGIC - Requires: `python=3.10`
 # MAGIC - Databricks Runtime `14.3 LTS` supports `Python 3.10`
+# MAGIC - MLflow: `2.22.0`; NB: `v3.0` has breaking changes wrt `runs` --> `models` vs `artifact_paths` --> `name` etc.
 
 # COMMAND ----------
 
@@ -33,18 +34,18 @@
 # DBTITLE 1,Requirements & noted version
 # scimilarity==0.4.0
 # typing_extensions>=4.14.0 #>=4.0.0 
-## scanpy==1.11.1
+## scanpy==1.11.2
 ## numcodecs==0.13.1
 ## zarr>=2.6.1
 ## numpy==1.26.4
 ## pandas==1.5.3
-# mlflow
+# mlflow==2.22.0 ## pin to this for now since v3 has breaking changes... 
 # tbb>=2021.6.0
 # uv
 
 # COMMAND ----------
 
-# DBTITLE 1,CATALOG | SHCHEMA | VOLS
+# DBTITLE 1,CATALOG | SCHEMA | VOLS
 ## causes concurrency conflicts wrt multiple tasks writing to Vols 
 
 # import os
@@ -107,9 +108,12 @@
 requirements = [
     "scimilarity==0.4.0",
     "typing_extensions>=4.14.0",
+    "scanpy==1.11.2", #
+    "numcodecs==0.13.1", #
     "numpy==1.26.4",
     "pandas==1.5.3",
-    "mlflow",
+    "mlflow==2.22.0",
+    "cloudpickle==2.0.0", #
     "tbb>=2021.6.0",
     "uv"
 ]
@@ -155,20 +159,27 @@ numba.config.THREADING_LAYER = 'workqueue'  # Most compatible option
 # COMMAND ----------
 
 # DBTITLE 1,gwb_variablesNparams
+## for nb devs -- these get overwritten wrt deployment args
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("schema", "dev_mmt_core_gwb", "Schema")
+dbutils.widgets.text("schema", "dev_mmt_core_test", "Schema") 
+
 dbutils.widgets.text("model_name", "SCimilarity", "Model Name") ## use this as a prefix for the model name ?
 dbutils.widgets.text("experiment_name", "gwb_modules_scimilarity", "Experiment Name")
+# dbutils.widgets.text("experiment_name", "gwb_modules", "Experiment Name") ## mlflow expt folder_name
+
 dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id") # ??
 dbutils.widgets.text("user_email", "may.merkletan@databricks.com", "User Id/Email")
+
 dbutils.widgets.text("cache_dir", "scimilarity", "Cache dir") ## VOLUME NAME | MODEL_FAMILY 
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
+
 MODEL_NAME = dbutils.widgets.get("model_name")
 EXPERIMENT_NAME = dbutils.widgets.get("experiment_name")
 USER_EMAIL = dbutils.widgets.get("user_email")
 SQL_WAREHOUSE_ID = dbutils.widgets.get("sql_warehouse_id")
+
 CACHE_DIR = dbutils.widgets.get("cache_dir")
 
 print(f"Cache dir: {CACHE_DIR}")
@@ -177,23 +188,14 @@ print(f"Cache full path: {cache_full_path}")
 
 # COMMAND ----------
 
-# DBTITLE 1,CATALOG | SHCHEMA | VOLS
+# DBTITLE 1,CATALOG | SCHEMA | VOLS
 CATALOG = CATALOG #"mmt"
-# DB_SCHEMA = "genesiswb"
-DB_SCHEMA = SCHEMA #"tests"
+DB_SCHEMA = SCHEMA #"tests" | "genesiswb"
 
 # VOLUME_NAME | PROJECT 
-MODEL_FAMILY = CACHE_DIR #"scimilarity"
+MODEL_FAMILY = CACHE_DIR ## CACHE_DIR #"scimilarity"
 
-# # Create widgets for catalog, db_schema, and model_family
-# dbutils.widgets.text("catalog", "mmt")#, "CATALOG")
-# dbutils.widgets.text("db_schema", "genesiswb")#, "DB_SCHEMA")
-# dbutils.widgets.text("model_family", "scimilarity")#, "MODEL_FAMILY")
-
-# # Get the values from the widgets
-# CATALOG = dbutils.widgets.get("catalog")
-# DB_SCHEMA = dbutils.widgets.get("db_schema")
-# MODEL_FAMILY = dbutils.widgets.get("model_family")
+# MODEL_NAME #"SCimilarity" 
 
 print("CATALOG :", CATALOG)
 print("DB_SCHEMA :", DB_SCHEMA)
@@ -448,14 +450,14 @@ def check_endpoint_status(endpoint_name, max_checks=20, sleep_time=30):
 
 # COMMAND ----------
 
-# DBTITLE 1,[1] create_tf_serving_json | score_model
+# DBTITLE 1,[1] create_serving_json | score_model
 # import os 
 # import json
 # import requests
 
 ## databricks_instance = "e2-demo-field-eng.cloud.databricks.com"
 
-# def create_tf_serving_json(data):
+# def create_serving_json(data):
 #     if isinstance(data, dict):
 #         return {'inputs': {name: data[name].tolist() if hasattr(data[name], 'tolist') else data[name] for name in data.keys()}}
       
@@ -472,7 +474,7 @@ def check_endpoint_status(endpoint_name, max_checks=20, sleep_time=30):
 #         'Authorization': f'Bearer {os.environ.get("DATABRICKS_TOKEN")}',
 #         'Content-Type': 'application/json'
 #     }
-#     ds_dict = {'dataframe_split': dataset.to_dict(orient='split')} if isinstance(dataset, pd.DataFrame) else create_tf_serving_json(dataset)
+#     ds_dict = {'dataframe_split': dataset.to_dict(orient='split')} if isinstance(dataset, pd.DataFrame) else create_serving_json(dataset)
 
 #     data_json = json.dumps(ds_dict, allow_nan=True)
     
@@ -481,24 +483,20 @@ def check_endpoint_status(endpoint_name, max_checks=20, sleep_time=30):
 
 # COMMAND ----------
 
-# DBTITLE 1,[2] create_tf_serving_json | score_model
+# DBTITLE 1,[2] create_serving_json | score_model
 import os
 import json
 import requests
+import pandas as pd
 
-## databricks_instance = "e2-demo-field-eng.cloud.databricks.com"
-
-def create_tf_serving_json(data, params=None):
+def create_serving_json(data, params=None):
     result = {}
     if isinstance(data, dict):
         result['inputs'] = {name: data[name].tolist() if hasattr(data[name], 'tolist') else data[name] for name in data.keys()}
-        
     elif isinstance(data, list):
         result['inputs'] = data
-    
     if params:
         result['params'] = params
-    
     return result
 
 def score_model(databricks_instance, endpoint_name, dataset, params=None):
@@ -514,15 +512,15 @@ def score_model(databricks_instance, endpoint_name, dataset, params=None):
         if params:
             ds_dict['params'] = params
     else:
-        ds_dict = create_tf_serving_json(dataset, params)
+        ds_dict = create_serving_json(dataset, params)
     
     data_json = json.dumps(ds_dict, allow_nan=True)
-    response = requests.request(method='POST', headers=headers, url=url, data=data_json)
+    response = requests.post(url, headers=headers, data=data_json)
     
-    # Debug information
-    print(f"Response status code: {response.status_code}")
-    print(f"Response headers: {response.headers}")
-    print(f"Response text: {response.text}")
+    ### Debug information
+    # print(f"Response status code: {response.status_code}")
+    # print(f"Response headers: {response.headers}")
+    # print(f"Response text: {response.text}")
     
     # Check if the response is successful and contains JSON
     if response.status_code == 200:
@@ -534,6 +532,21 @@ def score_model(databricks_instance, endpoint_name, dataset, params=None):
     else:
         print(f"Request failed with status code: {response.status_code}")
         return {"error": f"HTTP {response.status_code}", "response_text": response.text}
+
+
+## Example usage
+
+# DATABRICKS_TOKEN = dbutils.secrets.get("<scope>", "<secret-key>")
+# os.environ["DATABRICKS_TOKEN"] = DATABRICKS_TOKEN
+
+# databricks_instance = "e2-demo-field-eng.cloud.databricks.com"
+# databricks_instance = "adb-830292400663869.9.azuredatabricks.net"
+
+# endpoint_name = "mmt_scimilarity_gene_order"
+# example_input = pd.DataFrame({"input": ["get_gene_order"]})
+
+# result = score_model(databricks_instance, endpoint_name, example_input)
+# display(result)
 
 # COMMAND ----------
 
@@ -547,7 +560,7 @@ import mlflow
 from mlflow.tracking.client import MlflowClient
 from typing import Optional, List
 
-def delete_model_versions(model_name, delete_all=False, specific_versions:Optional[List[int]]=None):
+def delete_model_versions(CATALOG, DB_SCHEMA, model_name, delete_all=False, specific_versions:Optional[List[int]]=None):
     """
     Delete all versions or specific versions of a registered model.
 
@@ -568,6 +581,11 @@ def delete_model_versions(model_name, delete_all=False, specific_versions:Option
         # Delete all versions of the model
         for model_version_info in model_version_infos:
             client.delete_model_version(name=full_model_name, version=model_version_info.version)
+        
+        # Delete the registered model
+        client.delete_registered_model(name=full_model_name)
+        print(f"Deleted model '{full_model_name}' and all its versions.")
+
     else:
         if specific_versions is None:
             raise ValueError("specific_versions must be provided if delete_all is False")
@@ -575,14 +593,12 @@ def delete_model_versions(model_name, delete_all=False, specific_versions:Option
         for version in specific_versions:
             client.delete_model_version(name=full_model_name, version=version)
 
-    # Delete the registered model
-    client.delete_registered_model(name=full_model_name)
-
-    print(f"Deleted model '{full_model_name}' and all its versions.")
+        print(f"Deleted model '{full_model_name}' and version {specific_versions}.")
 
 # Example usage
 # delete_model_versions("SCimilarity_GeneOrder", delete_all=True)
-# delete_model_versions("SCimilarity_GeneOrder", delete_all=False, specific_versions=["3", "4", "5"])
+# delete_model_versions("SCimilarity_GeneOrder", delete_all=False, specific_versions=["3", "4", "5"])  
+
 
 # COMMAND ----------
 
