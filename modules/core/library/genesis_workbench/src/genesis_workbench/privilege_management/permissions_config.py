@@ -17,7 +17,6 @@ class ModuleConfig:
     submodules: List[str]
 
 
-# Define all available modules and their submodules
 MODULES = {
     "protein_studies": ModuleConfig(
         name="protein_studies",
@@ -51,25 +50,21 @@ MODULES = {
     ),
 }
 
-# Permission types - simplified for app usage
 PERMISSION_TYPES = {
     "module_access": "Access to view and use a module",
     "submodule_access": "Access to specific submodule functionality",
 }
 
-# Access levels for granular permissions
 ACCESS_LEVELS = {
     "view": "Read-only access - can view but not modify",
     "full": "Full access - can view and modify",
 }
 
-# User types
 USER_TYPES = {
     "admin": "Administrative users with full access",
     "user": "Regular users with module-specific access",
 }
 
-# Default groups
 # TODO: Pull these from variables.yml
 DEFAULT_GROUPS = {
     "admin": ["genesis-admin-group"],

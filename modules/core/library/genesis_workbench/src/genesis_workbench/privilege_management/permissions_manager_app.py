@@ -150,7 +150,6 @@ class AppPermissionsManager:
             List of group names the current user belongs to
         """
         try:
-            # Get current user info first
             user_url = f"https://{self.server_hostname}/api/2.0/preview/scim/v2/Me"
             headers = {
                 "Authorization": f"Bearer {self.access_token}",
@@ -166,7 +165,6 @@ class AppPermissionsManager:
                 logger.warning("Could not get current user ID")
                 return []
 
-            # Get user's groups
             groups_url = f"https://{self.server_hostname}/api/2.0/preview/scim/v2/Users/{user_id}"
             response = requests.get(groups_url, headers=headers)
             response.raise_for_status()
@@ -245,7 +243,6 @@ class AppPermissionsManager:
             access_level: Level of access (view, full) - ignored for admins who always get full
             submodule_name: Optional submodule name for submodule-specific access
         """
-        # Validate inputs
         if module_name not in MODULES:
             raise ValueError(f"Invalid module: {module_name}")
         if user_type not in USER_TYPES:
@@ -257,11 +254,9 @@ class AppPermissionsManager:
                 f"Invalid submodule: {submodule_name} for module: {module_name}"
             )
 
-        # Admins always get full access
         if user_type == "admin":
             access_level = "full"
 
-        # Sanitize inputs
         module = self._sanitize_sql_string(module_name)
         user_t = self._sanitize_sql_string(user_type)
         access_l = self._sanitize_sql_string(access_level)
