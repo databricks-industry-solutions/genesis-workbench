@@ -163,22 +163,11 @@ download_data(data_location, workdir_data_file)
 
 # COMMAND ----------
 
-in_inference_success = False
+is_inference_success = False
 
 # COMMAND ----------
 
-shutil.rmtree(ft_weights_directory)
-shutil.copytree(weights_volume_location, ft_weights_directory)
-
-# COMMAND ----------
-
-ft_weights_directory
-
-# COMMAND ----------
-
-# MAGIC %sh
-# MAGIC ls -al '/workdir/ft_weights'
-# MAGIC
+model_weights_location
 
 # COMMAND ----------
 
@@ -201,67 +190,3 @@ ft_weights_directory
 # MAGIC %md
 # MAGIC #### Copy the results back into volume
 # MAGIC
-
-# COMMAND ----------
-
-ft_weights_volume_location = f"/Volumes/{catalog}/{schema}/model_weights/esm2/{esm_variant}/{finetune_label}"
-
-checkpoint_path = f"{ft_weights_directory}/{experiment_name}/dev/checkpoints"
-
-for file in os.listdir(checkpoint_path):  
-  if os.path.isdir(f"{checkpoint_path}/{file}") and file.endswith("-last"):
-    last_checkpoint_path = f"file://{checkpoint_path}/{file}"
-    print(f"Last checkpoint path is {last_checkpoint_path}")
-    print(f"Copying last checkpointed weights to {ft_weights_volume_location}")
-    dbutils.fs.cp(last_checkpoint_path, ft_weights_volume_location, True) 
-    print("Done")
-    is_finetune_success = True
-    
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC #### Log the details in an MLflow experiment 
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC #### Record FT Run and Weight into
-
-# COMMAND ----------
-
-from genesis_workbench import bionemo
-
-# COMMAND ----------
-
-user_email = "srijit.nair@databricks.com"
-
-if is_finetune_success:
-    #update the model deployment table
-    spark.sql(f"""
-        INSERT INTO {catalog}.{schema}.bionemo_weights(
-            ft_label,
-            model_type,
-            variant,
-            experiment_name,
-            run_id,
-            weights_volume_location,
-            created_by,
-            created_datetime,
-            is_active,
-            deactivated_timestamp
-        ) VALUES (
-            '{finetune_label}',
-            'esm2',
-            '{esm_variant}',
-            '{experiment_name}',
-            0,
-            '{ft_weights_volume_location}',
-            '{user_email}',
-            CURRENT_TIMESTAMP(),
-            true,
-            NULL
-        )
-    """) 
-else:
-    print("No deployments made")
