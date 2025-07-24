@@ -85,37 +85,6 @@ print("Successfully imported app permissions modules!")
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## Step 1: Create Catalog and Schema
-# MAGIC
-# MAGIC Ensure the catalog and schema exist before creating the permissions table.
-
-# COMMAND ----------
-
-# Create catalog if it doesn't exist
-try:
-    spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog_name}")
-    print(f"✓ Catalog '{catalog_name}' ready")
-except Exception as e:
-    print(f"Note: Catalog creation failed (may already exist or lack permissions): {e}")
-
-# Create schema if it doesn't exist
-try:
-    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog_name}.{schema_name}")
-    print(f"✓ Schema '{catalog_name}.{schema_name}' ready")
-except Exception as e:
-    print(f"Error creating schema: {e}")
-    raise
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Step 2: Initialize Permissions Manager
-# MAGIC
-# MAGIC Set up the permissions manager for app usage.
-
-# COMMAND ----------
-
 # Initialize the permissions manager
 # Note: In a Databricks app, these would come from environment variables
 # For the setup notebook, we'll use the current session
