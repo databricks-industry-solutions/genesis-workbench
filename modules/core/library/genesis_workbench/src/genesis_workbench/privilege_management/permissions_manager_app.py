@@ -398,7 +398,7 @@ class AppPermissionsManager:
         """
         accessible = {}
 
-        for module_name in MODULES:
+        for module_name, module_config in MODULES.items():
             # Check module access (view level minimum)
             if self.check_user_module_access(user_groups, module_name, None, "view"):
                 accessible[module_name] = {}
@@ -414,7 +414,7 @@ class AppPermissionsManager:
                 accessible[module_name]["_module_access"] = module_access_level
 
                 # Check each submodule
-                for submodule in MODULES[module_name].submodules:
+                for submodule in module_config.submodules:
                     if self.check_user_module_access(
                         user_groups, module_name, submodule, "view"
                     ):
@@ -547,7 +547,7 @@ class AppPermissionsManager:
         logger.info(f"Setting up admin permissions for user: {admin_user}")
 
         # Create a group for this admin user if needed
-        admin_group = f"genesis-admin-{admin_user.replace('@', '-').replace('.', '-')}"
+        admin_group = f"genesis-admin-group"
 
         for module_name, module_config in MODULES.items():
             try:

@@ -11,7 +11,19 @@ resources:
         - task_key: create_table_task
           notebook_task:
             notebook_path: ../../notebooks/initialize_tables.py
-          max_retries: 0 
+          max_retries: 0
+        - task_key: "setup_permissions"
+          description: "Set up app permissions for Genesis Workbench"
+          notebook_task:
+            notebook_path: "../../library/genesis_workbench/src/genesis_workbench/privilege_management/setup_permissions_notebook.py"
+            base_parameters:
+              catalog_name: "${var.core_catalog_name}"
+              schema_name: "${var.core_schema_name}"
+              initial_admin_user: "${var.admin_user}"
+              default_admin_group: "${var.default_admin_group}"
+              environment: "${bundle.target}"
+          #environment_key: Default
+          timeout_seconds: 600 
 
         # - task_key: create_non_dab_resources
         #   notebook_task:
@@ -26,6 +38,7 @@ resources:
             dependencies:
               - ../../library/genesis_workbench/dist/*.whl
               - databricks-sdk==0.50.0
+              - databricks-sql-connector==4.0.2
 
       parameters:
         - name: catalog

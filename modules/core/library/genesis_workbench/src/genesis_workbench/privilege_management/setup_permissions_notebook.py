@@ -22,10 +22,7 @@
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## Configuration Widgets
-# MAGIC
-# MAGIC Configure the catalog, schema, and initial admin user.
+%pip install -U databricks-sql-connector==4.0.2
 
 # COMMAND ----------
 
@@ -36,6 +33,7 @@ dbutils.widgets.text("schema_name", "permissions", "Schema Name")
 dbutils.widgets.text(
     "initial_admin_user", "", "Initial Admin User (leave empty to use current user)"
 )
+dbutils.widgets.text("default_admin_group", "genesis-admin-group", "Default Admin Group")
 dbutils.widgets.dropdown(
     "environment", "dev", ["dev", "staging", "prod"], "Environment"
 )
@@ -150,12 +148,12 @@ except Exception as e:
 if permissions_manager:
     try:
         permissions_manager.create_permissions_table()
-        print("✓ Permissions table created using manager")
+        print("✓ Permissions table created using AppPermissionsManager")
     except Exception as e:
         print(f"Manager table creation failed: {e}")
         permissions_manager = None
 
-# Fallback: Create table using Spark SQL
+# Fallback: Create table using Spark SQL if manager initialization failed
 if not permissions_manager:
     table_sql = f"""
     CREATE OR REPLACE TABLE {catalog_name}.{schema_name}.{PERMISSIONS_TABLE_NAME} (
@@ -195,41 +193,57 @@ if not permissions_manager:
 # MAGIC ## Step 4: Set Up Initial Admin Permissions
 # MAGIC
 # MAGIC Grant the initial admin user full access to all modules and submodules.
+# MAGIC Note: This uses a Spark SQL version of the AppPermissionsManager.setup_admin_permissions method.
 
 # COMMAND ----------
 
-# Create admin group name based on the admin user
-admin_group = f"genesis-admin-{admin_user.replace('@', '-').replace('.', '-')}"
-
 print(f"Setting up admin permissions for user: {admin_user}")
-print(f"Using admin group: {admin_group}")
 
-# Insert admin permissions for all modules
-for module_name, module_config in MODULES.items():
+# Use the AppPermissionsManager.setup_admin_permissions method if available
+if permissions_manager:
     try:
-        # Grant module access (admins always get full access)
-        module_insert_sql = f"""
-        INSERT INTO {catalog_name}.{schema_name}.{PERMISSIONS_TABLE_NAME}
-        (module_name, submodule_name, permission_type, user_type, access_level, groups)
-        VALUES ('{module_name}', NULL, 'module_access', 'admin', 'full', array('{admin_group}'))
-        """
-        spark.sql(module_insert_sql)
-        print(f"  ✓ Granted full module access: {module_name}")
+        permissions_manager.setup_admin_permissions(admin_user)
+        print("✓ Initial admin permissions setup completed using AppPermissionsManager!")
+    except Exception as e:
+        print(f"Manager setup failed: {e}")
+        permissions_manager = None
 
-        # Grant access to all submodules
-        for submodule in module_config.submodules:
-            submodule_insert_sql = f"""
+# Fallback: Manual setup if manager is not available
+if not permissions_manager:
+    print("Falling back to manual setup...")
+    
+    # Create admin group name based on the admin user
+    admin_group = f"genesis-admin-{admin_user.replace('@', '-').replace('.', '-')}"
+    print(f"Using admin group: {admin_group}")
+
+    # Insert admin permissions for all modules
+    for module_name, module_config in MODULES.items():
+        try:
+            # Grant module access (admins always get full access)
+            module_insert_sql = f"""
             INSERT INTO {catalog_name}.{schema_name}.{PERMISSIONS_TABLE_NAME}
             (module_name, submodule_name, permission_type, user_type, access_level, groups)
-            VALUES ('{module_name}', '{submodule}', 'submodule_access', 'admin', 'full', array('{admin_group}'))
+            VALUES ('{module_name}', NULL, 'module_access', 'admin', 'full', array('{admin_group}'))
             """
-            spark.sql(submodule_insert_sql)
-            print(f"    ✓ Granted full submodule access: {module_name}.{submodule}")
+            spark.sql(module_insert_sql)
+            print(f"  ✓ Granted full module access: {module_name}")
 
-    except Exception as e:
-        print(f"  Warning: Permission may already exist for {module_name}: {e}")
+            # Grant access to all submodules
+            for submodule in module_config.submodules:
+                submodule_insert_sql = f"""
+                INSERT INTO {catalog_name}.{schema_name}.{PERMISSIONS_TABLE_NAME}
+                (module_name, submodule_name, permission_type, user_type, access_level, groups)
+                VALUES ('{module_name}', '{submodule}', 'submodule_access', 'admin', 'full', array('{admin_group}'))
+                """
+                spark.sql(submodule_insert_sql)
+                print(f"    ✓ Granted full submodule access: {module_name}.{submodule}")
 
-print("✓ Initial admin permissions setup completed!")
+        except Exception as e:
+            print(f"  Warning: Permission may already exist for {module_name}: {e}")
+
+    print("✓ Initial admin permissions setup completed!")
+
+
 
 # COMMAND ----------
 
