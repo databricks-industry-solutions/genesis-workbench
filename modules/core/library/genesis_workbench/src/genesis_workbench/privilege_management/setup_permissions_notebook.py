@@ -213,7 +213,7 @@ if not permissions_manager:
     print("Falling back to manual setup...")
     
     # Create admin group name based on the admin user
-    admin_group = f"genesis-admin-{admin_user.replace('@', '-').replace('.', '-')}"
+    admin_group = f"genesis-admin-group"
     print(f"Using admin group: {admin_group}")
 
     # Insert admin permissions for all modules
