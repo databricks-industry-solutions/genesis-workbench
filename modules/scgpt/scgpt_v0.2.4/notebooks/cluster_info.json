@@ -1,0 +1,28 @@
+// for dev, I used the cluster info as below.
+// This is the JSON used for creating this cluster
+{
+    "cluster_name": "[dev yyang] scgpt_gpu_cluster",
+    "spark_version": "15.4.x-gpu-ml-scala2.12",
+    "spark_conf": {
+        "spark.databricks.cluster.profile": "singleNode",
+        "spark.master": "local[*]"
+    },
+    "azure_attributes": {
+        "first_on_demand": 1,
+        "availability": "ON_DEMAND_AZURE",
+        "spot_bid_max_price": -1
+    },
+    "node_type_id": "Standard_NC4as_T4_v3",
+    "driver_node_type_id": "Standard_NC4as_T4_v3",
+    "custom_tags": {
+        "ResourceClass": "SingleNode"
+    },
+    "autotermination_minutes": 240,
+    "enable_elastic_disk": true,
+    "single_user_name": "yang.yang@databricks.com",
+    "enable_local_disk_encryption": false,
+    "data_security_mode": "SINGLE_USER",
+    "assigned_principal": "user:yang.yang@databricks.com",
+    "num_workers": 0,
+    "apply_policy_default_values": false
+}
