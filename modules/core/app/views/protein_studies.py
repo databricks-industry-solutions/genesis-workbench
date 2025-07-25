@@ -25,7 +25,7 @@ import streamlit.components.v1 as components
 
 import logging
 
-st.title(":material/biotech: Protein Structure Prediction")
+st.title(":material/biotech: Protein Studies")
 
 def get_progress_callback(status_generation
         #status_parsing,status_esm_init,status_rfdiffusion,status_proteinmpnn,status_esm_preds
@@ -71,7 +71,7 @@ def design_tab_fn(sequence: str, mlflow_experiment:str, mlflow_run_name:str, pro
     output = make_designs(sequence=sequence, 
                                  mlflow_experiment_name=mlflow_experiment,
                                  mlflow_run_name=mlflow_run_name,
-                                 user_email=user_info.user_email,
+                                 user_info=user_info,
                                  n_rfdiffusion_hits=n_rf_diffusion,
                                  progress_callback=progress_callback)
     
