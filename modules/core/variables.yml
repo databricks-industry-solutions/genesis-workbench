@@ -55,3 +55,15 @@ variables:
   bionemo_cluster_dbr_version:
     description: DBR Version of BioNeMo cluster
     default: 15.4.x-scala2.12
+
+  default_admin_group:
+    description: The default admin group for the app
+    default: genesis-admin-group
+
+  default_user_group:
+    description: The default user group for the app
+    default: genesis-users
+
+  admin_user:
+    description: The admin user for the app
+    default: ${var.current_user}
