@@ -16,4 +16,4 @@ temp.*
 /temp
 mlruns
 lightning_logs
-.idea/
+.idea
