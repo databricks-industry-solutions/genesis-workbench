@@ -1,17 +1,17 @@
 resources:
   jobs:
-    bionemo_esm_finetune:
-      name: bionemo_esm_finetune_job
+    bionemo_esm_inference:
+      name: bionemo_esm_inference_job
 
       email_notifications:
         on_failure:
           - ${var.current_user}
 
       tasks:
-        - task_key: bionemo_esm_finetune_task
+        - task_key: bionemo_esm_inference_task
           job_cluster_key: job_cluster
           notebook_task:
-            notebook_path: ../../notebooks/bionemo_esm_finetune.py
+            notebook_path: ../../notebooks/bionemo_esm_inference.py
           max_retries: 0 
 
       parameters:
@@ -19,42 +19,20 @@ resources:
           default: ${var.core_catalog_name}
         - name: schema
           default: ${var.core_schema_name}
+        - name: is_base_model
+          default: true
         - name: esm_variant
           default: 650M
-        - name: train_data_location
-          default: /Volumes/srijit_nair/bionemo/esm2/ft_data/BLAT_ECOLX_Tenaillon2013_metadata_train.csv
-        - name: validation_data_location
-          default: /Volumes/srijit_nair/bionemo/esm2/ft_data/BLAT_ECOLX_Tenaillon2013_metadata_eval.csv
-        - name: should_use_lora
-          default: false
-        - name: finetune_label
-          default: esm_650m_ft_xyz
-        - name: core_catalog
-          default: genesis_workbench
-        - name: core_schema
-          default: dev_srijit_nair_dbx_genesis_workbench_core
         - name: task_type
           default: regression
-        - name: mlp_ft_dropout
-          default: 0.25
-        - name: mlp_hidden_size
-          default: 256
-        - name: mlp_target_size
-          default: 1
-        - name: experiment_name
-          default: sequence_level_regression
-        - name: num_steps
-          default: 50
-        - name: lr
-          default: 5e-3
-        - name: lr_multiplier
-          default: 1e2
-        - name: scale_lr_layer
-          default: regression_head
-        - name: micro_batch_size
-          default: 2
-        - name: precision
-          default: bf16-mixed
+        - name: finetune_run_id
+          default: 3
+        - name: data_location
+          default: /Volumes/srijit_nair/bionemo/esm2/ft_data/BLAT_ECOLX_Tenaillon2013_metadata_train.csv", "Training data location
+        - name: sequence_column_name
+          default: sequence
+        - name: result_location
+          default: /Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/esm_finetune
         - name: user_email
           default: a@b.com
 

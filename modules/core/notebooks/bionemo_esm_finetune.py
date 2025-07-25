@@ -1,7 +1,11 @@
 # Databricks notebook source
+#dbutils.widgets.removeAll()
+
+# COMMAND ----------
+
 dbutils.widgets.text("esm_variant", "650M", "ESM Variant")
-dbutils.widgets.text("train_data_location", "/Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/esm_finetune", "Training data location")
-dbutils.widgets.text("validation_data_location", "/Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/esm_finetune", "Validation data location")
+dbutils.widgets.text("train_data_location", "/Volumes/srijit_nair/bionemo/esm2/ft_data/BLAT_ECOLX_Tenaillon2013_metadata_train.csv", "Training data location")
+dbutils.widgets.text("validation_data_location", "/Volumes/srijit_nair/bionemo/esm2/ft_data/BLAT_ECOLX_Tenaillon2013_metadata_eval.csv", "Validation data location")
 dbutils.widgets.text("should_use_lora", "false", "Should use LORA")
 dbutils.widgets.text("finetune_label", "esm_650m_ft_xyz", "A label using which these finetune weights are saved")
 dbutils.widgets.text("core_catalog", "genesis_workbench", "Catalog")
@@ -18,7 +22,7 @@ dbutils.widgets.text("lr_multiplier", "1e2" , "Learning rate multiplier")
 #dbutils.widgets.text("scale_lr_layer", "regression_head" ,"Layers to scale Learning Rate")
 dbutils.widgets.text("micro_batch_size", "2" , "Micro batch size")
 dbutils.widgets.text("precision", "bf16-mixed", "Precision")
-dbutils.widgets.text("user_email", "a@b.com", "User Email")
+dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Email")
 
 catalog = dbutils.widgets.get("core_catalog")
 schema = dbutils.widgets.get("core_schema")
@@ -47,6 +51,10 @@ print(gwb_library_path)
 
 # MAGIC %pip install {gwb_library_path} --force-reinstall
 # MAGIC dbutils.library.restartPython()
+
+# COMMAND ----------
+
+!nvidia-smi
 
 # COMMAND ----------
 
@@ -92,6 +100,7 @@ os.makedirs(work_dir)
 os.makedirs(work_dir + "/data/train")
 os.makedirs(work_dir + "/data/val")
 os.makedirs(work_dir + "/ft_weights")
+
 ft_weights_directory = f"{work_dir}/ft_weights"
 ft_weights_volume_location = f"/Volumes/{catalog}/{schema}/model_weights/esm2/{esm_variant}/{finetune_label}"
 dbutils.fs.rm(ft_weights_volume_location, True)
@@ -121,8 +130,8 @@ import os
 import io
 from databricks.sdk import WorkspaceClient
 
-db_host = dbutils.notebook.entry_point.getDbutils().notebook().getContext().extraContext().apply('api_url')
-databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
+db_host = spark.conf.get("spark.databricks.workspaceUrl")
+db_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
 
 # COMMAND ----------
 
@@ -131,37 +140,47 @@ databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getConte
 
 # COMMAND ----------
 
-w = WorkspaceClient(host=db_host, token=databricks_token)
+# w = WorkspaceClient(host=db_host, token=db_token)
 
-def download_data(remote_path, local_file_name):
-  file_content = ""
-  sequences = []
-  for f in w.files.list_directory_contents(remote_path):
-    print(f"Downloading {f.path}")
-    with w.files.download(f.path).contents as remote_file:
-      file_content += remote_file.read().decode("utf-8")
+# def download_data(remote_path, local_file_name):
+#   file_content = ""
+#   sequences = []
+#   for f in w.files.list_directory_contents(remote_path):
+    
+#     if not f.is_directory and f.path.endswith('.csv'):
+#       print(f"Downloading {f.path}")
+#       with w.files.download(f.path).contents as remote_file:
+#         file_content += remote_file.read().decode("utf-8")
 
-  for seq in file_content.split("\n"):
-    seq = seq.strip()
-    if len(seq)>0:
-      sequences.append((seq.split(",")[0], seq.split(",")[1]))
+#   for seq in file_content.split("\n"):
+#     seq = seq.strip()
+#     if len(seq)>0:
+#       sequences.append((seq.split(",")[0], seq.split(",")[1]))
 
-  # Create a DataFrame
-  df = pd.DataFrame(sequences, columns=["sequences", "labels"])
+#   # Create a DataFrame
+#   df = pd.DataFrame(sequences, columns=["sequences", "labels"])
 
-  # Save the DataFrame to a CSV file
-  data_path = os.path.join(work_dir, local_file_name)
-  print(f"Writing to {data_path}")
-  df.to_csv(data_path, index=False)
+#   # Save the DataFrame to a CSV file
+#   data_path = os.path.join(work_dir, local_file_name)
+#   print(f"Writing to {data_path}")
+#   df.to_csv(data_path, index=False)
 
 
 # COMMAND ----------
 
+train_data_pdf =  pd.read_csv(train_data_volume_location)
+val_data_pdf = pd.read_csv(validation_data_volume_location)
+
+
 workdir_train_data_file = f"{work_dir}/data/train/train.csv"
 workdir_val_data_file = f"{work_dir}/data/val/val.csv"
 
-download_data(train_data_volume_location, workdir_train_data_file)
-download_data(validation_data_volume_location, workdir_val_data_file)
+#download_data(train_data_volume_location, workdir_train_data_file)
+#download_data(validation_data_volume_location, workdir_val_data_file)
+
+train_data_pdf[["sequence","target"]].rename(columns={"sequence": "sequences", "target":"labels"}).to_csv(workdir_train_data_file , index=False)
+
+val_data_pdf[["sequence","target"]].rename(columns={"sequence": "sequences", "target":"labels"}).to_csv(workdir_val_data_file , index=False)
 
 # COMMAND ----------
 
@@ -176,8 +195,6 @@ from tensorboard.backend.event_processing import event_accumulator
 from genesis_workbench.models import set_mlflow_experiment
 
 is_finetune_success = False
-db_host = dbutils.notebook.entry_point.getDbutils().notebook().getContext().extraContext().apply('api_url')
-db_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
 os.environ["DATABRICKS_HOST"] = db_host
 os.environ["DATABRICKS_TOKEN"] = db_token
 os.environ["MLFLOW_ENABLE_SYSTEM_METRICS_LOGGING"] = "true"
@@ -253,8 +270,6 @@ mlflow.end_run()
 # MAGIC
 
 # COMMAND ----------
-
-ft_weights_volume_location = f"/Volumes/{catalog}/{schema}/model_weights/esm2/{esm_variant}/{finetune_label}"
 
 checkpoint_path = f"{ft_weights_directory}/{experiment_name}/dev/checkpoints"
 

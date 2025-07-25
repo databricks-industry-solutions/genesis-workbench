@@ -15,5 +15,4 @@ env.env
 temp.*
 /temp
 mlruns
-# Optional: ignore entire .idea folder for pycharm
-.idea/
+lightning_logs
