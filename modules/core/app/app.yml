@@ -13,5 +13,8 @@ env:
     valueFrom: "deploy_model_job"
   - name: BIONEMO_ESM_FINETUNE_JOB_ID
     valueFrom: "bionemo_esm_finetune_job"
+  - name: BIONEMO_ESM_INFERENCE_JOB_ID
+    valueFrom: "bionemo_esm_inference_job"
+
 
 
