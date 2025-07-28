@@ -28,7 +28,7 @@ resources:
         - name: finetune_run_id
           default: 3
         - name: data_location
-          default: /Volumes/srijit_nair/bionemo/esm2/ft_data/BLAT_ECOLX_Tenaillon2013_metadata_train.csv", "Training data location
+          default: /Volumes/srijit_nair/bionemo/esm2/ft_data/BLAT_ECOLX_Tenaillon2013_metadata_train.csv
         - name: sequence_column_name
           default: sequence
         - name: result_location
