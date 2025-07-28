@@ -10,20 +10,6 @@ CWD=$1
 ENV=$2
 EXTRA_PARAMS=${@: 3}
 
-echo "================================"
-echo "⚙️ Preparing to destroy module $CWD"
-echo "================================"
-
 cd modules/$CWD
-databricks bundle destroy -t $ENV $EXTRA_PARAMS
-if [ $? -eq 0 ]; then
-    echo "================================"
-    echo "✅ SUCCESS! Destroy complete."
-    echo "================================"
-else
-    echo "================================"
-    echo "❗️ ERROR! Destroy failed."
-    echo "================================"
-fi
-
+./destroy.sh $ENV $EXTRA_PARAMS
 
