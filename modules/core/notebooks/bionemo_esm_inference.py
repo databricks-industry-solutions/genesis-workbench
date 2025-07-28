@@ -1,12 +1,21 @@
 # Databricks notebook source
+!nvidia-smi
+
+# COMMAND ----------
+
+#dbutils.widgets.removeAll()
+
+# COMMAND ----------
+
 dbutils.widgets.text("core_catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("core_schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
-dbutils.widgets.text("is_base_model", "true", "Use Base Model?")
+dbutils.widgets.text("is_base_model", "false", "Use Base Model?")
 dbutils.widgets.text("esm_variant", "650M", "ESM Variant")
 dbutils.widgets.text("task_type", "regression", "Task type: Regression or Classification")
-dbutils.widgets.text("finetune_run_id", "1", "Finetune Run Id")
-dbutils.widgets.text("data_location", "/Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/esm_finetune", "Training data location")
-dbutils.widgets.text("result_table", "/Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/esm_finetune", "Result table")
+dbutils.widgets.text("finetune_run_id", "3", "Finetune Run Id")
+dbutils.widgets.text("data_location", "/Volumes/srijit_nair/bionemo/esm2/ft_data/BLAT_ECOLX_Tenaillon2013_metadata_train.csv", "Training data location")
+dbutils.widgets.text("sequence_column_name", "sequence", "Column name containing the sequence")
+dbutils.widgets.text("result_location", "/Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/esm_finetune", "Result Location in UC Volume")
 dbutils.widgets.text("user_email", "a@b.com", "User Email")
 
 catalog = dbutils.widgets.get("core_catalog")
@@ -58,7 +67,8 @@ esm_variant = dbutils.widgets.get("esm_variant")
 task_type = dbutils.widgets.get("task_type")
 finetune_run_id = dbutils.widgets.get("finetune_run_id")
 data_location = dbutils.widgets.get("data_location")
-result_table = dbutils.widgets.get("result_table")
+sequence_column_name = dbutils.widgets.get("sequence_column_name")
+result_location = dbutils.widgets.get("result_location")
 user_email = dbutils.widgets.get("user_email")
 
 # COMMAND ----------
@@ -121,8 +131,8 @@ import os
 import io
 from databricks.sdk import WorkspaceClient
 
-db_host = dbutils.notebook.entry_point.getDbutils().notebook().getContext().extraContext().apply('api_url')
-databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
+db_host = spark.conf.get("spark.databricks.workspaceUrl")
+db_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
 
 # COMMAND ----------
 
@@ -131,43 +141,44 @@ databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getConte
 
 # COMMAND ----------
 
-w = WorkspaceClient(host=db_host, token=databricks_token)
+# w = WorkspaceClient(host=db_host, token=databricks_token)
 
-def download_data(remote_path, local_file_name):
-  file_content = ""
-  sequences = []
-  for f in w.files.list_directory_contents(remote_path):
-    print(f"Downloading {f.path}")
-    with w.files.download(f.path).contents as remote_file:
-      file_content += remote_file.read().decode("utf-8")
+# def download_data(remote_path, local_file_name):
+#   file_content = ""
+#   sequences = []
+#   for f in w.files.list_directory_contents(remote_path):
+#     print(f"Downloading {f.path}")
+#     with w.files.download(f.path).contents as remote_file:
+#       file_content += remote_file.read().decode("utf-8")
 
-  for seq in file_content.split("\n"):
-    seq = seq.strip()
-    if len(seq)>0:
-      sequences.append((seq.split(",")[0], seq.split(",")[1]))
+#   for seq in file_content.split("\n"):
+#     seq = seq.strip()
+#     if len(seq)>0:
+#       sequences.append((seq.split(",")[0], seq.split(",")[1]))
 
-  # Create a DataFrame
-  df = pd.DataFrame(sequences, columns=["sequences", "labels"])
+#   # Create a DataFrame
+#   df = pd.DataFrame(sequences, columns=["sequences", "labels"])
 
-  # Save the DataFrame to a CSV file
-  print(f"Writing to {local_file_name}")
-  df.to_csv(local_file_name, index=False)
+#   # Save the DataFrame to a CSV file
+#   print(f"Writing to {local_file_name}")
+#   df.to_csv(local_file_name, index=False)
 
 
 # COMMAND ----------
 
+import pandas as pd
+
 workdir_data_file = f"{data_dir}/data.csv"
 
-download_data(data_location, workdir_data_file)
+infer_data = pd.read_csv(data_location)
+
+infer_data[[sequence_column_name]].rename(columns={sequence_column_name: "sequences"}).to_csv(workdir_data_file , index=False)
+
 
 
 # COMMAND ----------
 
 is_inference_success = False
-
-# COMMAND ----------
-
-model_weights_location
 
 # COMMAND ----------
 
@@ -190,3 +201,27 @@ model_weights_location
 # MAGIC %md
 # MAGIC #### Copy the results back into volume
 # MAGIC
+
+# COMMAND ----------
+
+import torch
+
+
+results = torch.load(f"{results_dir}/predictions__rank_0.pt")
+
+for key, val in results.items():
+    if val is not None:
+        print(f"{key}\t{val.shape}")
+
+# COMMAND ----------
+
+results_df = pd.read_csv(workdir_data_file)
+results_df["predictions"] = [r[0] for r in results["regression_output"].tolist()]
+results_df
+
+# COMMAND ----------
+
+# Save the DataFrame to a CSV file
+results_file_name = f"{result_location}/results.csv"
+print(f"Writing to {results_file_name}")
+results_df.to_csv(results_file_name, index=False)

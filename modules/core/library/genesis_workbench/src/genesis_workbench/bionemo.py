@@ -33,7 +33,7 @@ def get_variants(model_type: BionemoModelType) -> List[str]:
     if model_type == BionemoModelType.ESM2:
         return ["650M","3B"]
 
-def start_finetuning(user_info: UserInfo,
+def start_esm2_finetuning(user_info: UserInfo,
             esm_variant:str,
             train_data_volume_location:str,
             validation_data_volume_location:str,
@@ -73,6 +73,32 @@ def start_finetuning(user_info: UserInfo,
     print(params)
     run_id = execute_workflow(bionemo_finetune_job_id,params)
     return run_id
+
+def start_esm2_inference(user_info: UserInfo,
+                        esm_variant:str,
+                        is_base_model:bool,
+                        finetune_run_id: int,
+                        task_type:str,
+                        data_volume_location:str,
+                        sequence_column_name:str,
+                        result_location:str):
+    
+    print(f"Starting an Inference run")
+    bionemo_finetune_job_id = os.environ["BIONEMO_ESM_INFERENCE_JOB_ID"]
+    params = {
+        "user_email": "a@b.com" if not (user_info and user_info.user_email) else user_info.user_email,
+        "esm_variant" :esm_variant,
+        "is_base_model" : "true" if is_base_model else "false",
+        "task_type": task_type,
+        "data_volume_location" : data_volume_location,                
+        "finetune_run_id" : finetune_run_id,
+        "sequence_column_name" : sequence_column_name,
+        "result_location": result_location
+    }
+    print(params)
+    run_id = execute_workflow(bionemo_finetune_job_id,params)
+    return run_id
+
 
 
 def list_finetuned_weights(model_type: BionemoModelType, app_context: AppContext) -> pd.DataFrame:

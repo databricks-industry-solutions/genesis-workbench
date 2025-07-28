@@ -25,7 +25,7 @@ Moreover, because Genesis Workbench is open source, it provides AI engineers wit
 	- Access Management, Monitoring and Dashboards
 
 ## Installation
-Read the Getting Started guide
+Read the Installation guide
 
 ## Troubleshooting
 Read the Troubleshooting guide
