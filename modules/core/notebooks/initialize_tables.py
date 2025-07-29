@@ -2,10 +2,17 @@
 #parameters to the notebook
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
+dbutils.widgets.text("deploy_model_job_id", "1234", "Deploy Model Job ID")
+dbutils.widgets.text("bionemo_esm_finetune_job_id", "1234", "BioNeMo ESM Fine Tune Job ID")
+dbutils.widgets.text("bionemo_esm_inference_job_id", "1234", "BioNeMo ESM Inference Job ID")
+dbutils.widgets.text("application_secret_scope", "dbx_genesis_workbench", "Secret Scope used by application")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
-
+deploy_model_job_id = dbutils.widgets.get("deploy_model_job_id")
+bionemo_esm_finetune_job_id = dbutils.widgets.get("bionemo_esm_finetune_job_id")
+bionemo_esm_inference_job_id = dbutils.widgets.get("bionemo_esm_inference_job_id")
+secret_scope = dbutils.widgets.get("application_secret_scope")
 
 # COMMAND ----------
 
@@ -102,4 +109,25 @@ CREATE TABLE bionemo_weights (
     is_active BOOLEAN,
     deactivated_timestamp TIMESTAMP
 )
+""")
+
+# COMMAND ----------
+
+spark.sql("DROP TABLE IF EXISTS settings")
+
+spark.sql(f"""
+CREATE TABLE settings (
+    key STRING,
+    value STRING
+)
+""")
+
+# COMMAND ----------
+
+spark.sql(f"""
+INSERT INTO settings VALUES
+('bionemo_esm_finetune_job_id', '{bionemo_esm_finetune_job_id}'),
+('bionemo_esm_inference_job_id', '{bionemo_esm_inference_job_id}'),
+('deploy_model_job_id', '{deploy_model_job_id}'),
+('secret_scope', '{secret_scope}')
 """)
