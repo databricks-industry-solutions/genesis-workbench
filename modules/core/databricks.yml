@@ -9,6 +9,7 @@ include:
   - resources/app.yml
   - resources/volumes/*.yml
   - resources/experiments/*.yml
+#  - resources/secrets/*.yml
     
 # artifacts:
 #     genesis_workbench:
@@ -25,6 +26,7 @@ targets:
     mode: development
     default: true
     variables:
+      secret_scope_name: dev_${var.dev_user_prefix}_genesis_workbench_application_settings_scope
       app_name: dev-${var.dev_user_prefix}-genesis-workbench
       sql_warehouse_id: 8f210e00850a2c16
       bionemo_docker_image: srijitnair254/bionemo_dbx_amd64:0.1

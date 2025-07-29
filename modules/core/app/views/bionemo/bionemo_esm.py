@@ -5,7 +5,7 @@ from genesis_workbench.bionemo import (BionemoModelType,
                                        start_esm2_finetuning,
                                        start_esm2_inference,
                                        list_finetuned_weights)
-from utils.streamlit_helper import get_user_info, get_app_context, open_run_window
+from utils.streamlit_helper import get_user_info, open_run_window
 
 
 
@@ -163,7 +163,7 @@ def display_inference_tab():
 #load data for page
 with st.spinner("Loading data"):
     if "finetuned_esm_weights_df" not in st.session_state:
-            finetuned_esm_weights_df = list_finetuned_weights(model_type=BionemoModelType.ESM2, app_context=get_app_context())[["ft_id", "ft_label", "model_type", "variant", "created_by"]]
+            finetuned_esm_weights_df = list_finetuned_weights(model_type=BionemoModelType.ESM2)[["ft_id", "ft_label", "model_type", "variant", "created_by"]]
 
             finetuned_esm_weights_df.columns = ["Id", "Label", "Model type", "Variant", "Created By"]
 

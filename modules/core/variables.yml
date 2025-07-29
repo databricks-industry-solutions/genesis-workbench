@@ -26,6 +26,9 @@ variables:
       module: core
       created_by: ${var.current_user}
 
+  secret_scope_name:
+    description: The secret scope that contains values for app
+
   dev_user_prefix:
     description: A prefix for resources in dev environment
 

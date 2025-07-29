@@ -337,12 +337,7 @@ os.environ["DATABRICKS_TOKEN"]=databricks_token
 model_version = get_latest_model_version(registered_model_name)
 model_uri = f"models:/{registered_model_name}/{model_version}"
 
-app_context = AppContext(
-        core_catalog_name=CATALOG,
-        core_schema_name=SCHEMA
-    )
-
-import_model_from_uc(app_context,user_email=USER_EMAIL,
+import_model_from_uc(user_email=USER_EMAIL,
                     model_category=ModelCategory.PROTEIN_STUDIES,
                     model_uc_name=registered_model_name,
                     model_uc_version=model_version,

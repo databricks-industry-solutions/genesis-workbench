@@ -3,13 +3,14 @@
 set -e
 
 if [ "$#" -lt 1 ]; then
-    echo "Usage: $0 <env> <additional build variables>"
-    echo 'Example: deploy dev --var="dev_user_prefix=scn,core_catalog_name=genesis_workbench,core_schema_name=dev_srijit_nair_dbx_genesis_workbench_core"'
+    echo "Usage: $0 <env> "
+    echo 'Example: deploy dev '
     exit 1
 fi
 
 ENV=$1
-EXTRA_PARAMS=${@: 2}
+
+source env.env
 
 echo "⏩️ Starting deploy of Protein Studies module"
 
@@ -19,7 +20,7 @@ for module in alphafold/alphafold_v2.3.2 boltz/boltz_1 esmfold/esmfold_v1 protei
         echo "Deploying $module"
         cd $module
         chmod +x deploy.sh
-        ./deploy.sh $ENV $EXTRA_PARAMS
+        ./deploy.sh $ENV --var="dev_user_prefix=$dev_user_prefix,core_catalog_name=$core_catalog_name,core_schema_name=$core_schema_name"
         cd ../..
     done
 

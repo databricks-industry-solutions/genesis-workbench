@@ -55,12 +55,7 @@ model_uc_name=f"{catalog}.{schema}.rfdiffusion_unconditional"
 model_version = get_latest_model_version(model_uc_name)
 model_uri = f"models:/{model_uc_name}/{model_version}"
 
-app_context = AppContext(
-        core_catalog_name=catalog,
-        core_schema_name=schema
-    )
-
-import_model_from_uc(app_context,user_email=user_email,
+import_model_from_uc(user_email=user_email,
                     model_category=ModelCategory.PROTEIN_STUDIES,
                     model_uc_name=f"{catalog}.{schema}.rfdiffusion_unconditional",
                     model_uc_version=model_version,
@@ -75,12 +70,7 @@ model_uc_name=f"{catalog}.{schema}.rfdiffusion_inpainting"
 model_version = get_latest_model_version(model_uc_name)
 model_uri = f"models:/{model_uc_name}/{model_version}"
 
-app_context = AppContext(
-        core_catalog_name=catalog,
-        core_schema_name=schema
-    )
-
-import_model_from_uc(app_context,user_email=user_email,
+import_model_from_uc(user_email=user_email,
                     model_category=ModelCategory.PROTEIN_STUDIES,
                     model_uc_name=f"{catalog}.{schema}.rfdiffusion_inpainting",
                     model_uc_version=model_version,

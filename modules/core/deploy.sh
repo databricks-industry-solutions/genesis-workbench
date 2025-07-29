@@ -3,29 +3,46 @@
 set -e
 
 if [ "$#" -lt 1 ]; then
-    echo "Usage: $0 <env> <additional build variables>"
-    echo 'Example: deploy dev --var="dev_user_prefix=scn,core_catalog_name=genesis_workbench,core_schema_name=dev_srijit_nair_dbx_genesis_workbench_core"'
+    echo "Usage: $0 <env> "
+    echo 'Example: deploy dev'
     exit 1
 fi
 
 ENV=$1
-EXTRA_PARAMS=${@: 2}
+#EXTRA_PARAMS=${@: 2}
 
-echo ""
-echo "▶️ Extracting variables"
-echo ""
+# echo ""
+# echo "▶️ Extracting variables"
+# echo ""
 
-var_strs="${EXTRA_PARAMS//--var=}"
+# var_strs="${EXTRA_PARAMS//--var=}"
 
-extracted_content=$(sed 's/.*"\([^"]*\)".*/\1/' <<< "$var_strs")
-rm -f env.env
-while read -d, -r pair; do
-  IFS='=' read -r key val <<<"$pair"
-  echo "export $key=$val" >> env.env
-done <<<"$extracted_content,"
+# extracted_content=$(sed 's/.*"\([^"]*\)".*/\1/' <<< "$var_strs")
+# rm -f env.env
+# while read -d, -r pair; do
+#   IFS='=' read -r key val <<<"$pair"
+#   echo "export $key=$val" >> env.env
+# done <<<"$extracted_content,"
 
 source env.env
-rm -f env.env
+
+echo ""
+echo "▶️ Creating a secret scope"
+echo ""
+
+SCOPE_NAME="${ENV}_${dev_user_prefix}_genesis_workbench_application_settings_scope"
+
+echo "Scope name: $SCOPE_NAME"
+
+if databricks secrets list-scopes | grep -qw "$SCOPE_NAME"; then
+    echo "Scope $SCOPE_NAME already exists."
+else
+    databricks secrets create-scope "$SCOPE_NAME"
+    echo "Scope $SCOPE_NAME created."
+fi
+
+databricks secrets put-secret $SCOPE_NAME core_catalog_name --string-value $core_catalog_name
+databricks secrets put-secret $SCOPE_NAME core_schema_name --string-value $core_schema_name
 
 echo ""
 echo "▶️ Building libraries"
@@ -64,8 +81,7 @@ for file in library/genesis_workbench/dist/*.whl; do
   fi
 done
 
-echo $EXTRA_PARAMS > app/extra_params.txt
-
+#echo $EXTRA_PARAMS > app/extra_params.txt
 echo ""
 echo "▶️ Creating schema if not exists"
 echo ""
@@ -85,25 +101,29 @@ echo ""
 echo "▶️ Validating bundle"
 echo ""
 
-databricks bundle validate -t $ENV $EXTRA_PARAMS
+databricks bundle validate -t $ENV \
+  --var="dev_user_prefix=$dev_user_prefix,core_catalog_name=$core_catalog_name,core_schema_name=$core_schema_name,bionemo_docker_token=$bionemo_docker_token"
 
 echo ""
 echo "▶️ Deploying bundle"
 echo ""
 
-databricks bundle deploy -t $ENV $EXTRA_PARAMS
+databricks bundle deploy -t $ENV \
+  --var="dev_user_prefix=$dev_user_prefix,core_catalog_name=$core_catalog_name,core_schema_name=$core_schema_name,bionemo_docker_token=$bionemo_docker_token"
 
 echo ""
 echo "▶️ Running initialization job"
 echo ""
 
-databricks bundle run -t $ENV initial_setup_job $EXTRA_PARAMS
+databricks bundle run -t $ENV initial_setup_job \
+  --var="dev_user_prefix=$dev_user_prefix,core_catalog_name=$core_catalog_name,core_schema_name=$core_schema_name,bionemo_docker_token=$bionemo_docker_token"
 
 echo ""
 echo "▶️ Deploying UI Application"
 echo ""
 
-databricks bundle run -t $ENV genesis_workbench_app $EXTRA_PARAMS
+databricks bundle run -t $ENV genesis_workbench_app \
+  --var="dev_user_prefix=$dev_user_prefix,core_catalog_name=$core_catalog_name,core_schema_name=$core_schema_name,bionemo_docker_token=$bionemo_docker_token"
 
 
 echo ""

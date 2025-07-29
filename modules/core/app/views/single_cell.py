@@ -6,8 +6,7 @@ from genesis_workbench.models import (ModelCategory,
                                       get_available_models, 
                                       get_deployed_models)
 
-from utils.streamlit_helper import (get_app_context, 
-                                    display_import_model_uc_dialog,
+from utils.streamlit_helper import (display_import_model_uc_dialog,
                                     display_deploy_model_dialog)
 
 def reset_available_models():
@@ -111,7 +110,7 @@ def display_embeddings_tab(deployed_models_df):
 #load data for page
 with st.spinner("Loading data"):
     if "available_single_cell_models_df" not in st.session_state:
-            available_single_cell_models_df = get_available_models(ModelCategory.SINGLE_CELL, get_app_context())
+            available_single_cell_models_df = get_available_models(ModelCategory.SINGLE_CELL)
             available_single_cell_models_df["model_labels"] = (available_single_cell_models_df["model_id"].astype(str) + " - " 
                                                 + available_single_cell_models_df["model_display_name"].astype(str) + " [ " 
                                                 + available_single_cell_models_df["model_uc_name"].astype(str) + " v"
@@ -121,7 +120,7 @@ with st.spinner("Loading data"):
     available_single_cell_models_df = st.session_state["available_single_cell_models_df"]
 
     if "deployed_single_cell_models_df" not in st.session_state:
-        deployed_single_cell_models_df = get_deployed_models(ModelCategory.SINGLE_CELL, get_app_context())
+        deployed_single_cell_models_df = get_deployed_models(ModelCategory.SINGLE_CELL)
         deployed_single_cell_models_df.columns = ["Id", "Name", "Description", "Model Name", "Source Version", "UC Name/Version"]
 
         st.session_state["deployed_single_cell_models_df"] = deployed_single_cell_models_df

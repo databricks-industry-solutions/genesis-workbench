@@ -13,17 +13,33 @@ resources:
           sql_warehouse:
             id: ${var.sql_warehouse_id}
             permission: "CAN_USE"
+
+        - name: "core_catalog_name"
+          secret:
+            key: "core_catalog_name"
+            scope: ${var.secret_scope_name}
+            permission: "READ"
+
+        - name: "core_schema_name"
+          secret:
+            key: "core_schema_name"
+            scope: ${var.secret_scope_name}
+            permission: "READ"
+
         - name: "deploy_model_job"
           job:
             id: ${resources.jobs.deploy_model_job.id}
             permission: "CAN_MANAGE_RUN"
+
         - name: "bionemo_esm_finetune_job"
           job:
             id: ${resources.jobs.bionemo_esm_finetune.id}
             permission: "CAN_MANAGE_RUN"
+
         - name: "bionemo_esm_inference_job"
           job:
             id: ${resources.jobs.bionemo_esm_inference.id}
             permission: "CAN_MANAGE_RUN"
+    
 
 

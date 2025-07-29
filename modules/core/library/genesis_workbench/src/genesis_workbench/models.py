@@ -1,17 +1,27 @@
 import os
 import mlflow
+import time
+import numpy as np
 from mlflow import MlflowClient
 from mlflow.pyfunc import PythonModel
 from mlflow.models.model import ModelInfo
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, asdict
 from enum import StrEnum, auto
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Union, List
 import pandas as pd
 import numpy as np
 from databricks.sdk import WorkspaceClient
 from databricks.sdk import errors
+from databricks.sdk.service.serving import (
+        EndpointCoreConfigInput,
+        ServedEntityInput,
+        AutoCaptureConfigInput,
+        ServingEndpointDetailed,
+        ServingModelWorkloadType
+    )
+
 from .workbench import (UserInfo, 
                         AppContext,
                          execute_select_query, 
@@ -95,13 +105,13 @@ def get_latest_model_version(model_name):
     model_version_infos = client.search_model_versions("name = '%s'" % model_name)
     return max([int(model_version_info.version) for model_version_info in model_version_infos])
 
-def get_available_models(model_category : ModelCategory,app_context:AppContext) -> pd.DataFrame:
+def get_available_models(model_category : ModelCategory) -> pd.DataFrame:
     
     """Gets all models that are available for deployment"""
     query = f"SELECT \
                 model_id, model_name, model_display_name, model_source_version, model_uc_name, model_uc_version \
             FROM \
-                {app_context.core_catalog_name}.{app_context.core_schema_name}.models \
+                {os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.models \
             WHERE \
                 model_category = '{str(model_category)}' AND is_active=true \
             ORDER BY model_id DESC "
@@ -110,14 +120,14 @@ def get_available_models(model_category : ModelCategory,app_context:AppContext) 
     result_df = execute_select_query(query)
     return result_df
 
-def get_deployed_models(model_category : ModelCategory, app_context:AppContext)-> pd.DataFrame:
+def get_deployed_models(model_category : ModelCategory)-> pd.DataFrame:
     """Gets all models that are available for deployment"""
     
     query = f"SELECT deployment_id, deployment_name, deployment_description, model_display_name, model_source_version, \
                 concat(model_uc_name,'/',model_uc_version) as uc_name  \
             FROM \
-                {app_context.core_catalog_name}.{app_context.core_schema_name}.model_deployments \
-            INNER JOIN {app_context.core_catalog_name}.{app_context.core_schema_name}.models ON \
+                {os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.model_deployments \
+            INNER JOIN {os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.models ON \
                 models.model_id = model_deployments.model_id \
             WHERE \
                 model_category = '{str(model_category)}' and model_deployments.is_active=true \
@@ -128,30 +138,22 @@ def get_deployed_models(model_category : ModelCategory, app_context:AppContext)-
     result_df = execute_select_query(query)
     return result_df
 
-def insert_model_info(model_info : GWBModelInfo, app_context:AppContext):
+def insert_model_info(model_info : GWBModelInfo):
     """Register the model in GWB"""
     columns = []
     values = []
     params = []
 
     for key, value in asdict(model_info).items():
-        if key != "model_id":
-            columns.append(key)
-            if isinstance(value, StrEnum):
-                values.append(str(value))
-            else:
-                values.append(value)
-            params.append("?")
+        columns.append(key)
+        if isinstance(value, StrEnum):
+            values.append(str(value))
+        else:
+            values.append(value)
+        params.append("?")
 
-    # #delete any existing records    
-    # if model_info.model_id != -1:
-    #     delete_query = f"DELETE FROM {app_context.core_catalog_name}.{app_context.core_schema_name}.models \
-    #                     WHERE model_id = {model_info.model_id}"
-    #     execute_upsert_delete_query(delete_query)
-
-    #insert the record
     insert_sql = f"""
-        INSERT INTO {app_context.core_catalog_name}.{app_context.core_schema_name}.models ({",".join(columns)}) 
+        INSERT INTO {os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.models ({",".join(columns)}) 
         values ({",".join(params)})
         """
     execute_parameterized_inserts(insert_sql, [ values ])
@@ -163,11 +165,11 @@ def get_uc_model_info(model_uc_name_fq : str, model_uc_version:int) -> ModelInfo
     return model_info
 
 
-def get_gwb_model_info(model_id:int, app_context: AppContext)-> GWBModelInfo:
+def get_gwb_model_info(model_id:int)-> GWBModelInfo:
     """Method to get model details using id"""
 
     query = f"SELECT * FROM \
-                {app_context.core_catalog_name}.{app_context.core_schema_name}.models \
+                {os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.models \
             WHERE model_id = {model_id} "
         
     result_df = execute_select_query(query)
@@ -175,8 +177,7 @@ def get_gwb_model_info(model_id:int, app_context: AppContext)-> GWBModelInfo:
     model_info = result_df.apply(lambda row: GWBModelInfo(**row), axis=1).tolist()[0]
     return model_info
 
-def import_model_from_uc(app_context: AppContext ,
-                        user_email : str,
+def import_model_from_uc(user_email : str,
                         model_category : ModelCategory,
                         model_uc_name : str,
                         model_uc_version: int,                       
@@ -184,7 +185,7 @@ def import_model_from_uc(app_context: AppContext ,
                         model_source_version : None,
                         model_display_name:str = None, 
                         model_description_url:str = None                      
-                      ):
+                      ) -> int:
     """Imports a UC model intp GWB"""    
     model_info = get_uc_model_info(model_uc_name, model_uc_version)
     #throws exception if not found 
@@ -196,8 +197,10 @@ def import_model_from_uc(app_context: AppContext ,
     if not model_display_name:
         model_display_name = model_name
 
+    gwb_model_id = time.time_ns()
+
     gwb_model = GWBModelInfo(
-        model_id = -1, #will be ignored
+        model_id = gwb_model_id, #will be ignored
         model_name = model_name,
         model_display_name = model_display_name,
         model_source_version = model_source_version,
@@ -217,10 +220,69 @@ def import_model_from_uc(app_context: AppContext ,
         is_active = True,
         deactivated_timestamp=None
     )
-    insert_model_info(gwb_model, app_context)
+    insert_model_info(gwb_model)
+    return gwb_model_id
 
 
-def deploy_model(user_info: UserInfo,
+def deploy_model_endpoint(catalog_name: str,
+                 schema_name : str,
+                 fq_model_uc_name : str,
+                 model_version: int,
+                 workload_type: str,
+                 workload_size:str) -> ServingEndpointDetailed:
+
+    w = WorkspaceClient()
+
+    model_name = fq_model_uc_name.split(".")[2]
+    endpoint_name = f"gwb_{model_name}_endpoint"
+    scale_to_zero = True
+
+    served_entities = [
+        ServedEntityInput(
+            entity_name=fq_model_uc_name,
+            entity_version=model_version,
+            name=model_name,
+            workload_type=ServingModelWorkloadType(workload_type),
+            workload_size=workload_size,
+            scale_to_zero_enabled=scale_to_zero,
+        )
+    ]
+    auto_capture_config = AutoCaptureConfigInput(
+        catalog_name=catalog_name,
+        schema_name=schema_name,
+        table_name_prefix=f"{endpoint_name}_serving",
+        enabled=True,
+    )
+
+    print(f"Checking if endpoint: {endpoint_name} exists")
+    
+    try:
+        # try to update the endpoint if already have one
+        existing_endpoint = w.serving_endpoints.get(endpoint_name)
+        print(f"Updating existing endpoint {endpoint_name}")
+        # may take some time to actually do the update
+        endpoint_details = w.serving_endpoints.update_config_and_wait(
+            name=endpoint_name,
+            served_entities=served_entities,
+            auto_capture_config=auto_capture_config,
+            timeout = timedelta(minutes=60)
+        )
+    except errors.platform.ResourceDoesNotExist as e:
+        # if no endpoint yet, make it, wait for it to spin up, and put model on endpoint
+        print(f"Creating new endpoint {endpoint_name}")
+        endpoint_details = w.serving_endpoints.create_and_wait(
+            name=endpoint_name,
+            config=EndpointCoreConfigInput(
+                name=endpoint_name,
+                served_entities=served_entities,
+                auto_capture_config=auto_capture_config
+            ),
+            timeout = timedelta(minutes=60) #wait upto an hour
+        )
+
+    return endpoint_details
+
+def deploy_model(user_email: str,
                  gwb_model_id:int,
                  deployment_name:str,
                  deployment_description:str,
@@ -242,7 +304,7 @@ def deploy_model(user_info: UserInfo,
         'sample_params_as_json': sample_params_as_json,
         "workload_type" : workload_type,
         "workload_size" : workload_size,
-        "deploy_user": "a@b.com" if not user_info.user_email else user_info.user_email
+        "deploy_user": user_email
     }
     
     run_id = execute_workflow(model_deploy_job_id,params)

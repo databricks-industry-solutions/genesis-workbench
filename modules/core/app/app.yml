@@ -9,12 +9,11 @@ env:
     value: "false"
   - name: SQL_WAREHOUSE
     valueFrom: "sql_warehouse"
-  - name: DEPLOY_MODEL_JOB_ID
-    valueFrom: "deploy_model_job"
-  - name: BIONEMO_ESM_FINETUNE_JOB_ID
-    valueFrom: "bionemo_esm_finetune_job"
-  - name: BIONEMO_ESM_INFERENCE_JOB_ID
-    valueFrom: "bionemo_esm_inference_job"
+  - name: CORE_CATALOG_NAME
+    valueFrom: "core_catalog_name"
+  - name: CORE_SCHEMA_NAME
+    valueFrom: "core_schema_name"
+
 
 
 

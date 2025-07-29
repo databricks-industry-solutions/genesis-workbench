@@ -150,7 +150,14 @@ def get_workflow_job_status(
 
     return result
 
+def get_workbench_settings() -> dict:
+    """Method to application settings like job id etc"""
 
+    query = f"SELECT * FROM \
+                {os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.settings"
+        
+    result_df = execute_select_query(query)
 
-
+    model_info = result_df.apply(lambda row: GWBModelInfo(**row), axis=1).tolist()[0]
+    return model_info    
     
