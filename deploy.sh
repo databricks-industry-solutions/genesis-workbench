@@ -8,7 +8,6 @@ fi
 
 CWD=$1
 ENV=$2
-EXTRA_PARAMS=${@: 3}
 
 echo "Installing Poetry"
 
@@ -21,7 +20,7 @@ echo "================================"
 
 cd modules/$CWD
 chmod +x deploy.sh
-./deploy.sh $ENV $EXTRA_PARAMS
+./deploy.sh $ENV
 
 if [ $? -eq 0 ]; then
     echo "================================"

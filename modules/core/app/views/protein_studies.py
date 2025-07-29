@@ -5,8 +5,7 @@ from genesis_workbench.models import (ModelCategory,
                                       get_gwb_model_info,
                                       deploy_model)
 
-from utils.streamlit_helper import (get_app_context, 
-                                    get_user_info,                                    
+from utils.streamlit_helper import (get_user_info,                                    
                                     display_import_model_uc_dialog,
                                     display_deploy_model_dialog,
                                     open_mlflow_experiment_window,
@@ -121,7 +120,7 @@ def display_protein_studies_settings(available_models_df,deployed_models_df):
 #load data for page
 with st.spinner("Loading data"):
     if "available_protein_models_df" not in st.session_state:
-            available_protein_models_df = get_available_models(ModelCategory.PROTEIN_STUDIES, get_app_context())
+            available_protein_models_df = get_available_models(ModelCategory.PROTEIN_STUDIES)
             available_protein_models_df["model_labels"] = (available_protein_models_df["model_id"].astype(str) + " - " 
                                                 + available_protein_models_df["model_display_name"].astype(str) + " [ " 
                                                 + available_protein_models_df["model_uc_name"].astype(str) + " v"
@@ -131,7 +130,7 @@ with st.spinner("Loading data"):
     available_protein_models_df = st.session_state["available_protein_models_df"]
 
     if "deployed_protein_models_df" not in st.session_state:
-        deployed_protein_models_df = get_deployed_models(ModelCategory.PROTEIN_STUDIES, get_app_context())
+        deployed_protein_models_df = get_deployed_models(ModelCategory.PROTEIN_STUDIES)
         deployed_protein_models_df.columns = ["Id", "Name", "Description", "Model Name", "Source Version", "UC Name/Version"]
 
         st.session_state["deployed_protein_models_df"] = deployed_protein_models_df

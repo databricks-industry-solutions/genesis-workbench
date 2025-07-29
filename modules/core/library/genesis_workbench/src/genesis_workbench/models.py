@@ -105,13 +105,13 @@ def get_latest_model_version(model_name):
     model_version_infos = client.search_model_versions("name = '%s'" % model_name)
     return max([int(model_version_info.version) for model_version_info in model_version_infos])
 
-def get_available_models(model_category : ModelCategory,app_context:AppContext) -> pd.DataFrame:
+def get_available_models(model_category : ModelCategory) -> pd.DataFrame:
     
     """Gets all models that are available for deployment"""
     query = f"SELECT \
                 model_id, model_name, model_display_name, model_source_version, model_uc_name, model_uc_version \
             FROM \
-                {app_context.core_catalog_name}.{app_context.core_schema_name}.models \
+                {os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.models \
             WHERE \
                 model_category = '{str(model_category)}' AND is_active=true \
             ORDER BY model_id DESC "
@@ -120,14 +120,14 @@ def get_available_models(model_category : ModelCategory,app_context:AppContext) 
     result_df = execute_select_query(query)
     return result_df
 
-def get_deployed_models(model_category : ModelCategory, app_context:AppContext)-> pd.DataFrame:
+def get_deployed_models(model_category : ModelCategory)-> pd.DataFrame:
     """Gets all models that are available for deployment"""
     
     query = f"SELECT deployment_id, deployment_name, deployment_description, model_display_name, model_source_version, \
                 concat(model_uc_name,'/',model_uc_version) as uc_name  \
             FROM \
-                {app_context.core_catalog_name}.{app_context.core_schema_name}.model_deployments \
-            INNER JOIN {app_context.core_catalog_name}.{app_context.core_schema_name}.models ON \
+                {os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.model_deployments \
+            INNER JOIN {os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.models ON \
                 models.model_id = model_deployments.model_id \
             WHERE \
                 model_category = '{str(model_category)}' and model_deployments.is_active=true \
@@ -138,7 +138,7 @@ def get_deployed_models(model_category : ModelCategory, app_context:AppContext)-
     result_df = execute_select_query(query)
     return result_df
 
-def insert_model_info(model_info : GWBModelInfo, app_context:AppContext):
+def insert_model_info(model_info : GWBModelInfo):
     """Register the model in GWB"""
     columns = []
     values = []
@@ -152,15 +152,8 @@ def insert_model_info(model_info : GWBModelInfo, app_context:AppContext):
             values.append(value)
         params.append("?")
 
-    # #delete any existing records    
-    # if model_info.model_id != -1:
-    #     delete_query = f"DELETE FROM {app_context.core_catalog_name}.{app_context.core_schema_name}.models \
-    #                     WHERE model_id = {model_info.model_id}"
-    #     execute_upsert_delete_query(delete_query)
-
-    #insert the record
     insert_sql = f"""
-        INSERT INTO {app_context.core_catalog_name}.{app_context.core_schema_name}.models ({",".join(columns)}) 
+        INSERT INTO {os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.models ({",".join(columns)}) 
         values ({",".join(params)})
         """
     execute_parameterized_inserts(insert_sql, [ values ])
@@ -172,11 +165,11 @@ def get_uc_model_info(model_uc_name_fq : str, model_uc_version:int) -> ModelInfo
     return model_info
 
 
-def get_gwb_model_info(model_id:int, app_context: AppContext)-> GWBModelInfo:
+def get_gwb_model_info(model_id:int)-> GWBModelInfo:
     """Method to get model details using id"""
 
     query = f"SELECT * FROM \
-                {app_context.core_catalog_name}.{app_context.core_schema_name}.models \
+                {os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.models \
             WHERE model_id = {model_id} "
         
     result_df = execute_select_query(query)
@@ -184,8 +177,7 @@ def get_gwb_model_info(model_id:int, app_context: AppContext)-> GWBModelInfo:
     model_info = result_df.apply(lambda row: GWBModelInfo(**row), axis=1).tolist()[0]
     return model_info
 
-def import_model_from_uc(app_context: AppContext ,
-                        user_email : str,
+def import_model_from_uc(user_email : str,
                         model_category : ModelCategory,
                         model_uc_name : str,
                         model_uc_version: int,                       
@@ -228,7 +220,7 @@ def import_model_from_uc(app_context: AppContext ,
         is_active = True,
         deactivated_timestamp=None
     )
-    insert_model_info(gwb_model, app_context)
+    insert_model_info(gwb_model)
     return gwb_model_id
 
 

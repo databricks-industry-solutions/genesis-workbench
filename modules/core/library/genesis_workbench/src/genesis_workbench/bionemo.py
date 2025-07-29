@@ -101,12 +101,12 @@ def start_esm2_inference(user_info: UserInfo,
 
 
 
-def list_finetuned_weights(model_type: BionemoModelType, app_context: AppContext) -> pd.DataFrame:
+def list_finetuned_weights(model_type: BionemoModelType) -> pd.DataFrame:
     """Gets all finetuned model weight details for a model type"""
     
     query = f"SELECT ft_id, ft_label, model_type, variant, experiment_name, run_id, created_by, created_datetime \
             FROM \
-                {app_context.core_catalog_name}.{app_context.core_schema_name}.bionemo_weights \
+                {os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.bionemo_weights \
             WHERE \
                 model_type = '{str(model_type)}' and is_active=true"
     

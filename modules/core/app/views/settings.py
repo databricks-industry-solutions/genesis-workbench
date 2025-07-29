@@ -1,6 +1,6 @@
 import streamlit as st
 import os
-from utils.streamlit_helper import get_user_info, get_app_context
+from utils.streamlit_helper import get_user_info
 
 st.title(":material/settings: Settings")
 
@@ -11,8 +11,7 @@ with general_tab:
 
     with col1:
         
-        ctx = get_app_context()
-
-        st.text_input("Application Schema Location: ", f"{ctx.core_catalog_name}.{ctx.core_schema_name}")
+        st.text_input("Application Schema Location: ", f"{os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}")
         
         st.write(f"SQL Warehouse Host Name:{os.getenv('SQL_WAREHOUSE','NONE')}")
+

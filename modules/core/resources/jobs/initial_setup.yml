@@ -45,5 +45,13 @@ resources:
         - name: schema
           #default: ${resources.schemas.core_workbench.name}
           default: ${var.core_schema_name}
+        - name: deploy_model_job_id
+          default: ${resources.jobs.deploy_model_job.id}
+        - name: bionemo_esm_finetune_job_id
+          default: ${resources.jobs.bionemo_esm_finetune.id}
+        - name: bionemo_esm_inference_job_id
+          default: ${resources.jobs.bionemo_esm_inference.id}
+        # - name: application_secret_scope
+        #   default: ${resources.secret_scopes.dbx_gwb_secret_scope.name}
 
       tags: ${var.common_resource_tags}

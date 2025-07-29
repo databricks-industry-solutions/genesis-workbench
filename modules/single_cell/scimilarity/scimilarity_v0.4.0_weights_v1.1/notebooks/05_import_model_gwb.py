@@ -84,12 +84,8 @@ model_version = get_latest_model_version(model_uc_name)
 model_uri = f"models:/{model_uc_name}/{model_version}"
 print(model_uri)
 
-app_context = AppContext(
-        core_catalog_name=catalog,
-        core_schema_name=schema
-    )
 
-import_model_from_uc(app_context,user_email=user_email,
+import_model_from_uc(user_email=user_email,
                     model_category=ModelCategory.SINGLE_CELL,
                     model_uc_name=f"{catalog}.{schema}.scimilarity_gene_order",
                     model_uc_version=model_version,
@@ -106,12 +102,7 @@ model_version = get_latest_model_version(model_uc_name)
 model_uri = f"models:/{model_uc_name}/{model_version}"
 print(model_uri)
 
-app_context = AppContext(
-        core_catalog_name=catalog,
-        core_schema_name=schema
-    )
-
-import_model_from_uc(app_context,user_email=user_email,
+import_model_from_uc(user_email=user_email,
                     model_category=ModelCategory.SINGLE_CELL,
                     model_uc_name=f"{catalog}.{schema}.scimilarity_get_embedding",
                     model_uc_version=model_version,
@@ -128,12 +119,7 @@ model_version = get_latest_model_version(model_uc_name)
 model_uri = f"models:/{model_uc_name}/{model_version}"
 print(model_uri)
 
-app_context = AppContext(
-        core_catalog_name=catalog,
-        core_schema_name=schema
-    )
-
-import_model_from_uc(app_context,user_email=user_email,
+import_model_from_uc(user_email=user_email,
                     model_category=ModelCategory.SINGLE_CELL,
                     model_uc_name=f"{catalog}.{schema}.scimilarity_search_nearest",
                     model_uc_version=model_version,

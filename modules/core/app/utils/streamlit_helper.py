@@ -41,27 +41,6 @@ def get_user_info():
         user_display_name = user_display_name if user_display_name != "" else user_name
     )
 
-def get_app_context() -> AppContext:
-    context_str = ""
-    with open("extra_params.txt", "r") as file:
-        context_str = file.read()
-
-    #context str is like --var="dev_user_prefix=scn,core_catalog_name=genesis_workbench,core_schema_name=dev_srijit_nair_dbx_genesis_workbench_core"
-
-    context_str = context_str.replace("--var=","").replace("\"","")
-
-    ctx_items = {}
-    [(lambda x : ctx_items.update({x[0]:x[1]}) )(ctx_item.split("=")) for ctx_item in context_str.split(",")] 
-    
-    appContext = AppContext(
-        core_catalog_name=ctx_items["core_catalog_name"],
-        core_schema_name=ctx_items["core_schema_name"]
-    )
-
-    print(f"App context: {appContext}")
-
-    return appContext
-
 def open_run_window(job_id,run_id):
     host_name = os.getenv("DATABRICKS_HOSTNAME")    
     url = f"{host_name}/jobs/{job_id}/runs/{run_id}"
@@ -111,7 +90,7 @@ def display_deploy_model_dialog(selected_model_name, success_callback = None, er
 
     with st.spinner("Getting model details"):
         try:
-            model_info = get_gwb_model_info(model_id, get_app_context())        
+            model_info = get_gwb_model_info(model_id)        
             st.session_state["deployment_model_details"] = model_info
         except Exception as e:
             st.error("Error getting model details.")
@@ -288,7 +267,7 @@ def display_import_model_uc_dialog(model_category: ModelCategory, success_callba
     if uc_import_model_clicked:
         with st.spinner("Importing model"):
             try:
-                import_model_from_uc(get_app_context(), user_email = user_info.user_email,
+                import_model_from_uc(user_email = user_info.user_email,
                     model_category = model_category,
                     model_uc_name = uc_model_name,
                     model_uc_version =  uc_model_version, 
