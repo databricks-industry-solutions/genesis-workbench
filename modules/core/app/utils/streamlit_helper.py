@@ -196,7 +196,7 @@ def display_deploy_model_dialog(selected_model_name, success_callback = None, er
 
                     if validation_pass:
                         try:
-                            run_id = deploy_model(user_info = user_info,
+                            run_id = deploy_model(user_email = user_info.user_email,
                                                 gwb_model_id = model_id,
                                                 deployment_name=deploy_name,
                                                 deployment_description=deploy_description, 

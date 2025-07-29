@@ -1,17 +1,27 @@
 import os
 import mlflow
+import time
+import numpy as np
 from mlflow import MlflowClient
 from mlflow.pyfunc import PythonModel
 from mlflow.models.model import ModelInfo
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, asdict
 from enum import StrEnum, auto
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Union, List
 import pandas as pd
 import numpy as np
 from databricks.sdk import WorkspaceClient
 from databricks.sdk import errors
+from databricks.sdk.service.serving import (
+        EndpointCoreConfigInput,
+        ServedEntityInput,
+        AutoCaptureConfigInput,
+        ServingEndpointDetailed,
+        ServingModelWorkloadType
+    )
+
 from .workbench import (UserInfo, 
                         AppContext,
                          execute_select_query, 
@@ -135,13 +145,12 @@ def insert_model_info(model_info : GWBModelInfo, app_context:AppContext):
     params = []
 
     for key, value in asdict(model_info).items():
-        if key != "model_id":
-            columns.append(key)
-            if isinstance(value, StrEnum):
-                values.append(str(value))
-            else:
-                values.append(value)
-            params.append("?")
+        columns.append(key)
+        if isinstance(value, StrEnum):
+            values.append(str(value))
+        else:
+            values.append(value)
+        params.append("?")
 
     # #delete any existing records    
     # if model_info.model_id != -1:
@@ -184,7 +193,7 @@ def import_model_from_uc(app_context: AppContext ,
                         model_source_version : None,
                         model_display_name:str = None, 
                         model_description_url:str = None                      
-                      ):
+                      ) -> int:
     """Imports a UC model intp GWB"""    
     model_info = get_uc_model_info(model_uc_name, model_uc_version)
     #throws exception if not found 
@@ -196,8 +205,10 @@ def import_model_from_uc(app_context: AppContext ,
     if not model_display_name:
         model_display_name = model_name
 
+    gwb_model_id = time.time_ns()
+
     gwb_model = GWBModelInfo(
-        model_id = -1, #will be ignored
+        model_id = gwb_model_id, #will be ignored
         model_name = model_name,
         model_display_name = model_display_name,
         model_source_version = model_source_version,
@@ -218,9 +229,68 @@ def import_model_from_uc(app_context: AppContext ,
         deactivated_timestamp=None
     )
     insert_model_info(gwb_model, app_context)
+    return gwb_model_id
 
 
-def deploy_model(user_info: UserInfo,
+def deploy_model_endpoint(catalog_name: str,
+                 schema_name : str,
+                 fq_model_uc_name : str,
+                 model_version: int,
+                 workload_type: str,
+                 workload_size:str) -> ServingEndpointDetailed:
+
+    w = WorkspaceClient()
+
+    model_name = fq_model_uc_name.split(".")[2]
+    endpoint_name = f"gwb_{model_name}_endpoint"
+    scale_to_zero = True
+
+    served_entities = [
+        ServedEntityInput(
+            entity_name=fq_model_uc_name,
+            entity_version=model_version,
+            name=model_name,
+            workload_type=ServingModelWorkloadType(workload_type),
+            workload_size=workload_size,
+            scale_to_zero_enabled=scale_to_zero,
+        )
+    ]
+    auto_capture_config = AutoCaptureConfigInput(
+        catalog_name=catalog_name,
+        schema_name=schema_name,
+        table_name_prefix=f"{endpoint_name}_serving",
+        enabled=True,
+    )
+
+    print(f"Checking if endpoint: {endpoint_name} exists")
+    
+    try:
+        # try to update the endpoint if already have one
+        existing_endpoint = w.serving_endpoints.get(endpoint_name)
+        print(f"Updating existing endpoint {endpoint_name}")
+        # may take some time to actually do the update
+        endpoint_details = w.serving_endpoints.update_config_and_wait(
+            name=endpoint_name,
+            served_entities=served_entities,
+            auto_capture_config=auto_capture_config,
+            timeout = timedelta(minutes=60)
+        )
+    except errors.platform.ResourceDoesNotExist as e:
+        # if no endpoint yet, make it, wait for it to spin up, and put model on endpoint
+        print(f"Creating new endpoint {endpoint_name}")
+        endpoint_details = w.serving_endpoints.create_and_wait(
+            name=endpoint_name,
+            config=EndpointCoreConfigInput(
+                name=endpoint_name,
+                served_entities=served_entities,
+                auto_capture_config=auto_capture_config
+            ),
+            timeout = timedelta(minutes=60) #wait upto an hour
+        )
+
+    return endpoint_details
+
+def deploy_model(user_email: str,
                  gwb_model_id:int,
                  deployment_name:str,
                  deployment_description:str,
@@ -242,7 +312,7 @@ def deploy_model(user_info: UserInfo,
         'sample_params_as_json': sample_params_as_json,
         "workload_type" : workload_type,
         "workload_size" : workload_size,
-        "deploy_user": "a@b.com" if not user_info.user_email else user_info.user_email
+        "deploy_user": user_email
     }
     
     run_id = execute_workflow(model_deploy_job_id,params)

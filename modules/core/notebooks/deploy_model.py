@@ -105,7 +105,7 @@ print(f"workload_size: {workload_size}")
 # COMMAND ----------
 
 from genesis_workbench.adapters import BaseAdapter, GWBModel
-from genesis_workbench.models import get_latest_model_version
+from genesis_workbench.models import get_latest_model_version, deploy_model_endpoint
 
 def get_adapter_instance(class_str):
     adapter_instance = None
@@ -129,79 +129,6 @@ def get_adapter_instance(class_str):
 input_adapter_instance = get_adapter_instance(input_adapter_str)
 output_adapter_instance = get_adapter_instance(output_adapter_str)
 
-# COMMAND ----------
-
-import numpy as np
-from databricks.sdk import WorkspaceClient
-from databricks.sdk.service.serving import (
-        EndpointCoreConfigInput,
-        ServedEntityInput,
-        AutoCaptureConfigInput,
-        ServingEndpointDetailed,
-        ServingModelWorkloadType
-    )
-from databricks.sdk import errors
-from datetime import datetime, timedelta
-import mlflow 
-
-def deploy_model(catalog_name: str,
-                 schema_name : str,
-                 fq_model_uc_name : str,
-                 model_version: int,
-                 workload_type: str,
-                 workload_size:str) -> ServingEndpointDetailed:
-
-    w = WorkspaceClient()
-
-    model_name = fq_model_uc_name.split(".")[2]
-    endpoint_name = f"gwb_{model_name}_endpoint"
-    scale_to_zero = True
-
-    served_entities = [
-        ServedEntityInput(
-            entity_name=fq_model_uc_name,
-            entity_version=model_version,
-            name=model_name,
-            workload_type=ServingModelWorkloadType(workload_type),
-            workload_size=workload_size,
-            scale_to_zero_enabled=scale_to_zero,
-        )
-    ]
-    auto_capture_config = AutoCaptureConfigInput(
-        catalog_name=catalog_name,
-        schema_name=schema_name,
-        table_name_prefix=f"{endpoint_name}_serving",
-        enabled=True,
-    )
-
-    print(f"Checking if endpoint: {endpoint_name} exists")
-    
-    try:
-        # try to update the endpoint if already have one
-        existing_endpoint = w.serving_endpoints.get(endpoint_name)
-        print(f"Updating existing endpoint {endpoint_name}")
-        # may take some time to actually do the update
-        endpoint_details = w.serving_endpoints.update_config_and_wait(
-            name=endpoint_name,
-            served_entities=served_entities,
-            auto_capture_config=auto_capture_config,
-            timeout = timedelta(minutes=60)
-        )
-    except errors.platform.ResourceDoesNotExist as e:
-        # if no endpoint yet, make it, wait for it to spin up, and put model on endpoint
-        print(f"Creating new endpoint {endpoint_name}")
-        endpoint_details = w.serving_endpoints.create_and_wait(
-            name=endpoint_name,
-            config=EndpointCoreConfigInput(
-                name=endpoint_name,
-                served_entities=served_entities,
-                auto_capture_config=auto_capture_config
-            ),
-            timeout = timedelta(minutes=60) #wait upto an hour
-        )
-
-    return endpoint_details
-        
 
 # COMMAND ----------
 
@@ -323,7 +250,7 @@ if result_df.count() > 0:
    model_uri = f"models:/{model_uc_name}/{model_uc_version}"
    
    #deploy the model to model serving endpoint
-   deploy_result = deploy_model(catalog, schema, model_uc_name, model_uc_version, workload_type, workload_size)
+   deploy_result = deploy_model_endpoint(catalog, schema, model_uc_name, model_uc_version, workload_type, workload_size)
    model_deployed = True
 else:
     print("No model found to deploy")

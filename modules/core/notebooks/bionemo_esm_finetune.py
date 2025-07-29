@@ -300,6 +300,7 @@ if is_finetune_success:
     #update the model deployment table
     spark.sql(f"""
         INSERT INTO {catalog}.{schema}.bionemo_weights(
+            ft_id,
             ft_label,
             model_type,
             variant,
