@@ -7,9 +7,6 @@ variables:
     description: Working directory or bundle root.
     default: /Users/${var.current_user}/.bundle/${bundle.name}/${bundle.target}
 
-  dev_user_prefix:
-    description: A prefix for resources in dev environment
-
   common_resource_tags:
     description: Resource tags
     default: 
