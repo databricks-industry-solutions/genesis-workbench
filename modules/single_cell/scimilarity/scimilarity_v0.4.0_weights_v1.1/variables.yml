@@ -19,15 +19,12 @@ variables:
 
   core_catalog_name:
     description: primary catalog where data, models, and files are stored for this project.
-    #default: genesis_workbench 
   
   core_schema_name:
     description: The schema where core components will be installed.
-    #default: dbx_genesis_workbench_core 
 
   sql_warehouse_id:
     description: Id of the SQL Warehouse that will be used by the app
-    default: 0000
     
   module_registration_experiment_name:
     description: The experiment to which all registered modules are logged

@@ -18,7 +18,6 @@ targets:
     default: true
     variables:
       module_registration_experiment_name: "[dev yyang] scgpt_genesis_workbench_modules"
-      sql_warehouse_id: 8f210e00850a2c16
     workspace:
       root_path: ${var.current_working_directory}
       host: https://adb-830292400663869.9.azuredatabricks.net

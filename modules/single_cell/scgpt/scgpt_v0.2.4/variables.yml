@@ -31,7 +31,6 @@ variables:
 
   sql_warehouse_id:
     description: Id of the SQL Warehouse that will be used by the app
-    default: 0000
     
   module_registration_experiment_name:
     description: The experiment to which all registered modules are logged
