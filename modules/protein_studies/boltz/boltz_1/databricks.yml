@@ -17,7 +17,7 @@ targets:
     mode: development
     default: true
     variables:
-      module_registration_experiment_name: "[dev srijit_nair] dbx_genesis_workbench_modules"
+      module_registration_experiment_name: "boltz_genesis_workbench_modules"
       sql_warehouse_id: 8f210e00850a2c16
     workspace:
       root_path: ${var.current_working_directory}

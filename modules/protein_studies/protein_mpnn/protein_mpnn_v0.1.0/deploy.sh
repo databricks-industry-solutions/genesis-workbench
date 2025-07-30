@@ -12,19 +12,19 @@ ENV=$1
 EXTRA_PARAMS=${@: 2}
 
 echo ""
-echo "▶️ Validating bundle"
+echo "▶️ [Protein_MPNN] Validating bundle"
 echo ""
 
 databricks bundle validate $EXTRA_PARAMS
 
 echo ""
-echo "▶️ Deploying bundle"
+echo "▶️ [Protein_MPNN] Deploying bundle"
 echo ""
 
 databricks bundle deploy -t $ENV $EXTRA_PARAMS
 
 echo ""
-echo "▶️ Running model registration job"
+echo "▶️ [Protein_MPNN] Running model registration job"
 echo ""
 
 databricks bundle run -t $ENV register_proteinmpnn $EXTRA_PARAMS

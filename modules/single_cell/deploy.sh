@@ -24,7 +24,7 @@ for module in scgpt/scgpt_v0.2.4 scimilarity/scimilarity_v0.4.0_weights_v1.1
         echo "Deploying $module"
         cd $module
         chmod +x deploy.sh
-        ./deploy.sh $ENV --var="$EXTRA_PARAMS"
+        ./deploy.sh $ENV --var="$EXTRA_PARAMS" 
         cd ../..
     done
 

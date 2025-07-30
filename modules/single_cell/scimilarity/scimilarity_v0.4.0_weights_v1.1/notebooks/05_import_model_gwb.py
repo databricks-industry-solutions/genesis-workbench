@@ -100,7 +100,7 @@ gwb_model_id_get_embedding = import_model_from_uc(user_email=user_email,
 
 # COMMAND ----------
 
-run_id_get_embedding = deploy_model(user_email=USER_EMAIL,
+run_id_get_embedding = deploy_model(user_email=user_email,
                 gwb_model_id=gwb_model_id_get_embedding,
                 deployment_name=f"Scimilarity_Get_Embedding",
                 deployment_description="Initial deployment",
@@ -130,7 +130,7 @@ gwb_model_id_search = import_model_from_uc(user_email=user_email,
 
 # COMMAND ----------
 
-run_id_search = deploy_model(user_email=USER_EMAIL,
+run_id_search = deploy_model(user_email=user_email,
                 gwb_model_id=gwb_model_id_search,
                 deployment_name=f"Scimilarity_Search_Nearest",
                 deployment_description="Initial deployment",

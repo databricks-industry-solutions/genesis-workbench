@@ -6,19 +6,12 @@ include:
   - variables.yml
   - resources/*.yml
     
-# artifacts:
-#   esmfold:
-#     type: whl
-#     build: poetry build
-#     path: .
-
 targets:
   dev:
     mode: development
     default: true
     variables:
-      module_registration_experiment_name: "[dev srijit_nair] dbx_genesis_workbench_modules"
-      sql_warehouse_id: 8f210e00850a2c16
+      module_registration_experiment_name: "potein_mpnn_genesis_workbench_modules"
     workspace:
       root_path: ${var.current_working_directory}
       host: https://adb-830292400663869.9.azuredatabricks.net

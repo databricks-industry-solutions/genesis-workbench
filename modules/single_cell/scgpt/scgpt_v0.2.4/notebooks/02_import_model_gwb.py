@@ -152,7 +152,7 @@ gwb_model_id = import_model_from_uc(user_email=user_email,
 
 # COMMAND ----------
 
-run_id = deploy_model(user_email=USER_EMAIL,
+run_id = deploy_model(user_email=user_email,
                 gwb_model_id=gwb_model_id,
                 deployment_name=f"scGPT",
                 deployment_description="Initial deployment",
