@@ -38,6 +38,7 @@ sample_params_as_json = """
 
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
+dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
 dbutils.widgets.text("gwb_model_id", str(gwb_model_id), "Model Id")
 dbutils.widgets.text("deployment_name", "my_finetuned_deployment", "Deployment Name")
 dbutils.widgets.text("deployment_description", "description", "Deployment Description")
@@ -52,7 +53,6 @@ dbutils.widgets.text("deploy_user", "a@b.com", "User Id")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
-
 
 # COMMAND ----------
 
@@ -73,12 +73,14 @@ print(gwb_library_path)
 # MAGIC %pip install {gwb_library_path} --force-reinstall
 # MAGIC dbutils.library.restartPython()
 
+
 # COMMAND ----------
 
 #parameters to the notebook
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
+sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
 gwb_model_id = dbutils.widgets.get("gwb_model_id")
 deployment_name = dbutils.widgets.get("deployment_name")
 deployment_description = dbutils.widgets.get("deployment_description")
@@ -101,6 +103,13 @@ print(f"deployment_name: {deployment_name}")
 print(f"deployment_description: {deployment_description}")
 print(f"workload_type: {workload_type}")
 print(f"workload_size: {workload_size}")
+
+# COMMAND ----------
+
+#Setup the env variables required for Genesis Workbench library to load settings
+from genesis_workbench.workbench import initialize
+databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
+initialize(core_catalog_name = catalog, core_schema_name = schema, sql_warehouse_id = sql_warehouse_id, token = databricks_token)
 
 # COMMAND ----------
 
@@ -133,6 +142,7 @@ output_adapter_instance = get_adapter_instance(output_adapter_str)
 # COMMAND ----------
 
 import json
+import numpy as np
 import pandas as pd
 from mlflow import MlflowClient
 from mlflow.models import infer_signature
@@ -250,7 +260,13 @@ if result_df.count() > 0:
    model_uri = f"models:/{model_uc_name}/{model_uc_version}"
    
    #deploy the model to model serving endpoint
-   deploy_result = deploy_model_endpoint(catalog, schema, model_uc_name, model_uc_version, workload_type, workload_size)
+   deploy_result = deploy_model_endpoint(catalog_name=catalog, 
+                                         schema_name=schema, 
+                                         fq_model_uc_name=model_uc_name, 
+                                         model_version=model_uc_version, 
+                                         workload_type=workload_type, 
+                                         workload_size=workload_size,
+                                         creating_user_email=deploy_user)
    model_deployed = True
 else:
     print("No model found to deploy")

@@ -3,7 +3,7 @@ import os
 import json
 from io import StringIO
 
-from genesis_workbench.workbench import UserInfo, AppContext
+from genesis_workbench.workbench import UserInfo
 from genesis_workbench.models import (ModelCategory,                                       
                                       get_uc_model_info,
                                       import_model_from_uc,
