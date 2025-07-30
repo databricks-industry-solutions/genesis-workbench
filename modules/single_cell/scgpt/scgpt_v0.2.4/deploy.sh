@@ -4,7 +4,7 @@ set -e
 
 if [ "$#" -lt 1 ]; then
     echo "Usage: $0 <env> <additional build variables>"
-    echo 'Example: deploy dev --var="dev_user_prefix=yyang,core_catalog_name=genesis_workbench,core_schema_name=dev_srijit_nair_dbx_genesis_workbench_core"'
+    echo 'Example: deploy dev --var="core_catalog_name=genesis_workbench,core_schema_name=dev_srijit_nair_dbx_genesis_workbench_core"'
     exit 1
 fi
 
