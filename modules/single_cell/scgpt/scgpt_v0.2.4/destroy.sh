@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [ "$#" -lt 2 ]; then
-    echo "Usage: $0 <path_to_working_directory> <env>  <additional build variables>"
+    echo "Usage: $0 <env>  <additional build variables>"
     echo 'Example: destroy dev --var="dev_user_prefix=scn"'
     exit 1
 fi

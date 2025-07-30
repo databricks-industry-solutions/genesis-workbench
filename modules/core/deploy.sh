@@ -30,19 +30,18 @@ echo ""
 echo "▶️ Creating a secret scope"
 echo ""
 
-SCOPE_NAME="${ENV}_${dev_user_prefix}_genesis_workbench_application_settings_scope"
 
-echo "Scope name: $SCOPE_NAME"
+echo "Scope name: $secret_scope_name"
 
-if databricks secrets list-scopes | grep -qw "$SCOPE_NAME"; then
-    echo "Scope $SCOPE_NAME already exists."
+if databricks secrets list-scopes | grep -qw "$secret_scope_name"; then
+    echo "Scope $secret_scope_name already exists."
 else
-    databricks secrets create-scope "$SCOPE_NAME"
-    echo "Scope $SCOPE_NAME created."
+    databricks secrets create-scope "$secret_scope_name"
+    echo "Scope $secret_scope_name created."
 fi
 
-databricks secrets put-secret $SCOPE_NAME core_catalog_name --string-value $core_catalog_name
-databricks secrets put-secret $SCOPE_NAME core_schema_name --string-value $core_schema_name
+databricks secrets put-secret $secret_scope_name core_catalog_name --string-value $core_catalog_name
+databricks secrets put-secret $secret_scope_name core_schema_name --string-value $core_schema_name
 
 echo ""
 echo "▶️ Building libraries"
@@ -96,33 +95,34 @@ else
 fi
 set -e
 
+EXTRA_PARAMS=$(paste -sd, "env.env")
+
+echo "Extra Params: $EXTRA_PARAMS"
+
+
 echo ""
 echo "▶️ Validating bundle"
 echo ""
 
-databricks bundle validate -t $ENV \
-  --var="dev_user_prefix=$dev_user_prefix,core_catalog_name=$core_catalog_name,core_schema_name=$core_schema_name,bionemo_docker_token=$bionemo_docker_token"
+databricks bundle validate -t $ENV --var="$EXTRA_PARAMS"
 
 echo ""
 echo "▶️ Deploying bundle"
 echo ""
 
-databricks bundle deploy -t $ENV \
-  --var="dev_user_prefix=$dev_user_prefix,core_catalog_name=$core_catalog_name,core_schema_name=$core_schema_name,bionemo_docker_token=$bionemo_docker_token"
+databricks bundle deploy -t $ENV --var="$EXTRA_PARAMS"
 
 echo ""
 echo "▶️ Running initialization job"
 echo ""
 
-databricks bundle run -t $ENV initial_setup_job \
-  --var="dev_user_prefix=$dev_user_prefix,core_catalog_name=$core_catalog_name,core_schema_name=$core_schema_name,bionemo_docker_token=$bionemo_docker_token"
+databricks bundle run -t $ENV initial_setup_job --var="$EXTRA_PARAMS"
 
 echo ""
 echo "▶️ Deploying UI Application"
 echo ""
 
-databricks bundle run -t $ENV genesis_workbench_app \
-  --var="dev_user_prefix=$dev_user_prefix,core_catalog_name=$core_catalog_name,core_schema_name=$core_schema_name,bionemo_docker_token=$bionemo_docker_token"
+databricks bundle run -t $ENV genesis_workbench_app --var="$EXTRA_PARAMS"
 
 
 echo ""

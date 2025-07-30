@@ -11,14 +11,6 @@ variables:
     description: queryable serving endpoint for app to access
     default: databricks-meta-llama-3-3-70b-instruct
   
-  app_name:
-    description: Name of the databricks app for UI
-    default: genesis-workbench
-
-  sql_warehouse_id:
-    description: Id of the SQL Warehouse that will be used by the app
-    default: 0000
-
   common_resource_tags:
     description: Resource tags
     default: 
@@ -26,17 +18,23 @@ variables:
       module: core
       created_by: ${var.current_user}
 
-  secret_scope_name:
-    description: The secret scope that contains values for app
+  sql_warehouse_id:
+    description: Id of the SQL Warehouse that will be used by the app
 
   dev_user_prefix:
-    description: A prefix for resources in dev environment
+    description: A prefix for resources to avoid conflict when developing
+    
+  secret_scope_name:
+    description: The secret scope that contains values for app
 
   core_catalog_name:
     description: primary catalog where data, models, and files are stored for this project.
   
   core_schema_name:
     description: The schema where core components will be installed.
+
+  app_name:
+    description: Name of the databricks app for UI
 
   module_registration_experiment_name:
     description: The experiment to which all registered modules are logged

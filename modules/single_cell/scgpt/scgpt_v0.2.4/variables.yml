@@ -39,4 +39,4 @@ variables:
 
   cache_dir:
     description: The cache directory for ScGPT model
-    default: scgpt_cache_dir
+    default: scgpt
