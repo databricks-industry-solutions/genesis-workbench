@@ -57,12 +57,11 @@ spark.sql(f"CREATE VOLUME IF NOT EXISTS {catalog}.{schema}.{cache_dir}")
 
 # COMMAND ----------
 
-import os
-
+#Initialize Genesis Workbench
+from genesis_workbench.workbench import initialize
 databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
-os.environ["SQL_WAREHOUSE"]=sql_warehouse_id
-os.environ["IS_TOKEN_AUTH"]="Y"
-os.environ["DATABRICKS_TOKEN"]=databricks_token
+initialize(core_catalog_name = catalog, core_schema_name = schema, sql_warehouse_id = sql_warehouse_id, token = databricks_token)
+
 
 # COMMAND ----------
 
@@ -101,8 +100,10 @@ from typing import Any, Dict, List, Optional
 from genesis_workbench.models import (ModelCategory, 
                                       import_model_from_uc,
                                       get_latest_model_version,
+                                      deploy_model,
                                       set_mlflow_experiment)
-from genesis_workbench.workbench import AppContext
+
+from genesis_workbench.workbench import wait_for_job_run_completion
 
 # COMMAND ----------
 
@@ -232,7 +233,7 @@ model_uc_name=f"{catalog}.{schema}.{model_name}"
 model_version = get_latest_model_version(model_uc_name)
 model_uri = f"models:/{model_uc_name}/{model_version}"
 
-import_model_from_uc(user_email=user_email,
+gwb_model_id = import_model_from_uc(user_email=user_email,
                     model_category=ModelCategory.PROTEIN_STUDIES,
                     model_uc_name=f"{catalog}.{schema}.{model_name}",
                     model_uc_version=model_version,
@@ -240,3 +241,20 @@ import_model_from_uc(user_email=user_email,
                     model_display_name="ESMFold",
                     model_source_version="v1.0",
                     model_description_url="https://github.com/facebookresearch/esm?tab=readme-ov-file#evolutionary-scale-modeling")
+
+# COMMAND ----------
+
+run_id = deploy_model(user_email=user_email,
+                gwb_model_id=gwb_model_id,
+                deployment_name=f"ESMFold",
+                deployment_description="Initial deployment",
+                input_adapter_str="none",
+                output_adapter_str="none",
+                sample_input_data_dict_as_json="none",
+                sample_params_as_json="none",
+                workload_type="GPU_SMALL",
+                workload_size="Small")
+
+# COMMAND ----------
+
+result = wait_for_job_run_completion(run_id, timeout = 3600)
