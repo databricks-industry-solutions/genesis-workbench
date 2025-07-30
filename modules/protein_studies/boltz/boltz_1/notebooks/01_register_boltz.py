@@ -53,6 +53,14 @@ print(f"Cache full path: {cache_full_path}")
 
 # COMMAND ----------
 
+#Initialize Genesis Workbench
+from genesis_workbench.workbench import initialize
+databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
+initialize(core_catalog_name = CATALOG, core_schema_name = SCHEMA, sql_warehouse_id = SQL_WAREHOUSE_ID, token = databricks_token)
+
+
+# COMMAND ----------
+
 WEIGHTS_VOLUME_LOCATION = f"{cache_full_path}/weights"
 BINARIES_VOLUME_LOCATION = f"{cache_full_path}/binaries"
 
@@ -289,10 +297,11 @@ result[0]
 
 from genesis_workbench.models import (ModelCategory, 
                                       import_model_from_uc,
+                                      deploy_model,
                                       get_latest_model_version,
                                       set_mlflow_experiment)
 
-from genesis_workbench.workbench import AppContext
+from genesis_workbench.workbench import wait_for_job_run_completion
 
 # COMMAND ----------
 
@@ -326,18 +335,10 @@ with mlflow.start_run(run_name=f"{MODEL_NAME}", experiment_id=experiment.experim
 
 # COMMAND ----------
 
-databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
-os.environ["SQL_WAREHOUSE"]=SQL_WAREHOUSE_ID
-os.environ["IS_TOKEN_AUTH"]="Y"
-os.environ["DATABRICKS_TOKEN"]=databricks_token
-
-
-# COMMAND ----------
-
 model_version = get_latest_model_version(registered_model_name)
 model_uri = f"models:/{registered_model_name}/{model_version}"
 
-import_model_from_uc(user_email=USER_EMAIL,
+gwb_model_id = import_model_from_uc(user_email=USER_EMAIL,
                     model_category=ModelCategory.PROTEIN_STUDIES,
                     model_uc_name=registered_model_name,
                     model_uc_version=model_version,
@@ -345,3 +346,20 @@ import_model_from_uc(user_email=USER_EMAIL,
                     model_display_name="Boltz-1",
                     model_source_version="v1.0.0",
                     model_description_url="https://huggingface.co/boltz-community/boltz-1")
+
+# COMMAND ----------
+
+run_id = deploy_model(user_email=USER_EMAIL,
+                gwb_model_id=gwb_model_id,
+                deployment_name=f"boltz-1",
+                deployment_description="Initial deployment",
+                input_adapter_str="none",
+                output_adapter_str="none",
+                sample_input_data_dict_as_json="none",
+                sample_params_as_json="none",
+                workload_type="GPU_SMALL",
+                workload_size="Small")
+
+# COMMAND ----------
+
+result = wait_for_job_run_completion(run_id, timeout = 3600)
