@@ -2,8 +2,8 @@
 
 docker login -u \$oauthtoken nvcr.io
 
-docker buildx build --platform linux/amd64 -t srijitnair254/bionemo_dbx_amd64:0.1 -f dockerfile .
+docker buildx build --platform linux/amd64 -t <your tag> -f dockerfile .
 
-docker login -u srijitnair254 docker.io 
+docker login <to your container repo> 
 
-docker push srijitnair254/bionemo_dbx_amd64:0.1
+docker push <your tag>
