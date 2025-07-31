@@ -3,6 +3,7 @@ import mlflow
 import time
 import numpy as np
 from mlflow import MlflowClient
+from mlflow.exceptions import RestException
 from mlflow.pyfunc import PythonModel
 from mlflow.models.model import ModelInfo
 from abc import ABC, abstractmethod
@@ -25,6 +26,7 @@ from databricks.sdk.service.serving import (
 
 from .workbench import (UserInfo, 
                         AppContext,
+                        get_user_settings,
                          execute_select_query, 
                          execute_parameterized_inserts,
                          execute_workflow)
@@ -44,6 +46,14 @@ class ModelCategory(StrEnum):
 class ModelDeployPlatform(StrEnum):
     MODEL_SERVING = auto()
     EXTERNAL = auto()
+
+class MLflowExperimentAccessException(Exception):
+    """
+    A custom exception for access issues to MLflow.
+    """
+    def __init__(self, message="Error accessing MLflow folder"):
+        self.message = message
+        super().__init__(self.message)
 
 @dataclass
 class GWBModelInfo:
@@ -87,19 +97,29 @@ class ModelDeploymentInfo:
     is_active: bool 
     deactivated_timestamp : datetime
 
-def set_mlflow_experiment(experiment_tag, user_email, host=None, token=None):     
+def set_mlflow_experiment(experiment_tag, user_email, host=None, token=None): 
+
+    user_settings = get_user_settings(user_email=user_email)
+
     if host and not host.startswith("https://"):
         host = f"https://{host}"    
 
     w = WorkspaceClient() if not token else WorkspaceClient(host=host, token=token, auth_type="pat")
 
-    mlflow_experiment_base_path = f"Users/{user_email}/mlflow_experiments"
-    w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")
-
-    experiment_path = f"/{mlflow_experiment_base_path}/{experiment_tag}"
-    mlflow.set_registry_uri("databricks-uc")
-    mlflow.set_tracking_uri("databricks")
-    return mlflow.set_experiment(experiment_path)
+    mlflow_experiment_base_path = f"Users/{user_email}/{user_settings['mlflow_experiment_folder']}"
+    
+    try:
+        w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")
+        experiment_path = f"/{mlflow_experiment_base_path}/{experiment_tag}"
+        mlflow.set_registry_uri("databricks-uc")
+        mlflow.set_tracking_uri("databricks")
+        experiment = mlflow.set_experiment(experiment_path)
+        return experiment
+    except RestException as e:
+        if e.error_code=="RESOURCE_DOES_NOT_EXIST":
+            raise MLflowExperimentAccessException("Error accessing the experiment location")
+        else:
+            raise e
 
 def get_latest_model_version(model_name):
     client = MlflowClient()

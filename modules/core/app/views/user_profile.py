@@ -53,7 +53,7 @@ with st.form("user_profile_setup_form", enter_to_submit=False):
 
     st.write("Step 1: Navigate to the above workspace folder and click the `Share` button on top right corner.")
     
-    st.write("Step 2: Grant `Can Manage` permission to this service principal:")
+    st.write(f"Step 2: Grant `Can Manage` permission to this service principal: `{ os.environ['DATABRICKS_CLIENT_ID'] if 'DATABRICKS_CLIENT_ID' in os.environ else 'none' }` ")
 
     profile_save_button = st.form_submit_button('Check Folder Permission and Save')
 

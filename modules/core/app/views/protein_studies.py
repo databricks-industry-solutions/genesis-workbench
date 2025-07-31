@@ -1,15 +1,14 @@
 import streamlit as st
+import traceback
+
 from genesis_workbench.models import (ModelCategory, 
                                       get_available_models, 
-                                      get_deployed_models,                                      
-                                      get_gwb_model_info,
-                                      deploy_model)
+                                      get_deployed_models, 
+                                      MLflowExperimentAccessException)
 
 from utils.streamlit_helper import (get_user_info,                                    
-                                    display_import_model_uc_dialog,
                                     display_deploy_model_dialog,
-                                    open_mlflow_experiment_window,
-                                    UserInfo)
+                                    open_mlflow_experiment_window)
 
 from utils.molstar_tools import (
                     html_as_iframe,
@@ -240,19 +239,21 @@ with protein_design_tab:
                     # status_esm_preds = st.progress(0, text="Generating structure for new protein using ESMFold")
                     status_generation = st.progress(0, text="Generating Sequence")
 
-                    html, experiment_id, run_id = design_tab_fn(sequence=gen_input_sequence, 
-                                          mlflow_experiment=protein_design_mlflow_experiment,
-                                          mlflow_run_name=protein_design_mlflow_run,
-                                          progress_callback=get_progress_callback(
-                        # status_parsing,
-                        # status_esm_init,
-                        # status_rfdiffusion,
-                        # status_proteinmpnn,
-                        # status_esm_preds
-                        status_generation
-                    ))
-                    view_mlflow_experiment_btn = st.button("View MLflow Experiment", on_click=lambda: open_mlflow_experiment_window(experiment_id))
-                    components.html(html, height=700)
+                    try:
+                        html, experiment_id, run_id = design_tab_fn(sequence=gen_input_sequence, 
+                                            mlflow_experiment=protein_design_mlflow_experiment,
+                                            mlflow_run_name=protein_design_mlflow_run,
+                                            progress_callback=get_progress_callback(status_generation))
+                    
+                        view_mlflow_experiment_btn = st.button("View MLflow Experiment", on_click=lambda: open_mlflow_experiment_window(experiment_id))
+                        components.html(html, height=700)
+                    except MLflowExperimentAccessException as mle:
+                        st.error("Cannot access MLflow folder. Please complete MLflow Setup in the profile page")
+                    except Exception as e:
+                        st.error(f"An error occured while generating the sequence: {e}")
+                        traceback.print_exc()
+
+
             
     if clear_btn:
         mol_viewer.empty()
