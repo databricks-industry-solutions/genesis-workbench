@@ -2,25 +2,36 @@
 
 ## Introduction
 
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/genai_ls.png" alt="Generative AI in Life Sciences" width="700"/>
+
 Generative AI is revolutionizing the life sciences by harnessing multiple foundational models tailored to various biological domains. These models, trained on vast biological datasets including genomic sequences, protein structures, molecular interactions, and cellular behaviors, enable advanced capabilities such as predictive modeling, drug discovery, and synthetic biology design. By integrating diverse biological data into unified frameworks, foundational models can generate novel hypotheses, simulate complex biochemical pathways, and predict molecular folding with unprecedented accuracy. This accelerates the identification of therapeutic targets, optimizes compound screening, and personalizes medicine by modeling patient-specific responses. Additionally, the synergy of large-scale language models specialized in biological text mining facilitates the extraction and synthesis of biomedical knowledge from the growing scientific literature.
 
 Despite their expertise in biology, many highly talented life science scientists find themselves struggling to set up advanced biological models due to the burden of non-biological tasks. These challenges include technical complexities such as configuring CUDA environments for GPU acceleration, which is essential for efficiently training large models. Additionally, scientists often need to create and manage complex workflows that automate data processing, model training, and validation—a task that requires skills outside traditional biological training. Data engineering also poses a significant hurdle, involving the collection, cleaning, and integration of diverse biological datasets while ensuring compliance with data governance policies to maintain privacy and reproducibility. These non-biological demands divert valuable time and focus away from the core scientific research, slowing down progress and innovation in applying generative AI models in life sciences. Addressing this gap requires interdisciplinary collaboration and improved tool accessibility that lowers the technical barriers for biological researchers.
 
 Genesis Workbench from Databricks leverages the powerful capabilities of the Databricks platform—such as automated workflows, GPU-enabled clusters, model serving, and MLflow for experiment tracking and lifecycle management—to streamline and accelerate AI-driven research in life sciences. It builds an intuitive user interface using Databricks Apps to offer pre-packaged biological models alongside a curated set of workflows tailored specifically for life science scientists, enabling them to quickly get started without dealing with complex setup or infrastructure management.
 
+As part of the collaboration between Databricks and NVIDIA, we are integrating NVIDIA's BioNeMo framework—a domain-specific platform for generative AI in digital biology—directly into its Genesis Workbench application. This integration enables life science researchers to easily access and deploy BioNeMo's advanced pre-trained models. The BioNeMo models come with optimizations from NVIDIA, ensuring high performance and efficiency on NVIDIA hardware for enterprise-scale workloads.
+
 Moreover, because Genesis Workbench is open source, it provides AI engineers with blueprints that serve as extensible templates, allowing easy customization and expansion to meet unique customer needs. This combination of robust platform features and flexible, ready-to-use components significantly reduces the non-biological workload on researchers and fosters faster innovation with generative AI in biology.
 
 ## Architecture Diagram
 
-```pending
-```
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/architecture.png" alt="Architecture" width="700"/>
+
+#### Important Disclaimer
+
+**NVIDIA, the NVIDIA logo, and NVIDIA BioNeMo are trademarks or registered trademarks of NVIDIA Corporation in the United States and other countries. All other product names, trademarks, and registered trademarks are the property of their respective owners.**
+
+**References to third-party products or services, including NVIDIA BioNeMo, are for informational purposes only and do not constitute an endorsement or affiliation. This material is not sponsored or endorsed by NVIDIA Corporation. The information provided here is for general informational purposes and should not be interpreted as specific advice or a warranty of suitability for any particular use.**
+
+**Use of NVIDIA BioNeMo and related technologies should comply with all relevant licensing terms, trademarks, and applicable regulations.**
 
 ## Inside Genesis Workbench
 
 - Scripts to deploy Genesis Workbench core module in your workspace
-- Scripts to deploy below modules
-  - Single Cell models scGPT and SCimilarity
-	- Protein Studies using ESMFold, Aphafold2, ProteinMPNN, rfdiffusion and Boltz
+- Scripts to deploy below modules:
+	- Single Cell module that deploys and uses scGPT and SCimilarity
+	- Protein Studies module that deploys and uses ESMFold, Aphafold2, ProteinMPNN, rfdiffusion and Boltz
 	- BioNeMo container definitions and workflows
 	- Access Management, Monitoring and Dashboards
 
