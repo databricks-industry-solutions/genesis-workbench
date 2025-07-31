@@ -1,26 +1,40 @@
 #!/bin/bash
 set -e
 
-cd ../library/genesis_workbench
-poetry build
+echo "#############################################################"
+echo "MAKE SURE core MODULE IS DEPLOYED BEFORE RUNNING APP LOCALLY"
+echo "#############################################################"
 
-cd ../../app
+read -p "Do you wish to continue? (y/n): " answer
+if [[ "$answer" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+    echo "Continuing..."
+    # put your continuing code here
 
-mkdir -p lib
-yes | cp -rf ../library/genesis_workbench/dist/*.whl lib/
+    cd ../library/genesis_workbench
+    poetry build
 
-pip uninstall -y -r requirements.txt
+    cd ../../app
 
-pip install -r requirements.txt
+    mkdir -p lib
+    yes | cp -rf ../library/genesis_workbench/dist/*.whl lib/
 
-source env.env
+    pip uninstall -y -r requirements.txt
 
-rm lib/*.whl
+    pip install -r requirements.txt
 
-cd ..
+    source env.env
 
-cd app
+    rm lib/*.whl
 
-streamlit run home.py
+    cd ..
+
+    cd app
+
+    streamlit run home.py
+
+else
+    echo "Aborted."
+    exit 1
+fi
 
 
