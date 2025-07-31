@@ -12,8 +12,7 @@ Moreover, because Genesis Workbench is open source, it provides AI engineers wit
 
 ## Architecture Diagram
 
-```pending
-```
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/architecture.png" alt="Architecture" width="700"/>
 
 ## Inside Genesis Workbench
 
