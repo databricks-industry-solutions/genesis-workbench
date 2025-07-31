@@ -1,6 +1,13 @@
 # Installation Instructions
 
-In order to install Genesis Workbench you'll clone the repo locally and then use Databricks Asset Bundles to install the Workbench to a Databricks Workspace. 
+In order to install Genesis Workbench you'll clone the repo locally and then use the provided scripts to install the Workbench to a Databricks Workspace. 
+
+The scripts will uses Databricks Asset Bundles and other CLI commands to install the application
+
+### **IMPORTANT NOTE:**
+**Do not manually delete the resources that are created by the script, using the workspace UI.**
+<br>
+**Doing so, might cause build/destroy failures.Always use the provided destroy script to remove packages**
 
 ## Prerequisites
 
@@ -8,10 +15,11 @@ In order to install Genesis Workbench you'll clone the repo locally and then use
 
  - You'll need to have the databricks CLI installed ([docs here](https://docs.databricks.com/aws/en/dev-tools/cli/install)) and authenticate to a workspace. 
    - You should have the workspace you want to install to as the "DEFAULT" profile. Further details on authentication with the databricks CLI is [here](https://docs.databricks.com/aws/en/dev-tools/cli/authentication).
- - You will need to manually include "env.env" files in each module - details of what should be in those is below.
- - You must identify a UC Catalog that the application will use. You can use an existing catalog or create a new one.
- - You must identify a unique schema name that the application will use. **NOTE:** The schema must be exclusively for the application.
+ - The deploy script reads the configuration values from an `env.env` file which you will need to manually create under each module. Details of the content is given below.
+ - You need to identify a UC Catalog that the application will use. You can use an existing catalog or create a new one.
+ - You need to identify a unique schema name that the application will use. If the schema does not exist it will be created by the deploy script<br> **NOTE:** The schema must be exclusively for the Genesis Workbench application.
  - You will need a SQL Warehouse to be used by the application. Follow the instructions given [here](https://docs.databricks.com/aws/en/compute/sql-warehouse/create) to create a `2X-Small` warehouse.
+ - If you are planning to use NVIDIA BioNeMo modules, you need to build a docker container and push it to a container repository. The `dockerfile` is provided at `/modules/core/resources/` folder. The `build_docker.sh` file in the same directory has the commands that need to be executed to build the docker image. Please read the disclaimer in the README about usage of NVIDIA and BioNeMo.
 
 ### Env files
 

@@ -14,12 +14,20 @@ Moreover, because Genesis Workbench is open source, it provides AI engineers wit
 
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/architecture.png" alt="Architecture" width="700"/>
 
+#### Important Disclaimer
+
+**NVIDIA, the NVIDIA logo, and NVIDIA BioNeMo are trademarks or registered trademarks of NVIDIA Corporation in the United States and other countries. All other product names, trademarks, and registered trademarks are the property of their respective owners.**
+
+**References to third-party products or services, including NVIDIA BioNeMo, are for informational purposes only and do not constitute an endorsement or affiliation. This material is not sponsored or endorsed by NVIDIA Corporation. The information provided here is for general informational purposes and should not be interpreted as specific advice or a warranty of suitability for any particular use.**
+
+**Use of NVIDIA BioNeMo and related technologies should comply with all relevant licensing terms, trademarks, and applicable regulations.**
+
 ## Inside Genesis Workbench
 
 - Scripts to deploy Genesis Workbench core module in your workspace
-- Scripts to deploy below modules
-  - Single Cell models scGPT and SCimilarity
-	- Protein Studies using ESMFold, Aphafold2, ProteinMPNN, rfdiffusion and Boltz
+- Scripts to deploy below modules:
+	- Single Cell module that deploys and uses scGPT and SCimilarity
+	- Protein Studies module that deploys and uses ESMFold, Aphafold2, ProteinMPNN, rfdiffusion and Boltz
 	- BioNeMo container definitions and workflows
 	- Access Management, Monitoring and Dashboards
 
