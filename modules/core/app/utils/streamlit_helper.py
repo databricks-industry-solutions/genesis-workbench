@@ -38,7 +38,7 @@ def get_user_info():
         user_email = user_email,
         user_id=headers.get("X-Forwarded-User"),
         user_access_token = headers.get("X-Forwarded-Access-Token"),
-        user_display_name = user_display_name if user_display_name != "" else user_name
+        user_display_name = user_display_name if user_display_name != "" else user_email
     )
 
 def open_run_window(job_id,run_id):

@@ -214,5 +214,27 @@ def initialize(core_catalog_name:str, core_schema_name:str, sql_warehouse_id:str
 
         os.environ["___ENV_SET"] = "TRUE"
 
+
+def get_user_settings(user_email: str) -> dict:
+    core_catalog_name = os.environ["CORE_CATALOG_NAME"]
+    core_schema_name = os.environ["CORE_SCHEMA_NAME"]
+
+    query = f"SELECT key,value FROM {core_catalog_name}.{core_schema_name}.user_settings WHERE user_email='{user_email}'"
+
+    result_df = execute_select_query(query)
+    result_dict = dict(zip(result_df['key'], result_df['value']))
+    return result_dict
+
+def save_user_settings(user_email:str, user_settings:dict):
+    core_catalog_name = os.environ["CORE_CATALOG_NAME"]
+    core_schema_name = os.environ["CORE_SCHEMA_NAME"]
     
-    
+    print(f"Deleting existing user settings for {user_email}")
+    delete_query=f"DELETE FROM {core_catalog_name}.{core_schema_name}.user_settings WHERE user_email='{user_email}'"
+    execute_insert_delete_query(delete_query)
+
+    print(f"Inserting new settings for {user_email}")
+    insert_fields = ",".join([ f"('{user_email}','{k}','{v}')" for k,v in user_settings.items()])
+    insert_query = f"INSERT INTO {core_catalog_name}.{core_schema_name}.user_settings (user_email, key, value) VALUES {insert_fields}"
+    execute_insert_delete_query(insert_query)
+
