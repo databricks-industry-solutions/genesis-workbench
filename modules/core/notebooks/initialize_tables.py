@@ -130,4 +130,17 @@ INSERT INTO settings VALUES
 ('bionemo_esm_inference_job_id', '{bionemo_esm_inference_job_id}'),
 ('deploy_model_job_id', '{deploy_model_job_id}'),
 ('secret_scope', '{secret_scope}')
+
+""")
+
+# COMMAND ----------
+
+spark.sql("DROP TABLE IF EXISTS user_settings")
+
+spark.sql(f"""
+CREATE TABLE user_settings (
+    user_email STRING,
+    key STRING,
+    value STRING
+)
 """)
