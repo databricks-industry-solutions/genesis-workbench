@@ -13,12 +13,6 @@ pip uninstall -y -r requirements.txt
 
 pip install -r requirements.txt
 
-#set the following variables
-# export IS_TOKEN_AUTH="Y"
-# export SQL_WAREHOUSE="8f210e00850a2c16"
-# export DATABRICKS_HOSTNAME="https://adb-830292400663869.9.azuredatabricks.net"
-# export DATABRICKS_TOKEN="xxx"
-
 source env.env
 
 rm lib/*.whl
@@ -29,7 +23,8 @@ echo "Extra params: $EXTRA_PARAMS"
 
 echo $EXTRA_PARAMS > app/extra_params.txt
 
-databricks bundle deploy -t dev --var=$EXTRA_PARAMS
+databricks bundle deploy -t dev \
+    --var="dev_user_prefix=$DEV_USER_PREFIX,core_catalog_name=$CORE_CATALOG_NAME,core_schema_name=$CORE_SCHEMA_NAME,bionemo_docker_token=$BIONEMO_DOCKER_TOKEN"
 
 cd app
 

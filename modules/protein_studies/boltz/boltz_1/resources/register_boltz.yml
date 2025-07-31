@@ -22,7 +22,7 @@ resources:
         - name: model_name
           default: boltz
         - name: cache_dir
-          default: ${resources.volumes.proteinmpnn_cache_dir.name}
+          default: ${resources.volumes.boltz_cache_dir.name}
         - name: experiment_name
           default: ${var.module_registration_experiment_name}
         - name: sql_warehouse_id

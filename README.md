@@ -47,6 +47,25 @@ core | databricks-sql-connector | Apache2.0 | https://github.com/databricks/data
 core | py3Dmol==2.4.0 | MIT | TOBEREMOVED (https://pypi.org/project/py3Dmol/)
 core | biopython |	[BioPython License Agreement](https://github.com/biopython/biopython/blob/master/LICENSE.rst) | https://github.com/biopython/biopython
 core | Mlflow	| Apache2.0 | https://github.com/mlflow/mlflow
+scGPT | numpy==1.26.4 | BSD-3-Clause | https://github.com/numpy/numpy
+scGPT | gdown==5.2.0 | MIT | https://github.com/wkentaro/gdown
+scGPT | wget==3.2 | MIT / Public Domain | https://pypi.org/project/wget/
+scGPT | ipython==8.15.0 | BSD | https://github.com/ipython/ipython
+scGPT | cloudpickle==2.2.1 | BSD-3-Clause | https://github.com/cloudpipe/cloudpickle
+scGPT | torch==2.0.1+cu118 | BSD | https://github.com/pytorch/pytorch
+scGPT | torchvision==0.15.2+cu118 | BSD | https://github.com/pytorch/vision
+scGPT | flash-attn==2.5.8 | Apache-2.0 | https://github.com/Dao-AILab/flash-attention
+scGPT | scgpt==0.2.4 | MIT | https://github.com/bowang-lab/scGPT
+scGPT | wandb==0.19.11 | MIT | https://github.com/wandb/wandb
+SCimilarity | SCimilarity |	Apache2.0 | https://github.com/Genentech/scimilarity
+SCimilarity | Mlflow	| Apache2.0 | https://github.com/mlflow/mlflow
+SCimilarity | scanpy |	BSD 3-Clause | https://github.com/scverse/scanpy
+SCimilarity | numcodecs |	MIT | https://github.com/zarr-developers/numcodecs
+SCimilarity | tbb	| Apache2.0 | https://github.com/uxlfoundation/oneTBB [i think this is it?]
+SCimilarity | typing_extensions	| PSF | https://github.com/python/typing_extensions
+SCimilarity | numpy |	BSD [https://numpy.org/] | https://github.com/numpy/numpy
+SCimilarity | pandas | BSD 3-Clause | https://github.com/pandas-dev/pandas
+SCimilarity | uv | Apache2.0 | https://github.com/astral-sh/uv
 RFDiffusion | RFDiffusion |	BSD-3 | https://github.com/RosettaCommons/RFdiffusion
 RFDiffusion | Hydra	| MIT | https://github.com/facebookresearch/hydra
 RFDiffusion | OmegaConf |	BSD-3 | https://github.com/omry/omegaconf

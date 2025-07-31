@@ -1,4 +1,3 @@
-
 #!/bin/bash
 set -e
 
@@ -12,17 +11,25 @@ ENV=$1
 
 source env.env
 
-echo "⏩️ Starting deploy of Protein Studies module"
+EXTRA_PARAMS=$(paste -sd, "env.env")
 
-for module in alphafold/alphafold_v2.3.2 boltz/boltz_1 esmfold/esmfold_v1 protein_mpnn/protein_mpnn_v0.1.0 rfdiffusion/rfdiffusion_v1.1.0
+echo "Extra Params: $EXTRA_PARAMS"
+
+echo "##############################################"
+echo "⏩️ Starting deploy of Protein Studies module #"
+
+#for module in alphafold/alphafold_v2.3.2 boltz/boltz_1 esmfold/esmfold_v1 protein_mpnn/protein_mpnn_v0.1.0 rfdiffusion/rfdiffusion_v1.1.0
+for module in boltz/boltz_1 esmfold/esmfold_v1 protein_mpnn/protein_mpnn_v0.1.0 rfdiffusion/rfdiffusion_v1.1.0
     do
-        echo "----------------------------------"
+        echo "###########################################"
         echo "Deploying $module"
         cd $module
         chmod +x deploy.sh
-        ./deploy.sh $ENV --var="dev_user_prefix=$dev_user_prefix,core_catalog_name=$core_catalog_name,core_schema_name=$core_schema_name"
-        cd ../..
+        echo "Running command deploy.sh $ENV --var=\"$EXTRA_PARAMS\" " 
+        ./deploy.sh $ENV --var="$EXTRA_PARAMS" 
+        cd ../..        
     done
 
+echo "##############################################"
 
 

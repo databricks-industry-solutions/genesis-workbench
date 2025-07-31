@@ -35,19 +35,23 @@ schema = dbutils.widgets.get("schema")
 user_email = dbutils.widgets.get("user_email")
 sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
 
+
+# COMMAND ----------
+
+#Initialize Genesis Workbench
+from genesis_workbench.workbench import initialize
 databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
-os.environ["SQL_WAREHOUSE"]=sql_warehouse_id
-os.environ["IS_TOKEN_AUTH"]="Y"
-os.environ["DATABRICKS_TOKEN"]=databricks_token
+initialize(core_catalog_name = catalog, core_schema_name = schema, sql_warehouse_id = sql_warehouse_id, token = databricks_token)
 
 
 # COMMAND ----------
 
 from genesis_workbench.models import (ModelCategory, 
                                       import_model_from_uc,
+                                      deploy_model,
                                       get_latest_model_version)
 
-from genesis_workbench.workbench import AppContext
+from genesis_workbench.workbench import wait_for_job_run_completion
 
 # COMMAND ----------
 
@@ -55,7 +59,7 @@ model_uc_name=f"{catalog}.{schema}.rfdiffusion_unconditional"
 model_version = get_latest_model_version(model_uc_name)
 model_uri = f"models:/{model_uc_name}/{model_version}"
 
-import_model_from_uc(user_email=user_email,
+gwb_model_id_unconditional = import_model_from_uc(user_email=user_email,
                     model_category=ModelCategory.PROTEIN_STUDIES,
                     model_uc_name=f"{catalog}.{schema}.rfdiffusion_unconditional",
                     model_uc_version=model_version,
@@ -66,11 +70,24 @@ import_model_from_uc(user_email=user_email,
 
 # COMMAND ----------
 
+run_id_unconditional = deploy_model(user_email=user_email,
+                gwb_model_id=gwb_model_id_unconditional,
+                deployment_name=f"RFdiffusion_Unconditional",
+                deployment_description="Initial deployment",
+                input_adapter_str="none",
+                output_adapter_str="none",
+                sample_input_data_dict_as_json="none",
+                sample_params_as_json="none",
+                workload_type="GPU_SMALL",
+                workload_size="Small")
+
+# COMMAND ----------
+
 model_uc_name=f"{catalog}.{schema}.rfdiffusion_inpainting"
 model_version = get_latest_model_version(model_uc_name)
 model_uri = f"models:/{model_uc_name}/{model_version}"
 
-import_model_from_uc(user_email=user_email,
+gwb_model_id_inpainting = import_model_from_uc(user_email=user_email,
                     model_category=ModelCategory.PROTEIN_STUDIES,
                     model_uc_name=f"{catalog}.{schema}.rfdiffusion_inpainting",
                     model_uc_version=model_version,
@@ -78,3 +95,24 @@ import_model_from_uc(user_email=user_email,
                     model_display_name="RFdiffusion Inpainting",
                     model_source_version="v1.1.0",
                     model_description_url="https://github.com/RosettaCommons/RFdiffusion")
+
+# COMMAND ----------
+
+run_id_inpainting = deploy_model(user_email=user_email,
+                gwb_model_id=gwb_model_id_inpainting,
+                deployment_name=f"RFdiffusion_Inpainting",
+                deployment_description="Initial deployment",
+                input_adapter_str="none",
+                output_adapter_str="none",
+                sample_input_data_dict_as_json="none",
+                sample_params_as_json="none",
+                workload_type="GPU_SMALL",
+                workload_size="Small")
+
+# COMMAND ----------
+
+result1 = wait_for_job_run_completion(run_id_unconditional, timeout = 3600)
+
+# COMMAND ----------
+
+result2 = wait_for_job_run_completion(run_id_inpainting, timeout = 3600)

@@ -4,7 +4,7 @@ set -e
 
 if [ "$#" -lt 1 ]; then
     echo "Usage: $0 <env> "
-    echo 'Example: deploy dev '
+    echo "Example: deploy dev"
     exit 1
 fi
 
@@ -12,17 +12,22 @@ ENV=$1
 
 source env.env
 
-echo "⏩️ Starting deploy of Single Cell module"
+EXTRA_PARAMS=$(paste -sd, "env.env")
+
+echo "Extra Params: $EXTRA_PARAMS"
+
+echo "###########################################"
+echo "⏩️ Starting deploy of Single Cell module  #"
 
 for module in scgpt/scgpt_v0.2.4 scimilarity/scimilarity_v0.4.0_weights_v1.1
     do
-        echo "----------------------------------"
+        echo "###########################################"
         echo "Deploying $module"
         cd $module
         chmod +x deploy.sh
-        ./deploy.sh $ENV --var="dev_user_prefix=$dev_user_prefix,core_catalog_name=$core_catalog_name,core_schema_name=$core_schema_name"
+
+        echo "Running command deploy.sh $ENV --var=\"$EXTRA_PARAMS\" " 
+        ./deploy.sh $ENV --var="$EXTRA_PARAMS" 
         cd ../..
     done
-
-
-
+echo "##############################################"

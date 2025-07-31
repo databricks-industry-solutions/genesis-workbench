@@ -12,19 +12,20 @@ ENV=$1
 EXTRA_PARAMS=${@: 2}
 
 echo ""
-echo "▶️ Validating bundle"
+echo "▶️ [AlphaFold] Validating bundle"
 echo ""
 
 databricks bundle validate $EXTRA_PARAMS
 
 echo ""
-echo "▶️ Deploying bundle"
+echo "▶️ [AlphaFold] Deploying bundle"
 echo ""
 
 databricks bundle deploy -t $ENV $EXTRA_PARAMS
 
 echo ""
-echo "▶️ Running model file downloads"
+echo "▶️ [AlphaFold] Running model file downloads"
+echo "🚨 This job might take a long time to finish. See Jobs & Pipeline tab for status"
 echo ""
 
-databricks bundle run -t $ENV alphafold_downloads $EXTRA_PARAMS
+databricks bundle run -t $ENV alphafold_downloads $EXTRA_PARAMS --no-wait

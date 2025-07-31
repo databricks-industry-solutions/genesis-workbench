@@ -2,10 +2,11 @@
 from databricks.sdk.core import Config, oauth_service_principal
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.errors import DatabricksError
-
+from databricks.sdk.service.jobs import RunLifeCycleState, RunResultState
 from databricks import sql
 
 import os
+import time
 import pandas as pd
 from datetime import datetime, timedelta
 from dataclasses import dataclass
@@ -150,14 +151,68 @@ def get_workflow_job_status(
 
     return result
 
-def get_workbench_settings() -> dict:
-    """Method to application settings like job id etc"""
+def wait_for_job_run_completion(run_id: int, timeout: int = 600, poll_interval: int = 10):
+    """
+    Waits for a Databricks job run to complete.
 
-    query = f"SELECT * FROM \
-                {os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.settings"
+    Args:
+        w: An instance of WorkspaceClient (authenticated).
+        run_id: The Databricks job run ID to monitor.
+        timeout: The maximum time (in seconds) to wait for completion.
+        poll_interval: How often (in seconds) to poll the run status.
+
+    Raises:
+        TimeoutError: If the job does not complete within the timeout.
+        Exception: For other unexpected job run statuses.
+
+    Returns:
+        The final run object as returned by get_run.
+    """
+    w = WorkspaceClient()
+    start = time.time()
+    while True:
+        run_info = w.jobs.get_run(run_id)
+        life_cycle = run_info.state.life_cycle_state
+        result_state = run_info.state.result_state
+
+        print(str(life_cycle))
         
-    result_df = execute_select_query(query)
+        print(f"Job run {run_id}: Life cycle state = {life_cycle}, Result state = {result_state}")
 
-    model_info = result_df.apply(lambda row: GWBModelInfo(**row), axis=1).tolist()[0]
-    return model_info    
+        if life_cycle in [RunLifeCycleState.TERMINATED, RunLifeCycleState.SKIPPED, RunLifeCycleState.INTERNAL_ERROR]:
+            if result_state and result_state == RunResultState.SUCCESS:
+                print(f"Job run {run_id} succeeded.")
+                return run_info
+            else:
+                raise Exception(f"Job run {run_id} failed with result: {result_state}")
+
+        if time.time() - start > timeout:
+            raise TimeoutError(f"Job run {run_id} did not complete within {timeout} seconds.")
+
+        time.sleep(poll_interval)
+
+
+def initialize(core_catalog_name:str, core_schema_name:str, sql_warehouse_id:str, token=None):
+    """Initilializes the env variables required for workbench"""
+
+    if not "___ENV_SET" in os.environ:
+        print("✳️ Initializing Genesis Workbench")
+
+        os.environ["CORE_CATALOG_NAME"]=core_catalog_name
+        os.environ["CORE_SCHEMA_NAME"]=core_schema_name
+        os.environ["SQL_WAREHOUSE"]=sql_warehouse_id
+
+        if token:
+            os.environ["IS_TOKEN_AUTH"]="Y"
+            os.environ["DATABRICKS_TOKEN"]=token
+
+        query = f"SELECT * FROM {core_catalog_name}.{core_schema_name}.settings"
+            
+        result_df = execute_select_query(query)
+        for idx, row in result_df.iterrows():
+            os.environ[ str(row['key']).upper()] = str(row['value'])
+
+        os.environ["___ENV_SET"] = "TRUE"
+
+    
     

@@ -17,6 +17,7 @@ schema = dbutils.widgets.get("schema")
 user_email = dbutils.widgets.get("user_email")
 sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
 model_name = dbutils.widgets.get("model_name")
+
 # COMMAND ----------
 
 # MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0
@@ -92,20 +93,23 @@ user_email = dbutils.widgets.get("user_email")
 sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
 model_name = dbutils.widgets.get("model_name")
 
-import os
+
+# COMMAND ----------
+
+#Initialize Genesis Workbench
+from genesis_workbench.workbench import initialize
 databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
-os.environ["SQL_WAREHOUSE"]=sql_warehouse_id
-os.environ["IS_TOKEN_AUTH"]="Y"
-os.environ["DATABRICKS_TOKEN"]=databricks_token
+initialize(core_catalog_name = catalog, core_schema_name = schema, sql_warehouse_id = sql_warehouse_id, token = databricks_token)
 
 
 # COMMAND ----------
 
 from genesis_workbench.models import (ModelCategory, 
                                       import_model_from_uc,
+                                      deploy_model,
                                       get_latest_model_version)
 
-from genesis_workbench.workbench import AppContext
+from genesis_workbench.workbench import wait_for_job_run_completion
 
 # COMMAND ----------
 
@@ -135,7 +139,7 @@ model_version = get_latest_model_version(model_uc_name)
 model_uri = f"models:/{model_uc_name}/{model_version}"
 print(model_uri)
 
-import_model_from_uc(user_email=user_email,
+gwb_model_id = import_model_from_uc(user_email=user_email,
                     model_category=ModelCategory.SINGLE_CELL,
                     model_uc_name=f"{catalog}.{schema}.{model_name}",
                     model_uc_version=model_version,
@@ -146,5 +150,19 @@ import_model_from_uc(user_email=user_email,
 
 
 
+# COMMAND ----------
 
+run_id = deploy_model(user_email=user_email,
+                gwb_model_id=gwb_model_id,
+                deployment_name=f"scGPT",
+                deployment_description="Initial deployment",
+                input_adapter_str="none",
+                output_adapter_str="none",
+                sample_input_data_dict_as_json="none",
+                sample_params_as_json="none",
+                workload_type="GPU_SMALL",
+                workload_size="Small")
 
+# COMMAND ----------
+
+result = wait_for_job_run_completion(run_id, timeout = 3600)

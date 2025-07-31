@@ -19,7 +19,8 @@ from databricks.sdk.service.serving import (
         ServedEntityInput,
         AutoCaptureConfigInput,
         ServingEndpointDetailed,
-        ServingModelWorkloadType
+        ServingModelWorkloadType,
+        EndpointTag
     )
 
 from .workbench import (UserInfo, 
@@ -229,7 +230,8 @@ def deploy_model_endpoint(catalog_name: str,
                  fq_model_uc_name : str,
                  model_version: int,
                  workload_type: str,
-                 workload_size:str) -> ServingEndpointDetailed:
+                 workload_size:str,
+                 creating_user_email:str) -> ServingEndpointDetailed:
 
     w = WorkspaceClient()
 
@@ -277,6 +279,10 @@ def deploy_model_endpoint(catalog_name: str,
                 served_entities=served_entities,
                 auto_capture_config=auto_capture_config
             ),
+            tags=[
+                EndpointTag(key="application", value="genesis_workbench"),
+                EndpointTag(key="created_by", value=creating_user_email)
+            ],
             timeout = timedelta(minutes=60) #wait upto an hour
         )
 

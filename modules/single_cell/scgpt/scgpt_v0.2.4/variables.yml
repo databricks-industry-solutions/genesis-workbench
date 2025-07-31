@@ -7,9 +7,6 @@ variables:
     description: Working directory or bundle root.
     default: /Users/${var.current_user}/.bundle/${bundle.name}/${bundle.target}
 
-  dev_user_prefix:
-    description: A prefix for resources in dev environment
-
   common_resource_tags:
     description: Resource tags
     default:
@@ -31,7 +28,6 @@ variables:
 
   sql_warehouse_id:
     description: Id of the SQL Warehouse that will be used by the app
-    default: 0000
     
   module_registration_experiment_name:
     description: The experiment to which all registered modules are logged
@@ -39,4 +35,4 @@ variables:
 
   cache_dir:
     description: The cache directory for ScGPT model
-    default: scgpt_cache_dir
+    default: scgpt

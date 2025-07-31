@@ -18,12 +18,15 @@ resources:
           spec:
             client: '2'
 
+      max_concurrent_runs: 5
 
       parameters:
         - name: catalog
           default: ${var.core_catalog_name}
         - name: schema
           default: ${var.core_schema_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}          
         - name: gwb_model_id
           default: '-1' 
         - name: deployment_name

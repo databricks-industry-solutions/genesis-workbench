@@ -10,13 +10,15 @@ ENV=$1
 
 source env.env
 
+EXTRA_PARAMS=$(paste -sd, "env.env")
+
+echo "Extra Params: $EXTRA_PARAMS"
+
 echo "=========================================================="
 echo "⚙️ Preparing to destroy module core from $ENV"
 echo "=========================================================="
 
-databricks bundle destroy -t $ENV \
-    --var="dev_user_prefix=$dev_user_prefix,core_catalog_name=$core_catalog_name,core_schema_name=$core_schema_name,bionemo_docker_token=$bionemo_docker_token" \
-    --auto-approve
+databricks bundle destroy -t $ENV --var="$EXTRA_PARAMS" --auto-approve
 
 if [ $? -eq 0 ]; then
     echo "✅ SUCCESS! Destroy complete."

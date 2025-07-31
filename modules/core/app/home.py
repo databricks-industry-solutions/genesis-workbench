@@ -1,4 +1,6 @@
 import streamlit as st
+import os
+from genesis_workbench.workbench import initialize
 
 st.set_page_config(layout="wide")
 #delete the top right menu
@@ -6,6 +8,13 @@ st.set_page_config(layout="wide")
 st.logo("images/blank.png", size="large", icon_image="images/dbx_logo_icon_2.png")
 st.sidebar.image("images/big_blank.png", width=200)
 st.sidebar.image("images/dbx_logo_1.png", width=200)
+
+with st.spinner("Initializing"):
+    initialize(
+        core_catalog_name = os.environ["CORE_CATALOG_NAME"],
+        core_schema_name = os.environ["CORE_SCHEMA_NAME"],
+        sql_warehouse_id = os.environ["SQL_WAREHOUSE"]
+    )
 
 home_page = st.Page(
     page="views/home.py",

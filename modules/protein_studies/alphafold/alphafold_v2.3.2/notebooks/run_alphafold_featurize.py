@@ -17,7 +17,7 @@
 
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
-dbutils.widgets.text("volume", "alphafold", "Volume")
+dbutils.widgets.text("model_volume", "alphafold", "Volume")
 dbutils.widgets.text("experiment_name", "alphafold2", "Experiment")
 dbutils.widgets.text("run_name", "my_run", "Run Name")
 dbutils.widgets.text("protein_sequence", "QVQLVESGGGLVQAGGSLRLACIASGRTFHSYVMAWFRQAPGKEREFVAAISWSSTPTYYGESVKGRFTISRDNAKNTVYLQMNRLKPEDTAVYFCAADRGESYYYTRPTEYEFWGQGTQVTVSS", "Protein Sequence")
@@ -25,7 +25,7 @@ dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Email")
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
-VOLUME = dbutils.widgets.get("volume")
+VOLUME = dbutils.widgets.get("model_volume")
 EXPERIMENT_NAME = dbutils.widgets.get("experiment_name")
 RUN_NAME = dbutils.widgets.get("run_name")
 PROTEIN_SEQUENCE = dbutils.widgets.get("protein_sequence")
