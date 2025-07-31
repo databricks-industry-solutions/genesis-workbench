@@ -33,6 +33,6 @@ with col2:
     else:
         st.markdown("## Welcome to Genesis Workbench.")
         st.markdown("#### ⚠️ Your profile setup is incomplete.")
-        st.write("Finish your profile setup using Profile tab.")
+        st.markdown("Finish your setup using **Profile** tab.")
     
 

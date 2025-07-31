@@ -21,7 +21,9 @@ def test_mlflow_experiment(user_email, base_folder, ):
     mlflow.delete_experiment(experiment_id= experiment.experiment_id)
 
 def reload():
-    components.html("<script>parent.window.location.reload()</script>")
+    #components.html("<script>parent.window.location.reload()</script>")
+    st.switch_page("views/home.py")
+
 
 st.title(":material/account_circle: Profile")
 
