@@ -43,7 +43,7 @@ Moreover, because Genesis Workbench is open source, it provides AI engineers wit
 	- Access Management, Monitoring and Dashboards
 
 ## Installation
-Read the Installation guide
+Read the [Installation Guide](https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/Installation.md)
 
 ## Troubleshooting
 Read the Troubleshooting guide
