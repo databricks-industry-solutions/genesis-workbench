@@ -112,8 +112,8 @@ def make_designs(sequence,
 
     experiment = set_mlflow_experiment(experiment_tag = mlflow_experiment_name,
                                        user_email = user_info.user_email,
-                                       host = host_name,
-                                       token = user_info.user_access_token
+                                       host = None, #host_name, Until we a have a way to grant user token permission to workspace api
+                                       token = None #user_info.user_access_token
                                        )
     mlflow_run_id = 0
 
