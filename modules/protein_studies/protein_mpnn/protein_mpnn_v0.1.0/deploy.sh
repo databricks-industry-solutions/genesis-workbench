@@ -25,7 +25,7 @@ databricks bundle deploy -t $ENV $EXTRA_PARAMS
 
 echo ""
 echo "▶️ [Protein_MPNN] Running model registration job"
+echo "🚨 This job might take a long time to finish. See Jobs & Pipeline tab for status"
 echo ""
-
-databricks bundle run -t $ENV register_proteinmpnn $EXTRA_PARAMS
+databricks bundle run -t $ENV register_proteinmpnn $EXTRA_PARAMS --no-wait
 

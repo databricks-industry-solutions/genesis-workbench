@@ -1,6 +1,6 @@
 resources:
   volumes:
-    proteinmpnn_cache_dir:
+    boltz_cache_dir:
       name: ${var.cache_dir}
       catalog_name: ${var.core_catalog_name}
       schema_name: ${var.core_schema_name}

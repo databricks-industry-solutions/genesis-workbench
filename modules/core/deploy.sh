@@ -9,20 +9,6 @@ if [ "$#" -lt 1 ]; then
 fi
 
 ENV=$1
-#EXTRA_PARAMS=${@: 2}
-
-# echo ""
-# echo "▶️ Extracting variables"
-# echo ""
-
-# var_strs="${EXTRA_PARAMS//--var=}"
-
-# extracted_content=$(sed 's/.*"\([^"]*\)".*/\1/' <<< "$var_strs")
-# rm -f env.env
-# while read -d, -r pair; do
-#   IFS='=' read -r key val <<<"$pair"
-#   echo "export $key=$val" >> env.env
-# done <<<"$extracted_content,"
 
 source env.env
 

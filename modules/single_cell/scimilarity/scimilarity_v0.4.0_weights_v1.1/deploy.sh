@@ -12,21 +12,22 @@ ENV=$1
 EXTRA_PARAMS=${@: 2}
 
 echo ""
-echo "▶️ Validating bundle"
+echo "▶️ [SCimilarity] Validating bundle"
 echo ""
 
 databricks bundle validate $EXTRA_PARAMS
 
 echo ""
-echo "▶️ Deploying bundle"
+echo "▶️ [SCimilarity] Deploying bundle"
 echo ""
 
 databricks bundle deploy -t $ENV $EXTRA_PARAMS
 
 echo ""
-echo "▶️ Running model registration job"
+echo "▶️ [SCimilarity] Running model registration job"
+echo "🚨 This job might take a long time to finish. See Jobs & Pipeline tab for status"
 echo ""
 
-databricks bundle run -t $ENV register_scimilarity $EXTRA_PARAMS
+databricks bundle run -t $ENV register_scimilarity $EXTRA_PARAMS --no-wait
 
 

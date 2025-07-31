@@ -25,6 +25,7 @@ databricks bundle deploy -t $ENV $EXTRA_PARAMS
 
 echo ""
 echo "▶️ [AlphaFold] Running model file downloads"
+echo "🚨 This job might take a long time to finish. See Jobs & Pipeline tab for status"
 echo ""
 
-databricks bundle run -t $ENV alphafold_downloads $EXTRA_PARAMS
+databricks bundle run -t $ENV alphafold_downloads $EXTRA_PARAMS --no-wait

@@ -18,6 +18,7 @@ resources:
           spec:
             client: '2'
 
+      max_concurrent_runs: 5
 
       parameters:
         - name: catalog
