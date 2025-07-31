@@ -1,4 +1,9 @@
 # Databricks notebook source
+# MAGIC %pip install databricks-sdk==0.61.0
+# MAGIC dbutils.library.restartPython()
+
+# COMMAND ----------
+
 #parameters to the notebook
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
@@ -6,6 +11,7 @@ dbutils.widgets.text("deploy_model_job_id", "1234", "Deploy Model Job ID")
 dbutils.widgets.text("bionemo_esm_finetune_job_id", "1234", "BioNeMo ESM Fine Tune Job ID")
 dbutils.widgets.text("bionemo_esm_inference_job_id", "1234", "BioNeMo ESM Inference Job ID")
 dbutils.widgets.text("application_secret_scope", "dbx_genesis_workbench", "Secret Scope used by application")
+dbutils.widgets.text("databricks_app_name", "dev-scn-genesis-workbench", "UI Application name")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
@@ -13,12 +19,7 @@ deploy_model_job_id = dbutils.widgets.get("deploy_model_job_id")
 bionemo_esm_finetune_job_id = dbutils.widgets.get("bionemo_esm_finetune_job_id")
 bionemo_esm_inference_job_id = dbutils.widgets.get("bionemo_esm_inference_job_id")
 secret_scope = dbutils.widgets.get("application_secret_scope")
-
-# COMMAND ----------
-
-#for testing
-#catalog = "genesis_workbench"
-#schema = "dev_scn_dbx_genesis_workbench_core"
+databricks_app_name = dbutils.widgets.get("databricks_app_name")
 
 # COMMAND ----------
 
@@ -144,3 +145,15 @@ CREATE TABLE user_settings (
     value STRING
 )
 """)
+
+# COMMAND ----------
+
+from databricks.sdk import WorkspaceClient
+
+w = WorkspaceClient()
+app = w.apps.get(name=databricks_app_name)
+
+# COMMAND ----------
+
+spark.sql(f"GRANT USE CATALOG ON CATALOG {catalog} TO `{app.service_principal_client_id}`")
+spark.sql(f"GRANT ALL PRIVILEGES ON SCHEMA {catalog}.{schema} TO `{app.service_principal_client_id}`")
