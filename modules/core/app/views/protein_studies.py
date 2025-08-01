@@ -175,17 +175,32 @@ with protein_structure_prediction_tab:
             view_alphafold_input_sequence = st.text_area("Provide an input sequence to infer the structure:"
                                         ,"QVQLVESGGGLVQAGGSLRLACIASGRTFHSYVMAWFRQAPGKEREFVAAISWSSTPTYYGESVKGRFTISRDNAKNTVYLQMNRLKPEDTAVYFCAADRGESYYYTRPTEYEFWGQGTQVTVSS", key="view_alphafold_input_sequence")
         
-        c1,c2,c3,c4 = st.columns([1,1,1,3], vertical_alignment="bottom")
+        c1,c2,c3 = st.columns([1,1,1], vertical_alignment="bottom")
         with c1:
             view_alphafold_run_experiment = st.text_input("MLflow Experiment:","",placeholder="structure_prediction_alphafold")            
         with c2:
             view_alphafold_run_label = st.text_input("Run Name:","",placeholder="my_run_123")
         with c3:
             view_structure_alphafold_btn = st.button("Start Job", key="view_structure_alphafold_btn")
-        
+
+        if view_structure_alphafold_btn:
+            is_valid = True
+            if view_alphafold_input_sequence.strip() == "" :
+                is_valid = False
+                st.error("Enter a valid sequence with the region to be replaced marked by square braces")
+
+            if (view_alphafold_run_experiment.strip() == ""  or 
+                view_alphafold_run_label.strip() == ""):
+                is_valid = False
+                st.error("Enter an mlflow experiment and run name")
+
+            if is_valid:    
+                start_run_alphafold_job()
+
+
         st.divider()
         st.markdown("###### Search Past Runs:")
-        c1,c2,c3 = st.columns([1,1,3], vertical_alignment="bottom")
+        c1,c2,c3 = st.columns([1,1,1], vertical_alignment="bottom")
 
         with c1:
             search_alphafold_run_experiment = st.text_input("MLflow Experiment:","",key="search_alphafold_run_experiment")            
@@ -193,6 +208,8 @@ with protein_structure_prediction_tab:
             search_alphafold_run_name = st.text_input("Run Name:","", key="search_alphafold_run_name")
         with c3:
             search_alphafold_run_button= st.button("Search", key="search_alphafold_run_button")
+
+    
 
 
 with protein_design_tab:

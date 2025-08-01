@@ -18,16 +18,14 @@
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
 dbutils.widgets.text("model_volume", "alphafold", "Volume")
-dbutils.widgets.text("experiment_name", "alphafold2", "Experiment")
-dbutils.widgets.text("run_name", "my_run", "Run Name")
+dbutils.widgets.text("run_id", "1234", "Run Id")
 dbutils.widgets.text("protein_sequence", "QVQLVESGGGLVQAGGSLRLACIASGRTFHSYVMAWFRQAPGKEREFVAAISWSSTPTYYGESVKGRFTISRDNAKNTVYLQMNRLKPEDTAVYFCAADRGESYYYTRPTEYEFWGQGTQVTVSS", "Protein Sequence")
 dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Email")
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
 VOLUME = dbutils.widgets.get("model_volume")
-EXPERIMENT_NAME = dbutils.widgets.get("experiment_name")
-RUN_NAME = dbutils.widgets.get("run_name")
+RUN_ID = dbutils.widgets.get("run_id")
 PROTEIN_SEQUENCE = dbutils.widgets.get("protein_sequence")
 USER_EMAIL = dbutils.widgets.get("user_email")
 
@@ -171,23 +169,9 @@ print(os.environ['AF_FASTA_FILE'])
 
 import os
 import mlflow
-from databricks.sdk import WorkspaceClient
-
-def set_mlflow_experiment(experiment_tag, user_email):    
-    w = WorkspaceClient()
-    mlflow_experiment_base_path = f"Users/{user_email}/mlflow_experiments"
-    print(f"Creating directory /Workspace/{mlflow_experiment_base_path}")
-    w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")
-    experiment_path = f"/{mlflow_experiment_base_path}/{experiment_tag}"
-    mlflow.set_registry_uri("databricks-uc")
-    mlflow.set_tracking_uri("databricks")
-    return mlflow.set_experiment(experiment_path)
 
 # COMMAND ----------
-
-experiment = set_mlflow_experiment(EXPERIMENT_NAME, USER_EMAIL)
-
-with mlflow.start_run(experiment_id=experiment.experiment_id, run_name=RUN_NAME) as run:
+with mlflow.start_run(run_id=RUN_id) as run:
   mlflow.log_param("protein_sequence", PROTEIN_SEQUENCE)
   mlflow.log_param("mode", mode)
   mlflow.log_param("results_directory", OUTDIR)

@@ -26,16 +26,14 @@
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
 dbutils.widgets.text("model_volume", "alphafold", "Volume")
-dbutils.widgets.text("experiment_name", "alphafold2", "Experiment")
-dbutils.widgets.text("run_name", "my_run", "Run Name")
+dbutils.widgets.text("run_id", "1234", "Run Id")
 dbutils.widgets.text("protein_sequence", "MTYKLILNGKTLKGETTTEAVDAATAEKVFKQYANDNGVDGEWTYDAATKTFTVTE", "Protein Sequence")
 dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Email")
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
 VOLUME = dbutils.widgets.get("model_volume")
-EXPERIMENT_NAME = dbutils.widgets.get("experiment_name")
-RUN_NAME = dbutils.widgets.get("run_name")
+RUN_ID = dbutils.widgets.get("run_id")
 PROTEIN_SEQUENCE = dbutils.widgets.get("protein_sequence")
 USER_EMAIL = dbutils.widgets.get("user_email")
 
@@ -88,7 +86,7 @@ def write(f,protein,mode):
 mode = 'multimer' if ':' in PROTEIN_SEQUENCE else 'monomer'
 
 tmpdir = '/local_disk0/'
-tmp_file = os.path.join(tmpdir,RUN_NAME+'.fasta') 
+tmp_file = os.path.join(tmpdir,RUN_ID+'.fasta') 
 with open(tmp_file,'w') as f:
     write(f,PROTEIN_SEQUENCE,mode)
 
@@ -99,7 +97,7 @@ BASEDIR=f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/datasets"
 now = datetime.now()
 formatted_datetime = now.strftime("%Y%m%d_%H%M%S")
 #Where results are stored
-OUTDIR = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/results/{RUN_NAME}/{formatted_datetime}"
+OUTDIR = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/results/{RUN_ID}/{formatted_datetime}"
 
 if not os.path.exists(OUTDIR):
     os.makedirs(OUTDIR)
