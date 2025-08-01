@@ -23,7 +23,7 @@ Moreover, because Genesis Workbench is open source, it provides AI engineers wit
 
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/happy_scientists.png" alt="Generative AI in Life Sciences" width="700"/>
 
-## $${\color{orange}Architecture Diagram}$$
+## $${\color{orange}Architecture}$$ $${\color{orange}Diagram}$$
 
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/architecture.png" alt="Architecture" width="700"/>
 
