@@ -3,6 +3,8 @@
 In order to install Genesis Workbench you'll clone the repo locally and then use the provided scripts to install the Workbench to a Databricks Workspace. 
 
 The scripts will use Databricks Asset Bundles and other CLI commands to install the application. The below diagram shows the installation process
+<br>
+
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment.png" alt="Generative AI in Life Sciences" width="700"/>
 
 ### **IMPORTANT NOTE:**
