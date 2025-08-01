@@ -26,8 +26,7 @@ def hit_model_endpoint(endpoint_name, inputs) -> str:
     Query endpoint with input
     """
 
-    #endpoint_name = f"gwb_{endpoint_name}_endpoint"
-    
+    endpoint_name = f"gwb_{endpoint_name}_endpoint"    
 
     try:
         logger.info(f"Sending request to model endpoint: {endpoint_name}")

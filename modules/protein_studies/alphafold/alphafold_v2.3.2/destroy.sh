@@ -7,14 +7,13 @@ if [ "$#" -lt 2 ]; then
 fi
 
 ENV=$1
-
-source env.env
+EXTRA_PARAMS=${@: 2}
 
 echo "=========================================================="
 echo "⚙️ Preparing to destroy module alphafold_v2.3.2 from $ENV"
 echo "=========================================================="
 
-databricks bundle destroy -t $ENV --var="dev_user_prefix=$dev_user_prefix,core_catalog_name=$core_catalog_name,core_schema_name=$core_schema_name" --auto-approve
+databricks bundle destroy -t $ENV $EXTRA_PARAMS --auto-approve
 
 if [ $? -eq 0 ]; then
     echo "✅ SUCCESS! Destroy complete."

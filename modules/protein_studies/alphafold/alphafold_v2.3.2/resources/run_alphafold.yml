@@ -1,7 +1,7 @@
 resources:
   jobs:
     alphafold:
-      name: alphafold
+      name: run_alphafold
       description: >
         # Alphafold_v2.3.2 workflow
         inputs:
@@ -27,7 +27,7 @@ resources:
       tasks:
         - task_key: featurize
           notebook_task:
-            notebook_path: ../notebooks/run_alphafold_featurize
+            notebook_path: ../notebooks/run_alphafold_featurize.py
             source: WORKSPACE
           job_cluster_key: featurize_cluster
           timeout_seconds: 28800
@@ -50,7 +50,7 @@ resources:
           depends_on:
             - task_key: featurize
           notebook_task:
-            notebook_path: ../notebooks/run_alphafold_fold
+            notebook_path: ../notebooks/run_alphafold_fold.py
             source: WORKSPACE
           job_cluster_key: fold_cluster
           timeout_seconds: 14400

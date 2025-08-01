@@ -10,5 +10,7 @@ CWD=$1
 ENV=$2
 
 cd modules/$CWD
+chmod +x destroy.sh
+
 ./destroy.sh $ENV
 
