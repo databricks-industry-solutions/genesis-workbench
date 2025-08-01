@@ -28,4 +28,5 @@ echo "▶️ [AlphaFold] Running model file downloads"
 echo "🚨 This job might take a long time to finish. See Jobs & Pipeline tab for status"
 echo ""
 
-databricks bundle run -t $ENV alphafold_register_and_downloads $EXTRA_PARAMS --no-wait
+# TODO
+#databricks bundle run -t $ENV alphafold_register_and_downloads $EXTRA_PARAMS --no-wait

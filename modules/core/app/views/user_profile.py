@@ -10,7 +10,6 @@ from genesis_workbench.workbench import get_user_settings, save_user_settings
 
 def test_mlflow_experiment(user_email, base_folder, ):     
     w = WorkspaceClient()
-
     mlflow_experiment_base_path = f"Users/{user_email}/{base_folder}"
     w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")
     experiment_path = f"/{mlflow_experiment_base_path}/__test__"

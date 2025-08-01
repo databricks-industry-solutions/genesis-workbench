@@ -1,12 +1,13 @@
 import streamlit as st
 import traceback
-
+import os
 from genesis_workbench.models import (ModelCategory, 
                                       get_available_models, 
                                       get_deployed_models, 
                                       MLflowExperimentAccessException)
 
-from utils.streamlit_helper import (get_user_info,                                    
+from utils.streamlit_helper import (get_user_info, 
+                                    open_run_window,
                                     display_deploy_model_dialog,
                                     open_mlflow_experiment_window)
 
@@ -14,6 +15,8 @@ from utils.molstar_tools import (
                     html_as_iframe,
                     molstar_html_singlebody,
                     molstar_html_multibody)
+
+from utils.protein_structure import start_run_alphafold_job
 
 from utils.protein_design import (make_designs, 
                                   hit_esmfold,
@@ -195,7 +198,22 @@ with protein_structure_prediction_tab:
                 st.error("Enter an mlflow experiment and run name")
 
             if is_valid:    
-                start_run_alphafold_job()
+                user_info = get_user_info()  
+                try:
+                    with st.spinner("Starting job"):
+                        alphafold_job_run_id = start_run_alphafold_job(protein_sequence=view_alphafold_input_sequence,
+                                    mlflow_experiment_name=view_alphafold_run_experiment,
+                                    mlflow_run_name=view_alphafold_run_label,
+                                    user_info=user_info)
+                        
+                        st.success(f"Job started with run id: {alphafold_job_run_id}.")                
+                        run_alphafold_job_id = os.getenv("RUN_ALPHAFOLD_JOB_ID")
+                        view_deploy_run_btn = st.button("View Run", on_click=lambda: open_run_window(run_alphafold_job_id,alphafold_job_run_id))
+
+                except Exception as e:
+                    st.error("An error occured while running the workflow")
+                    print(e)
+                
 
 
         st.divider()

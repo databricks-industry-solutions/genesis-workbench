@@ -19,19 +19,27 @@ def start_run_alphafold_job(protein_sequence:str,
                                        token = None #user_info.user_access_token
                                        )
     mlflow_run_id = ""
+    job_run_id = ""
     with mlflow.start_run(run_name=mlflow_run_name, experiment_id=experiment.experiment_id) as run:
         mlflow_run_id = run.info.run_id
-        mlflow.log_param("protein_sequence",protein_sequence)
+        mlflow.log_param("protein_sequence",protein_sequence)           
     
-    
-    execute_workflow(
-        job_id=os.environ["RUN_ALPHAFOLD_JOB_ID"],
-        params={
-            "catalog" : os.environ["CORE_CATALOG_NAME"],
-            "schema" : os.environ["CORE_CATALOG_NAME"],
-            "run_id" : mlflow_run_id,
-            "protein_sequence" : protein_sequence,
-            "user_email" : user_info.user_email
-        }
-    )
+        job_run_id = execute_workflow(
+            job_id=os.environ["RUN_ALPHAFOLD_JOB_ID"],
+            params={
+                "catalog" : os.environ["CORE_CATALOG_NAME"],
+                "schema" : os.environ["CORE_CATALOG_NAME"],
+                "run_id" : mlflow_run_id,
+                "protein_sequence" : protein_sequence,
+                "user_email" : user_info.user_email
+            }
+        )
+        mlflow.set_tag("origin","genesis_workbench")        
+        mlflow.set_tag("created_by",user_info.user_email)
+        mlflow.set_tag("job_run_id", job_run_id)
+        mlflow.set_tag("job_status","started")
+        
+    return job_run_id
+
+
    
