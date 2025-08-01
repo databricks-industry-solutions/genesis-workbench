@@ -8,9 +8,9 @@ The scripts will use Databricks Asset Bundles and other CLI commands to install 
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment.png" alt="Generative AI in Life Sciences" width="700"/>
 
 ### **IMPORTANT NOTE:**
-** Do not manually delete the resources that are created by the script, using the workspace UI. **
+**Do not manually delete the resources that are created by the script, using the workspace UI.**
 <br>
-** Doing so, might cause build/destroy failures.Always use the provided destroy script to remove packages **
+**Doing so, might cause build/destroy failures.Always use the provided destroy script to remove packages**
 
 ## Prerequisites
 
