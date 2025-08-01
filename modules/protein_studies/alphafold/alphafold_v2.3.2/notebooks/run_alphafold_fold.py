@@ -45,6 +45,15 @@ USER_EMAIL = dbutils.widgets.get("user_email")
 # MAGIC mkdir -p /miniconda3
 # MAGIC wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /miniconda3/miniconda.sh
 # MAGIC bash /miniconda3/miniconda.sh -b -u -p /miniconda3
+# MAGIC
+# MAGIC cat > /miniconda3/.condarc <<EOF
+# MAGIC channels:
+# MAGIC   - conda-forge
+# MAGIC   - bioconda
+# MAGIC   - nodefaults
+# MAGIC channel_priority: strict
+# MAGIC EOF
+# MAGIC
 # MAGIC rm -rf /miniconda3/miniconda.sh
 # MAGIC
 # MAGIC source /miniconda3/bin/activate
@@ -173,3 +182,23 @@ print(os.environ['AF_FASTA_FILE'])
 
 # MAGIC %sh
 # MAGIC cat ${AF_FASTA_FILE}
+
+# COMMAND ----------
+
+with open(os.environ['AF_FASTA_FILE'], 'r') as file:
+    all_lines = file.readlines()
+    content = "".join(all_lines)
+    print(content)
+
+# COMMAND ----------
+
+import mlflow
+
+with mlflow.start_run(run_id=RUN_ID) as run:
+  mlflow.log_param("fold_results_path", os.environ['OUTDIR'])
+  mlflow.log_param("fold_fasta_file", os.environ['AF_FASTA_FILE'])
+  mlflow.set_tag("job_status","fold_complete")
+  with open(os.environ['AF_FASTA_FILE'], 'r') as file:
+    all_lines = file.readlines()
+    content = "".join(all_lines)
+    mlflow.log_param("output", content)
