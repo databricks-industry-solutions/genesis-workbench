@@ -18,8 +18,7 @@ echo "Extra Params: $EXTRA_PARAMS"
 echo "##############################################"
 echo "⏩️ Starting deploy of Protein Studies module #"
 
-#for module in alphafold/alphafold_v2.3.2 boltz/boltz_1 esmfold/esmfold_v1 protein_mpnn/protein_mpnn_v0.1.0 rfdiffusion/rfdiffusion_v1.1.0
-for module in boltz/boltz_1 esmfold/esmfold_v1 protein_mpnn/protein_mpnn_v0.1.0 rfdiffusion/rfdiffusion_v1.1.0
+for module in alphafold/alphafold_v2.3.2 boltz/boltz_1 esmfold/esmfold_v1 protein_mpnn/protein_mpnn_v0.1.0 rfdiffusion/rfdiffusion_v1.1.0
     do
         echo "###########################################"
         echo "Deploying $module"
