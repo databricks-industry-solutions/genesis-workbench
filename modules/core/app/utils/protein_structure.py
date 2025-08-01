@@ -28,7 +28,7 @@ def start_run_alphafold_job(protein_sequence:str,
             job_id=os.environ["RUN_ALPHAFOLD_JOB_ID"],
             params={
                 "catalog" : os.environ["CORE_CATALOG_NAME"],
-                "schema" : os.environ["CORE_CATALOG_NAME"],
+                "schema" : os.environ["CORE_SCHEMA_NAME"],
                 "run_id" : mlflow_run_id,
                 "protein_sequence" : protein_sequence,
                 "user_email" : user_info.user_email
@@ -38,7 +38,7 @@ def start_run_alphafold_job(protein_sequence:str,
         mlflow.set_tag("created_by",user_info.user_email)
         mlflow.set_tag("job_run_id", job_run_id)
         mlflow.set_tag("job_status","started")
-        
+
     return job_run_id
 
 
