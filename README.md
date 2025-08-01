@@ -2,7 +2,7 @@
 
 ## Introduction
 
-<span style="color: orange;">### Opportunity</span>
+### <span style="color: orange;">Opportunity</span>
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/genai_ls.png" alt="Generative AI in Life Sciences" width="700"/>
 
 Generative AI is revolutionizing the life sciences by harnessing multiple foundational models tailored to various biological domains. These models, trained on vast biological datasets including genomic sequences, protein structures, molecular interactions, and cellular behaviors, enable advanced capabilities such as predictive modeling, drug discovery, and synthetic biology design. By integrating diverse biological data into unified frameworks, foundational models can generate novel hypotheses, simulate complex biochemical pathways, and predict molecular folding with unprecedented accuracy. This accelerates the identification of therapeutic targets, optimizes compound screening, and personalizes medicine by modeling patient-specific responses. Additionally, the synergy of large-scale language models specialized in biological text mining facilitates the extraction and synthesis of biomedical knowledge from the growing scientific literature.
