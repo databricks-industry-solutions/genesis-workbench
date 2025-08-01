@@ -1,7 +1,7 @@
 resources:
   jobs:
-    alphafold_downloads:
-      name: alphafold_downloads
+    alphafold_register_and_downloads:
+      name: alphafold_register_and_downloads
       email_notifications:
         on_success:
           - ${var.current_user}
@@ -13,7 +13,20 @@ resources:
 
       tasks:
 
+        - task_key: register_run_job
+          notebook_task:
+            notebook_path: ../notebooks/register_alphafold_job.py
+            source: WORKSPACE
+          job_cluster_key: download_common_files_cluster
+          health:
+            rules:
+              - metric: RUN_DURATION_SECONDS
+                op: GREATER_THAN
+                value: 300
+
         - task_key: common_files
+          depends_on:
+            - task_key: register_run_job
           notebook_task:
             notebook_path: ../notebooks/download_common_files.py
             source: WORKSPACE
@@ -93,6 +106,9 @@ resources:
           default: ${resources.volumes.alphafold_volume.name}
         - name: user_email
           default: ${var.current_user}
+        - name: run_alphafold_job_id
+          default: ${resources.jobs.alphafold.id}
+
               
       job_clusters:
 
