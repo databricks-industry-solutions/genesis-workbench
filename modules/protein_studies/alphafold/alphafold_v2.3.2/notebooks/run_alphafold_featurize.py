@@ -18,7 +18,7 @@
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
 dbutils.widgets.text("model_volume", "alphafold", "Volume")
-dbutils.widgets.text("run_id", "1234", "Run Id")
+dbutils.widgets.text("run_id", "b3c99d3b49ba4893aa402a4342a70cd1", "Run Id")
 dbutils.widgets.text("protein_sequence", "QVQLVESGGGLVQAGGSLRLACIASGRTFHSYVMAWFRQAPGKEREFVAAISWSSTPTYYGESVKGRFTISRDNAKNTVYLQMNRLKPEDTAVYFCAADRGESYYYTRPTEYEFWGQGTQVTVSS", "Protein Sequence")
 dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Email")
 
@@ -98,7 +98,7 @@ def write(f,protein,mode):
 mode = 'multimer' if ':' in PROTEIN_SEQUENCE else 'monomer'
 
 tmpdir = '/local_disk0/'
-tmp_file = os.path.join(tmpdir,RUN_NAME+'.fasta') 
+tmp_file = os.path.join(tmpdir,RUN_ID+'.fasta') 
 with open(tmp_file,'w') as f:
     write(f,PROTEIN_SEQUENCE,mode)
 
@@ -109,7 +109,7 @@ BASEDIR=f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/datasets"
 now = datetime.now()
 formatted_datetime = now.strftime("%Y%m%d_%H%M%S")
 #Where results are stored
-OUTDIR = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/results/{RUN_NAME}/{formatted_datetime}"
+OUTDIR = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/results/{RUN_ID}/{formatted_datetime}"
 
 if not os.path.exists(OUTDIR):
     os.makedirs(OUTDIR)
@@ -171,11 +171,10 @@ import os
 import mlflow
 
 # COMMAND ----------
-with mlflow.start_run(run_id=RUN_id) as run:
+
+with mlflow.start_run(run_id=RUN_ID) as run:
   mlflow.log_param("protein_sequence", PROTEIN_SEQUENCE)
   mlflow.log_param("mode", mode)
   mlflow.log_param("results_directory", OUTDIR)
   mlflow.log_param("fasta_file", os.environ['AF_FASTA_FILE'])
-
-  dbutils.jobs.taskValues.set("run_id", run.info.run_id)
 
