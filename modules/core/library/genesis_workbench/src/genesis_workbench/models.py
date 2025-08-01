@@ -114,6 +114,11 @@ def set_mlflow_experiment(experiment_tag, user_email, host=None, token=None):
         mlflow.set_registry_uri("databricks-uc")
         mlflow.set_tracking_uri("databricks")
         experiment = mlflow.set_experiment(experiment_path)
+
+        mlflow.set_experiment_tags({
+            "used_by_genesis_workbench":"yes"
+        })
+        
         return experiment
     except RestException as e:
         if e.error_code=="RESOURCE_DOES_NOT_EXIST":

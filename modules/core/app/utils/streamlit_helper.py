@@ -208,7 +208,7 @@ def display_deploy_model_dialog(selected_model_name, success_callback = None, er
                 error_callback()
 
         if deploy_started:
-            st.success(f"Model deploy has started with a run id {run_id}.")                
+            st.success(f"Model deploy has started with run id: {run_id}.")                
             st.warning(f"It might take upto 30 minutes to complete")
             job_id = os.getenv("DEPLOY_MODEL_JOB_ID")
             view_deploy_run_btn = st.button("View Run", on_click=lambda: open_run_window(job_id,run_id))

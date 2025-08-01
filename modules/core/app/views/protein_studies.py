@@ -1,12 +1,13 @@
 import streamlit as st
 import traceback
-
+import os
 from genesis_workbench.models import (ModelCategory, 
                                       get_available_models, 
                                       get_deployed_models, 
                                       MLflowExperimentAccessException)
 
-from utils.streamlit_helper import (get_user_info,                                    
+from utils.streamlit_helper import (get_user_info, 
+                                    open_run_window,
                                     display_deploy_model_dialog,
                                     open_mlflow_experiment_window)
 
@@ -14,6 +15,8 @@ from utils.molstar_tools import (
                     html_as_iframe,
                     molstar_html_singlebody,
                     molstar_html_multibody)
+
+from utils.protein_structure import start_run_alphafold_job
 
 from utils.protein_design import (make_designs, 
                                   hit_esmfold,
@@ -175,17 +178,47 @@ with protein_structure_prediction_tab:
             view_alphafold_input_sequence = st.text_area("Provide an input sequence to infer the structure:"
                                         ,"QVQLVESGGGLVQAGGSLRLACIASGRTFHSYVMAWFRQAPGKEREFVAAISWSSTPTYYGESVKGRFTISRDNAKNTVYLQMNRLKPEDTAVYFCAADRGESYYYTRPTEYEFWGQGTQVTVSS", key="view_alphafold_input_sequence")
         
-        c1,c2,c3,c4 = st.columns([1,1,1,3], vertical_alignment="bottom")
+        c1,c2,c3 = st.columns([1,1,1], vertical_alignment="bottom")
         with c1:
             view_alphafold_run_experiment = st.text_input("MLflow Experiment:","",placeholder="structure_prediction_alphafold")            
         with c2:
             view_alphafold_run_label = st.text_input("Run Name:","",placeholder="my_run_123")
         with c3:
             view_structure_alphafold_btn = st.button("Start Job", key="view_structure_alphafold_btn")
-        
+
+        if view_structure_alphafold_btn:
+            is_valid = True
+            if view_alphafold_input_sequence.strip() == "" :
+                is_valid = False
+                st.error("Enter a valid sequence with the region to be replaced marked by square braces")
+
+            if (view_alphafold_run_experiment.strip() == ""  or 
+                view_alphafold_run_label.strip() == ""):
+                is_valid = False
+                st.error("Enter an mlflow experiment and run name")
+
+            if is_valid:    
+                user_info = get_user_info()  
+                try:
+                    with st.spinner("Starting job"):
+                        alphafold_job_run_id = start_run_alphafold_job(protein_sequence=view_alphafold_input_sequence,
+                                    mlflow_experiment_name=view_alphafold_run_experiment,
+                                    mlflow_run_name=view_alphafold_run_label,
+                                    user_info=user_info)
+                        
+                        st.success(f"Job started with run id: {alphafold_job_run_id}.")                
+                        run_alphafold_job_id = os.getenv("RUN_ALPHAFOLD_JOB_ID")
+                        view_deploy_run_btn = st.button("View Run", on_click=lambda: open_run_window(run_alphafold_job_id,alphafold_job_run_id))
+
+                except Exception as e:
+                    st.error("An error occured while running the workflow")
+                    print(e)
+                
+
+
         st.divider()
         st.markdown("###### Search Past Runs:")
-        c1,c2,c3 = st.columns([1,1,3], vertical_alignment="bottom")
+        c1,c2,c3 = st.columns([1,1,1], vertical_alignment="bottom")
 
         with c1:
             search_alphafold_run_experiment = st.text_input("MLflow Experiment:","",key="search_alphafold_run_experiment")            
@@ -193,6 +226,8 @@ with protein_structure_prediction_tab:
             search_alphafold_run_name = st.text_input("Run Name:","", key="search_alphafold_run_name")
         with c3:
             search_alphafold_run_button= st.button("Search", key="search_alphafold_run_button")
+
+    
 
 
 with protein_design_tab:

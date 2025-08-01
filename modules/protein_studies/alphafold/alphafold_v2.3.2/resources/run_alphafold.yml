@@ -80,9 +80,7 @@ resources:
           default: ${var.current_user}      
         - name: protein_sequence
           default: XXX
-        - name: experiment_name
-          default: none
-        - name: run_name
+        - name: run_id
           default: run
 
 
