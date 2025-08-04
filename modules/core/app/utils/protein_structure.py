@@ -4,6 +4,11 @@ import json
 import logging
 import mlflow
 import pandas as pd
+from typing import Tuple, Optional
+import tempfile
+from Bio.PDB import PDBParser
+from .structure_utils import _cif_to_pdb_str, select_and_align
+from databricks.sdk import WorkspaceClient
 from genesis_workbench.models import set_mlflow_experiment
 from genesis_workbench.workbench import UserInfo, execute_workflow
 
@@ -47,6 +52,8 @@ def search_alphafold_runs_by_run_name(user_email: str, run_name:str):
     """
     Searches for runs with the given run name and returns a pandas dataframe """
 
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
     #find all experiments thats used by genesis workbench
     experiment_list = mlflow.search_experiments(filter_string=f"tags.used_by_genesis_workbench='yes' ")
     if len(experiment_list)==0:
@@ -69,13 +76,15 @@ def search_alphafold_runs_by_run_name(user_email: str, run_name:str):
     
     #format the results
     filtered_runs['experiment_name'] = filtered_runs['experiment_id'].map(experiments)
-    return_results = filtered_runs[['tags.mlflow.runName','experiment_name','params.protein_sequence','start_time','tags.job_status']]
-    return_results.columns = ['run_name','experiment_name','protein_sequence','start_time','status']
+    return_results = filtered_runs[['run_id','tags.mlflow.runName','experiment_name','params.protein_sequence','start_time','tags.job_status']]
+    return_results.columns = ['run_id','run_name','experiment_name','protein_sequence','start_time','status']
     return return_results
 
 def search_alphafold_runs_by_experiment_name(user_email: str, experiment_name:str):
     """ Searches for runs with the given experiment name and returns a pandas dataframe """
 
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
     #find all experiments thats used by genesis workbench
     experiment_list = mlflow.search_experiments(filter_string=f"tags.used_by_genesis_workbench='yes' ")
     experiments = {exp.experiment_id: exp.name.split("/")[-1] 
@@ -100,6 +109,75 @@ def search_alphafold_runs_by_experiment_name(user_email: str, experiment_name:st
     
     #format the results
     experiment_run_search_results['experiment_name'] = experiment_run_search_results['experiment_id'].map(experiments)
-    return_results = experiment_run_search_results[['tags.mlflow.runName','experiment_name','params.protein_sequence','start_time','tags.job_status']]
-    return_results.columns = ['run_name','experiment_name','protein_sequence','start_time','status']
+    return_results = experiment_run_search_results[['run_id','tags.mlflow.runName','experiment_name','params.protein_sequence','start_time','tags.job_status']]
+    return_results.columns = ['run_id','run_name','experiment_name','protein_sequence','start_time','status']
     return return_results
+
+
+def pull_alphafold_run(run_id : str ='run') -> str:
+    catalog = os.environ["CORE_CATALOG_NAME"]
+    schema = os.environ["CORE_SCHEMA_NAME"]
+    run_id = "0b3f5bbf34fc45208b804000f75034ba"
+    w = WorkspaceClient()
+    response = w.files.download(
+        f'/Volumes/{catalog}/{schema}/alphafold/results/{run_id}/{run_id}/ranked_0.pdb'
+
+        
+    )
+    pdb_str = str(response.contents.read(), encoding='utf-8')
+    return pdb_str
+
+def pull_pdbmmcif(pdb_code : str ='4ykk') -> str:
+    catalog = os.environ["CORE_CATALOG_NAME"]
+    schema = os.environ["CORE_SCHEMA_NAME"]
+    pdb_code = pdb_code.lower()
+    w = WorkspaceClient()
+    response = w.files.download(
+        f'/Volumes/{catalog}/{schema}/alphafold/datasets/pdb_mmcif/mmcif_files/{pdb_code}.cif'
+    )
+    cif_str = str(response.contents.read(), encoding='utf-8')
+    return _cif_to_pdb_str(cif_str)
+  
+def apply_pdb_header(pdb_str: str, name: str) -> str:
+    header = f"""HEADER    "{name}"                           00-JAN-00   0XXX 
+    TITLE     "{name}"                         
+    COMPND    MOL_ID: 1;                                                            
+    COMPND   2 MOLECULE: {name};                          
+    COMPND   3 CHAIN: A;""" 
+    return header + pdb_str
+  
+def af_collect_and_align(run_id:str, 
+                         run_name : str, 
+                         pdb_code : Optional[str] = None, 
+                         include_pdb : bool = False) -> Tuple[str]:
+    
+    logging.info("collect run")
+    pdb_run = pull_alphafold_run(run_id=run_id)
+    logging.info("add header")
+    pdb_run = apply_pdb_header(pdb_run, run_name)
+    true_structure_str = ""
+    af_structure_str = pdb_run
+    if include_pdb:
+      logging.info("collect PDB entry")
+      pdb_mmcif = pull_pdbmmcif(pdb_code)
+      # strings to biopdb structures
+      with tempfile.TemporaryDirectory() as tmpdir:
+          true_pdb_path = os.path.join(tmpdir, 'true_pdb.pdb')
+          af_pdb_path = os.path.join(tmpdir, 'af_pdb.pdb') 
+          with open(true_pdb_path, 'w') as f:
+              f.write(pdb_mmcif)
+          with open(af_pdb_path, 'w') as f:
+              f.write(pdb_run)
+          
+          true_structure = PDBParser().get_structure('true',true_pdb_path)
+          af_structure = PDBParser().get_structure('af',af_pdb_path)
+
+          logging.info("do slect and align")
+          true_structure_str, af_structure_str = select_and_align(
+              true_structure, af_structure
+          )
+
+          logging.info("more headers")          
+          true_structure_str = apply_pdb_header(true_structure_str, run_name)
+          af_structure_str = apply_pdb_header(af_structure_str, "alphafold2 prediction")
+    return pdb_run, true_structure_str, af_structure_str

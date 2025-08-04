@@ -1,6 +1,9 @@
 import streamlit as st
 import traceback
 import os
+
+from typing import Tuple, Optional
+
 from genesis_workbench.models import (ModelCategory, 
                                       get_available_models, 
                                       get_deployed_models, 
@@ -18,7 +21,8 @@ from utils.molstar_tools import (
 
 from utils.protein_structure import (start_run_alphafold_job,
                                      search_alphafold_runs_by_run_name,
-                                     search_alphafold_runs_by_experiment_name)
+                                     search_alphafold_runs_by_experiment_name,
+                                     af_collect_and_align )
 
 from utils.protein_design import (make_designs, 
                                   hit_esmfold,
@@ -65,6 +69,22 @@ def get_progress_callback(status_generation
 def esmfold_btn_fn(protein : str) -> str:
     pdb = hit_esmfold(protein)
     html =  molstar_html_multibody(pdb)
+    return html
+
+
+def view_structure_from_alphafold_run(run_id:str, run_name : str, pdb_code : Optional[str] = None, include_pdb : bool = False) -> str: 
+    logging.info('running alphafold viewer')
+    pdb_run, true_structure_str, af_structure_str = af_collect_and_align(
+        run_id = run_id, 
+        run_name=run_name, 
+        pdb_code=pdb_code,
+        include_pdb=include_pdb
+    )
+    if include_pdb:
+        logging.info('sending two pdb str to html')
+        html = molstar_html_multibody([af_structure_str, true_structure_str])
+    else:
+        html = molstar_html_multibody(af_structure_str)
     return html
 
 def design_tab_fn(sequence: str, mlflow_experiment:str, mlflow_run_name:str, progress_callback=None) -> str:
@@ -119,6 +139,24 @@ def display_protein_studies_settings(available_models_df,deployed_models_df):
                             selection_mode="single-row")
     else:
         st.write("There are no deployed models")
+
+def set_selected_row_status():
+    selection = st.session_state["alphafold_run_search_result_display_df"].selection
+    selected_alphafold_run_status = st.session_state["alphafold_run_search_result_df"].iloc[selection]["status"].iloc[0]
+    st.session_state["selected_alphafold_run_status"]=selected_alphafold_run_status
+
+@st.dialog("View Structure", width="large")
+def display_view_alphafold_result_dialog(run_id: str, run_name:str):
+    st.markdown(f"##### Run Name: {run_name}")
+    pdb_compare_c1, pdb_compare_c2 = st.columns([2,1], vertical_alignment="bottom")
+    with pdb_compare_c1:
+        af_run_compare_pbm_id = st.text_input("PDB Code: ")
+    with pdb_compare_c2:
+        compare_pdb_btn = st.button("Compare")
+    with st.spinner("Fetching result"):
+        html_to_display = view_structure_from_alphafold_run(run_id=run_id, run_name=run_name,pdb_code=None, include_pdb=False)
+        components.html(html_to_display, height=700)
+
 
 
 #load data for page
@@ -234,25 +272,57 @@ with protein_structure_prediction_tab:
 
     
         if search_alphafold_run_button:
-            if search_alphafold_text.strip() != "":
-                if search_alphafold_run_mode == "Experiment Name":
-                    alphafold_run_search_result_df = search_alphafold_runs_by_experiment_name(user_email = user_info.user_email,
-                                                                                              experiment_name = search_alphafold_text)
-                else:
-                    alphafold_run_search_result_df = search_alphafold_runs_by_run_name(user_email = user_info.user_email,
-                                                                                              run_name = search_alphafold_text)
-                
-                if not alphafold_run_search_result_df.empty:
-                    st.dataframe(alphafold_run_search_result_df, 
-                            use_container_width=True,
-                            hide_index=True,
-                            on_select="rerun",
-                            selection_mode="single-row")
-                else:
-                    st.error("No results found")
+            with st.spinner("Searching"):
+                if "alphafold_run_search_result_df" in st.session_state :
+                    del st.session_state["alphafold_run_search_result_df"]
+                    del st.session_state["selected_alphafold_run_status"]
 
-            else:
-                st.error("Provide a search text")
+                if search_alphafold_text.strip() != "":
+                    if search_alphafold_run_mode == "Experiment Name":
+                        alphafold_run_search_result_df = search_alphafold_runs_by_experiment_name(user_email = user_info.user_email,
+                                                                                                experiment_name = search_alphafold_text)                        
+
+                    else:
+                        alphafold_run_search_result_df = search_alphafold_runs_by_run_name(user_email = user_info.user_email,
+                                                                                                run_name = search_alphafold_text)
+                    
+                    if not alphafold_run_search_result_df.empty:
+                        st.session_state["alphafold_run_search_result_df"]=alphafold_run_search_result_df                        
+                    else:
+                        st.error("No results found")
+
+                else:
+                    st.error("Provide a search text")
+
+        if "alphafold_run_search_result_df" in st.session_state:
+            st.divider()
+            view_af_result_enabled = True if "selected_alphafold_run_status" in st.session_state and st.session_state["selected_alphafold_run_status"]=="fold_complete" else False
+            view_c1,view_c2,view_c3 = st.columns([1,1,1], vertical_alignment="bottom")
+            with view_c1:
+                alphafold_result_view_btn = st.button("View", disabled= not view_af_result_enabled)
+
+            alphafold_results_selected_row = st.dataframe(st.session_state["alphafold_run_search_result_df"], 
+                    column_config={
+                        "run_id": None
+                    },
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    key="alphafold_run_search_result_display_df")
+            
+            selected_row_for_view = alphafold_results_selected_row.selection.rows
+            selected_alphafold_run_id = 0
+            if len(selected_row_for_view) > 0:
+                selected_alphafold_run_id = st.session_state["alphafold_run_search_result_df"].iloc[selected_row_for_view]["run_id"].iloc[0]
+                selected_alphafold_run_name = st.session_state["alphafold_run_search_result_df"].iloc[selected_row_for_view]["run_name"].iloc[0]
+                
+
+                print(f"selected run id : {selected_alphafold_run_id}")
+
+                if alphafold_result_view_btn:
+                    display_view_alphafold_result_dialog(run_id = selected_alphafold_run_id, run_name=selected_alphafold_run_name)
+
 
 
 with protein_design_tab:

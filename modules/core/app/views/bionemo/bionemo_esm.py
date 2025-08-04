@@ -126,6 +126,7 @@ def display_inference_tab():
                     if inf_data_location.endswith(".csv") and inf_data_location.strip().startswith("/Volumes") :
                         if inf_result_location.strip() != "" and inf_result_location.strip().startswith("/Volumes") :
                             if inf_sequence_column_name.strip() != "" :
+                                
                                 run_id = start_esm2_inference(user_info=get_user_info(),
                                         esm_variant= esm_variant_for_inference, 
                                         is_base_model = is_base_model,                                       
