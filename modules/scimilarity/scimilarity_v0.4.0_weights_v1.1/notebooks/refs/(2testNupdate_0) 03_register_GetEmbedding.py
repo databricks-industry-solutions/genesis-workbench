@@ -23,14 +23,237 @@ CATALOG, DB_SCHEMA, MODEL_FAMILY, MODEL_NAME, EXPERIMENT_NAME
 
 # COMMAND ----------
 
+# DBTITLE 1,original
+# import csv
+# from typing import Any
+# import mlflow
+# import numpy as np
+# import pandas as pd
+# from mlflow.pyfunc.model import PythonModelContext
+# from scimilarity import CellEmbedding, CellQuery
+# import torch
+
+
+# class SCimilarity_GetEmbedding(mlflow.pyfunc.PythonModel):
+#     r"""Create MLFlow Pyfunc class for SCimilarity embedding model."""
+
+#     def load_context(self, context: PythonModelContext):
+#         r"""Intialize pre-trained SCimilarity embedding model.
+
+#         Parameters
+#         ----------
+#         context : PythonModelContext
+#             Context object for MLFlow model -- here we are loading pre-trained model weights from the artifact path.
+
+#         """
+#         self.ce = CellEmbedding(context.artifacts["model_path"]) 
+        
+#     def predict(
+#         self,
+#         context: PythonModelContext,
+#         model_input: pd.DataFrame, # DF of dict: key is column name, value is embedding --> array/matrix | scipy.sparse.csr_matrix         
+#     ) -> pd.DataFrame: #tuple
+#         r"""Output prediction on model.
+
+#         Parameters
+#         ----------
+#         context : PythonModelContext
+#             Context object for MLFlow model.
+#         model_input : pd.DataFrame, # DF of dict: key is column name, value is embedding --> array/matrix
+#             Input to the model.        
+
+#         Returns
+#         -------
+#         pd.DataFrame with 1d numpy.ndarray
+#             The embeddings.
+
+#         """        
+
+#         # Convert the Pandas DataFrame to a NumPy array
+#         model_input_array = model_input['subsample_query_array'].explode().to_numpy(dtype='object').astype(np.float32).reshape(1, -1)
+
+#         embedding_dict = {'embedding': self.ce.get_embeddings(model_input_array)}
+#         embedding_df = pd.DataFrame([embedding_dict])
+#         return embedding_df
+        
+
+# COMMAND ----------
+
+# torch.__version__ #'2.7.1+cu126'
+
+# COMMAND ----------
+
+# DBTITLE 1,test
+# import csv
+# from typing import Any
+# import mlflow
+# import numpy as np
+# import pandas as pd
+# from mlflow.pyfunc.model import PythonModelContext
+# from scimilarity import CellEmbedding, CellQuery
+# import torch
+
+
+# class SCimilarity_GetEmbedding(mlflow.pyfunc.PythonModel):
+#     r"""Create MLFlow Pyfunc class for SCimilarity embedding model."""
+
+#     def load_context(self, context: PythonModelContext):
+#         r"""Intialize pre-trained SCimilarity embedding model.
+
+#         Parameters
+#         ----------
+#         context : PythonModelContext
+#             Context object for MLFlow model -- here we are loading pre-trained model weights from the artifact path.
+
+#         """
+#         self.ce = CellEmbedding(context.artifacts["model_path"]) 
+        
+#     def predict(
+#         self,
+#         context: PythonModelContext,
+#         model_input: pd.DataFrame, # DF of dict: key is column name, value is embedding --> array/matrix | scipy.sparse.csr_matrix         
+#     ) -> pd.DataFrame: #tuple
+#         r"""Output prediction on model.
+
+#         Parameters
+#         ----------
+#         context : PythonModelContext
+#             Context object for MLFlow model.
+#         model_input : pd.DataFrame, # DF of dict: key is column name, value is embedding --> array/matrix
+#             Input to the model.        
+
+#         Returns
+#         -------
+#         pd.DataFrame with 1d numpy.ndarray
+#             The embeddings.
+
+#         """        
+
+#         # Initialize a list to store the embeddings
+#         embeddings_list = []
+
+#         # Iterate over each row in the input DataFrame
+#         for index, row in model_input.iterrows():
+#             # Convert the row to a NumPy array
+#             model_input_array = np.array(row['subsample_query_array'], dtype=np.float32).reshape(1, -1)
+            
+#             # Get the embedding for the current row
+#             embedding = self.ce.get_embeddings(model_input_array)
+            
+#             # Append the embedding to the list with the index
+#             embeddings_list.append({'index': index, 'embedding': embedding})
+
+#         # Convert the list of embeddings to a DataFrame
+#         embedding_df = pd.DataFrame(embeddings_list)
+        
+#         # Set the index of the embedding DataFrame to the preserved index without an index name
+#         embedding_df.index = embedding_df['index']
+#         embedding_df.index.name = None
+#         embedding_df.drop(columns=['index'], inplace=True)
+#         # embedding_df.set_index('index', inplace=True)
+        
+#         return embedding_df
+
+# COMMAND ----------
+
+# DBTITLE 1,test2
 import csv
-from typing import Any
+from typing import Any, Dict
 import mlflow
 import numpy as np
 import pandas as pd
 from mlflow.pyfunc.model import PythonModelContext
 from scimilarity import CellEmbedding, CellQuery
 import torch
+
+
+class SCimilarity_GetEmbedding(mlflow.pyfunc.PythonModel):
+    r"""Create MLFlow Pyfunc class for SCimilarity embedding model."""
+
+    def load_context(self, context: PythonModelContext):
+        r"""Intialize pre-trained SCimilarity embedding model.
+
+        Parameters
+        ----------
+        context : PythonModelContext
+            Context object for MLFlow model -- here we are loading pre-trained model weights from the artifact path.
+
+        """
+        self.ce = CellEmbedding(context.artifacts["model_path"]) 
+        
+    def predict(
+        self,
+        context: PythonModelContext,
+        model_input: pd.DataFrame, # DF of dict: key is column name, value is embedding --> array/matrix | scipy.sparse.csr_matrix         
+    ) -> Dict[str, np.ndarray]: #-> pd.DataFrame: 
+        r"""Output prediction on model.
+
+        Parameters
+        ----------
+        context : PythonModelContext
+            Context object for MLFlow model.
+        model_input : pd.DataFrame, # DF of dict: key is column name, value is embedding --> array/matrix
+            Input to the model.        
+
+        Returns
+        -------
+        pd.DataFrame with 1d numpy.ndarray
+            The embeddings.
+
+        """        
+
+        # Extract celltype_sample and celltype_sample_obs from model_input
+        celltype_sample_json = model_input['celltype_sample'].iloc[0]
+        celltype_sample_obs_json = model_input['celltype_sample_obs'].iloc[0]
+
+        # Convert JSON back to DataFrame
+        celltype_sample_df = pd.read_json(celltype_sample_json, orient='split')
+        celltype_sample_obs_df = pd.read_json(celltype_sample_obs_json, orient='split')
+
+        # Initialize a list to store the embeddings
+        embeddings_list = []
+
+        # Iterate over each row in the input DataFrame
+        for index, row in celltype_sample_df.iterrows():
+            # Convert the row to a NumPy array
+            # model_input_array = np.array(row['subsample_query_array'], dtype=np.float32).reshape(1, -1)
+            model_input_array = np.array(row['cell_subsample'], dtype=np.float32).reshape(1, -1)
+
+            # Get the embedding for the current row
+            embedding = self.ce.get_embeddings(model_input_array)
+            
+            # Append the embedding to the list with the index
+            embeddings_list.append({'index': index, 'embedding': embedding})
+
+        # Convert the list of embeddings to a DataFrame
+        embedding_df = pd.DataFrame(embeddings_list)
+        
+        # Set the index of the embedding DataFrame to the preserved index without an index name
+        embedding_df.index = embedding_df['index']
+        embedding_df.index.name = None
+        embedding_df.drop(columns=['index'], inplace=True)
+
+        # return embedding_df.T.to_dict(orient='split')
+        # return embedding_df.T.to_dict(orient='records')
+        return embedding_df.to_dict()
+
+        # Merge the embeddings with the celltype_sample_obs_df
+        # result_df = pd.concat([celltype_sample_obs_df, embedding_df], axis=1)
+        
+        # return result_df.to_json(orient='split')
+
+# COMMAND ----------
+
+# DBTITLE 1,test3
+import csv
+from typing import Any, Dict
+import mlflow
+import numpy as np
+import pandas as pd
+from mlflow.pyfunc.model import PythonModelContext
+from scimilarity import CellEmbedding, CellQuery
+import torch
+import json
 
 
 class SCimilarity_GetEmbedding(mlflow.pyfunc.PythonModel):
@@ -68,13 +291,60 @@ class SCimilarity_GetEmbedding(mlflow.pyfunc.PythonModel):
 
         """        
 
-        # Convert the Pandas DataFrame to a NumPy array
-        model_input_array = model_input['subsample_query_array'].explode().to_numpy(dtype='object').astype(np.float32).reshape(1, -1)
+        # Initialize a list to store the final results
+        final_results = []
 
-        embedding_dict = {'embedding': self.ce.get_embeddings(model_input_array)}
-        embedding_df = pd.DataFrame([embedding_dict])
-        return embedding_df
-        
+        # Iterate over each row in the input DataFrame
+        for _, row in model_input.iterrows():
+            # Extract celltype_sample and celltype_sample_obs from the current row
+            celltype_sample_json = row['celltype_sample']
+            celltype_sample_obs_json = row['celltype_sample_obs']
+
+            # Convert JSON back to DataFrame
+            celltype_sample_df = pd.read_json(celltype_sample_json, orient='split')
+            celltype_sample_obs_df = pd.read_json(celltype_sample_obs_json, orient='split')
+
+            # Initialize a list to store the embeddings for the current row
+            embeddings_list = []
+
+            # Iterate over each row in the celltype_sample_df
+            for index, sample_row in celltype_sample_df.iterrows():
+                # Convert the row to a NumPy array
+                model_input_array = np.array(sample_row['cell_subsample'], dtype=np.float32).reshape(1, -1)
+
+                # Get the embedding for the current row
+                embedding = self.ce.get_embeddings(model_input_array)
+
+                # Append the embedding to the list with the index
+                embeddings_list.append({'index': index, 'embedding': embedding.tolist()})
+
+            # Convert the list of embeddings to a DataFrame
+            embedding_df = pd.DataFrame(embeddings_list)
+
+            # Set the index of the embedding DataFrame to the preserved index without an index name
+            embedding_df.index = embedding_df['index']
+            embedding_df.index.name = None
+            embedding_df.drop(columns=['index'], inplace=True)
+
+            # Convert the embeddings DataFrame to JSON
+            embedding_json = embedding_df.to_json(orient='records')
+            celltype_sample_obs_json_out = celltype_sample_obs_df.to_json(orient='records')
+
+            # Append the result to the final results list
+            final_results.append({
+                'embedding': embedding_json,
+                'celltype_sample_obs': celltype_sample_obs_json_out
+            })
+
+        # Create the output DataFrame
+        output_df = pd.DataFrame(final_results)
+
+        return output_df
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC
 
 # COMMAND ----------
 
@@ -98,16 +368,311 @@ model.load_context(temp_context)
 
 # COMMAND ----------
 
+# DBTITLE 1,XXX | sample data ref
+# sampledata_path = f"/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}/data/adams_etal_2020/GSE136831_subsample.h5ad"
+
+# ## READ sample czi dataset H5AD file + align + lognorm 
+# adams = sc.read(sampledata_path)
+
+# # gene_order = derive_gene_order(databricks_instance, endpoint_name = "mmt_scimilarity_gene_order")
+# # gene_order = derive_gene_order(databricks_instance, endpoint_name = gene_order_endpoint)
+# aligned = align_dataset(adams, gene_order) #
+
+# lognorm = lognorm_counts(aligned)
+
+# ### Filter sample data to "Disease: IFP" | celltype: "myofibroblast cell" | sample_ref: "DS000011735-GSM4058950"  
+# adams_ipf = lognorm[lognorm.obs["Disease"] == "IPF"].copy()
+
+# adams_myofib = adams_ipf[
+#                           adams_ipf.obs["celltype_name"] == "myofibroblast cell"
+#                         ].copy()
+
+# ## Extract list for sample_ref
+# subsample = adams_myofib[
+#                           adams_myofib.obs["sample"] == "DS000011735-GSM4058950" # sample ref 
+#                         ].copy()
+
+# ## extract specific index in subsample | test batch inference? 
+# # query_cell = subsample[subsample.obs.index == "123942"]
+# # query_cell = subsample[subsample.obs.index == "124332"]
+# # query_cell = subsample[subsample.obs.index == "126138"]
+
+# query_cell = subsample ## test multiple rows
+
+# ## extract subsample query (1d array or list)
+# X_vals: sparse.csr_matrix = query_cell.X
+# X_vals
+
+# COMMAND ----------
+
+adams
+
+# COMMAND ----------
+
+adams_myofib
+
+# COMMAND ----------
+
+subsample
+
+# COMMAND ----------
+
+# utils X_vals
+X_vals
+
+# COMMAND ----------
+
+# DBTITLE 1,update query_cell to use multiple subsamples for this version
+query_cell = subsample ## test multiple rows
+
+## extract subsample query (1d array or list)
+X_vals: sparse.csr_matrix = query_cell.X
+X_vals
+
+# COMMAND ----------
+
+# DBTITLE 1,check update
+query_cell, X_vals
+
+# COMMAND ----------
+
+# DBTITLE 1,TODO
+## todo
+# save minisample as h5ad 
+# check it has all the data objects
+# and test as a X_val first 
+
+# then add obs as another input 
+# update model wrapper
+
+# add dictionary structure for output 
+
+ 
+# adata_subset = adata[:1000,:1000]
+# #: version 2 (serving_input format): 
+# input_data = pd.DataFrame({'adata_sparsematrix': [adata_subset.X.toarray().tolist()], 'adata_obs': [adata_subset.obs.to_json(orient='split')], 'adata_var':[adata_subset.var.to_json(orient='split')]})
+
+# https://e2-demo-field-eng.cloud.databricks.com/editor/notebooks/1880719540082312?o=1444828305810485#command/1880719540086927
+
+# COMMAND ----------
+
+# DBTITLE 1,NOTES
+### Filter sample data to "Disease: IFP" | celltype: "myofibroblast cell" | sample_ref: "DS000011735-GSM4058950" 
+
+# h5ad: filename =f"{disease_name}_{celltype_name}_{sample_ref}.h5ad"
+
+# X_vals: sparse.csr_matrix = query_cell.X
+# subsample index refs 
+
+
+
+# COMMAND ----------
+
+# query_cell.write_h5ad(filename: 'PathLike[str] | str | None'=None, compression: "Literal['gzip', 'lzf'] | None"=None, compression_opts: 'int | Any'=None, as_dense: 'Sequence[str]'=(), *, convert_strings_to_categoricals: 'bool'=True)
+
+# COMMAND ----------
+
+len(query_cell.X.toarray().tolist())
+
+# COMMAND ----------
+
+# import scipy# Check your data size first
+
+# print(f"Data shape: {query_cell.shape}")
+# print(f"Memory usage estimate: {query_cell.X.nnz} B") # / 1e9:.2f} GB")
+# print(f"Data type: {query_cell.X.dtype}")
+# print(f"Is sparse: {scipy.sparse.issparse(query_cell.X)}")
+
+# COMMAND ----------
+
+# DBTITLE 1,write a subsample as zarr to UC vols
+## to move to utils 
+import os
+
+# Filter sample data to "Disease: IFP" | celltype: "myofibroblast cell" | sample_ref: "DS000011735-GSM4058950" 
+
+disease_name = "IFP"
+celltype_name = "myofibroblast cell".replace(' ','-')
+sample_refid = "DS000011735-GSM4058950"
+
+
+path2save_zarr = f"/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}/data/adams_etal_2020/GSE136831_subsample/{disease_name}_{celltype_name}_{sample_refid}.zarr"
+
+# Ensure the directory exists
+# os.makedirs(os.path.dirname(path2save_h5ad), exist_ok=True)
+os.makedirs(os.path.dirname(path2save_zarr), exist_ok=True)
+
+print("path2save_zarr :", path2save_zarr)
+
+# Method 1: Use zarr backend (often more stable)
+try:
+    print("Writing cell_query subsample to UC Vols as Zarr .... ")
+    # query_cell.write_zarr("/Volumes/genesis_workbench/dev_mmt_core_test/scimilarity/data/adams_etal_2020/GSE136831_subsample/IFP_myofibroblast-cell_DS000011735-GSM4058950.zarr")
+    query_cell.write_zarr(path2save_zarr)
+    print("cell_query subsample write to UC Vols as Zarr: successful")
+except Exception as e:
+    print(f"cell_query subsample write to UC Vols as Zarr: failed: {e}")
+
+
+### NOT working on DBX --> kernel crashes due to 
+# The SIGSEGV (Segmentation fault) indicates a low-level memory access violation. This is happening in Databricks, and given your tiny dataset (3 × 28231), it's likely a library compatibility issue rather than memory problems.
+
+# path2save_h5ad = f"/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}/data/adams_etal_2020/GSE136831_subsample/{disease_name}_{celltype_name}_{sample_refid}.h5ad"
+
+# query_cell.write_h5ad(path2save_h5ad, compression=None)
+
+# COMMAND ----------
+
+# DBTITLE 1,updated
+query_cell
+
+# COMMAND ----------
+
+# DBTITLE 1,Read back zarr file
+## move to utils / UI inference 
+import scanpy as sc
+import anndata as ad
+
+# Read zarr file with full path
+cell_sample = ad.read_zarr(path2save_zarr)
+
+print(cell_sample)
+
+# COMMAND ----------
+
+# DBTITLE 1,check
+query_cell.X, cell_sample.X
+
+# COMMAND ----------
+
+query_cell.X.toarray(), cell_sample.X.toarray()
+
+
+# COMMAND ----------
+
+# DBTITLE 1,X_vals | sparse matrix
+# X_vals: sparse.csr_matrix = query_cell.X
+X_vals: sparse.csr_matrix = cell_sample.X
+X_vals
+
+# Assuming X_vals is a sparse matrix
+X_vals_dense = X_vals.toarray()
+
+
+# COMMAND ----------
+
+cell_sample.obs
+
+# COMMAND ----------
+
+cell_sample.obs.index
+
+# COMMAND ----------
+
+cell_sample_obs_json = cell_sample.obs.to_json(orient='split')
+cell_sample_obs_json
+
+# COMMAND ----------
+
+# DBTITLE 1,cell_sample_obs
+pd.read_json(cell_sample_obs_json, orient='split')
+
+# COMMAND ----------
+
+# DBTITLE 1,cell_subsample
+## preserve the index from original data
+cell_subsample_pdf = pd.DataFrame([{'cell_subsample': row} for row in X_vals_dense ], index=cell_sample.obs.index)
+cell_subsample_pdf
+# cell_subsample_json = cell_subsample_pdf.to_json(orient='split')
+# cell_subsample_json
+
+# COMMAND ----------
+
+cell_subsample_pdf.to_json(orient='split')
+
+# COMMAND ----------
+
 # DBTITLE 1,Specify model_input
-# Create a DataFrame containing the embeddings
+# existing
+## model_input = pd.DataFrame([{'subsample_query_array': X_vals.toarray().astype(np.float64)[0]}])
+# model_input = pd.DataFrame([{'subsample_query_array': X_vals.toarray()[0].tolist() }]) ## simpler
 
-# X_vals.dtype # float64 
-# X_vals.shape # (1, 28231) -- 1d array
 
-# model_input = pd.DataFrame([{'subsample_query_array': X_vals.toarray().astype(np.float64)[0]}])
-model_input = pd.DataFrame([{'subsample_query_array': X_vals.toarray()[0].tolist() }]) ## simpler
+model_input = pd.DataFrame([{"celltype_sample": cell_subsample_pdf.to_json(orient='split'), 
+               "celltype_sample_obs": cell_sample.obs.to_json(orient='split')
+              }
+              ])
+
+
+# model_input_tmp = pd.DataFrame([{"celltype_sample": cell_subsample_pdf.to_json(orient='split'), 
+#                                 "celltype_sample_obs": cell_sample.obs.to_json(orient='split')
+#                                 }
+#                                 ])
+
+# model_input = pd.concat([model_input_tmp, model_input_tmp], axis=0)
 
 model_input
+
+# COMMAND ----------
+
+pd.concat([cell_subsample_pdf, cell_sample.obs], axis=1)
+
+# COMMAND ----------
+
+X_vals.toarray(), X_vals_dense
+
+# COMMAND ----------
+
+# DBTITLE 1,XX Specify model_input
+# # Create a DataFrame containing the embeddings
+
+# # X_vals.dtype # float64 
+# # X_vals.shape # (1, 28231) -- 1d array
+
+# # X_vals: sparse.csr_matrix = query_cell.X
+# X_vals: sparse.csr_matrix = cell_sample.X
+# X_vals
+
+# # existing
+# ## model_input = pd.DataFrame([{'subsample_query_array': X_vals.toarray().astype(np.float64)[0]}])
+# # model_input = pd.DataFrame([{'subsample_query_array': X_vals.toarray()[0].tolist() }]) ## simpler
+
+
+# # Assuming X_vals is a sparse matrix
+# X_vals_dense = X_vals.toarray()
+
+# # Create a DataFrame where each row in X_vals_dense is a separate entry in the DataFrame
+# # model_input = pd.DataFrame([{'subsample_query_array': row for row in X_vals_dense}], index=cell_sample.obs.index)
+
+
+# model_input = pd.DataFrame([{"celltype_sample": subsample_query_pdf.to_json(orient='split'), 
+#                "celltype_sample_obs": cell_sample.obs.to_json(orient='split')
+#               }
+#               ])
+
+# # Convert cell_sample.obs to a DataFrame
+# # cell_sample_obs_df = pd.DataFrame(cell_sample.obs.to_dict(orient='list'), index=cell_sample.obs.index)
+
+# # Concatenate the two DataFrames along the columns
+# # model_input = pd.concat([model_input, cell_sample_obs_df], axis=1)
+
+# # Add the index as a column to preserve it
+# # model_input['index'] = model_input.index
+
+# # Display the DataFrame
+# model_input
+
+# COMMAND ----------
+
+pd.read_json(model_input["celltype_sample"].iloc[0], orient='split')
+
+# COMMAND ----------
+
+pd.read_json(model_input[["celltype_sample_obs"]].iloc[0][0], orient='split')
+
+# COMMAND ----------
+
+
 
 # COMMAND ----------
 
@@ -120,13 +685,55 @@ embedding_output
 
 # COMMAND ----------
 
+pd.read_json(embedding_output[['embedding']].iloc[0][0])
+
+# COMMAND ----------
+
+pd.read_json(embedding_output[['celltype_sample_obs']].iloc[0][0])
+
+# COMMAND ----------
+
+# embedding_output.to_dict()
+
+# COMMAND ----------
+
+# pd.DataFrame(embedding_output)
+
+pd.DataFrame(embedding_output.to_dict())
+
+# COMMAND ----------
+
+# embedding_output.to_dict()
+
+# COMMAND ----------
+
+# DBTITLE 1,test search nearest array -- for- loop
+## Assuming embedding_output.embedding is a 2D array where each row is an embedding
+# results = []
+# for embedding in embedding_output.embedding:
+#     result = cq.search_nearest(embedding, k=10)
+#     results.append(result)
+
+# # Display the results
+# results
+
+# COMMAND ----------
+
 # DBTITLE 1,test embedding_output with downstream KNN
-cq.search_nearest(embedding_output.embedding[0], k=10)
+# 1 row of input embeddings to search_nearest
+# cq.search_nearest(embedding_output.embedding[0], k=10) 
+
+#test 1row or multiple 
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC #### Define MLflow Signature with local Model + Context
+
+# COMMAND ----------
+
+# DBTITLE 1,include subsample index/extra info. | disease/type / cell type / water
+model_input
 
 # COMMAND ----------
 
@@ -138,6 +745,9 @@ example_input = model_input
 
 # Ensure the example output is in a serializable format
 example_output = embedding_output # from model.predict(temp_context, model_input)
+# example_output = embedding_output.to_dict()
+# example_output = embedding_output.to_json(orient='split')
+# example_output = pd.read_json(embedding_output, orient='split')
 
 # Infer the model signature
 signature = infer_signature(
@@ -280,16 +890,31 @@ loaded_model = mlflow.pyfunc.load_model(logged_model_run_uri) ##
 
 # COMMAND ----------
 
+example_input
+
+# COMMAND ----------
+
 # DBTITLE 1,access input_example from loaded_model
 # loaded_model.input_example
+# loaded_model.input_example 
+
+# example_input[['celltype_sample']].iloc[[0]]
 
 # COMMAND ----------
 
 # DBTITLE 1,Test logged + loaded model prediction
-# loaded_model.predict(loaded_model.input_example) 
+loaded_model.predict(loaded_model.input_example) 
 
-# predictions = loaded_model.predict(loaded_model.input_example)
-# print(predictions)
+predictions = loaded_model.predict(loaded_model.input_example)
+print(predictions)
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+# loaded_model.predict(example_input[['subsample_query_array']].iloc[[0]] ) 
 
 # COMMAND ----------
 

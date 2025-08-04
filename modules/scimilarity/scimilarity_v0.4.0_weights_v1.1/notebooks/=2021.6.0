@@ -1,0 +1,3 @@
+Using pip 22.3.1 from /local_disk0/.ephemeral_nfs/envs/pythonEnv-e276008e-4f2a-4ffd-a9cc-ae72d6f3be8a/lib/python3.10/site-packages/pip (python 3.10)
+Requirement already satisfied: tbb in /local_disk0/.ephemeral_nfs/envs/pythonEnv-e276008e-4f2a-4ffd-a9cc-ae72d6f3be8a/lib/python3.10/site-packages (2022.2.0)
+Requirement already satisfied: tcmlib==1.* in /local_disk0/.ephemeral_nfs/envs/pythonEnv-e276008e-4f2a-4ffd-a9cc-ae72d6f3be8a/lib/python3.10/site-packages (from tbb) (1.4.0)

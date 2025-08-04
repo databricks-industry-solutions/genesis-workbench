@@ -1,4 +1,6 @@
 # Databricks notebook source
+## using serverless compute for this
+
 # dbutils.widgets.removeAll()
 
 # COMMAND ----------
@@ -54,8 +56,6 @@ print("sampledata_path :", sampledata_path)
 # COMMAND ----------
 
 # DBTITLE 1,get model & data files
-## using serverless compute for this
-
 ## REF https://genentech.github.io/scimilarity/install.html
 # https://genentech.github.io/scimilarity/news.html#version-0-4-0-may-05-2025
 

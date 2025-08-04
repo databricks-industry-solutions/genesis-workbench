@@ -4,11 +4,12 @@
 # MAGIC - Ref: https://genentech.github.io/scimilarity/install.html#conda-environment-setup
 # MAGIC - Requires: `python=3.10`
 # MAGIC - Databricks Runtime `14.3 LTS` supports `Python 3.10`
-# MAGIC - MLflow: `2.22.0`; NB: `v3.0` has breaking changes wrt `runs` --> `models` vs `artifact_paths` --> `name` etc.
+# MAGIC - For this version we are pinning MLflow: `2.22.0`; 
+# MAGIC   - NB: `MLflow v3.0` has breaking changes wrt `runs` --> `models` vs `artifact_paths` --> `name` etc.
 
 # COMMAND ----------
 
-# DBTITLE 1,(initial) gwb_variablesNparams
+# DBTITLE 1,(ref) gwb_variablesNparams
 # dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 # dbutils.widgets.text("schema", "dev_mmt_core_gwb", "Schema")
 # # dbutils.widgets.text("model_name", "SCimilarity", "Model Name") ## use this as a prefix for the model name ?
@@ -68,8 +69,8 @@
 # # VOLUME_NAME | PROJECT 
 # MODEL_FAMILY = CACHE_DIR #"scimilarity"
 
-# # Define the volumes path
-# # scimilarity_ws_requirements_path = "/Volumes/mmt/genesiswb/scimilarity/workspace_requirements/requirements.txt"
+## Define the volumes path
+## scimilarity_ws_requirements_path = "/Volumes/mmt/genesiswb/scimilarity/workspace_requirements/requirements.txt"
 # scimilarity_ws_requirements_path = f"/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}/workspace_requirements/requirements.txt"
 
 # # Create the directory if it does not exist
@@ -120,7 +121,8 @@ requirements = [
 
 # Install the required packages
 for package in requirements:
-    %pip install {package} --upgrade -v
+    # %pip install {package} --upgrade -v # for debugging
+    %pip install {package} --upgrade -q # for "prod"
 
 dbutils.library.restartPython()
 
@@ -192,8 +194,8 @@ print(f"Cache full path: {cache_full_path}")
 CATALOG = CATALOG #"mmt"
 DB_SCHEMA = SCHEMA #"tests" | "genesiswb"
 
-# VOLUME_NAME | PROJECT 
-MODEL_FAMILY = CACHE_DIR ## CACHE_DIR #"scimilarity"
+# VOLUME_NAME | PROJECT | "study-type/Module"
+MODEL_FAMILY = CACHE_DIR ##"scimilarity"
 
 # MODEL_NAME #"SCimilarity" 
 
@@ -269,22 +271,28 @@ aligned = align_dataset(adams, gene_order)  ## adams_aligned = align_dataset(ada
 lognorm = lognorm_counts(aligned)
 
 ### Filter samle data to "Disease" | celltype: "myofibroblast cell" | sample_ref: "DS000011735-GSM4058950"  
-adams_ipf = lognorm[lognorm.obs["Disease"] == "IPF"].copy()
 
-adams_myofib = adams_ipf[
-                          adams_ipf.obs["celltype_name"] == "myofibroblast cell"
-                        ].copy()
+disease_name = "IPF"
+celltype_name = "myofibroblast cell" 
+sample_refid = "DS000011735-GSM4058950"
+subsample_refid = "123942"
+
+diseasetype_ipf = lognorm[lognorm.obs["Disease"] == disease_name].copy()
+
+celltype_myofib = diseasetype_ipf[
+                                  diseasetype_ipf.obs["celltype_name"] == celltype_name
+                                 ].copy()
 
 ## Extract list for sample_ref
-subsample = adams_myofib[
-                          adams_myofib.obs["sample"] == "DS000011735-GSM4058950" # sample ref 
-                        ].copy()
+celltype_sample = celltype_myofib[
+                                  celltype_myofib.obs["sample"] == sample_refid 
+                                 ].copy()
 
-## extract specific index in subsample 
-query_cell = subsample[subsample.obs.index == "123942"]
+## extract specific index in celltype_sample 
+celltype_subsample = celltype_sample[celltype_sample.obs.index == subsample_refid]
 
-## extract subsample query (1d array or list)
-X_vals: sparse.csr_matrix = query_cell.X
+## extract celltype_sample query (1d array or list)
+X_vals: sparse.csr_matrix = celltype_subsample.X
 
 ## get cell embeddings --> substitue with endpoint in testing nb/task
 ce = CellEmbedding(model_path)
@@ -294,15 +302,13 @@ cell_embeddings = ce.get_embeddings(X_vals)
 cq = CellQuery(model_path)
 nn_idxs,nn_dists,results_metadata  = cq.search_nearest(cell_embeddings, k=100) # where k is a parameter for N of nearest neighbors to search 
 
-# results_metadata
-
 print("Initial Data Processing using SCimilarity Complete")
 
 # COMMAND ----------
 
 # DBTITLE 1,check / review outputs
 # adams_myofib.obs#["sample"].unique()
-# subsample.obs
+# subsample.obs --> celltype_sample.obs
 # X_vals
 # cell_embeddings | # cell_embeddings.shape #(1, 128)
 # nn_idxs,nn_dists,results_metadata 
@@ -379,11 +385,6 @@ def get_latest_model_version(model_name):
 
 def get_model_uri(model_name):
   return f"models:/{model_name}/{get_latest_model_version(model_name)}"
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC
 
 # COMMAND ----------
 
@@ -548,11 +549,6 @@ def score_model(databricks_instance, endpoint_name, dataset, params=None):
 
 # result = score_model(databricks_instance, endpoint_name, example_input)
 # display(result)
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC
 
 # COMMAND ----------
 
