@@ -16,7 +16,9 @@ from utils.molstar_tools import (
                     molstar_html_singlebody,
                     molstar_html_multibody)
 
-from utils.protein_structure import start_run_alphafold_job
+from utils.protein_structure import (start_run_alphafold_job,
+                                     search_alphafold_runs_by_run_name,
+                                     search_alphafold_runs_by_experiment_name)
 
 from utils.protein_design import (make_designs, 
                                   hit_esmfold,
@@ -138,6 +140,8 @@ with st.spinner("Loading data"):
         st.session_state["deployed_protein_models_df"] = deployed_protein_models_df
     deployed_protein_models_df = st.session_state["deployed_protein_models_df"]
 
+user_info = get_user_info()
+
 settings_tab, protein_structure_prediction_tab, protein_design_tab = st.tabs(["Settings", "Protein Structure Prediction", "Protein Design"])
 
 with settings_tab:
@@ -221,13 +225,34 @@ with protein_structure_prediction_tab:
         c1,c2,c3 = st.columns([1,1,1], vertical_alignment="bottom")
 
         with c1:
-            search_alphafold_run_experiment = st.text_input("MLflow Experiment:","",key="search_alphafold_run_experiment")            
+            search_alphafold_run_mode = st.pills("Search By:", ["Experiment Name", "Run Name"], selection_mode="single",
+                                default="Experiment Name")           
         with c2:
-            search_alphafold_run_name = st.text_input("Run Name:","", key="search_alphafold_run_name")
+            search_alphafold_text = st.text_input(f"{search_alphafold_run_mode} contains:","", key="search_alphafold_text")
         with c3:
             search_alphafold_run_button= st.button("Search", key="search_alphafold_run_button")
 
     
+        if search_alphafold_run_button:
+            if search_alphafold_text.strip() != "":
+                if search_alphafold_run_mode == "Experiment Name":
+                    alphafold_run_search_result_df = search_alphafold_runs_by_experiment_name(user_email = user_info.user_email,
+                                                                                              experiment_name = search_alphafold_text)
+                else:
+                    alphafold_run_search_result_df = search_alphafold_runs_by_run_name(user_email = user_info.user_email,
+                                                                                              run_name = search_alphafold_text)
+                
+                if not alphafold_run_search_result_df.empty:
+                    st.dataframe(alphafold_run_search_result_df, 
+                            use_container_width=True,
+                            hide_index=True,
+                            on_select="rerun",
+                            selection_mode="single-row")
+                else:
+                    st.error("No results found")
+
+            else:
+                st.error("Provide a search text")
 
 
 with protein_design_tab:
