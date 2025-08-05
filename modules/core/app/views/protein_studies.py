@@ -142,7 +142,8 @@ def display_protein_studies_settings(available_models_df,deployed_models_df):
 
 def set_selected_row_status():
     selection = st.session_state["alphafold_run_search_result_display_df"].selection
-    selected_alphafold_run_status = st.session_state["alphafold_run_search_result_df"].iloc[selection]["status"].iloc[0]
+    selected_index = selection["rows"][0]
+    selected_alphafold_run_status = st.session_state["alphafold_run_search_result_df"].iloc[selected_index]["status"]
     st.session_state["selected_alphafold_run_status"]=selected_alphafold_run_status
 
 @st.dialog("View Structure", width="large")
@@ -297,6 +298,7 @@ with protein_structure_prediction_tab:
         if "alphafold_run_search_result_df" in st.session_state:
             st.divider()
             view_af_result_enabled = True if "selected_alphafold_run_status" in st.session_state and st.session_state["selected_alphafold_run_status"]=="fold_complete" else False
+
             view_c1,view_c2,view_c3 = st.columns([1,1,1], vertical_alignment="bottom")
             with view_c1:
                 alphafold_result_view_btn = st.button("View", disabled= not view_af_result_enabled)
@@ -307,7 +309,7 @@ with protein_structure_prediction_tab:
                     },
                     use_container_width=True,
                     hide_index=True,
-                    on_select="rerun",
+                    on_select=set_selected_row_status,
                     selection_mode="single-row",
                     key="alphafold_run_search_result_display_df")
             
@@ -316,11 +318,8 @@ with protein_structure_prediction_tab:
             if len(selected_row_for_view) > 0:
                 selected_alphafold_run_id = st.session_state["alphafold_run_search_result_df"].iloc[selected_row_for_view]["run_id"].iloc[0]
                 selected_alphafold_run_name = st.session_state["alphafold_run_search_result_df"].iloc[selected_row_for_view]["run_name"].iloc[0]
-                
 
-                print(f"selected run id : {selected_alphafold_run_id}")
-
-                if alphafold_result_view_btn:
+                if alphafold_result_view_btn :
                     display_view_alphafold_result_dialog(run_id = selected_alphafold_run_id, run_name=selected_alphafold_run_name)
 
 
