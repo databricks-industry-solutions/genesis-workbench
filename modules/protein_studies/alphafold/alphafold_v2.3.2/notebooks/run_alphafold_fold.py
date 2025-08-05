@@ -106,7 +106,7 @@ BASEDIR=f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/datasets"
 now = datetime.now()
 formatted_datetime = now.strftime("%Y%m%d_%H%M%S")
 #Where results are stored
-OUTDIR = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/results/{RUN_ID}/{formatted_datetime}"
+OUTDIR = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/results/{RUN_ID}"
 
 if not os.path.exists(OUTDIR):
     os.makedirs(OUTDIR)
