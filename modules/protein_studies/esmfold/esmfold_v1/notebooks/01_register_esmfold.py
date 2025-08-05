@@ -18,9 +18,9 @@ schema = dbutils.widgets.get("schema")
 # COMMAND ----------
 
 #requirements for genesis workbench library
-%pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.2 mlflow==2.22.0
+%pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.2 #mlflow==2.22.0
 #requirements for current library
-%pip install -r ../requirements.txt
+#%pip install -r ../requirements.txt
 
 # COMMAND ----------
 
