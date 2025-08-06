@@ -108,7 +108,7 @@ run_id_get_embedding = deploy_model(user_email=user_email,
                 output_adapter_str="none",
                 sample_input_data_dict_as_json="none",
                 sample_params_as_json="none",
-                workload_type="GPU_SMALL",
+                workload_type="GPU_LARGE",
                 workload_size="Small")
 
 # COMMAND ----------
@@ -138,7 +138,7 @@ run_id_search = deploy_model(user_email=user_email,
                 output_adapter_str="none",
                 sample_input_data_dict_as_json="none",
                 sample_params_as_json="none",
-                workload_type="GPU_SMALL",
+                workload_type="GPU_LARGE",
                 workload_size="Small")
 
 # COMMAND ----------
