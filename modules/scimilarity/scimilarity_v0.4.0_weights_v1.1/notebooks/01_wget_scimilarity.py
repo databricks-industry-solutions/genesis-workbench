@@ -89,7 +89,7 @@ spark.sql(f"CREATE VOLUME IF NOT EXISTS {CATALOG}.{DB_SCHEMA}.{MODEL_FAMILY}")
 
 # COMMAND ----------
 
-# DBTITLE 1,test scimilarity_setup -- ~60++mins?
+# DBTITLE 1,scimilarity_setup -- ~60++mins?
 import os
 import subprocess
 import logging
