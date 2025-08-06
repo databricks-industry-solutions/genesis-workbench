@@ -189,7 +189,7 @@ cell_sample.obs
 # MAGIC %md
 # MAGIC #### For visualization of all embeddings derived from full sample data 
 # MAGIC To save time, and for tutorial viz: we use 
-# MAGIC - `cell_query.get_embeddings` to pre-derive `adams0`, which is cell-order aligned, log-normed, and scimilarity embeddings applied to display with umap.   
+# MAGIC - `cell_query.get_embeddings` to pre-process `adams0`, which is cell-order aligned, log-normed, and scimilarity embeddings applied to the adams et al dataset sample for displaying with umap.    
 # MAGIC - `cell_query.cell_metadata` to pre-extract `scimilarity_cq_ref_metadata` and save as UC table for faster read and filtering to celltype for deriving `calculate_disease_proportions`
 # MAGIC       
 # MAGIC <br>   
