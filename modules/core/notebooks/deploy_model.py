@@ -72,7 +72,7 @@ print(gwb_library_path)
 
 # MAGIC %pip install {gwb_library_path} --force-reinstall
 # MAGIC dbutils.library.restartPython()
-
+# MAGIC
 
 # COMMAND ----------
 
@@ -307,8 +307,8 @@ if model_deployed:
             CURRENT_TIMESTAMP(),
             '{deploy_user}',
             'model_serving',
-            '{deploy_result.config.served_entities[0].entity_name}',
-            'https://{hostname}/serving-endpoints/{deploy_result.config.served_entities[0].entity_name}/invocations',
+            '{deploy_result.name}',
+            'https://{hostname}/serving-endpoints/{deploy_result.name}/invocations',
             true,
             NULL
         )
