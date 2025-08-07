@@ -121,7 +121,7 @@ with st.spinner("Loading data"):
 
     if "deployed_single_cell_models_df" not in st.session_state:
         deployed_single_cell_models_df = get_deployed_models(ModelCategory.SINGLE_CELL)
-        deployed_single_cell_models_df.columns = ["Id", "Name", "Description", "Model Name", "Source Version", "UC Name/Version"]
+        deployed_single_cell_models_df.columns = ["Model Id","Deploy Id", "Name", "Description", "Model Name", "Source Version", "UC Name/Version", "Endpoint Name"]
 
         st.session_state["deployed_single_cell_models_df"] = deployed_single_cell_models_df
     deployed_single_cell_models_df = st.session_state["deployed_single_cell_models_df"]

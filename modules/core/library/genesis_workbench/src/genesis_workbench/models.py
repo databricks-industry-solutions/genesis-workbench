@@ -149,14 +149,13 @@ def get_available_models(model_category : ModelCategory) -> pd.DataFrame:
                 model_category = '{str(model_category)}' AND is_active=true \
             ORDER BY model_id DESC "
     
-    print(query)
     result_df = execute_select_query(query)
     return result_df
 
 def get_deployed_models(model_category : ModelCategory)-> pd.DataFrame:
     """Gets all models that are available for deployment"""
     
-    query = f"SELECT models.model_id, deployment_id, deployment_name, deployment_description, model_display_name, model_source_version, \
+    query = f"SELECT models.model_id as model_id, deployment_id, deployment_name, deployment_description, model_display_name, model_source_version, \
                 concat(model_uc_name,'/',model_uc_version) as uc_name , model_endpoint_name \
             FROM \
                 {os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.model_deployments \
@@ -165,8 +164,6 @@ def get_deployed_models(model_category : ModelCategory)-> pd.DataFrame:
             WHERE \
                 model_category = '{str(model_category)}' and model_deployments.is_active=true \
             ORDER BY deployment_id DESC "
-    
-    print(query)
     
     result_df = execute_select_query(query)
     return result_df
