@@ -5,9 +5,9 @@
 # COMMAND ----------
 
 # DBTITLE 1,[gwb] pip install from requirements list
-%cat ../requirements.txt
-%pip install -r ../requirements.txt
-dbutils.library.restartPython()
+# MAGIC %cat ../requirements.txt
+# MAGIC %pip install -r ../requirements.txt
+# MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
 
@@ -36,15 +36,17 @@ cache_full_path = f"/Volumes/{catalog}/{schema}/{cache_dir}"
 print(f"Cache full path: {cache_full_path}")
 
 # COMMAND ----------
+
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.{schema}")
 spark.sql(f"CREATE VOLUME IF NOT EXISTS {catalog}.{schema}.{cache_dir}")
 print(f"Cache full path: {cache_full_path} established")
 
 # COMMAND ----------
+
 # MAGIC %md
 # MAGIC #### Download data and model into Volume/Folder
 # MAGIC Pretrained scGPT Model Zoo
-
+# MAGIC
 # MAGIC Here is the list of pretrained models. Please find the links for downloading the checkpoint folders. We recommend using the `whole-human` model for most applications by default. If your fine-tuning dataset shares similar cell type context with the training data of the organ-specific models, these models can usually demonstrate competitive performance as well. A paired vocabulary file mapping gene names to ids is provided in each checkpoint folder. If ENSEMBL ids are needed, please find the conversion at [gene_info.csv](https://github.com/bowang-lab/scGPT/files/13243634/gene_info.csv).
 # MAGIC
 # MAGIC | Model name                | Description                                             | Download                                                                                     |
@@ -57,9 +59,10 @@ print(f"Cache full path: {cache_full_path} established")
 # MAGIC | lung                      | Pretrained on 2.1 million lung cells                    | [link](https://drive.google.com/drive/folders/16A1DJ30PT6bodt4bWLa4hpS7gbWZQFBG?usp=sharing) |
 # MAGIC | kidney                    | Pretrained on 814 thousand kidney cells                 | [link](https://drive.google.com/drive/folders/1S-1AR65DF120kNFpEbWCvRHPhpkGK3kK?usp=sharing) |
 # MAGIC | pan-cancer                | Pretrained on 5.7 million cells of various cancer types | [link](https://drive.google.com/drive/folders/13QzLHilYUd0v3HTwa_9n4G4yEF-hdkqa?usp=sharing) |
-
+# MAGIC
 
 # COMMAND ----------
+
 #: downnload model
 import gdown
 model_dir = f'{cache_full_path}/models/'
@@ -76,6 +79,7 @@ print(f"Model dir: {model_dir}")
 
 
 # COMMAND ----------
+
 #: downnload data
 import wget
 import os
@@ -89,6 +93,7 @@ wget.download(file_url, str(file_path))
 
 
 # COMMAND ----------
+
 #: setup credential
 import os
 
@@ -343,7 +348,7 @@ class TransformerModelWrapper(mlflow.pyfunc.PythonModel):
 
 # MAGIC %md
 # MAGIC # Dry Load Test
-
+# MAGIC
 
 # COMMAND ----------
 
@@ -383,7 +388,7 @@ tf_model.load_context(context)
 # MAGIC __correct vs. wrong__.
 # MAGIC adata_subset.X.toarray().tolist() vs. adata_subset.X.toarray()
 # MAGIC adata_subset.obs.to_json(orient='split') vs. adata_subset.obs
-
+# MAGIC
 
 # COMMAND ----------
 
@@ -487,8 +492,17 @@ signature
 # COMMAND ----------
 
 # DBTITLE 1,Logging Gene Embeddings Model with MLflow
-mlflow.set_tracking_uri("databricks")
-mlflow.set_registry_uri("databricks-uc")
+from databricks.sdk import WorkspaceClient
+import mlflow
+
+def set_mlflow_experiment(experiment_tag, user_email):
+    w = WorkspaceClient()
+    mlflow_experiment_base_path = "Shared/dbx_genesis_workbench_models"
+    w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")
+    experiment_path = f"/{mlflow_experiment_base_path}/{experiment_tag}"
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+    return mlflow.set_experiment(experiment_path)
 
 #: for input_example, it is a tuple of (input_data, params).
 # This code converts the csr_matrix to a dense array using the toarray() method, making it JSON serializable.
@@ -519,18 +533,6 @@ params = {
     "nlayers": 12,
     "n_layers_cls": 3
     }
-
-
-from databricks.sdk import WorkspaceClient
-import mlflow
-def set_mlflow_experiment(experiment_tag, user_email):
-    w = WorkspaceClient()
-    mlflow_experiment_base_path = "Shared/dbx_genesis_workbench_models"
-    w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")
-    experiment_path = f"/{mlflow_experiment_base_path}/{experiment_tag}"
-    mlflow.set_registry_uri("databricks-uc")
-    mlflow.set_tracking_uri("databricks")
-    return mlflow.set_experiment(experiment_path)
 
 
 experiment = set_mlflow_experiment(experiment_tag=experiment_name, user_email=user_email)
@@ -581,129 +583,3 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
     )
 
 
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC
-# MAGIC Alternatively, you can avoid passing input example and pass model signature instead when logging the model. To ensure the input example is valid prior to serving, please try calling `mlflow.models.validate_serving_input` on the model uri and serving input example. A serving input example can be generated from model input example using `mlflow.models.convert_input_example_to_serving_input` function.
-# MAGIC > |
-# MAGIC
-# MAGIC ``` python
-# MAGIC from mlflow.models import validate_serving_input
-# MAGIC from mlflow.models import convert_input_example_to_serving_input
-# MAGIC
-# MAGIC model_uri = 'runs:/<run_id>/<artifact_path>'
-# MAGIC
-# MAGIC # Define INPUT_EXAMPLE with your own input example to the model
-# MAGIC # A valid input example is a data instance suitable for pyfunc prediction
-# MAGIC
-# MAGIC serving_payload = convert_input_example_to_serving_input(INPUT_EXAMPLE)
-# MAGIC
-# MAGIC # Validate the serving payload works on the model
-# MAGIC validate_serving_input(model_uri, serving_payload)
-# MAGIC ```
-
-
-# # COMMAND ----------
-#
-# # DBTITLE 1,convert_input_example_to_serving_input
-# serving_input_example = mlflow.models.convert_input_example_to_serving_input((input_data, params))
-# # for version 1 (original format): TypeError: Object of type csr_matrix is not JSON serializable
-# # for version 2 ((serving_input format)):
-#
-# # COMMAND ----------
-#
-# # DBTITLE 1,serving input should be str data type
-# serving_input_example.__class__
-#
-#
-# # COMMAND ----------
-#
-# # DBTITLE 1,validate_serving_input
-# mlflow.models.validate_serving_input(f"models:/{registered_model_name}/18", serving_input_example) # input_data and params are passed as a whole to the validate_serving_input
-#
-#
-#
-# # COMMAND ----------
-#
-# model_uc_name = registered_model_name
-# model_version = get_latest_model_version(model_uc_name)
-# model_uri = f"models:/{model_uc_name}/{model_version}"
-#
-
-# import_model_from_uc(user_email=user_email,
-#                     model_category=ModelCategory.SINGLE_CELL,
-#                     model_uc_name=f"{catalog}.{schema}.{model_name}",
-#                     model_uc_version=model_version,
-#                     model_name="scgpt",
-#                     model_display_name="scgpt",
-#                     model_source_version="v0.2.4",
-#                     model_description_url="https://github.com/bowang-lab/scGPT/blob/main/README.md")
-
-# COMMAND ----------
-# MAGIC %md
-# MAGIC # Below is create model serving endpoint, we dont need to create here in the notebook.
-
-
-# COMMAND ----------
-
-# from databricks.sdk import WorkspaceClient
-# from databricks.sdk.service.serving import (
-#     EndpointCoreConfigInput,
-#     ServedEntityInput,
-#     ServedModelInputWorkloadSize,
-#     ServedModelInputWorkloadType,
-#     AutoCaptureConfigInput,
-# )
-# from databricks.sdk import errors
-
-# w = WorkspaceClient()
-
-# endpoint_name = ENDPOINT_NAME
-
-# model_name = f"{catalog}.{schema}.{model_name}"
-# versions = w.model_versions.list(model_name)
-# latest_version = max(versions, key=lambda v: v.version).version
-
-# print("version being served = ", latest_version)
-
-
-# served_entities = [
-#     ServedEntityInput(
-#         entity_name=model_name,
-#         entity_version=latest_version,
-#         name=model_name,
-#         workload_type="GPU_SMALL",
-#         workload_size="Small",
-#         scale_to_zero_enabled=True,
-#     )
-# ]
-# auto_capture_config = AutoCaptureConfigInput(
-#     catalog_name=catalog,
-#     schema_name=schema,
-#     table_name_prefix=f"{model_name}_serving",
-#     enabled=True,
-# )
-
-# try:
-#     # try to update the endpoint if already have one
-#     existing_endpoint = w.serving_endpoints.get(endpoint_name)
-#     # may take some time to actually do the update
-#     status = w.serving_endpoints.update_config(
-#         name=endpoint_name,
-#         served_entities=served_entities,
-#         auto_capture_config=auto_capture_config,
-#     )
-# except errors.platform.ResourceDoesNotExist as e:
-#     # if no endpoint yet, make it, wait for it to spin up, and put model on endpoint
-#     status = w.serving_endpoints.create_and_wait(
-#         name=endpoint_name,
-#         config=EndpointCoreConfigInput(
-#             name=endpoint_name,
-#             served_entities=served_entities,
-#             auto_capture_config=auto_capture_config,
-#         ),
-#     )
-
-# print(status)
