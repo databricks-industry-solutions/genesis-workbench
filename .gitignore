@@ -15,4 +15,6 @@ env.env
 temp.*
 /temp
 mlruns
-.refs/
+lightning_logs
+.idea
+.refs
