@@ -65,6 +65,11 @@ from genesis_workbench.workbench import wait_for_job_run_completion
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC #####  Import Gene Order
+
+# COMMAND ----------
+
 # DBTITLE 1,scimilarity_gene_order
 model_uc_name=f"{catalog}.{schema}.scimilarity_gene_order"
 model_version = get_latest_model_version(model_uc_name)
@@ -72,7 +77,7 @@ model_uri = f"models:/{model_uc_name}/{model_version}"
 print(model_uri)
 
 
-import_model_from_uc(user_email=user_email,
+gwb_model_id_gene_order = import_model_from_uc(user_email=user_email,
                     model_category=ModelCategory.SINGLE_CELL,
                     model_uc_name=f"{catalog}.{schema}.scimilarity_gene_order",
                     model_uc_version=model_version,
@@ -80,6 +85,24 @@ import_model_from_uc(user_email=user_email,
                     model_display_name="SCimilarity:GeneOrder",
                     model_source_version="v0.4.0_weights_v1.1",
                     model_description_url="https://genentech.github.io/scimilarity/index.html")
+
+# COMMAND ----------
+
+run_id_gene_order = deploy_model(user_email=user_email,
+                gwb_model_id=gwb_model_id_gene_order,
+                deployment_name=f"SCimilarity_Gene_Order",
+                deployment_description="Initial deployment",
+                input_adapter_str="none",
+                output_adapter_str="none",
+                sample_input_data_dict_as_json="none",
+                sample_params_as_json="none",
+                workload_type="GPU_LARGE",
+                workload_size="Small")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC #####  Import Get Embedding
 
 # COMMAND ----------
 
@@ -113,6 +136,11 @@ run_id_get_embedding = deploy_model(user_email=user_email,
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC #####  Import Search Nearest
+
+# COMMAND ----------
+
 # DBTITLE 1,scimilarity_search_nearest
 model_uc_name=f"{catalog}.{schema}.scimilarity_search_nearest"
 model_version = get_latest_model_version(model_uc_name)
@@ -143,10 +171,13 @@ run_id_search = deploy_model(user_email=user_email,
 
 # COMMAND ----------
 
-result1 = wait_for_job_run_completion(run_id_get_embedding, timeout = 3600)
+result1 = wait_for_job_run_completion(run_id_gene_order, timeout = 3600)
+
+# COMMAND ----------
+
+result2 = wait_for_job_run_completion(run_id_get_embedding, timeout = 3600)
 
 
 # COMMAND ----------
 
-result2 = wait_for_job_run_completion(run_id_search, timeout = 3600)
-
+result3 = wait_for_job_run_completion(run_id_search, timeout = 3600)

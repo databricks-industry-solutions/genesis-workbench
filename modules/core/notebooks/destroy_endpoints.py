@@ -78,3 +78,15 @@ for index, row in deployed_models[["model_id", "deployment_id", "model_endpoint_
     model_id = row['model_id']
     deployment_id = row['deployment_id']
     delete_endpoint(catalog, schema, deployment_id)
+
+# COMMAND ----------
+
+#lets deactivate all the models registered in Genesis Workbench
+spark.sql("""
+     UPDATE {catalog}.{schema}.models SET
+        is_active = 'false',
+        deactivated_timestamp = current_timestamp()
+     WHERE 
+        model_category = '{model_category}'  AND 
+        is_active = 'true'  
+""")
