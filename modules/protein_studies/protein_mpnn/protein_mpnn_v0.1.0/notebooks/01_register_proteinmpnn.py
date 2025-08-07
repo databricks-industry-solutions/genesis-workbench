@@ -294,13 +294,26 @@ seqs
 
 # COMMAND ----------
 
+from databricks.sdk import WorkspaceClient
+
 signature = mlflow.models.signature.ModelSignature(
     inputs = Schema([ColSpec(type="string")]),
     outputs = Schema([ColSpec(type="string")]),
     params = None
 )
 
-with mlflow.start_run(run_name='protein_mpnn'):
+def set_mlflow_experiment(experiment_tag, user_email):    
+    w = WorkspaceClient()
+    mlflow_experiment_base_path = "Shared/dbx_genesis_workbench_models"
+    w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")
+    experiment_path = f"/{mlflow_experiment_base_path}/{experiment_tag}"
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+    return mlflow.set_experiment(experiment_path)
+
+experiment = set_mlflow_experiment(experiment_tag=EXPERIMENT_NAME, user_email=USER_EMAIL)
+
+with mlflow.start_run(run_name='protein_mpnn',experiment_id=experiment.experiment_id):
     model_info = mlflow.pyfunc.log_model(
         artifact_path="model",
         python_model=ProteinMPNN(),

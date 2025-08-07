@@ -366,7 +366,10 @@ def add_model_alias(full_model_name, alias="Champion"):
 # COMMAND ----------
 
 # DBTITLE 1,get_latest_model_version
+import mlflow
 from mlflow.tracking import MlflowClient
+from databricks.sdk import WorkspaceClient
+
 
 def get_latest_model_version(model_name):
     mlflow_client = MlflowClient(registry_uri="databricks-uc")
@@ -380,6 +383,15 @@ def get_latest_model_version(model_name):
 def get_model_uri(model_name):
   return f"models:/{model_name}/{get_latest_model_version(model_name)}"
 
+
+def set_mlflow_experiment(experiment_tag, user_email):    
+    w = WorkspaceClient()
+    mlflow_experiment_base_path = "Shared/dbx_genesis_workbench_models"
+    w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")
+    experiment_path = f"/{mlflow_experiment_base_path}/{experiment_tag}"
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+    return mlflow.set_experiment(experiment_path)
 # COMMAND ----------
 
 

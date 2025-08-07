@@ -204,7 +204,11 @@ del tokenizer
 mlflow.set_registry_uri("databricks-uc")
 mlflow.set_tracking_uri("databricks")
 
-experiment = set_mlflow_experiment(experiment_tag=experiment_name, user_email=user_email)
+experiment = set_mlflow_experiment(experiment_tag=experiment_name, 
+                                   user_email=user_email,
+                                   host=None,
+                                   token=None,
+                                   shared=True)
 
 with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experiment_id):
     model_info = mlflow.pyfunc.log_model(

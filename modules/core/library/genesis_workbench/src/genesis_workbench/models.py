@@ -99,7 +99,7 @@ class ModelDeploymentInfo:
     is_active: bool 
     deactivated_timestamp : datetime
 
-def set_mlflow_experiment(experiment_tag, user_email, host=None, token=None): 
+def set_mlflow_experiment(experiment_tag, user_email, host=None, token=None, shared=False): 
 
     user_settings = get_user_settings(user_email=user_email)
 
@@ -108,7 +108,12 @@ def set_mlflow_experiment(experiment_tag, user_email, host=None, token=None):
 
     w = WorkspaceClient() if not token else WorkspaceClient(host=host, token=token, auth_type="pat")
 
-    mlflow_experiment_base_path = f"Users/{user_email}/{user_settings['mlflow_experiment_folder']}"
+    mlflow_experiment_base_path = ""
+
+    if shared:
+        mlflow_experiment_base_path = "Shared/dbx_genesis_workbench_models"
+    else:
+        mlflow_experiment_base_path = f"Users/{user_email}/{user_settings['mlflow_experiment_folder']}"
     
     try:
         w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")
@@ -307,7 +312,7 @@ def deploy_model_endpoint(catalog_name: str,
             name=endpoint_name,
             served_entities=served_entities,
             auto_capture_config=auto_capture_config,
-            timeout = timedelta(minutes=60)
+            timeout = timedelta(minutes=180)
         )
     except errors.platform.ResourceDoesNotExist as e:
         # if no endpoint yet, make it, wait for it to spin up, and put model on endpoint
@@ -323,7 +328,7 @@ def deploy_model_endpoint(catalog_name: str,
                 EndpointTag(key="application", value="genesis_workbench"),
                 EndpointTag(key="created_by", value=creating_user_email)
             ],
-            timeout = timedelta(minutes=60) #wait upto an hour
+            timeout = timedelta(minutes=180) #wait upto three hours. some models take very long
         )
 
     return endpoint_details

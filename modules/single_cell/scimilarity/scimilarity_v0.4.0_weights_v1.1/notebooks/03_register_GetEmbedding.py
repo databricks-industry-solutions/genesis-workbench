@@ -162,35 +162,35 @@ signature
 
 # DBTITLE 1,Specify MODEL_TYPE & experiment_name
 MODEL_TYPE = "Get_Embedding" ##
-# model_name = f"SCimilarity_{MODEL_TYPE}"  
 model_name = f"{MODEL_NAME}_{MODEL_TYPE}"
+experiment = set_mlflow_experiment(experiment_tag=model_name, user_email=USER_EMAIL)
 
 ## Set the experiment
-experiment_dir = f"{user_path}/mlflow_experiments/{EXPERIMENT_NAME}" ## same as MODEL_FAMILY from widget above
-print(experiment_dir)
+# experiment_dir = f"{user_path}/mlflow_experiments/{EXPERIMENT_NAME}" ## same as MODEL_FAMILY from widget above
+# print(experiment_dir)
 
-experiment_name = f"{experiment_dir}/{MODEL_TYPE}"
-print(experiment_name)
+# experiment_name = f"{experiment_dir}/{MODEL_TYPE}"
+# print(experiment_name)
 
 # COMMAND ----------
 
 # DBTITLE 1,create experiment_dir
-from databricks.sdk import WorkspaceClient
+# from databricks.sdk import WorkspaceClient
 
-# Initialize client (uses ~/.databrickscfg or env vars for auth)
-client = WorkspaceClient()
+# # Initialize client (uses ~/.databrickscfg or env vars for auth)
+# client = WorkspaceClient()
 
-# Create workspace folder
-client.workspace.mkdirs(    
-                        # path = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}"
-                        path = f"{experiment_dir}", 
-                      )
+# # Create workspace folder
+# client.workspace.mkdirs(    
+#                         # path = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}"
+#                         path = f"{experiment_dir}", 
+#                       )
 
-# List to verify
-folders = client.workspace.list(f"{user_path}/mlflow_experiments")
-for folder in folders:
-  if folder.path == experiment_dir:
-    print(f"Name: {folder.path}, Type: {folder.object_type}")
+# # List to verify
+# folders = client.workspace.list(f"{user_path}/mlflow_experiments")
+# for folder in folders:
+#   if folder.path == experiment_dir:
+#     print(f"Name: {folder.path}, Type: {folder.object_type}")
 
 # COMMAND ----------
 
@@ -210,7 +210,7 @@ numpy==1.26.4
 
 # MODEL_TYPE = "Get_Embeddings"
 # model_name = f"SCimilarity_{MODEL_TYPE}"  #
-model_name = f"{MODEL_NAME}_{MODEL_TYPE}" 
+#model_name = f"{MODEL_NAME}_{MODEL_TYPE}" 
 
 # Define the path to save the requirements file in the UV volumes
 SCimilarity_GetEmbeddings_requirements_path = f"/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}/mlflow_requirements/{model_name}/requirements.txt"
@@ -228,26 +228,26 @@ print(f"Requirements written to {SCimilarity_GetEmbeddings_requirements_path}")
 # COMMAND ----------
 
 # DBTITLE 1,log SCimilarity_GetEmbeddings
-import mlflow
-from mlflow.models.signature import infer_signature
-import pandas as pd
+# import mlflow
+# from mlflow.models.signature import infer_signature
+# import pandas as pd
 
-# Log the model
-mlflow.set_tracking_uri("databricks")
-mlflow.set_registry_uri("databricks-uc")
+# # Log the model
+# mlflow.set_tracking_uri("databricks")
+# mlflow.set_registry_uri("databricks-uc")
 
-# Check if the experiment_name (defined above) exists
-experiment = mlflow.get_experiment_by_name(experiment_name)
-if experiment is None:
-    exp_id = mlflow.create_experiment(experiment_name)
-else:
-    exp_id = experiment.experiment_id
+# # Check if the experiment_name (defined above) exists
+# experiment = mlflow.get_experiment_by_name(experiment_name)
+# if experiment is None:
+#     exp_id = mlflow.create_experiment(experiment_name)
+# else:
+#     exp_id = experiment.experiment_id
 
-mlflow.set_experiment(experiment_id=exp_id)
+# mlflow.set_experiment(experiment_id=exp_id)
 
 # Save and log the model
-# with mlflow.start_run(run_name=f'{model_name}', experiment_id=experiment.experiment_id)
-with mlflow.start_run() as run:
+with mlflow.start_run(run_name=f'{model_name}', experiment_id=experiment.experiment_id):
+#with mlflow.start_run() as run:
     mlflow.pyfunc.log_model(        
         artifact_path=f"{MODEL_TYPE}", # artifact_path --> "name" mlflow v3.0
         python_model=model,

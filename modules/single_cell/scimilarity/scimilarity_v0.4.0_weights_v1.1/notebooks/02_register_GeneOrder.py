@@ -142,63 +142,37 @@ signature
 
 # COMMAND ----------
 
-# DBTITLE 1,Specify MODEL_TYPE & experiment_name
-MODEL_TYPE = "Gene_Order" ##
-# model_name = f"SCimilarity_{MODEL_TYPE}" 
-model_name = f"{MODEL_NAME}_{MODEL_TYPE}"  
-
 ## Set the experiment
-experiment_dir = f"{user_path}/mlflow_experiments/{EXPERIMENT_NAME}" ## same as MODEL_FAMILY from widget above
-print(experiment_dir)
 
-# experiment_name = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}/{MODEL_TYPE}"
-experiment_name = f"{experiment_dir}/{MODEL_TYPE}"
-print(experiment_name)
+# # DBTITLE 1,Specify MODEL_TYPE & experiment_name
+# MODEL_TYPE = "Gene_Order" ##
+
+# model_name = f"{MODEL_NAME}_{MODEL_TYPE}"  
+# mlflow_experiment_base_path = "/Workspace/Shared/dbx_genesis_workbench_models"
+# experiment_dir = f"{mlflow_experiment_base_path}/{EXPERIMENT_NAME}" ## same as MODEL_FAMILY from widget above
+# print(experiment_dir)
+
+# # experiment_name = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}/{MODEL_TYPE}"
+# experiment_name = f"{experiment_dir}/{MODEL_TYPE}"
+# print(experiment_name)
 
 # COMMAND ----------
 
 # DBTITLE 1,create experiment_dir
-from databricks.sdk import WorkspaceClient
-
-# Initialize client (uses ~/.databrickscfg or env vars for auth)
-client = WorkspaceClient()
-
-# Create workspace folder
-client.workspace.mkdirs(    
-                        # path = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}"
-                        path = f"{experiment_dir}", 
-                      )
-
-# List to verify
-folders = client.workspace.list(f"{user_path}/mlflow_experiments")
-for folder in folders:
-  if folder.path == experiment_dir:
-    print(f"Name: {folder.path}, Type: {folder.object_type}")
+MODEL_TYPE = "Gene_Order"
+model_name = f"{MODEL_NAME}_{MODEL_TYPE}"
+experiment = set_mlflow_experiment(experiment_tag=model_name, user_email=USER_EMAIL)
 
 # COMMAND ----------
 
 # DBTITLE 1,Log SCimilarity_GeneOrder
 import os 
-import mlflow
 from mlflow.models.signature import infer_signature
 import pandas as pd
 
-# Log the model
-mlflow.set_tracking_uri("databricks")
-mlflow.set_registry_uri("databricks-uc")
-
-# Check if the experiment_name (defined above) exists
-experiment = mlflow.get_experiment_by_name(experiment_name)
-if experiment is None:
-    exp_id = mlflow.create_experiment(experiment_name)
-else:
-    exp_id = experiment.experiment_id
-
-mlflow.set_experiment(experiment_id=exp_id)
-
 # Save and log the model
-# with mlflow.start_run(run_name=f'{model_name}', experiment_id=experiment.experiment_id)
-with mlflow.start_run() as run:
+with mlflow.start_run(run_name=f'{model_name}', experiment_id=experiment.experiment_id):
+#with mlflow.start_run() as run:
     mlflow.pyfunc.log_model(
         artifact_path=f"{MODEL_TYPE}", # artifact_path --> "name" mlflow v3.0
         python_model=model, 
@@ -221,7 +195,6 @@ with mlflow.start_run() as run:
 # COMMAND ----------
 
 # DBTITLE 1,load MLflow Logged model + test
-import mlflow
 logged_model_run_uri = f'runs:/{run_id}/{MODEL_TYPE}'
 
 # Load model as a PyFuncModel.
