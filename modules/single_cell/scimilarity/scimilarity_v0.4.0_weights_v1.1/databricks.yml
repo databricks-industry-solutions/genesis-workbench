@@ -11,7 +11,7 @@ targets:
     mode: development
     default: true
     variables:
-      module_registration_experiment_name: "gwb_modules_scimilarity"
+      module_registration_experiment_name: "scimilarity_genesis_workbench_modules"
     workspace:
       root_path: ${var.current_working_directory}
       host: https://adb-830292400663869.9.azuredatabricks.net
