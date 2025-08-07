@@ -10,12 +10,6 @@ include:
   - resources/volumes/*.yml
   - resources/experiments/*.yml
 #  - resources/secrets/*.yml
-    
-# artifacts:
-#     genesis_workbench:
-#       type: whl
-#       build: poetry build 
-#       path: library/genesis_workbench
 
 sync:
   paths:

@@ -55,18 +55,18 @@ def db_connect():
     warehouse_id = os.getenv("SQL_WAREHOUSE")
     warehouse_details = get_warehouse_details_from_id(warehouse_id)
 
-    print(f"SQL Warehouse Id: {warehouse_id}")
+    #print(f"SQL Warehouse Id: {warehouse_id}")
 
     os.environ["DATABRICKS_HOSTNAME"] = warehouse_details.hostname
 
     if os.getenv("IS_TOKEN_AUTH","")=="Y":
-        print(f"Connecting to  warehouse: {warehouse_details.http_path}, warehouse host: {warehouse_details.hostname} using a token")
+        #print(f"Connecting to  warehouse: {warehouse_details.http_path}, warehouse host: {warehouse_details.hostname} using a token")
 
         return sql.connect(server_hostname = warehouse_details.hostname,
             http_path = warehouse_details.http_path,
             access_token = os.getenv("DATABRICKS_TOKEN"))
     else:
-        print(f"Connecting to warehouse: {warehouse_details.http_path}, warehouse host: {warehouse_details.hostname} using oauth")
+        #print(f"Connecting to warehouse: {warehouse_details.http_path}, warehouse host: {warehouse_details.hostname} using oauth")
 
         return sql.connect(server_hostname = warehouse_details.hostname,
             http_path = warehouse_details.http_path,
@@ -86,7 +86,7 @@ def execute_parameterized_inserts(param_query : str, list_of_records:list[list])
         with connection.cursor() as cursor:
             cursor.executemany(param_query, list_of_records )
 
-def execute_insert_delete_query(query):
+def execute_non_select_query(query):
     with(db_connect()) as connection:
         with connection.cursor() as cursor:
             cursor.execute(query)            
@@ -231,10 +231,10 @@ def save_user_settings(user_email:str, user_settings:dict):
     
     print(f"Deleting existing user settings for {user_email}")
     delete_query=f"DELETE FROM {core_catalog_name}.{core_schema_name}.user_settings WHERE user_email='{user_email}'"
-    execute_insert_delete_query(delete_query)
+    execute_non_select_query(delete_query)
 
     print(f"Inserting new settings for {user_email}")
     insert_fields = ",".join([ f"('{user_email}','{k}','{v}')" for k,v in user_settings.items()])
     insert_query = f"INSERT INTO {core_catalog_name}.{core_schema_name}.user_settings (user_email, key, value) VALUES {insert_fields}"
-    execute_insert_delete_query(insert_query)
+    execute_non_select_query(insert_query)
 

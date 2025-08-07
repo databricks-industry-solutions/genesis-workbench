@@ -28,6 +28,7 @@ from .workbench import (UserInfo,
                         AppContext,
                         get_user_settings,
                          execute_select_query, 
+                         execute_non_select_query,
                          execute_parameterized_inserts,
                          execute_workflow)
 from .adapters import BaseAdapter, GWBModel
@@ -93,6 +94,7 @@ class ModelDeploymentInfo:
     model_deployed_date : datetime
     model_deployed_by : str
     model_deploy_platform : ModelDeployPlatform
+    model_endpoint_name: str    
     model_invoke_url : str
     is_active: bool 
     deactivated_timestamp : datetime
@@ -149,8 +151,8 @@ def get_available_models(model_category : ModelCategory) -> pd.DataFrame:
 def get_deployed_models(model_category : ModelCategory)-> pd.DataFrame:
     """Gets all models that are available for deployment"""
     
-    query = f"SELECT deployment_id, deployment_name, deployment_description, model_display_name, model_source_version, \
-                concat(model_uc_name,'/',model_uc_version) as uc_name  \
+    query = f"SELECT models.model_id, deployment_id, deployment_name, deployment_description, model_display_name, model_source_version, \
+                concat(model_uc_name,'/',model_uc_version) as uc_name , model_endpoint_name \
             FROM \
                 {os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.model_deployments \
             INNER JOIN {os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.models ON \
@@ -203,6 +205,18 @@ def get_gwb_model_info(model_id:int)-> GWBModelInfo:
     model_info = result_df.apply(lambda row: GWBModelInfo(**row), axis=1).tolist()[0]
     return model_info
 
+def get_gwb_model_deployment_info(deployment_id:int)-> ModelDeploymentInfo:
+    """Method to get model deploymenmt details using id"""
+
+    query = f"SELECT * FROM \
+                {os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.model_deployments \
+            WHERE deployment_id = {deployment_id} "
+        
+    result_df = execute_select_query(query)
+
+    model_deployment_info = result_df.apply(lambda row: ModelDeploymentInfo(**row), axis=1).tolist()[0]
+    return model_deployment_info
+
 def import_model_from_uc(user_email : str,
                         model_category : ModelCategory,
                         model_uc_name : str,
@@ -252,6 +266,7 @@ def import_model_from_uc(user_email : str,
 
 def deploy_model_endpoint(catalog_name: str,
                  schema_name : str,
+                 dev_user_prefix:str,
                  fq_model_uc_name : str,
                  model_version: int,
                  workload_type: str,
@@ -261,7 +276,7 @@ def deploy_model_endpoint(catalog_name: str,
     w = WorkspaceClient()
 
     model_name = fq_model_uc_name.split(".")[2]
-    endpoint_name = f"gwb_{model_name}_endpoint"
+    endpoint_name = f"gwb_{dev_user_prefix}_{model_name}_endpoint" if dev_user_prefix and dev_user_prefix.strip() != "" else f"gwb_{model_name}_endpoint"
     scale_to_zero = True
 
     served_entities = [
@@ -340,3 +355,57 @@ def deploy_model(user_email: str,
     
     run_id = execute_workflow(model_deploy_job_id,params)
     return run_id
+
+def delete_endpoint(core_catalog:str, core_schema:str, deployment_id:str):
+    """Deletes the endpoint and archives the inference table"""
+    
+    print("==============================================")
+    print(f"⏩️ Getting model details for deployment {deployment_id}")
+    deployment_info : ModelDeploymentInfo = get_gwb_model_deployment_info(deployment_id)
+    model_info : GWBModelInfo = get_gwb_model_info(deployment_info.model_id)
+
+    model_id = deployment_info.model_id
+    endpoint_name = deployment_info.model_endpoint_name
+
+    w = WorkspaceClient()
+
+    print(f"⏩️ Deleting endpoint {endpoint_name}")
+    try:
+        w.serving_endpoints.delete(name = endpoint_name)
+    except Exception as e:
+        print(f"Error deleting endpoint {endpoint_name}: {e}. Delete it manually")
+    
+    print(" ")
+
+    inf_table_name = f"{endpoint_name}_serving_payload"
+    print(f"⏩️ Archiving the inference table {inf_table_name}")
+    execute_non_select_query(f"""
+        ALTER TABLE {core_catalog}.{core_schema}.{inf_table_name} 
+        RENAME TO {core_catalog}.{core_schema}.{inf_table_name}_bkup_{datetime.now().strftime('%Y%m%d%H%M%S')}
+    """)
+ 
+    print(" ")
+
+    print(f"⏩️ Deactivating the deployment {deployment_id}")
+    execute_non_select_query(f"""
+        UPDATE {core_catalog}.{core_schema}.model_deployments SET 
+          is_active = 'false',
+          deactivated_timestamp = current_timestamp()
+
+        WHERE deployment_id = {deployment_id}
+    """)
+
+    print(" ")
+
+    print(f"⏩️ Removing deployment from model {model_id}")
+    deployed_endpoint_ids = model_info.deployment_ids
+    if deployed_endpoint_ids :
+      deployed_endpoint_ids_arr = deployed_endpoint_ids.split(",")
+      new_deployed_endpoint_ids = ",".join([x for x in deployed_endpoint_ids_arr if x != deployment_id])
+
+      execute_non_select_query(f"""
+          UPDATE {core_catalog}.{core_schema}.models SET 
+            deployment_ids = '{new_deployed_endpoint_ids}'
+
+          WHERE model_id = {model_id}
+    """)

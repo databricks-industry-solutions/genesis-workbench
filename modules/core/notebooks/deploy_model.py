@@ -46,10 +46,10 @@ dbutils.widgets.text("input_adapter_str", input_adapter_str, "Input Adapter Clas
 dbutils.widgets.text("output_adapter_str", output_adapter_str, "Output Adapter Class Content")
 dbutils.widgets.text("sample_input_data_dict_as_json", sample_input_data_dict_as_json, "Sample Input with Adapters")
 dbutils.widgets.text("sample_params_as_json", sample_params_as_json, "Sample Params with Adapters")
-
 dbutils.widgets.text("workload_type", "CPU", "Endpoint Workload Type")
 dbutils.widgets.text("workload_size", "Medium", "Endpoint Workload Size")
 dbutils.widgets.text("deploy_user", "a@b.com", "User Id")
+dbutils.widgets.text("dev_user_prefix", "abc", "Prefix for resources")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
@@ -88,10 +88,10 @@ input_adapter_str = dbutils.widgets.get("input_adapter_str")
 output_adapter_str = dbutils.widgets.get("output_adapter_str")
 sample_input_data_dict_as_json = dbutils.widgets.get("sample_input_data_dict_as_json")
 sample_params_as_json = dbutils.widgets.get("sample_params_as_json")
-
 workload_type = dbutils.widgets.get("workload_type")
 workload_size = dbutils.widgets.get("workload_size")
 deploy_user = dbutils.widgets.get("deploy_user")
+dev_user_prefix = dbutils.widgets.get("dev_user_prefix")
 
 
 # COMMAND ----------
@@ -262,6 +262,7 @@ if result_df.count() > 0:
    #deploy the model to model serving endpoint
    deploy_result = deploy_model_endpoint(catalog_name=catalog, 
                                          schema_name=schema, 
+                                         dev_user_prefix = dev_user_prefix,
                                          fq_model_uc_name=model_uc_name, 
                                          model_version=model_uc_version, 
                                          workload_type=workload_type, 

@@ -6,18 +6,12 @@ include:
   - variables.yml
   - resources/*.yml
     
-# artifacts:
-#   esmfold:
-#     type: whl
-#     build: poetry build
-#     path: .
-
 targets:
   dev:
     mode: development
     default: true
     variables:
-      module_registration_experiment_name: "[dev mmt] gwb_modules_scimilarity"
+      module_registration_experiment_name: "gwb_modules_scimilarity"
     workspace:
       root_path: ${var.current_working_directory}
       host: https://adb-830292400663869.9.azuredatabricks.net

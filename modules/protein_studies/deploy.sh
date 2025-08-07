@@ -31,4 +31,4 @@ for module in alphafold/alphafold_v2.3.2 boltz/boltz_1 esmfold/esmfold_v1 protei
 
 echo "##############################################"
 
-
+date +"%Y-%m-%d %H:%M:%S" > .deployed
