@@ -19,7 +19,7 @@ def build_admin_usage_embed_url() -> str:
     if not host_name.startswith("https://"):
         host_name = "https://" + host_name
         
-    url = f"{host_name}/embed/dashboardsv3/{os.environ["ADMIN_USAGE_DASHBOARD_ID"]}"
+    url = f"{host_name}/embed/dashboardsv3/{os.environ['ADMIN_USAGE_DASHBOARD_ID']}"
     return url
 
 # --- Utility: Get Workflow Runs ---

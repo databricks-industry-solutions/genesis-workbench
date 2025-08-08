@@ -97,7 +97,7 @@
           "widget": {
             "multilineTextboxSpec": {
               "lines": [
-                "## Workspace Usage Tracking Dashboard"
+                "### Workspace Usage Tracking"
               ]
             },
             "name": "bc8676ec"

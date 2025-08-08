@@ -172,32 +172,32 @@ spark.sql(f"GRANT ALL PRIVILEGES ON SCHEMA {catalog}.{schema} TO `{app.service_p
 
 # COMMAND -----------
 #Granting dashboard access to the app service principal
-import requests
+# import requests
 
-db_host = spark.conf.get("spark.databricks.workspaceUrl")
-db_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
+# db_host = spark.conf.get("spark.databricks.workspaceUrl")
+# db_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
 
-payload = {
-    "access_control_list": [
-        {
-            "user_name": app.service_principal_client_id,            
-            "permission_level": "CAN_VIEW"    
-        }
-    ]
-}
+# payload = {
+#     "access_control_list": [
+#         {
+#             "user_name": app.service_principal_client_id,            
+#             "permission_level": "CAN_VIEW"    
+#         }
+#     ]
+# }
 
-headers = {
-    "Authorization": f"Bearer {db_token}",
-    "Content-Type": "application/json"
-}
+# headers = {
+#     "Authorization": f"Bearer {db_token}",
+#     "Content-Type": "application/json"
+# }
 
-response = requests.put(
-    f"https://{db_host}/api/2.0/permissions/dashboards/{dashboard_id}",
-    json=payload,
-    headers=headers
-)
+# response = requests.put(
+#     f"https://{db_host}/api/2.0/permissions/dashboards/{dashboard_id}",
+#     json=payload,
+#     headers=headers
+# )
 
-if response.ok:
-    print("Permissions updated.")
-else:
-    print(f"Error: {response.status_code} - {response.text}")
+# if response.ok:
+#     print("Permissions updated.")
+# else:
+#     print(f"Error: {response.status_code} - {response.text}")
