@@ -31,3 +31,5 @@ for module in scgpt/scgpt_v0.2.4 scimilarity/scimilarity_v0.4.0_weights_v1.1
         cd ../..
     done
 echo "##############################################"
+
+date +"%Y-%m-%d %H:%M:%S" > .deployed

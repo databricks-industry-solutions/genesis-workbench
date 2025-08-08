@@ -127,7 +127,7 @@ for file in library/genesis_workbench/dist/*.whl; do
   fi
 done
 
-#unfortunately databricks sync uses gitignore to synce files
+#unfortunately databricks sync uses gitignore to sync files
 #so we need to manualy delete the wheel files we created so that it does not
 #get checked into git
 echo ""
@@ -135,3 +135,5 @@ echo "▶️ Cleaning up wheel files"
 echo ""
 rm app/lib/*.whl
 rm -rf library/genesis_workbench/dist
+
+date +"%Y-%m-%d %H:%M:%S" > .deployed

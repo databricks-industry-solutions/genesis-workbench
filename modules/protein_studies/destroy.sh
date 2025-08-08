@@ -28,5 +28,5 @@ for module in alphafold/alphafold_v2.3.2 boltz/boltz_1 esmfold/esmfold_v1 protei
     done
 
 
-
+rm .deployed
 

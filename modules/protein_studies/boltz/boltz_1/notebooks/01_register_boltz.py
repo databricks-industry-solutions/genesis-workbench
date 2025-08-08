@@ -316,7 +316,11 @@ print(signature)
 mlflow.set_tracking_uri("databricks")
 mlflow.set_registry_uri("databricks-uc")
 
-experiment = set_mlflow_experiment(experiment_tag=EXPERIMENT_NAME, user_email=USER_EMAIL)
+experiment = set_mlflow_experiment(experiment_tag=EXPERIMENT_NAME,
+                                   user_email=USER_EMAIL,
+                                   host=None,
+                                   token=None,
+                                   shared=True)
 
 with mlflow.start_run(run_name=f"{MODEL_NAME}", experiment_id=experiment.experiment_id):
     model_info = mlflow.pyfunc.log_model(

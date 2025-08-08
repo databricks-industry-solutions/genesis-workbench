@@ -29,6 +29,8 @@ resources:
           default: ${var.sql_warehouse_id}          
         - name: gwb_model_id
           default: '-1' 
+        - name: dev_user_prefix
+          default: ${var.dev_user_prefix}          
         - name: deployment_name
           default: name
         - name: deployment_description

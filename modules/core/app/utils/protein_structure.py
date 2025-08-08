@@ -117,12 +117,11 @@ def search_alphafold_runs_by_experiment_name(user_email: str, experiment_name:st
 def pull_alphafold_run(run_id : str ='run') -> str:
     catalog = os.environ["CORE_CATALOG_NAME"]
     schema = os.environ["CORE_SCHEMA_NAME"]
-    run_id = "0b3f5bbf34fc45208b804000f75034ba"
+
+    print(f"Fetching result for run id: {run_id}")
     w = WorkspaceClient()
     response = w.files.download(
         f'/Volumes/{catalog}/{schema}/alphafold/results/{run_id}/{run_id}/ranked_0.pdb'
-
-        
     )
     pdb_str = str(response.contents.read(), encoding='utf-8')
     return pdb_str

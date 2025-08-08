@@ -464,7 +464,7 @@ from databricks.sdk import WorkspaceClient
 
 def set_mlflow_experiment(experiment_tag, user_email):    
     w = WorkspaceClient()
-    mlflow_experiment_base_path = f"Users/{user_email}/mlflow_experiments"
+    mlflow_experiment_base_path = "Shared/dbx_genesis_workbench_models"
     w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")
     experiment_path = f"/{mlflow_experiment_base_path}/{experiment_tag}"
     mlflow.set_registry_uri("databricks-uc")

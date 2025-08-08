@@ -136,15 +136,24 @@ def display_protein_studies_settings(available_models_df,deployed_models_df):
                             use_container_width=True,
                             hide_index=True,
                             on_select="rerun",
-                            selection_mode="single-row")
+                            selection_mode="single-row",
+                            column_config={
+                                "Model Id": None,
+                                "Deploy Id" : None,
+                                "Endpoint Name" : None
+                            })
     else:
         st.write("There are no deployed models")
 
 def set_selected_row_status():
     selection = st.session_state["alphafold_run_search_result_display_df"].selection
-    selected_index = selection["rows"][0]
-    selected_alphafold_run_status = st.session_state["alphafold_run_search_result_df"].iloc[selected_index]["status"]
-    st.session_state["selected_alphafold_run_status"]=selected_alphafold_run_status
+    if len(selection["rows"]) > 0:
+        selected_index = selection["rows"][0]
+        selected_alphafold_run_status = st.session_state["alphafold_run_search_result_df"].iloc[selected_index]["status"]
+        st.session_state["selected_alphafold_run_status"]=selected_alphafold_run_status
+    else:
+        del st.session_state["selected_alphafold_run_status"]
+
 
 @st.dialog("View Structure", width="large")
 def display_view_alphafold_result_dialog(run_id: str, run_name:str):
@@ -174,7 +183,7 @@ with st.spinner("Loading data"):
 
     if "deployed_protein_models_df" not in st.session_state:
         deployed_protein_models_df = get_deployed_models(ModelCategory.PROTEIN_STUDIES)
-        deployed_protein_models_df.columns = ["Id", "Name", "Description", "Model Name", "Source Version", "UC Name/Version"]
+        deployed_protein_models_df.columns = ["Model Id","Deploy Id", "Name", "Description", "Model Name", "Source Version", "UC Name/Version", "Endpoint Name"]
 
         st.session_state["deployed_protein_models_df"] = deployed_protein_models_df
     deployed_protein_models_df = st.session_state["deployed_protein_models_df"]
@@ -275,8 +284,11 @@ with protein_structure_prediction_tab:
         if search_alphafold_run_button:
             with st.spinner("Searching"):
                 if "alphafold_run_search_result_df" in st.session_state :
-                    del st.session_state["alphafold_run_search_result_df"]
-                    del st.session_state["selected_alphafold_run_status"]
+                    if "alphafold_run_search_result_df" in st.session_state:
+                        del st.session_state["alphafold_run_search_result_df"]
+                        
+                    if "selected_alphafold_run_status" in st.session_state:
+                        del st.session_state["selected_alphafold_run_status"]
 
                 if search_alphafold_text.strip() != "":
                     if search_alphafold_run_mode == "Experiment Name":

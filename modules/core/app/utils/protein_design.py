@@ -21,12 +21,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 workspace_client = WorkspaceClient()
 
-def hit_model_endpoint(endpoint_name, inputs) -> str:
+def hit_model_endpoint(model_name, inputs) -> str:
     """
     Query endpoint with input
     """
-
-    endpoint_name = f"gwb_{endpoint_name}_endpoint"    
+    dev_user_prefix = os.environ["DEV_USER_PREFIX"]
+    endpoint_name = f"gwb_{dev_user_prefix}_{model_name}_endpoint" if dev_user_prefix and dev_user_prefix.strip() != "" else f"gwb_{model_name}_endpoint"
+    #endpoint_name = model_name
 
     try:
         logger.info(f"Sending request to model endpoint: {endpoint_name}")
@@ -34,11 +35,6 @@ def hit_model_endpoint(endpoint_name, inputs) -> str:
             name=endpoint_name,
             inputs=inputs
         )
-
-        print("*****************")
-        print(response)
-        print("*****************")
-
 
         logger.info("Received response from model endpoint")
         return response.predictions

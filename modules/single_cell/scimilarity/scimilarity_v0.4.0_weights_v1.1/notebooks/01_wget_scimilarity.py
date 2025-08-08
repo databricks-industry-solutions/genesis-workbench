@@ -5,12 +5,12 @@
 
 # DBTITLE 1,gwb_variablesNparams
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("schema", "dev_mmt_core_test", "Schema")
-dbutils.widgets.text("model_name", "SCimilarity", "Model Name") ## use this as a prefix for the model name ?
+dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
+dbutils.widgets.text("model_name", "SCimilarity", "Model Name") 
 dbutils.widgets.text("experiment_name", "gwb_modules_scimilarity", "Experiment Name")
-dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id") # ??
-dbutils.widgets.text("user_email", "may.merkletan@databricks.com", "User Id/Email")
-dbutils.widgets.text("cache_dir", "scimilarity", "Cache dir") ## VOLUME NAME | MODEL_FAMILY 
+dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id") 
+dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Id/Email")
+dbutils.widgets.text("cache_dir", "scimilarity", "Cache dir")
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
@@ -29,12 +29,9 @@ print(f"Cache full path: {cache_full_path}")
 # COMMAND ----------
 
 # DBTITLE 1,scimilarity UC paths
-CATALOG = CATALOG #"mmt"
-# DB_SCHEMA = "genesiswb"
-DB_SCHEMA = SCHEMA #"tests"
-
-# VOLUME_NAME | PROJECT 
-MODEL_FAMILY = CACHE_DIR #"scimilarity"
+CATALOG = CATALOG 
+DB_SCHEMA = SCHEMA 
+MODEL_FAMILY = CACHE_DIR 
 
 print("CATALOG :", CATALOG)
 print("DB_SCHEMA :", DB_SCHEMA)
@@ -53,14 +50,6 @@ print("sampledata_path :", sampledata_path)
 
 # COMMAND ----------
 
-# DBTITLE 1,get model & data files
-## using serverless compute for this
-
-## REF https://genentech.github.io/scimilarity/install.html
-# https://genentech.github.io/scimilarity/news.html#version-0-4-0-may-05-2025
-
-# COMMAND ----------
-
 # DBTITLE 1,model and data reference urls
 ## add to markdown
 
@@ -72,20 +61,6 @@ print("sampledata_path :", sampledata_path)
 
 # For Sample Query data. We will use Adams et al., 2020 healthy and IPF lung scRNA-seq data. Download tutorial data.
 # https://zenodo.org/records/13685881
-
-# COMMAND ----------
-
-# DBTITLE 1,create volume first
-## CREATE/CHECK EXISTENCE OF VOLUMES FIRST 
-
-# spark.sql(f"CREATE VOLUME IF NOT EXISTS {CATALOG}.{SCHEMA}.{CACHE_DIR}")
-
-base_dir=f"/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}"
-
-print(f"CREATE VOLUME IF NOT EXISTS: {base_dir}")
-
-## CREATE VOLUMES FIRST 
-spark.sql(f"CREATE VOLUME IF NOT EXISTS {CATALOG}.{DB_SCHEMA}.{MODEL_FAMILY}")
 
 # COMMAND ----------
 

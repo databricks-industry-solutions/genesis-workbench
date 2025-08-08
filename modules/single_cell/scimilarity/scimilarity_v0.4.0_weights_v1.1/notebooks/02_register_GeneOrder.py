@@ -1,19 +1,12 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC #### Setup: `%run ./utils` 
+# MAGIC #### Run Initialization
+# MAGIC
 
 # COMMAND ----------
 
 # DBTITLE 1,install/load dependencies | # ~5mins (including initial data processing)
 # MAGIC %run ./utils
-
-# COMMAND ----------
-
-mlflow.__version__
-
-# COMMAND ----------
-
-CATALOG, DB_SCHEMA, MODEL_FAMILY, MODEL_NAME, EXPERIMENT_NAME
 
 # COMMAND ----------
 
@@ -117,9 +110,10 @@ len(gene_order_output)
 from mlflow.models import infer_signature
 
 # Example input for the model
-example_input = pd.DataFrame({
-                                'input': ["get_gene_order"]  # Just to trigger getting GeneOrder list from model weights folder
-                            })
+example_input = pd.DataFrame(
+    {
+        'input': ["get_gene_order"]  # Just to trigger getting GeneOrder list from model weights folder
+    })
 
 # Ensure the example output is in a serializable format
 example_output = model.predict(example_input)
@@ -129,51 +123,19 @@ signature = infer_signature(example_input, example_output)
 
 # COMMAND ----------
 
-# example_input #, example_output
-
-# COMMAND ----------
-
 signature
 
 # COMMAND ----------
 
 # MAGIC %md 
-# MAGIC ### MLflow LOG Custom PyFunc: `SCimilarity_GeneOrder`
-
-# COMMAND ----------
-
-# DBTITLE 1,Specify MODEL_TYPE & experiment_name
-MODEL_TYPE = "Gene_Order" ##
-# model_name = f"SCimilarity_{MODEL_TYPE}" 
-model_name = f"{MODEL_NAME}_{MODEL_TYPE}"  
-
-## Set the experiment
-experiment_dir = f"{user_path}/mlflow_experiments/{EXPERIMENT_NAME}" ## same as MODEL_FAMILY from widget above
-print(experiment_dir)
-
-# experiment_name = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}/{MODEL_TYPE}"
-experiment_name = f"{experiment_dir}/{MODEL_TYPE}"
-print(experiment_name)
+# MAGIC ### MLflow Log Custom PyFunc: `SCimilarity_GeneOrder`
 
 # COMMAND ----------
 
 # DBTITLE 1,create experiment_dir
-from databricks.sdk import WorkspaceClient
-
-# Initialize client (uses ~/.databrickscfg or env vars for auth)
-client = WorkspaceClient()
-
-# Create workspace folder
-client.workspace.mkdirs(    
-                        # path = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}"
-                        path = f"{experiment_dir}", 
-                      )
-
-# List to verify
-folders = client.workspace.list(f"{user_path}/mlflow_experiments")
-for folder in folders:
-  if folder.path == experiment_dir:
-    print(f"Name: {folder.path}, Type: {folder.object_type}")
+MODEL_TYPE = "Gene_Order"
+model_name= f"{MODEL_NAME}_{MODEL_TYPE}".lower()
+experiment = set_mlflow_experiment(experiment_tag=EXPERIMENT_NAME, user_email=USER_EMAIL)
 
 # COMMAND ----------
 
@@ -183,22 +145,8 @@ import mlflow
 from mlflow.models.signature import infer_signature
 import pandas as pd
 
-# Log the model
-mlflow.set_tracking_uri("databricks")
-mlflow.set_registry_uri("databricks-uc")
-
-# Check if the experiment_name (defined above) exists
-experiment = mlflow.get_experiment_by_name(experiment_name)
-if experiment is None:
-    exp_id = mlflow.create_experiment(experiment_name)
-else:
-    exp_id = experiment.experiment_id
-
-mlflow.set_experiment(experiment_id=exp_id)
-
 # Save and log the model
-# with mlflow.start_run(run_name=f'{model_name}', experiment_id=experiment.experiment_id)
-with mlflow.start_run() as run:
+with mlflow.start_run(run_name=model_name, experiment_id=experiment.experiment_id) as run:
     mlflow.pyfunc.log_model(
         artifact_path=f"{MODEL_TYPE}", # artifact_path --> "name" mlflow v3.0
         python_model=model, 
@@ -206,119 +154,9 @@ with mlflow.start_run() as run:
                    "geneOrder_path": geneOrder_path ## defined in ./utils 
                   },
         input_example=example_input,
-        signature=signature
-        # registered_model_name=f"{CATALOG}.{SCHEMA}.{model_name}" ## to include directly wihout additonal load run_id checks
+        signature=signature,
+        registered_model_name=f"{CATALOG}.{SCHEMA}.{model_name}"
     )
 
     run_id = run.info.run_id
     print("Model logged with run ID:", run_id)
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC #### Check `run_id` logged Model & Predictions
-
-# COMMAND ----------
-
-# DBTITLE 1,load MLflow Logged model + test
-import mlflow
-logged_model_run_uri = f'runs:/{run_id}/{MODEL_TYPE}'
-
-# Load model as a PyFuncModel.
-loaded_model = mlflow.pyfunc.load_model(logged_model_run_uri) ## 
-
-# COMMAND ----------
-
-# DBTITLE 1,access input_example from loaded_model
-loaded_model.input_example
-
-# COMMAND ----------
-
-# DBTITLE 1,Test logged + loaded model prediction
-predictions = loaded_model.predict(loaded_model.input_example)
-
-len(predictions)
-# print(predictions)
-
-# COMMAND ----------
-
-# MAGIC %md 
-# MAGIC ### UC Register Custom PyFunc: `SCimilarity_GeneOrder`
-
-# COMMAND ----------
-
-# DBTITLE 1,Model Info
-# Register the model
-# model_name = f"SCimilarity_{MODEL_TYPE}"  
-model_name = f"{MODEL_NAME}_{MODEL_TYPE}" 
-full_model_name = f"{CATALOG}.{DB_SCHEMA}.{model_name}"
-model_uri = f"runs:/{run_id}/{MODEL_TYPE}"
-
-model_name, full_model_name, model_uri
-
-# COMMAND ----------
-
-# DBTITLE 1,Register SCimilarity_GeneOrder
-# registered_model = 
-mlflow.register_model(model_uri=model_uri, 
-                      name=full_model_name,                      
-                      await_registration_for=120,
-                    )
-
-# COMMAND ----------
-
-# DBTITLE 1,Associate model version with @: add_model_alias
-# add_model_alias(full_model_name, "Champion")
-
-# COMMAND ----------
-
-# MAGIC %md 
-# MAGIC ### Load UC registered model using @lias & test predictions
-
-# COMMAND ----------
-
-# DBTITLE 1,Load uc-registered model using alias
-## Load the model as a PyFunc model using alias
-# model_uri = f"models:/{full_model_name}@Champion"
-# loaded_model = mlflow.pyfunc.load_model(model_uri)
-
-# COMMAND ----------
-
-# DBTITLE 1,test predictions
-## Make predictions
-# predictions = loaded_model.predict(loaded_model.input_example) 
-
-# len(predictions)
-# # print(predictions)
-
-# COMMAND ----------
-
-# MAGIC %md 
-# MAGIC ### Deploy & Serve UC registered model: `SCimilarity_GeneOrder`
-# MAGIC
-# MAGIC ```
-# MAGIC ## AWS/Azure workload types&sizes
-# MAGIC workload_type = "CPU"
-# MAGIC workload_size = "Small"
-# MAGIC ```
-
-# COMMAND ----------
-
-# DBTITLE 1,convert_input_example_to_serving_input
-# json.loads(mlflow.models.convert_input_example_to_serving_input(loaded_model.input_example))
-
-# COMMAND ----------
-
-# DBTITLE 1,example input for inferencing
-# {
-#   "dataframe_split": {
-#     "columns": [
-#       "input"
-#     ],
-#     "data": [
-#       [
-#         "get_gene_order"
-#       ]
-#     ]
-#   }
-# }
