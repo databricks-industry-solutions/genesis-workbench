@@ -106,6 +106,8 @@ resources:
           default: ${resources.volumes.alphafold_volume.name}
         - name: user_email
           default: ${var.current_user}
+        - name: sql_warehouse_id 
+          default: ${var.sql_warehouse_id}
         - name: run_alphafold_job_id
           default: ${resources.jobs.alphafold.id}
 

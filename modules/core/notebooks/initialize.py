@@ -10,16 +10,22 @@ dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Sc
 dbutils.widgets.text("deploy_model_job_id", "1234", "Deploy Model Job ID")
 dbutils.widgets.text("bionemo_esm_finetune_job_id", "1234", "BioNeMo ESM Fine Tune Job ID")
 dbutils.widgets.text("bionemo_esm_inference_job_id", "1234", "BioNeMo ESM Inference Job ID")
+dbutils.widgets.text("admin_usage_dashboard_id", "1234", "ID of usage dashboard")
 dbutils.widgets.text("application_secret_scope", "dbx_genesis_workbench", "Secret Scope used by application")
 dbutils.widgets.text("databricks_app_name", "dev-scn-genesis-workbench", "UI Application name")
+dbutils.widgets.text("dev_user_prefix", "abc", "Prefix for resources")
+
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 deploy_model_job_id = dbutils.widgets.get("deploy_model_job_id")
 bionemo_esm_finetune_job_id = dbutils.widgets.get("bionemo_esm_finetune_job_id")
 bionemo_esm_inference_job_id = dbutils.widgets.get("bionemo_esm_inference_job_id")
+admin_usage_dashboard_id = dbutils.widgets.get("admin_usage_dashboard_id")
 secret_scope = dbutils.widgets.get("application_secret_scope")
 databricks_app_name = dbutils.widgets.get("databricks_app_name")
+dev_user_prefix = dbutils.widgets.get("dev_user_prefix")
+dev_user_prefix = None if dev_user_prefix.strip() == "" or dev_user_prefix.strip().lower()=="none" else dev_user_prefix
 
 # COMMAND ----------
 
@@ -125,14 +131,20 @@ CREATE TABLE settings (
 
 # COMMAND ----------
 
-spark.sql(f"""
-INSERT INTO settings VALUES
-('bionemo_esm_finetune_job_id', '{bionemo_esm_finetune_job_id}'),
-('bionemo_esm_inference_job_id', '{bionemo_esm_inference_job_id}'),
-('deploy_model_job_id', '{deploy_model_job_id}'),
-('secret_scope', '{secret_scope}')
+query= f"""
+    INSERT INTO settings VALUES
+    ('bionemo_esm_finetune_job_id', '{bionemo_esm_finetune_job_id}'),
+    ('bionemo_esm_inference_job_id', '{bionemo_esm_inference_job_id}'),
+    ('admin_usage_dashboard_id', '{admin_usage_dashboard_id}'),
+    ('databricks_app_name', '{databricks_app_name}'),    
+    ('deploy_model_job_id', '{deploy_model_job_id}'),
+    ('secret_scope', '{secret_scope}')
+"""
 
-""")
+if dev_user_prefix:
+    query = query + f", ('dev_user_prefix', '{dev_user_prefix}') "
+
+spark.sql(query)
 
 # COMMAND ----------
 
@@ -157,3 +169,35 @@ app = w.apps.get(name=databricks_app_name)
 
 spark.sql(f"GRANT USE CATALOG ON CATALOG {catalog} TO `{app.service_principal_client_id}`")
 spark.sql(f"GRANT ALL PRIVILEGES ON SCHEMA {catalog}.{schema} TO `{app.service_principal_client_id}`")
+
+# COMMAND -----------
+#Granting dashboard access to the app service principal
+# import requests
+
+# db_host = spark.conf.get("spark.databricks.workspaceUrl")
+# db_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
+
+# payload = {
+#     "access_control_list": [
+#         {
+#             "user_name": app.service_principal_client_id,            
+#             "permission_level": "CAN_VIEW"    
+#         }
+#     ]
+# }
+
+# headers = {
+#     "Authorization": f"Bearer {db_token}",
+#     "Content-Type": "application/json"
+# }
+
+# response = requests.put(
+#     f"https://{db_host}/api/2.0/permissions/dashboards/{dashboard_id}",
+#     json=payload,
+#     headers=headers
+# )
+
+# if response.ok:
+#     print("Permissions updated.")
+# else:
+#     print(f"Error: {response.status_code} - {response.text}")

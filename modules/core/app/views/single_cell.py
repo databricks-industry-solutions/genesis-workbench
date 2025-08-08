@@ -64,7 +64,12 @@ def display_settings_tab(available_models_df,deployed_models_df):
                             use_container_width=True,
                             hide_index=True,
                             on_select="rerun",
-                            selection_mode="single-row")
+                            selection_mode="single-row",
+                            column_config={
+                                "Model Id": None,
+                                "Deploy Id" : None,
+                                "Endpoint Name" : None
+                            })
     else:
         st.write("There are no deployed models")
 
@@ -86,7 +91,12 @@ def display_embeddings_tab(deployed_models_df):
                             use_container_width=True,
                             hide_index=True,
                             on_select="rerun",
-                            selection_mode="multi-row")
+                            selection_mode="multi-row",
+                            column_config={
+                                "Model Id": None,
+                                "Deploy Id" : None,
+                                "Endpoint Name" : None
+                            })
         
             st.write("NOTE: A result table will be created for EACH model selected.")
 
