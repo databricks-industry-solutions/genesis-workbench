@@ -50,6 +50,7 @@ dbutils.widgets.text("workload_type", "CPU", "Endpoint Workload Type")
 dbutils.widgets.text("workload_size", "Medium", "Endpoint Workload Size")
 dbutils.widgets.text("deploy_user", "a@b.com", "User Id")
 dbutils.widgets.text("dev_user_prefix", "abc", "Prefix for resources")
+dbutils.widgets.text("databricks_app_name", "dev-scn-genesis-workbench", "UI Application name")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
@@ -92,6 +93,9 @@ workload_type = dbutils.widgets.get("workload_type")
 workload_size = dbutils.widgets.get("workload_size")
 deploy_user = dbutils.widgets.get("deploy_user")
 dev_user_prefix = dbutils.widgets.get("dev_user_prefix")
+databricks_app_name = dbutils.widgets.get("databricks_app_name")
+
+dev_user_prefix = None if dev_user_prefix.strip() == "" or dev_user_prefix.strip().lower()=="none" else dev_user_prefix
 
 
 # COMMAND ----------

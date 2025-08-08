@@ -41,6 +41,8 @@ resources:
           default: Small
         - name: deploy_user
           default: none
+        - name: databricks_app_name
+          default: ${var.app_name}
       
       tags: ${var.common_resource_tags}
 

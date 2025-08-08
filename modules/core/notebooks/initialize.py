@@ -12,6 +12,7 @@ dbutils.widgets.text("bionemo_esm_finetune_job_id", "1234", "BioNeMo ESM Fine Tu
 dbutils.widgets.text("bionemo_esm_inference_job_id", "1234", "BioNeMo ESM Inference Job ID")
 dbutils.widgets.text("application_secret_scope", "dbx_genesis_workbench", "Secret Scope used by application")
 dbutils.widgets.text("databricks_app_name", "dev-scn-genesis-workbench", "UI Application name")
+dbutils.widgets.text("dev_user_prefix", "abc", "Prefix for resources")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
@@ -20,6 +21,8 @@ bionemo_esm_finetune_job_id = dbutils.widgets.get("bionemo_esm_finetune_job_id")
 bionemo_esm_inference_job_id = dbutils.widgets.get("bionemo_esm_inference_job_id")
 secret_scope = dbutils.widgets.get("application_secret_scope")
 databricks_app_name = dbutils.widgets.get("databricks_app_name")
+dev_user_prefix = dbutils.widgets.get("dev_user_prefix")
+dev_user_prefix = None if dev_user_prefix.strip() == "" or dev_user_prefix.strip().lower()=="none" else dev_user_prefix
 
 # COMMAND ----------
 
@@ -125,14 +128,26 @@ CREATE TABLE settings (
 
 # COMMAND ----------
 
-spark.sql(f"""
-INSERT INTO settings VALUES
-('bionemo_esm_finetune_job_id', '{bionemo_esm_finetune_job_id}'),
-('bionemo_esm_inference_job_id', '{bionemo_esm_inference_job_id}'),
-('deploy_model_job_id', '{deploy_model_job_id}'),
-('secret_scope', '{secret_scope}')
+if dev_user_prefix:
 
-""")
+    spark.sql(f"""
+    INSERT INTO settings VALUES
+    ('bionemo_esm_finetune_job_id', '{bionemo_esm_finetune_job_id}'),
+    ('bionemo_esm_inference_job_id', '{bionemo_esm_inference_job_id}'),
+    ('dev_user_prefix', '{dev_user_prefix}'),
+    ('deploy_model_job_id', '{deploy_model_job_id}'),
+    ('secret_scope', '{secret_scope}')
+
+    """)
+else:
+    spark.sql(f"""
+    INSERT INTO settings VALUES
+    ('bionemo_esm_finetune_job_id', '{bionemo_esm_finetune_job_id}'),
+    ('bionemo_esm_inference_job_id', '{bionemo_esm_inference_job_id}'),
+    ('deploy_model_job_id', '{deploy_model_job_id}'),
+    ('secret_scope', '{secret_scope}')
+
+    """)    
 
 # COMMAND ----------
 
