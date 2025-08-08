@@ -134,6 +134,7 @@ if dev_user_prefix:
     INSERT INTO settings VALUES
     ('bionemo_esm_finetune_job_id', '{bionemo_esm_finetune_job_id}'),
     ('bionemo_esm_inference_job_id', '{bionemo_esm_inference_job_id}'),
+    ('databricks_app_name', '{databricks_app_name}'),    
     ('dev_user_prefix', '{dev_user_prefix}'),
     ('deploy_model_job_id', '{deploy_model_job_id}'),
     ('secret_scope', '{secret_scope}')
@@ -144,6 +145,7 @@ else:
     INSERT INTO settings VALUES
     ('bionemo_esm_finetune_job_id', '{bionemo_esm_finetune_job_id}'),
     ('bionemo_esm_inference_job_id', '{bionemo_esm_inference_job_id}'),
+    ('databricks_app_name', '{databricks_app_name}'),    
     ('deploy_model_job_id', '{deploy_model_job_id}'),
     ('secret_scope', '{secret_scope}')
 

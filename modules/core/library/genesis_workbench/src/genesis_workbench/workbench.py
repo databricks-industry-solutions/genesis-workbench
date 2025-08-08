@@ -2,7 +2,9 @@
 from databricks.sdk.core import Config, oauth_service_principal
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.errors import DatabricksError
-from databricks.sdk.service.jobs import RunLifeCycleState, RunResultState
+from databricks.sdk.service.jobs import RunLifeCycleState, RunResultState, JobAccessControlRequest, JobPermissionLevel
+from databricks.sdk.service.serving import ServingEndpointAccessControlRequest, ServingEndpointPermissionLevel
+
 from databricks import sql
 
 import os
@@ -238,3 +240,45 @@ def save_user_settings(user_email:str, user_settings:dict):
     insert_query = f"INSERT INTO {core_catalog_name}.{core_schema_name}.user_settings (user_email, key, value) VALUES {insert_fields}"
     execute_non_select_query(insert_query)
 
+
+def set_app_permissions_for_job(job_id:str, user_email:str):
+    w = WorkspaceClient()
+    app_name = os.environ["DATABRICKS_APP_NAME"]
+    app = w.apps.get(name=app_name)
+    app_service_principal_id = app.service_principal_client_id
+    acl = [
+        JobAccessControlRequest(
+            user_name=user_email,
+            permission_level=JobPermissionLevel.IS_OWNER
+        ),
+        JobAccessControlRequest(
+            user_name=app_service_principal_id,
+            permission_level=JobPermissionLevel.CAN_MANAGE_RUN
+        )
+    ]
+
+    # Set permissions on the job, replacing any previous ACL
+    w.jobs.set_permissions(
+        job_id=job_id,
+        access_control_list=acl
+    )
+
+
+def set_app_permissions_for_endpoint(endpoint_name:str):
+    w = WorkspaceClient()
+    endpoint_id = w.serving_endpoints.get(endpoint_name).id
+    app_name = os.environ["DATABRICKS_APP_NAME"]
+    app = w.apps.get(name=app_name)
+
+    acl = [
+        ServingEndpointAccessControlRequest(
+            user_name=app.service_principal_client_id,
+            permission_level=ServingEndpointPermissionLevel.CAN_QUERY  
+        )
+    ]
+
+    # Grant the permission (this sets, or use update_permissions to update)
+    w.serving_endpoints.update_permissions(
+        serving_endpoint_id=endpoint_id,
+        access_control_list=acl
+    )
