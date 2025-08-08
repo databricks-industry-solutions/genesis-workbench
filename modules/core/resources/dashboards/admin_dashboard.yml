@@ -1,0 +1,11 @@
+resources:
+  dashboards:
+    genesis_workbench:
+      display_name: "Genesis Workbench Usage Dashboard"
+      warehouse_id: ${var.sql_warehouse_id}
+      file_path: genesis_workbench.lvdash.json
+      permissions:
+        - user_name: ${var.current_user}
+          level: CAN_MANAGE
+      
+      #tags: ${var.common_resource_tags}

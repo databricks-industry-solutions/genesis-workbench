@@ -95,6 +95,7 @@ def execute_non_select_query(query):
 
 def execute_workflow(job_id: int, params: dict) -> str:
     w = WorkspaceClient()
+    print(f"Running job with ID : {job_id}")
     run = w.jobs.run_now(
         job_id=job_id,
         job_parameters=params

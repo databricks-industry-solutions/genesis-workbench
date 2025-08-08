@@ -29,7 +29,7 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/run_alphafold_featurize.py
             source: WORKSPACE
-          job_cluster_key: featurize_cluster
+          job_cluster_key: fold_cluster
           timeout_seconds: 28800
           health:
             rules:
@@ -85,24 +85,24 @@ resources:
 
 
       job_clusters:
-        - job_cluster_key: featurize_cluster
-          new_cluster:
-            cluster_name: ""
-            spark_version: 15.4.x-scala2.12
-            spark_conf:
-              spark.master: local[*, 4]
-              spark.databricks.cluster.profile: singleNode
-            node_type_id: Standard_F8
-            driver_node_type_id: Standard_F8
-            custom_tags:
-              ResourceClass: SingleNode
-              work_type: protein_folding
-            spark_env_vars:
-              PYSPARK_PYTHON: /databricks/python3/bin/python3
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            runtime_engine: STANDARD
-            num_workers: 0
+      #   - job_cluster_key: featurize_cluster
+      #     new_cluster:
+      #       cluster_name: ""
+      #       spark_version: 15.4.x-scala2.12
+      #       spark_conf:
+      #         spark.master: local[*, 4]
+      #         spark.databricks.cluster.profile: singleNode
+      #       node_type_id: Standard_F8
+      #       driver_node_type_id: Standard_F8
+      #       custom_tags:
+      #         ResourceClass: SingleNode
+      #         work_type: protein_folding
+      #       spark_env_vars:
+      #         PYSPARK_PYTHON: /databricks/python3/bin/python3
+      #       enable_elastic_disk: true
+      #       data_security_mode: SINGLE_USER
+      #       runtime_engine: STANDARD
+      #       num_workers: 0
 
         - job_cluster_key: fold_cluster
           new_cluster:

@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
-from pandas.api.types import is_datetime64_any_dtype
 import json
+import os
 from datetime import timedelta
-
+import streamlit.components.v1 as components
+from pandas.api.types import is_datetime64_any_dtype
 from genesis_workbench.workbench import get_workflow_job_status
 from utils.streamlit_helper import get_user_info, make_run_link
 
@@ -12,6 +13,14 @@ def format_duration(duration: timedelta) -> str:
     hours, remainder = divmod(total_seconds, 3600)
     minutes, _ = divmod(remainder, 60)
     return f"{hours}h {minutes}m"
+
+def build_admin_usage_embed_url() -> str:
+    host_name = os.getenv("DATABRICKS_HOSTNAME")
+    if not host_name.startswith("https://"):
+        host_name = "https://" + host_name
+        
+    url = f"{host_name}/embed/dashboardsv3/{os.environ["ADMIN_USAGE_DASHBOARD_ID"]}"
+    return url
 
 # --- Utility: Get Workflow Runs ---
 def get_workflow_runs_df(tag_key: str = "application", tag_value: str = "genesis_workbench", days_back: int = 7) -> pd.DataFrame:
@@ -129,8 +138,9 @@ with job_runs:
 
 # --- Alerts Tab ---
 with dashboard_tab:
+# --- Dashboard Tab --
     st.subheader("Dashboards")
-    st.info("Dashboards coming soon.")
+    components.iframe(build_admin_usage_embed_url(),  height=600,  scrolling=True)
 
 # --- Alerts Tab ---
 with alerts_tab:

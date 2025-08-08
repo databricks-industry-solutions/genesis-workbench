@@ -9,6 +9,7 @@ include:
   - resources/app.yml
   - resources/volumes/*.yml
   - resources/experiments/*.yml
+  - resources/dashboards/*.yml
 #  - resources/secrets/*.yml
 
 sync:

@@ -54,6 +54,11 @@ resources:
           default: ${resources.jobs.bionemo_esm_inference.id}
         - name: databricks_app_name
           default: ${var.app_name}
+        - name: dev_user_prefix
+          default: ${var.dev_user_prefix}       
+        - name: admin_usage_dashboard_id
+          default: ${resources.dashboards.genesis_workbench.id}       
+                
         # - name: application_secret_scope
         #   default: ${resources.secret_scopes.dbx_gwb_secret_scope.name}
 
