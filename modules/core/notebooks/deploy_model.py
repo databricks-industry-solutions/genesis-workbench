@@ -332,6 +332,17 @@ if model_deployed:
                 deployment_ids = '{','.join(current_deployment_ids)}'
             WHERE model_id = {gwb_model_id}
     """)
+
 else:
     print("No deployments made")
 
+
+# COMMAND ----------
+
+from genesis_workbench.workbench import set_app_permissions_for_endpoint
+
+#update the permission for the databricks app
+if model_deployed:
+    set_app_permissions_for_endpoint(endpoint_name=deploy_result.name)
+else:
+    print("No deployments made")
