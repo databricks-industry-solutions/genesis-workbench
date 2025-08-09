@@ -201,7 +201,7 @@ os.environ["DATABRICKS_HOST"] = db_host
 os.environ["DATABRICKS_TOKEN"] = db_token
 os.environ["MLFLOW_ENABLE_SYSTEM_METRICS_LOGGING"] = "true"
 
-experiment = set_mlflow_experiment(experiment_tag=experiment_name, user_email="srijit.nair@databricks.com")
+experiment = set_mlflow_experiment(experiment_tag=experiment_name, user_email=user_email)
 mlflow.start_run(experiment_id=experiment.experiment_id, run_name=finetune_label)
 
 ft_params = {
@@ -295,8 +295,6 @@ for file in os.listdir(checkpoint_path):
 from genesis_workbench import bionemo
 
 # COMMAND ----------
-
-user_email = "srijit.nair@databricks.com"
 
 if is_finetune_success:
     #update the model deployment table
