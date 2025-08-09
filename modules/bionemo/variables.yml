@@ -27,6 +27,18 @@ variables:
     description: The cache directory for bionemo model weights
     default: bionemo
 
+  bionemo_docker_image:
+    description: The docker image tag for bionemo 
+
+  bionemo_docker_userid:
+    description: The docker repo user_id
+
+  bionemo_docker_token:
+    description: The docker repo token
+  
+  cpu_node_type:
+    description: Node type for CPU vms
+
   t4_node_type:
     description: Node type for T4 GPUs
 

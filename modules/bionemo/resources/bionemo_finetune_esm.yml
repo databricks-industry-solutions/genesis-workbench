@@ -11,7 +11,7 @@ resources:
         - task_key: bionemo_esm_finetune_task
           job_cluster_key: job_cluster
           notebook_task:
-            notebook_path: ../../notebooks/bionemo_esm_finetune.py
+            notebook_path: ../notebooks/bionemo_esm_finetune.py
           max_retries: 0 
 
       parameters:

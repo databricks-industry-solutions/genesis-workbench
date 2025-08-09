@@ -240,7 +240,7 @@ def get_user_settings(user_email: str) -> dict:
 
     result_df = execute_select_query(query)
     
-    if len(result_df>0):
+    if len(result_df) > 0:
         return dict(zip(result_df['key'], result_df['value']))
     else:
         return {}

@@ -101,11 +101,15 @@ echo ""
 
 databricks bundle deploy -t $ENV --var="$EXTRA_PARAMS"
 
-echo ""
-echo "▶️ Running initialization job"
-echo ""
+#Run init job only if not deployed before
+if [[ ! -e ".deployed" ]]; then
 
-databricks bundle run -t $ENV initialize_core_job --var="$EXTRA_PARAMS"
+  echo ""
+  echo "▶️ Running initialization job"
+  echo ""
+
+  databricks bundle run -t $ENV initialize_core_job --var="$EXTRA_PARAMS"
+fi
 
 echo ""
 echo "▶️ Deploying UI Application"

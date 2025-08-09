@@ -22,17 +22,17 @@ echo ""
 echo "▶️ [BioNeMo] Validating bundle"
 echo ""
 
-databricks bundle validate $EXTRA_PARAMS
+databricks bundle validate --var="$EXTRA_PARAMS" 
 
 echo ""
 echo "▶️ [BioNeMo] Deploying bundle"
 echo ""
 
-databricks bundle deploy -t $ENV $EXTRA_PARAMS
+databricks bundle deploy -t $ENV --var="$EXTRA_PARAMS" 
 
 echo ""
 echo "▶️ [BioNeMo] Running model registration job as a backend task"
 echo "🚨 This job might take a long time to finish. See Jobs & Pipeline tab for status"
 echo ""
 
-databricks bundle run -t $ENV initial_setup_job $EXTRA_PARAMS --no-wait
+databricks bundle run -t $ENV initial_setup_job --var="$EXTRA_PARAMS"  --no-wait

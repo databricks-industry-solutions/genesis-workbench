@@ -11,7 +11,7 @@ resources:
         - task_key: bionemo_esm_inference_task
           job_cluster_key: job_cluster
           notebook_task:
-            notebook_path: ../../notebooks/bionemo_esm_inference.py
+            notebook_path: ../notebooks/bionemo_esm_inference.py
           max_retries: 0 
 
       parameters:

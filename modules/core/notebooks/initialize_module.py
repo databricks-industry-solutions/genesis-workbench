@@ -20,6 +20,15 @@ print(f"Schema: {schema}")
 
 # COMMAND ----------
 
+#remove any existing entry
+query= f"""
+    DELETE FROM {catalog}.{schema}.settings WHERE
+    module = '{module}' AND
+    key = '{module}_deployed'
+"""
+spark.sql(query)
+
+#re enter
 query= f"""
     INSERT INTO {catalog}.{schema}.settings VALUES
     ('{module}_deployed', 'true', '{module}')

@@ -23,8 +23,6 @@ targets:
 
   prod:
     mode: production
-    variables:
-      app_name: genesis-workbench
     workspace:
       host: https://adb-830292400663869.9.azuredatabricks.net
       root_path: ${var.current_working_directory}
