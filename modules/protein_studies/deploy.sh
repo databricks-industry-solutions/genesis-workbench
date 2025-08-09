@@ -1,17 +1,20 @@
 #!/bin/bash
 set -e
 
-if [ "$#" -lt 1 ]; then
-    echo "Usage: $0 <env> "
-    echo 'Example: deploy dev '
+if [ "$#" -lt 2 ]; then
+    echo "Usage: $0 <env> <cloud>"
+    echo "Example: deploy dev aws"
     exit 1
 fi
 
 ENV=$1
+CLOUD=$2
 
 source env.env
 
-EXTRA_PARAMS=$(paste -sd, "env.env")
+EXTRA_PARAMS_CLOUD=$(paste -sd, "$CLOUD.env")
+EXTRA_PARAMS_GENERAL=$(paste -sd, "env.env")
+EXTRA_PARAMS="$EXTRA_PARAMS_GENERAL,$EXTRA_PARAMS_CLOUD"
 
 echo "Extra Params: $EXTRA_PARAMS"
 
@@ -24,6 +27,7 @@ for module in alphafold/alphafold_v2.3.2 boltz/boltz_1 esmfold/esmfold_v1 protei
         echo "Deploying $module"
         cd $module
         chmod +x deploy.sh
+        
         echo "Running command deploy.sh $ENV --var=\"$EXTRA_PARAMS\" " 
         ./deploy.sh $ENV --var="$EXTRA_PARAMS" 
         cd ../..        

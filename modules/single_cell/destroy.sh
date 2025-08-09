@@ -23,6 +23,9 @@ echo "⚙️ Starting destroy of module Single Cell"
 for module in scgpt/scgpt_v0.2.4 scimilarity/scimilarity_v0.4.0_weights_v1.1
     do
         cd $module
+        echo "Running command destroy.sh $ENV --var=\"$EXTRA_PARAMS\" " 
+        chmod +x destroy.sh
+
         ./destroy.sh $ENV --var="$EXTRA_PARAMS"
         cd ../..
     done

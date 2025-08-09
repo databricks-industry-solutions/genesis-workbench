@@ -11,7 +11,7 @@ targets:
     mode: development
     default: true
     variables:
-      module_registration_experiment_name: "[dev srijit_nair] dbx_genesis_workbench_modules"
+      module_registration_experiment_name: "dbx_genesis_workbench_modules"
     workspace:
       root_path: ${var.current_working_directory}
       host: https://adb-830292400663869.9.azuredatabricks.net

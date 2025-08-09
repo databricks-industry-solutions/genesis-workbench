@@ -13,6 +13,9 @@ variables:
       application: genesis_workbench
       module: scimilarity
       created_by: ${var.current_user}
+  
+  cpu_node_type:
+    description: Node type for CPU vms
 
   t4_node_type:
     description: Node type for T4 GPUs

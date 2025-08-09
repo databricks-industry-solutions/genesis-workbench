@@ -11,6 +11,7 @@ dbutils.widgets.text("experiment_name", "dbx_genesis_workbench_modules", "Experi
 dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
 dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Id/Email")
 dbutils.widgets.text("cache_dir", "boltz_cache_dir", "Cache dir")
+dbutils.widgets.text("workload_type", "GPU_SMALL", "Workload Type for endpoints")
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
@@ -46,6 +47,7 @@ EXPERIMENT_NAME = dbutils.widgets.get("experiment_name")
 USER_EMAIL = dbutils.widgets.get("user_email")
 SQL_WAREHOUSE_ID = dbutils.widgets.get("sql_warehouse_id")
 CACHE_DIR = dbutils.widgets.get("cache_dir")
+WORKLOAD_TYPE = dbutils.widgets.get("workload_type")
 
 print(f"Cache dir: {CACHE_DIR}")
 cache_full_path = f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}"
@@ -361,7 +363,7 @@ run_id = deploy_model(user_email=USER_EMAIL,
                 output_adapter_str="none",
                 sample_input_data_dict_as_json="none",
                 sample_params_as_json="none",
-                workload_type="GPU_SMALL",
+                workload_type=WORKLOAD_TYPE,
                 workload_size="Small")
 
 # COMMAND ----------

@@ -28,15 +28,16 @@ resources:
           default: ${var.sql_warehouse_id}
         - name: user_email
           default: ${var.current_user}
-
+        - name: workload_type
+          default: ${var.gpu_small_setting}
 
 
       job_clusters:
         - job_cluster_key: job_cluster
           new_cluster:
             num_workers: 0
-            node_type_id: 'Standard_NC4as_T4_v3' 
-            driver_node_type_id: 'Standard_NC4as_T4_v3' 
+            node_type_id: ${var.t4_node_type} 
+            driver_node_type_id: ${var.t4_node_type}  
             spark_version: '15.4.x-gpu-ml-scala2.12'
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER

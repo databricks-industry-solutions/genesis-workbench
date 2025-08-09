@@ -11,6 +11,7 @@ dbutils.widgets.text("experiment_name", "dbx_genesis_workbench_modules", "Experi
 dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id")
 dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
 dbutils.widgets.text("cache_dir", "esm2_cache_dir", "Cache dir")
+dbutils.widgets.text("workload_type", "GPU_SMALL", "Workload Type for endpoints")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
@@ -46,6 +47,7 @@ experiment_name = dbutils.widgets.get("experiment_name")
 user_email = dbutils.widgets.get("user_email")
 sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
 cache_dir = dbutils.widgets.get("cache_dir")
+workload_type = dbutils.widgets.get("workload_type")
 
 print(f"Cache dir: {cache_dir}")
 cache_full_path = f"/Volumes/{catalog}/{schema}/{cache_dir}"
@@ -256,7 +258,7 @@ run_id = deploy_model(user_email=user_email,
                 output_adapter_str="none",
                 sample_input_data_dict_as_json="none",
                 sample_params_as_json="none",
-                workload_type="GPU_SMALL",
+                workload_type=workload_type,
                 workload_size="Small")
 
 # COMMAND ----------

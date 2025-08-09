@@ -92,8 +92,8 @@ resources:
       #       spark_conf:
       #         spark.master: local[*, 4]
       #         spark.databricks.cluster.profile: singleNode
-      #       node_type_id: Standard_F8
-      #       driver_node_type_id: Standard_F8
+      #       node_type_id: ${var.cpu_node_type}
+      #       driver_node_type_id: ${var.cpu_node_type}
       #       custom_tags:
       #         ResourceClass: SingleNode
       #         work_type: protein_folding
@@ -111,8 +111,8 @@ resources:
             spark_conf:
               spark.master: local[*, 4]
               spark.databricks.cluster.profile: singleNode
-            node_type_id: Standard_NC4as_T4_v3
-            driver_node_type_id: Standard_NC4as_T4_v3
+            node_type_id: ${var.t4_node_type} 
+            driver_node_type_id: ${var.t4_node_type}
             custom_tags:
               ResourceClass: SingleNode
               work_type: protein_folding
