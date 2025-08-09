@@ -18,6 +18,24 @@ variables:
       module: core
       created_by: ${var.current_user}
 
+  cpu_node_type:
+    description: Node type for CPU vms
+    
+  t4_node_type:
+    description: Node type for T4 GPUs
+
+  a10_node_type:
+    description: Node type for A10 GPUs
+
+  gpu_small_setting:
+    description: The config setting for GPU_SMALL
+
+  gpu_medium_setting:
+    description: The config setting for GPU_SMALL
+
+  gpu_large_setting:
+    description: The config setting for GPU_SMALL
+    
   sql_warehouse_id:
     description: Id of the SQL Warehouse that will be used by the app
 
@@ -40,23 +58,6 @@ variables:
     description: The experiment to which all registered modules are logged
     default: dbx_genesis_workbench_modules
 
-  bionemo_docker_image:
-    description: The docker image uri for bionemo
-
-  bionemo_docker_userid:
-    description: The userid for the decker registry
-
-  bionemo_docker_token:
-    description: The token for docker registry
-
-  bionemo_cluster_a10_nodetype:
-    description: The nodetype for bionemo A10 gpu cluster
-    default: g5.8xlarge
-
-  bionemo_cluster_dbr_version:
-    description: DBR Version of BioNeMo cluster
-    default: 15.4.x-scala2.12
-
   default_admin_group:
     description: The default admin group for the app
     default: genesis-admin-group
@@ -68,3 +69,4 @@ variables:
   admin_user:
     description: The admin user for the app
     default: ${var.current_user}
+

@@ -1,18 +1,19 @@
 bundle:
-  name: genesis_workbench_boltz
+  name: bionemo
   databricks_cli_version: ">=0.236.*"
 
 include:
   - variables.yml
   - resources/*.yml
 
-
+sync:
+  paths:
+    - .
+  
 targets:
   dev:
     mode: development
     default: true
-    variables:
-      module_registration_experiment_name: "boltz_genesis_workbench_modules"
     workspace:
       root_path: ${var.current_working_directory}
       host: https://adb-830292400663869.9.azuredatabricks.net
@@ -29,4 +30,4 @@ targets:
       - user_name: ${var.current_user}
         level: CAN_MANAGE
     run_as:
-      user_name: ${var.current_user}
+      user_name: ${var.current_user} #sp name should be used instead later.

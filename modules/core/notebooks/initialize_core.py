@@ -6,10 +6,8 @@
 
 #parameters to the notebook
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
+dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("deploy_model_job_id", "1234", "Deploy Model Job ID")
-dbutils.widgets.text("bionemo_esm_finetune_job_id", "1234", "BioNeMo ESM Fine Tune Job ID")
-dbutils.widgets.text("bionemo_esm_inference_job_id", "1234", "BioNeMo ESM Inference Job ID")
 dbutils.widgets.text("admin_usage_dashboard_id", "1234", "ID of usage dashboard")
 dbutils.widgets.text("application_secret_scope", "dbx_genesis_workbench", "Secret Scope used by application")
 dbutils.widgets.text("databricks_app_name", "dev-scn-genesis-workbench", "UI Application name")
@@ -19,8 +17,6 @@ dbutils.widgets.text("dev_user_prefix", "abc", "Prefix for resources")
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 deploy_model_job_id = dbutils.widgets.get("deploy_model_job_id")
-bionemo_esm_finetune_job_id = dbutils.widgets.get("bionemo_esm_finetune_job_id")
-bionemo_esm_inference_job_id = dbutils.widgets.get("bionemo_esm_inference_job_id")
 admin_usage_dashboard_id = dbutils.widgets.get("admin_usage_dashboard_id")
 secret_scope = dbutils.widgets.get("application_secret_scope")
 databricks_app_name = dbutils.widgets.get("databricks_app_name")
@@ -100,32 +96,13 @@ CREATE TABLE model_deployments (
 
 # COMMAND ----------
 
-spark.sql("DROP TABLE IF EXISTS bionemo_weights")
-
-spark.sql(f"""
-CREATE TABLE bionemo_weights (
-    ft_id BIGINT ,
-    ft_label STRING,
-    model_type STRING,
-    variant STRING,
-    experiment_name STRING,
-    run_id STRING,
-    weights_volume_location STRING,
-    created_by STRING,
-    created_datetime TIMESTAMP,
-    is_active BOOLEAN,
-    deactivated_timestamp TIMESTAMP
-)
-""")
-
-# COMMAND ----------
-
 spark.sql("DROP TABLE IF EXISTS settings")
 
 spark.sql(f"""
 CREATE TABLE settings (
     key STRING,
-    value STRING
+    value STRING,
+    module STRING
 )
 """)
 
@@ -133,16 +110,14 @@ CREATE TABLE settings (
 
 query= f"""
     INSERT INTO settings VALUES
-    ('bionemo_esm_finetune_job_id', '{bionemo_esm_finetune_job_id}'),
-    ('bionemo_esm_inference_job_id', '{bionemo_esm_inference_job_id}'),
-    ('admin_usage_dashboard_id', '{admin_usage_dashboard_id}'),
-    ('databricks_app_name', '{databricks_app_name}'),    
-    ('deploy_model_job_id', '{deploy_model_job_id}'),
-    ('secret_scope', '{secret_scope}')
+    ('admin_usage_dashboard_id', '{admin_usage_dashboard_id}', 'core'),
+    ('databricks_app_name', '{databricks_app_name}','core'),    
+    ('deploy_model_job_id', '{deploy_model_job_id}', 'core'),
+    ('secret_scope', '{secret_scope}', 'core')
 """
 
 if dev_user_prefix:
-    query = query + f", ('dev_user_prefix', '{dev_user_prefix}') "
+    query = query + f", ('dev_user_prefix', '{dev_user_prefix}' , 'core') "
 
 spark.sql(query)
 

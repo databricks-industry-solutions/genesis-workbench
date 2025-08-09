@@ -3,23 +3,33 @@ import os
 from genesis_workbench.workbench import initialize
 from utils.streamlit_helper import get_user_info  
 from databricks.sdk import WorkspaceClient
-from genesis_workbench.workbench import get_user_settings, save_user_settings
+from genesis_workbench.workbench import get_user_settings, get_deployed_modules
 
 st.set_page_config(layout="wide")
 #delete the top right menu
+deployed_modules = []
 
 with st.spinner("Initializing"):
-    initialize(
-        core_catalog_name = os.environ["CORE_CATALOG_NAME"],
-        core_schema_name = os.environ["CORE_SCHEMA_NAME"],
-        sql_warehouse_id = os.environ["SQL_WAREHOUSE"]
-    )
+    if "system_settings_initialized" not in st.session_state:
+        initialize(
+            core_catalog_name = os.environ["CORE_CATALOG_NAME"],
+            core_schema_name = os.environ["CORE_SCHEMA_NAME"],
+            sql_warehouse_id = os.environ["SQL_WAREHOUSE"]
+        )
+        st.session_state["system_settings_initialized"] = "true"
+        deployed_modules = get_deployed_modules()
+       
+        st.session_state["deployed_modules"] = deployed_modules
+        
+    deployed_modules = st.session_state["deployed_modules"]
+    
     user_info = get_user_info()
     if "user_settings" not in st.session_state:        
         user_settings = get_user_settings(user_email=user_info.user_email)
         st.session_state["user_settings"] = user_settings
     
     user_settings = st.session_state["user_settings"]
+
 
 st.logo("images/blank.png", size="large", icon_image="images/dbx_logo_icon_2.png")
 st.sidebar.image("images/dbx_logo_1.png", width=200)
@@ -79,18 +89,20 @@ bionemo_esm_page = st.Page(
 #     icon=":material/genetics:"
 # )
 
+workbench_pages = [home_page]
+if "protein_studies" in deployed_modules:
+    workbench_pages.append(protein_page)
+if "single_cell" in deployed_modules:
+    workbench_pages.append(single_cell_page)
+if "bionemo" in deployed_modules:
+    workbench_pages.append(bionemo_esm_page)
+
+
 menu_pages = {
     f"{user_settings['user_display_name'] if 'user_display_name' in user_settings else user_info.user_display_name}":[
         profile_page,
     ],
-    "Workbench": [
-        home_page,
-        single_cell_page,
-        protein_page,        
-        # small_molecules_page,
-        bionemo_esm_page,        
-        # bionemo_geneformer_page
-    ],
+    "Workbench": workbench_pages,
     "Management" : [
         monitoring_alerts_page,
         settings_page    

@@ -1,0 +1,34 @@
+resources:
+  jobs:
+    initialize_module_job:
+      name: dbx_gwb_initialize_module_job
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: initialize_module_task
+          notebook_task:
+            notebook_path: ../../notebooks/initialize_module.py
+          max_retries: 0 
+
+      environments:
+        - environment_key: default
+          spec:
+            client: '2'
+
+      max_concurrent_runs: 2
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: module
+          default: 'none' 
+        - name: user_email
+          default: ${var.current_user}
+      
+      tags: ${var.common_resource_tags}
+

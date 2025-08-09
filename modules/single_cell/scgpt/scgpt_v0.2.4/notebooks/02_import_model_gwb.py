@@ -10,65 +10,14 @@ dbutils.widgets.text("experiment_name", "scgpt_genesis_workbench_modules", "Expe
 dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id")
 dbutils.widgets.text("user_email", "yang.yang@databricks.com", "User Id/Email")
 dbutils.widgets.text("cache_dir", "scgpt_cache_dir", "Cache dir")
-
+dbutils.widgets.text("workload_type", "GPU_SMALL", "Workload Type for endpoints")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
-user_email = dbutils.widgets.get("user_email")
-sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
-model_name = dbutils.widgets.get("model_name")
 
 # COMMAND ----------
 
 # MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0
-# MAGIC # dbutils.library.restartPython()
-
-# COMMAND ----------
-
-### TEMP FIX to update code because I can't get core to deploy
-
-# COMMAND ----------
-
-# DBTITLE 1,when empty
-# # Create the volume in Unity Catalog if it does not exist
-# spark.sql(f"""
-# CREATE VOLUME IF NOT EXISTS {catalog}.{schema}.libraries
-# COMMENT 'Volume for libraries'
-# """)
-
-# dbutils.fs.ls(f"dbfs:/Volumes/{catalog}/{schema}/libraries")
-
-# COMMAND ----------
-
-# DBTITLE 1,check files
-# # catalog
-# schema_SCN = "dev_srijit_nair_dbx_genesis_workbench_core"
-# dbutils.fs.ls(f"/Volumes/{catalog}/{schema_SCN}/libraries")
-
-# COMMAND ----------
-
-# DBTITLE 1,copy over libraries
-# # Define the source and destination paths
-# source_path = f"/Volumes/{catalog}/{schema_SCN}/libraries/genesis_workbench-0.1.0-py3-none-any.whl"
-# destination_path = f"/Volumes/{catalog}/{schema}/libraries/genesis_workbench-0.1.0-py3-none-any.whl"
-
-# # Create the volume in Unity Catalog if it does not exist
-# spark.sql(f"""
-# CREATE VOLUME IF NOT EXISTS {catalog}.{schema}.libraries
-# COMMENT 'Volume for libraries'
-# """)
-
-# # Create the volume path if it does not exist
-# volume_path = f"/Volumes/{catalog}/{schema}/libraries"
-# dbutils.fs.mkdirs(volume_path)
-
-# # Copy the file
-# dbutils.fs.cp(source_path, destination_path)
-
-# COMMAND ----------
-
-# DBTITLE 1,check destination
-# dbutils.fs.ls(destination_path)
 
 # COMMAND ----------
 
@@ -92,7 +41,7 @@ schema = dbutils.widgets.get("schema")
 user_email = dbutils.widgets.get("user_email")
 sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
 model_name = dbutils.widgets.get("model_name")
-
+workload_type = dbutils.widgets.get("workload_type")
 
 # COMMAND ----------
 
@@ -160,7 +109,7 @@ run_id = deploy_model(user_email=user_email,
                 output_adapter_str="none",
                 sample_input_data_dict_as_json="none",
                 sample_params_as_json="none",
-                workload_type="GPU_SMALL",
+                workload_type=workload_type,
                 workload_size="Small")
 
 # COMMAND ----------

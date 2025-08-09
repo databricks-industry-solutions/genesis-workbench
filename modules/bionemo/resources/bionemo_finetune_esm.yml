@@ -11,13 +11,13 @@ resources:
         - task_key: bionemo_esm_finetune_task
           job_cluster_key: job_cluster
           notebook_task:
-            notebook_path: ../../notebooks/bionemo_esm_finetune.py
+            notebook_path: ../notebooks/bionemo_esm_finetune.py
           max_retries: 0 
 
       parameters:
-        - name: catalog
+        - name: core_catalog
           default: ${var.core_catalog_name}
-        - name: schema
+        - name: core_schema
           default: ${var.core_schema_name}
         - name: esm_variant
           default: 650M
@@ -29,10 +29,8 @@ resources:
           default: false
         - name: finetune_label
           default: esm_650m_ft_xyz
-        - name: core_catalog
-          default: genesis_workbench
-        - name: core_schema
-          default: dev_srijit_nair_dbx_genesis_workbench_core
+        - name: model_volume
+          default: ${resources.volumes.bionemo_dir.name}
         - name: task_type
           default: regression
         - name: mlp_ft_dropout
@@ -62,9 +60,9 @@ resources:
         - job_cluster_key: job_cluster
           new_cluster:
             num_workers: 0
-            node_type_id: ${var.bionemo_cluster_a10_nodetype}
-            driver_node_type_id: ${var.bionemo_cluster_a10_nodetype}
-            spark_version: ${var.bionemo_cluster_dbr_version}
+            node_type_id: ${var.a10_node_type}
+            driver_node_type_id: ${var.a10_node_type}
+            spark_version: 15.4.x-scala2.12
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             single_user_name: ${workspace.current_user.userName}

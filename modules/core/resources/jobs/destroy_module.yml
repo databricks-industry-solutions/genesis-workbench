@@ -1,16 +1,16 @@
 resources:
   jobs:
-    destroy_endpoints_job:
-      name: dbx_gwb_destroy_endpoints_job
+    destroy_module_job:
+      name: dbx_gwb_destroy_module_job
 
       email_notifications:
         on_failure:
           - ${var.current_user}
 
       tasks:
-        - task_key: destroy_endpoints_task
+        - task_key: destroy_module_task
           notebook_task:
-            notebook_path: ../../notebooks/destroy_endpoints.py
+            notebook_path: ../../notebooks/destroy_module.py
           max_retries: 0 
 
       environments:
@@ -27,7 +27,7 @@ resources:
           default: ${var.core_schema_name}
         - name: sql_warehouse_id
           default: ${var.sql_warehouse_id}          
-        - name: model_category
+        - name: module
           default: 'none' 
         - name: destroy_user_email
           default: a@b.com

@@ -1,0 +1,55 @@
+variables:
+  current_user:
+    description: User deploying the bundle. Can apply to service principals as well.
+    default: ${workspace.current_user.userName}
+  
+  current_working_directory:
+    description: Working directory or bundle root.
+    default: /Users/${var.current_user}/.bundle/${bundle.name}/${bundle.target}
+
+  common_resource_tags:
+    description: Resource tags
+    default:
+      application: genesis_workbench
+      module: bionemo
+      created_by: ${var.current_user}
+
+  core_catalog_name:
+    description: primary catalog where data, models, and files are stored for this project.
+  
+  core_schema_name:
+    description: The schema where core components will be installed.
+
+  sql_warehouse_id:
+    description: Id of the SQL Warehouse that will be used by the app
+  
+  model_volume:
+    description: The cache directory for bionemo model weights
+    default: bionemo
+
+  bionemo_docker_image:
+    description: The docker image tag for bionemo 
+
+  bionemo_docker_userid:
+    description: The docker repo user_id
+
+  bionemo_docker_token:
+    description: The docker repo token
+  
+  cpu_node_type:
+    description: Node type for CPU vms
+
+  t4_node_type:
+    description: Node type for T4 GPUs
+
+  a10_node_type:
+    description: Node type for A10 GPUs
+
+  gpu_small_setting:
+    description: The config setting for GPU_SMALL
+
+  gpu_medium_setting:
+    description: The config setting for GPU_SMALL
+
+  gpu_large_setting:
+    description: The config setting for GPU_SMALL

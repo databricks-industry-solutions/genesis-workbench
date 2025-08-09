@@ -14,6 +14,24 @@ variables:
       module: alphafold
       created_by: ${var.current_user}
 
+  cpu_node_type:
+    description: Node type for CPU vms
+    
+  t4_node_type:
+    description: Node type for T4 GPUs
+
+  a10_node_type:
+    description: Node type for A10 GPUs
+
+  gpu_small_setting:
+    description: The config setting for small gpu
+
+  gpu_medium_setting:
+    description: The config setting for medium gpu
+
+  gpu_large_setting:
+    description: The config setting for large gpu
+
   sql_warehouse_id:
     description: SQL Warehouse ID for genesis workbench
 
@@ -31,19 +49,3 @@ variables:
     description: The volume directory for the model and associated files
     default: alphafold
 
-  # t4_node_type:
-  #   description: Node type for T4 GPUs
-
-  # a10_node_type:
-  #   description: Node type for A10 GPUs
-
-  # gpu_small_setting:
-  #   description: The config setting for GPU_SMALL
-  #   default: GPU_SMALL
-
-  # gpu_medium_setting:
-  #   description: The config setting for GPU_SMALL
-  #   default: GPU_MEDIUM
-
-  # gpu_small_setting:
-  #   description: The config setting for GPU_SMALL

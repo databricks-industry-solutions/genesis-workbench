@@ -1,0 +1,34 @@
+resources:
+  jobs:
+    initial_setup_job:
+      name: dbx_bionemo_initial_setup
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: initialize_task
+          notebook_task:
+            notebook_path: ../notebooks/initialize.py
+          max_retries: 0
+          timeout_seconds: 600 
+
+      environments:
+        - environment_key: default
+          spec:
+            client: '2'
+
+      parameters:
+        - name: core_catalog
+          default: ${var.core_catalog_name}
+        - name: core_schema
+          default: ${var.core_schema_name}
+        - name: bionemo_esm_finetune_job_id
+          default: ${resources.jobs.bionemo_esm_finetune.id}
+        - name: bionemo_esm_inference_job_id
+          default: ${resources.jobs.bionemo_esm_inference.id}
+        - name: sql_warehouse_id 
+          default: ${var.sql_warehouse_id}
+
+      tags: ${var.common_resource_tags}

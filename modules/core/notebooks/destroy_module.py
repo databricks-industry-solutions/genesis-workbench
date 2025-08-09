@@ -1,8 +1,8 @@
 # Databricks notebook source
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
+dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
-dbutils.widgets.text("model_category", "single_cell", "Model Category for which endpoints will be destroyed")
+dbutils.widgets.text("module", "single_cell", "Model Category for which endpoints will be destroyed")
 dbutils.widgets.text("destroy_user_email", "a@b.com", "User Id")
 
 catalog = dbutils.widgets.get("catalog")
@@ -34,7 +34,7 @@ print(gwb_library_path)
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
-model_category = dbutils.widgets.get("model_category")
+module = dbutils.widgets.get("module")
 destroy_user_email = dbutils.widgets.get("destroy_user_email")
 
 
@@ -43,7 +43,7 @@ destroy_user_email = dbutils.widgets.get("destroy_user_email")
 print(f"catalog: {catalog}")
 print(f"schema: {schema}")
 print(f"sql_warehouse_id: {sql_warehouse_id}")
-print(f"model_category: {model_category}")
+print(f"module: {module}")
 print(f"destroy_user_email: {destroy_user_email}")
 
 
@@ -51,11 +51,7 @@ print(f"destroy_user_email: {destroy_user_email}")
 
 #Setup the env variables required for Genesis Workbench library to load settings
 from genesis_workbench.workbench import initialize
-from genesis_workbench.models import (GWBModelInfo, 
-                                      ModelDeploymentInfo, 
-                                      get_gwb_model_info,
-                                      get_deployed_models, 
-                                      get_gwb_model_deployment_info,
+from genesis_workbench.models import (get_deployed_models, 
                                       delete_endpoint)
 
 from genesis_workbench.workbench import (execute_select_query,
@@ -66,7 +62,7 @@ initialize(core_catalog_name = catalog, core_schema_name = schema, sql_warehouse
 
 # COMMAND ----------
 
-deployed_models = get_deployed_models(model_category)
+deployed_models = get_deployed_models(module)
 
 # COMMAND ----------
 
@@ -82,11 +78,21 @@ for index, row in deployed_models[["model_id", "deployment_id", "model_endpoint_
 # COMMAND ----------
 
 #lets deactivate all the models registered in Genesis Workbench
-spark.sql("""
+spark.sql(f"""
      UPDATE {catalog}.{schema}.models SET
         is_active = 'false',
         deactivated_timestamp = current_timestamp()
      WHERE 
-        model_category = '{model_category}'  AND 
+        model_category = '{module}'  AND 
         is_active = 'true'  
 """)
+
+# COMMAND ----------
+
+#Remove all module settings
+spark.sql(f"""
+     DELETE FROM {catalog}.{schema}.settings 
+     WHERE 
+        module = '{module}' 
+""")
+

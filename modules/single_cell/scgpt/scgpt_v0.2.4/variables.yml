@@ -13,7 +13,25 @@ variables:
       application: genesis_workbench
       module: scgpt
       created_by: ${var.current_user}
+  
+  cpu_node_type:
+    description: Node type for CPU vms
 
+  t4_node_type:
+    description: Node type for T4 GPUs
+
+  a10_node_type:
+    description: Node type for A10 GPUs
+
+  gpu_small_setting:
+    description: The config setting for small gpu
+
+  gpu_medium_setting:
+    description: The config setting for medium gpu
+
+  gpu_large_setting:
+    description: The config setting for large gpu
+    
   core_catalog_name:
     description: primary catalog where data, models, and files are stored for this project.
     #default: genesis_workbench

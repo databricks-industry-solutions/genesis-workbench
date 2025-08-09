@@ -1,7 +1,12 @@
 # Databricks notebook source
+
+# COMMAND ----------
+
+#parameters to the notebook
 dbutils.widgets.text("core_catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("core_schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
-dbutils.widgets.text("run_alphafold_job_id", "167486110869223", "AlphaFold Job ID")
+dbutils.widgets.text("core_schema", "genesis_schema", "Schema")
+dbutils.widgets.text("bionemo_esm_finetune_job_id", "1234", "BioNeMo ESM Fine Tune Job ID")
+dbutils.widgets.text("bionemo_esm_inference_job_id", "1234", "BioNeMo ESM Inference Job ID")
 dbutils.widgets.text("user_email", "a@b.com", "Email of the user running the deploy")
 dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
 
@@ -31,9 +36,15 @@ print(gwb_library_path)
 
 catalog = dbutils.widgets.get("core_catalog")
 schema = dbutils.widgets.get("core_schema")
-run_alphafold_job_id = dbutils.widgets.get("run_alphafold_job_id")
+bionemo_esm_finetune_job_id = dbutils.widgets.get("bionemo_esm_finetune_job_id")
+bionemo_esm_inference_job_id = dbutils.widgets.get("bionemo_esm_inference_job_id")
 user_email = dbutils.widgets.get("user_email")
 sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
+
+# COMMAND ----------
+
+print(f"Catalog: {catalog}")
+print(f"Schema: {schema}")
 
 # COMMAND ----------
 
@@ -45,20 +56,42 @@ initialize(core_catalog_name = catalog, core_schema_name = schema, sql_warehouse
 
 spark.sql(f"USE CATALOG {catalog}")
 
-spark.sql(f"CREATE SCHEMA IF NOT EXISTS {schema}")
-
 spark.sql(f"USE SCHEMA {schema}")
 
 # COMMAND ----------
 
+spark.sql("DROP TABLE IF EXISTS bionemo_weights")
+
 spark.sql(f"""
-INSERT INTO settings VALUES
-('run_alphafold_job_id', '{run_alphafold_job_id}', 'protein_studies')
+CREATE TABLE  bionemo_weights (
+    ft_id BIGINT ,
+    ft_label STRING,
+    model_type STRING,
+    variant STRING,
+    experiment_name STRING,
+    run_id STRING,
+    weights_volume_location STRING,
+    created_by STRING,
+    created_datetime TIMESTAMP,
+    is_active BOOLEAN,
+    deactivated_timestamp TIMESTAMP
+)
 """)
+
+# COMMAND ----------
+
+query= f"""
+    INSERT INTO settings VALUES
+    ('bionemo_esm_finetune_job_id', '{bionemo_esm_finetune_job_id}', 'bionemo'),
+    ('bionemo_esm_inference_job_id', '{bionemo_esm_inference_job_id}' , 'bionemo')
+"""
+
+spark.sql(query)
 
 # COMMAND ----------
 
 #Grant app permission to run this job
 from genesis_workbench.workbench import set_app_permissions_for_job
 
-set_app_permissions_for_job(job_id=run_alphafold_job_id, user_email=user_email)
+set_app_permissions_for_job(job_id=bionemo_esm_finetune_job_id, user_email=user_email)
+set_app_permissions_for_job(job_id=bionemo_esm_inference_job_id, user_email=user_email)

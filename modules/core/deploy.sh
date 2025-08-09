@@ -2,13 +2,14 @@
 #!/bin/bash
 set -e
 
-if [ "$#" -lt 1 ]; then
-    echo "Usage: $0 <env> "
-    echo 'Example: deploy dev'
+if [ "$#" -lt 2 ]; then
+    echo "Usage: deploy <env> <cloud>"
+    echo 'Example: deploy dev aws'
     exit 1
 fi
 
 ENV=$1
+CLOUD=$2
 
 source env.env
 
@@ -81,7 +82,9 @@ else
 fi
 set -e
 
-EXTRA_PARAMS=$(paste -sd, "env.env")
+EXTRA_PARAMS_CLOUD=$(paste -sd, "$CLOUD.env")
+EXTRA_PARAMS_GENERAL=$(paste -sd, "env.env")
+EXTRA_PARAMS="$EXTRA_PARAMS_GENERAL,$EXTRA_PARAMS_CLOUD"
 
 echo "Extra Params: $EXTRA_PARAMS"
 
@@ -98,18 +101,21 @@ echo ""
 
 databricks bundle deploy -t $ENV --var="$EXTRA_PARAMS"
 
-echo ""
-echo "▶️ Running initialization job"
-echo ""
+#Run init job only if not deployed before
+if [[ ! -e ".deployed" ]]; then
 
-databricks bundle run -t $ENV initial_setup_job --var="$EXTRA_PARAMS"
+  echo ""
+  echo "▶️ Running initialization job"
+  echo ""
+
+  databricks bundle run -t $ENV initialize_core_job --var="$EXTRA_PARAMS"
+fi
 
 echo ""
 echo "▶️ Deploying UI Application"
 echo ""
 
 databricks bundle run -t $ENV genesis_workbench_app --var="$EXTRA_PARAMS"
-
 
 echo ""
 echo "▶️ Copying libraries to UC Volume"
