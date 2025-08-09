@@ -2,15 +2,16 @@
 
 set -e
 
-if [ "$#" -lt 2 ]; then
-    echo "Usage: $0 <path_to_working_directory> <env>  <additional build variables>"
-    echo 'Example: deploy core dev --var="dev_user_prefix=scn,core_catalog_name=genesis_workbench,core_schema_name=dev_srijit_nair_dbx_genesis_workbench_core"'
+if [ "$#" -lt 3 ]; then
+    echo "Usage: deploy <module> <env> <cloud> "
+    echo 'Example: deploy core dev aws'
     exit 1
 fi
 
 
 CWD=$1
 ENV=$2
+CLOUD=$3
 
 
 if [[ "$CWD" != "core" && ! -f "modules/core/.deployed" ]]; then
@@ -30,8 +31,9 @@ echo "================================"
 
 cd modules/$CWD
 chmod +x deploy.sh
-./deploy.sh $ENV
+./deploy.sh $ENV $CLOUD
 
+cd ../..
 echo "======================================="
 echo "⚙️ Running initialization job for $CWD"
 echo "======================================="
@@ -39,7 +41,10 @@ echo "======================================="
 cd modules/core
 
 source env.env
-EXTRA_PARAMS=$(paste -sd, "env.env")
+
+EXTRA_PARAMS_CLOUD=$(paste -sd, "$CLOUD.env")
+EXTRA_PARAMS_GENERAL=$(paste -sd, "env.env")
+EXTRA_PARAMS="$EXTRA_PARAMS_GENERAL,$EXTRA_PARAMS_CLOUD"
 user_email=$(databricks current-user me | jq '.emails[0].value' | tr -d '"')
         
 databricks bundle run -t $ENV --params "module=$CWD" initialize_module_job --var="$EXTRA_PARAMS"

@@ -18,8 +18,7 @@ with st.spinner("Initializing"):
         )
         st.session_state["system_settings_initialized"] = "true"
         deployed_modules = get_deployed_modules()
-        if "BIONEMO_AVAILABLE" in os.environ and os.environ["BIONEMO_AVAILABLE"]=="true":
-            deployed_modules.append("bionemo")
+       
         st.session_state["deployed_modules"] = deployed_modules
         
     deployed_modules = st.session_state["deployed_modules"]

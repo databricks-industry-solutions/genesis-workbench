@@ -27,7 +27,7 @@ resources:
           default: ${var.core_schema_name}
         - name: sql_warehouse_id
           default: ${var.sql_warehouse_id}          
-        - name: model_category
+        - name: module
           default: 'none' 
         - name: destroy_user_email
           default: a@b.com

@@ -31,15 +31,4 @@ resources:
             id: ${resources.jobs.deploy_model_job.id}
             permission: "CAN_MANAGE_RUN"
 
-        - name: "bionemo_esm_finetune_job"
-          job:
-            id: ${resources.jobs.bionemo_esm_finetune.id}
-            permission: "CAN_MANAGE_RUN"
-
-        - name: "bionemo_esm_inference_job"
-          job:
-            id: ${resources.jobs.bionemo_esm_inference.id}
-            permission: "CAN_MANAGE_RUN"
-    
-
 

@@ -239,8 +239,11 @@ def get_user_settings(user_email: str) -> dict:
     query = f"SELECT key,value FROM {core_catalog_name}.{core_schema_name}.user_settings WHERE user_email='{user_email}'"
 
     result_df = execute_select_query(query)
-    result_dict = dict(zip(result_df['key'], result_df['value']))
-    return result_dict
+    
+    if len(result_df>0):
+        return dict(zip(result_df['key'], result_df['value']))
+    else:
+        return {}
 
 def save_user_settings(user_email:str, user_settings:dict):
     core_catalog_name = os.environ["CORE_CATALOG_NAME"]

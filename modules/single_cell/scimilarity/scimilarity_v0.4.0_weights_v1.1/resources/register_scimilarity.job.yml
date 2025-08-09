@@ -20,23 +20,23 @@ resources:
             - task_key: wget_SCimilarity_task
           job_cluster_key: job_cluster_gene_order
           notebook_task:
-            notebook_path: ../notebooks/02_register_GeneOrder.py ###
+            notebook_path: ../notebooks/02_register_GeneOrder.py 
         
         - task_key: register_GetEmbedding_task
           depends_on: 
             - task_key: wget_SCimilarity_task
           job_cluster_key: job_cluster_get_embedding
           notebook_task:
-            notebook_path: ../notebooks/03_register_GetEmbedding.py ###
+            notebook_path: ../notebooks/03_register_GetEmbedding.py 
         
         - task_key: register_SearchNearest_task
           depends_on: 
             - task_key: wget_SCimilarity_task
           job_cluster_key: job_cluster_search_nearest
           notebook_task:
-            notebook_path: ../notebooks/04_register_SearchNearest.py ###
+            notebook_path: ../notebooks/04_register_SearchNearest.py 
 
-        #this task need serverless runtime with python 3.11
+        #this task can utilize serverless runtime with python 3.11
         - task_key: update_model_catalog_scimilarity_models_task
           depends_on: 
             - task_key: "register_GeneOrder_task"
@@ -56,25 +56,25 @@ resources:
         - name: schema
           default: ${var.core_schema_name}
         - name: model_name
-          default: SCimilarity ###
+          default: SCimilarity
         - name: cache_dir
-          default: ${resources.volumes.scimilarity.name} ###
+          default: ${resources.volumes.scimilarity.name} 
         - name: experiment_name
-          default: ${var.module_registration_experiment_name} ### 
+          default: ${var.module_registration_experiment_name} 
         - name: sql_warehouse_id
           default: ${var.sql_warehouse_id}
         - name: user_email
           default: ${var.current_user}
+        - name: workload_type
+          default: ${var.gpu_large_setting}
 
       job_clusters:
         - job_cluster_key: job_cluster_wget
           new_cluster:
             num_workers: 0
-            ### NEED larger compute for SCimilarity
-            node_type_id: 'Standard_NV36ads_A10_v5' 
-            driver_node_type_id: 'Standard_NV36ads_A10_v5'  
+            node_type_id: ${var.a10_node_type} 
+            driver_node_type_id: ${var.a10_node_type}  
             spark_version: '14.3.x-gpu-ml-scala2.12'
-            # spark_version: '14.3.x-cpu-ml-scala2.12'
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             single_user_name: ${workspace.current_user.userName}
@@ -88,10 +88,9 @@ resources:
           new_cluster:
             num_workers: 0
             ### NEED larger compute for SCimilarity
-            node_type_id: 'Standard_NV36ads_A10_v5'  
-            driver_node_type_id: 'Standard_NV36ads_A10_v5'  
+            node_type_id: ${var.a10_node_type}  
+            driver_node_type_id: ${var.a10_node_type}  
             spark_version: '14.3.x-gpu-ml-scala2.12'
-            # spark_version: '14.3.x-cpu-ml-scala2.12'
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             single_user_name: ${workspace.current_user.userName}
@@ -105,10 +104,9 @@ resources:
           new_cluster:
             num_workers: 0
             ### NEED larger compute for SCimilarity
-            node_type_id: 'Standard_NV36ads_A10_v5'  
-            driver_node_type_id: 'Standard_NV36ads_A10_v5' 
+            node_type_id: ${var.a10_node_type}   
+            driver_node_type_id: ${var.a10_node_type}  
             spark_version: '14.3.x-gpu-ml-scala2.12'
-            # spark_version: '14.3.x-cpu-ml-scala2.12'
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             single_user_name: ${workspace.current_user.userName}
@@ -122,10 +120,9 @@ resources:
           new_cluster:
             num_workers: 0
             ### NEED larger RAM compute for SCimilarity: search_nearest
-            node_type_id: 'Standard_NV36ads_A10_v5' # GPU 
-            driver_node_type_id: 'Standard_NV36ads_A10_v5' # GPU  
+            node_type_id: ${var.a10_node_type} 
+            driver_node_type_id: ${var.a10_node_type}   
             spark_version: '14.3.x-gpu-ml-scala2.12'
-            # spark_version: '14.3.x-cpu-ml-scala2.12'
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             single_user_name: ${workspace.current_user.userName}
@@ -134,25 +131,6 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
-
-             
-        # - job_cluster_key: job_cluster_A10_v5
-        #   new_cluster:
-        #     num_workers: 0
-        #     ### NEED larger compute for SCimilarity || maybe a larger RAM + cpu works too 
-        #     node_type_id: 'Standard_NV36ads_A10_v5' # Standard_NC16as_T4_v3 #'Standard_NC4as_T4_v3'  
-        #     driver_node_type_id: 'Standard_NV36ads_A10_v5' # Standard_NC16as_T4_v3 #'Standard_NC4as_T4_v3' 
-        #     spark_version: '14.3.x-gpu-ml-scala2.12'
-        #     enable_elastic_disk: true
-        #     data_security_mode: SINGLE_USER
-        #     single_user_name: ${workspace.current_user.userName}
-        #     spark_conf:
-        #       spark.databricks.cluster.profile: singleNode
-        #       spark.master: local[*]
-        #     custom_tags:
-        #       ResourceClass: SingleNode
-
-
 
         ## critical for model training 
         ## singleNode GPU options: ## Standard_NV36ads_A10_v5 #440gigs #'Standard_NC16as_T4_v3' #110gigs #'Standard_NC4as_T4_v3'  

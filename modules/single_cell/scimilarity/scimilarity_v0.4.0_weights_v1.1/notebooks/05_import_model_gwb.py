@@ -4,6 +4,8 @@ dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_mmt_core_test", "Schema") #dev_mmt_core_test# gets overwritten during DAB deployment 
 dbutils.widgets.text("user_email", "may.merkletan@databricks.com", "User Id/Email")
 dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
+dbutils.widgets.text("workload_type", "GPU_SMALL", "Workload Type for endpoints")
+
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
@@ -43,7 +45,7 @@ catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 user_email = dbutils.widgets.get("user_email")
 sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
-
+workload_type = dbutils.widgets.get("workload_type")
 
 # COMMAND ----------
 
@@ -71,14 +73,14 @@ from genesis_workbench.workbench import wait_for_job_run_completion
 # COMMAND ----------
 
 # DBTITLE 1,scimilarity_gene_order
-model_uc_name=f"{catalog}.{schema}.scimilarity_gene_order"
-model_version = get_latest_model_version(model_uc_name)
+model_uc_name_gene_order=f"{catalog}.{schema}.scimilarity_gene_order"
+model_version_gene_order = get_latest_model_version(model_uc_name_gene_order)
 
 
 gwb_model_id_gene_order = import_model_from_uc(user_email=user_email,
                     model_category=ModelCategory.SINGLE_CELL,
-                    model_uc_name=f"{catalog}.{schema}.scimilarity_gene_order",
-                    model_uc_version=model_version,
+                    model_uc_name=model_uc_name_gene_order,
+                    model_uc_version=model_version_gene_order,
                     model_name="SCimilarity_Gene_Order",
                     model_display_name="SCimilarity:GeneOrder",
                     model_source_version="v0.4.0_weights_v1.1",
@@ -94,7 +96,7 @@ run_id_gene_order = deploy_model(user_email=user_email,
                 output_adapter_str="none",
                 sample_input_data_dict_as_json="none",
                 sample_params_as_json="none",
-                workload_type="GPU_LARGE",
+                workload_type=workload_type,
                 workload_size="Small")
 
 # COMMAND ----------
@@ -105,13 +107,13 @@ run_id_gene_order = deploy_model(user_email=user_email,
 # COMMAND ----------
 
 # DBTITLE 1,scimilarity_get_embedding
-model_uc_name=f"{catalog}.{schema}.scimilarity_get_embedding"
-model_version = get_latest_model_version(model_uc_name)
+model_uc_name_embedding=f"{catalog}.{schema}.scimilarity_get_embedding"
+model_version_embedding = get_latest_model_version(model_uc_name_embedding)
 
 gwb_model_id_get_embedding = import_model_from_uc(user_email=user_email,
                     model_category=ModelCategory.SINGLE_CELL,
-                    model_uc_name=f"{catalog}.{schema}.scimilarity_get_embedding",
-                    model_uc_version=model_version,
+                    model_uc_name=model_uc_name_embedding,
+                    model_uc_version=model_version_embedding,
                     model_name="SCimilarity_Get_Embedding",
                     model_display_name="SCimilarity:GetEmbedding",
                     model_source_version="v0.4.0_weights_v1.1",
@@ -127,7 +129,7 @@ run_id_get_embedding = deploy_model(user_email=user_email,
                 output_adapter_str="none",
                 sample_input_data_dict_as_json="none",
                 sample_params_as_json="none",
-                workload_type="GPU_LARGE",
+                workload_type=workload_type,
                 workload_size="Small")
 
 # COMMAND ----------
@@ -138,14 +140,13 @@ run_id_get_embedding = deploy_model(user_email=user_email,
 # COMMAND ----------
 
 # DBTITLE 1,scimilarity_search_nearest
-model_uc_name=f"{catalog}.{schema}.scimilarity_search_nearest"
-model_version = get_latest_model_version(model_uc_name)
-
+model_uc_name_search=f"{catalog}.{schema}.scimilarity_search_nearest"
+model_version_search = get_latest_model_version(model_uc_name_search)
 
 gwb_model_id_search = import_model_from_uc(user_email=user_email,
                     model_category=ModelCategory.SINGLE_CELL,
-                    model_uc_name=f"{catalog}.{schema}.scimilarity_search_nearest",
-                    model_uc_version=model_version,
+                    model_uc_name=model_uc_name_search,
+                    model_uc_version=model_version_search,
                     model_name="SCimilarity_Search_Nearest",
                     model_display_name="SCimilarity:SearchNearest",
                     model_source_version="v0.4.0_weights_v1.1",
@@ -161,7 +162,7 @@ run_id_search = deploy_model(user_email=user_email,
                 output_adapter_str="none",
                 sample_input_data_dict_as_json="none",
                 sample_params_as_json="none",
-                workload_type="GPU_LARGE",
+                workload_type=workload_type,
                 workload_size="Small")
 
 # COMMAND ----------
