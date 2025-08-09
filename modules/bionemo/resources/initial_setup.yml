@@ -8,7 +8,7 @@ resources:
           - ${var.current_user}
 
       tasks:
-        - task_key: create_table_task
+        - task_key: initialize_task
           notebook_task:
             notebook_path: ../../notebooks/initialize.py
           max_retries: 0

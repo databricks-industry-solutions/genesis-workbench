@@ -9,7 +9,6 @@ dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
 dbutils.widgets.text("bionemo_esm_finetune_job_id", "1234", "BioNeMo ESM Fine Tune Job ID")
 dbutils.widgets.text("bionemo_esm_inference_job_id", "1234", "BioNeMo ESM Inference Job ID")
-dbutils.widgets.text("databricks_app_name", "dev-scn-genesis-workbench", "UI Application name")
 dbutils.widgets.text("dev_user_prefix", "abc", "Prefix for resources")
 dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "Email of the user running the deploy")
 
@@ -41,7 +40,6 @@ catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 bionemo_esm_finetune_job_id = dbutils.widgets.get("bionemo_esm_finetune_job_id")
 bionemo_esm_inference_job_id = dbutils.widgets.get("bionemo_esm_inference_job_id")
-databricks_app_name = dbutils.widgets.get("databricks_app_name")
 dev_user_prefix = dbutils.widgets.get("dev_user_prefix")
 user_email = dbutils.widgets.get("user_email")
 
@@ -64,8 +62,10 @@ spark.sql(f"USE SCHEMA {schema}")
 
 # COMMAND ----------
 
+spark.sql("DROP TABLE IF EXISTS bionemo_weights")
+
 spark.sql(f"""
-CREATE TABLE IF NOT EXISTS bionemo_weights (
+CREATE TABLE  bionemo_weights (
     ft_id BIGINT ,
     ft_label STRING,
     model_type STRING,
