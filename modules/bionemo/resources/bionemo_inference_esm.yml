@@ -15,9 +15,9 @@ resources:
           max_retries: 0 
 
       parameters:
-        - name: catalog
+        - name: core_catalog
           default: ${var.core_catalog_name}
-        - name: schema
+        - name: core_schema
           default: ${var.core_schema_name}
         - name: is_base_model
           default: true

@@ -15,9 +15,9 @@ resources:
           max_retries: 0 
 
       parameters:
-        - name: catalog
+        - name: core_catalog
           default: ${var.core_catalog_name}
-        - name: schema
+        - name: core_schema
           default: ${var.core_schema_name}
         - name: esm_variant
           default: 650M
@@ -29,10 +29,6 @@ resources:
           default: false
         - name: finetune_label
           default: esm_650m_ft_xyz
-        - name: core_catalog
-          default: genesis_workbench
-        - name: core_schema
-          default: dev_srijit_nair_dbx_genesis_workbench_core
         - name: model_volume
           default: ${resources.volumes.bionemo_dir.name}
         - name: task_type

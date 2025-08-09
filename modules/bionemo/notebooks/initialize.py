@@ -1,15 +1,14 @@
 # Databricks notebook source
-# MAGIC %pip install databricks-sdk==0.61.0
-# MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
 
 #parameters to the notebook
-dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("schema", "genesis_schema", "Schema")
+dbutils.widgets.text("core_catalog", "genesis_workbench", "Catalog")
+dbutils.widgets.text("core_schema", "genesis_schema", "Schema")
 dbutils.widgets.text("bionemo_esm_finetune_job_id", "1234", "BioNeMo ESM Fine Tune Job ID")
 dbutils.widgets.text("bionemo_esm_inference_job_id", "1234", "BioNeMo ESM Inference Job ID")
 dbutils.widgets.text("user_email", "a@b.com", "Email of the user running the deploy")
+dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
 
 catalog = dbutils.widgets.get("core_catalog")
 schema = dbutils.widgets.get("core_schema")
@@ -35,11 +34,12 @@ print(gwb_library_path)
 
 # COMMAND ----------
 
-catalog = dbutils.widgets.get("catalog")
-schema = dbutils.widgets.get("schema")
+catalog = dbutils.widgets.get("core_catalog")
+schema = dbutils.widgets.get("core_schema")
 bionemo_esm_finetune_job_id = dbutils.widgets.get("bionemo_esm_finetune_job_id")
 bionemo_esm_inference_job_id = dbutils.widgets.get("bionemo_esm_inference_job_id")
 user_email = dbutils.widgets.get("user_email")
+sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
 
 # COMMAND ----------
 
@@ -48,7 +48,9 @@ print(f"Schema: {schema}")
 
 # COMMAND ----------
 
-assert catalog and schema, "Catalog and schema must be provided"
+from genesis_workbench.workbench import initialize
+databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
+initialize(core_catalog_name = catalog, core_schema_name = schema, sql_warehouse_id = sql_warehouse_id, token = databricks_token)
 
 # COMMAND ----------
 

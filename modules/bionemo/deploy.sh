@@ -35,4 +35,5 @@ echo "▶️ [BioNeMo] Running model registration job as a backend task"
 echo "🚨 This job might take a long time to finish. See Jobs & Pipeline tab for status"
 echo ""
 
-databricks bundle run -t $ENV initial_setup_job --var="$EXTRA_PARAMS"  --no-wait
+user_email=$(databricks current-user me | jq '.emails[0].value' | tr -d '"')
+databricks bundle run -t $ENV --params "user_email=$user_email" initial_setup_job --var="$EXTRA_PARAMS"  --no-wait
