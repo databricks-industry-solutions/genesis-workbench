@@ -1,19 +1,12 @@
 #!/bin/bash
 
-if [ "$#" -lt 2 ]; then
-    echo "Usage: $0 <env>  <additional build variables>"
-    echo 'Example: destroy dev --var="dev_user_prefix=scn"'
-    exit 1
-fi
-
-ENV=$1
-EXTRA_PARAMS=${@: 2}
+EXTRA_PARAMS=${@: 1}
 
 echo "=========================================================="
-echo "⚙️ Preparing to destroy module scgpt_v0.2.4 from $ENV"
+echo "⚙️ Preparing to destroy module scgpt_v0.2.4 "
 echo "=========================================================="
 
-databricks bundle destroy -t $ENV $EXTRA_PARAMS --auto-approve
+databricks bundle destroy $EXTRA_PARAMS --auto-approve
 
 if [ $? -eq 0 ]; then
     echo "✅ SUCCESS! Destroy complete."

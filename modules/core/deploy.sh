@@ -2,16 +2,16 @@
 #!/bin/bash
 set -e
 
-if [ "$#" -lt 2 ]; then
-    echo "Usage: deploy <env> <cloud>"
-    echo 'Example: deploy dev aws'
+if [ "$#" -lt 1 ]; then
+    echo "Usage: deploy <cloud>"
+    echo 'Example: deploy aws'
     exit 1
 fi
 
-ENV=$1
-CLOUD=$2
+CLOUD=$1
 
-source env.env
+source module.env
+source ../../application.env
 
 echo ""
 echo "▶️ Creating a secret scope"
@@ -82,9 +82,15 @@ else
 fi
 set -e
 
-EXTRA_PARAMS_CLOUD=$(paste -sd, "$CLOUD.env")
-EXTRA_PARAMS_GENERAL=$(paste -sd, "env.env")
+EXTRA_PARAMS_CLOUD=$(paste -sd, "../../$CLOUD.env")
+EXTRA_PARAMS_GENERAL=$(paste -sd, "../../application.env")
+
 EXTRA_PARAMS="$EXTRA_PARAMS_GENERAL,$EXTRA_PARAMS_CLOUD"
+
+if [[ -f "module.env" ]]; then
+    EXTRA_PARAMS_MODULE=$(paste -sd, "module.env")
+    EXTRA_PARAMS="$EXTRA_PARAMS,$EXTRA_PARAMS_MODULE"
+fi
 
 echo "Extra Params: $EXTRA_PARAMS"
 
@@ -93,13 +99,13 @@ echo ""
 echo "▶️ Validating bundle"
 echo ""
 
-databricks bundle validate -t $ENV --var="$EXTRA_PARAMS"
+databricks bundle validate --var="$EXTRA_PARAMS"
 
 echo ""
 echo "▶️ Deploying bundle"
 echo ""
 
-databricks bundle deploy -t $ENV --var="$EXTRA_PARAMS"
+databricks bundle deploy --var="$EXTRA_PARAMS"
 
 #Run init job only if not deployed before
 if [[ ! -e ".deployed" ]]; then
@@ -108,14 +114,14 @@ if [[ ! -e ".deployed" ]]; then
   echo "▶️ Running initialization job"
   echo ""
 
-  databricks bundle run -t $ENV initialize_core_job --var="$EXTRA_PARAMS"
+  databricks bundle run initialize_core_job --var="$EXTRA_PARAMS"
 fi
 
 echo ""
 echo "▶️ Deploying UI Application"
 echo ""
 
-databricks bundle run -t $ENV genesis_workbench_app --var="$EXTRA_PARAMS"
+databricks bundle run genesis_workbench_app --var="$EXTRA_PARAMS"
 
 echo ""
 echo "▶️ Copying libraries to UC Volume"

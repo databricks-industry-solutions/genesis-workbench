@@ -7,6 +7,9 @@ variables:
     description: Working directory or bundle root.
     default: /Users/${var.current_user}/.bundle/${bundle.name}/${bundle.target}
 
+  workspace_url:
+    description: Workspace url for deployment
+
   common_resource_tags:
     description: Resource tags
     default: 

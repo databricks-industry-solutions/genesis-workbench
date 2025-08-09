@@ -2,23 +2,19 @@
 
 set -e
 
-if [ "$#" -lt 3 ]; then
-    echo "Usage: deploy <module> <env> <cloud> "
-    echo 'Example: deploy core dev aws'
+if [ "$#" -lt 2 ]; then
+    echo "Usage: deploy <module> <cloud> "
+    echo 'Example: deploy core aws'
     exit 1
 fi
 
-
 CWD=$1
-ENV=$2
-CLOUD=$3
-
+CLOUD=$2
 
 if [[ "$CWD" != "core" && ! -f "modules/core/.deployed" ]]; then
     echo "🚫 Deploy core module first before installing sub-modules"
     exit 1
 fi
-
 
 echo "Installing Poetry"
 
@@ -29,9 +25,12 @@ echo "================================"
 echo "⚙️ Preparing to deploy module $CWD"
 echo "================================"
 
+source application.env
+
+
 cd modules/$CWD
 chmod +x deploy.sh
-./deploy.sh $ENV $CLOUD
+./deploy.sh $CLOUD
 
 cd ../..
 echo "======================================="
@@ -40,14 +39,19 @@ echo "======================================="
 
 cd modules/core
 
-source env.env
+EXTRA_PARAMS_CLOUD=$(paste -sd, "../../$CLOUD.env")
+EXTRA_PARAMS_GENERAL=$(paste -sd, "../../application.env")
 
-EXTRA_PARAMS_CLOUD=$(paste -sd, "$CLOUD.env")
-EXTRA_PARAMS_GENERAL=$(paste -sd, "env.env")
-EXTRA_PARAMS="$EXTRA_PARAMS_GENERAL,$EXTRA_PARAMS_CLOUD"
+if [[ -f "module.env" ]]; then
+    EXTRA_PARAMS_MODULE=$(paste -sd, "module.env")
+else
+    EXTRA_PARAMS_MODULE=''
+fi
+
+EXTRA_PARAMS="$EXTRA_PARAMS_GENERAL,$EXTRA_PARAMS_CLOUD,$EXTRA_PARAMS_MODULE"
 user_email=$(databricks current-user me | jq '.emails[0].value' | tr -d '"')
         
-databricks bundle run -t $ENV --params "module=$CWD" initialize_module_job --var="$EXTRA_PARAMS"
+databricks bundle run --params "module=$CWD" initialize_module_job --var="$EXTRA_PARAMS"
 
 cd ../..
 

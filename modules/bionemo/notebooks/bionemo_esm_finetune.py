@@ -10,6 +10,7 @@ dbutils.widgets.text("should_use_lora", "false", "Should use LORA")
 dbutils.widgets.text("finetune_label", "esm_650m_ft_xyz", "A label using which these finetune weights are saved")
 dbutils.widgets.text("core_catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("core_schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
+dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
 dbutils.widgets.text("model_volume", "bionemo", "Volume where weights are stored")
 
 dbutils.widgets.text("task_type", "regression", "Task type")
@@ -92,6 +93,7 @@ micro_batch_size = int(dbutils.widgets.get("micro_batch_size"))
 precision = dbutils.widgets.get("precision")
 user_email = dbutils.widgets.get("user_email")
 model_volume =  dbutils.widgets.get("model_volume")
+sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
 
 # COMMAND ----------
 
@@ -167,6 +169,10 @@ db_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().api
 #   print(f"Writing to {data_path}")
 #   df.to_csv(data_path, index=False)
 
+# COMMAND ----------
+
+from genesis_workbench.workbench import initialize
+initialize(core_catalog_name = catalog, core_schema_name = schema, sql_warehouse_id = sql_warehouse_id, token = db_token)
 
 # COMMAND ----------
 
@@ -199,6 +205,7 @@ from genesis_workbench.models import set_mlflow_experiment
 is_finetune_success = False
 os.environ["DATABRICKS_HOST"] = db_host
 os.environ["DATABRICKS_TOKEN"] = db_token
+
 os.environ["MLFLOW_ENABLE_SYSTEM_METRICS_LOGGING"] = "true"
 
 experiment = set_mlflow_experiment(experiment_tag=experiment_name, user_email=user_email)

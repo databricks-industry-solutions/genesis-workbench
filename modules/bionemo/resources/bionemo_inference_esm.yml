@@ -19,6 +19,8 @@ resources:
           default: ${var.core_catalog_name}
         - name: core_schema
           default: ${var.core_schema_name}
+        - name: sql_warehouse_id 
+          default: ${var.sql_warehouse_id}          
         - name: is_base_model
           default: true
         - name: esm_variant

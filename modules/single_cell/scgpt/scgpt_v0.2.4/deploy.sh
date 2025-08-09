@@ -2,14 +2,7 @@
 #!/bin/bash
 set -e
 
-if [ "$#" -lt 1 ]; then
-    echo "Usage: $0 <env> <additional build variables>"
-    echo 'Example: deploy dev --var="core_catalog_name=genesis_workbench,core_schema_name=dev_srijit_nair_dbx_genesis_workbench_core"'
-    exit 1
-fi
-
-ENV=$1
-EXTRA_PARAMS=${@: 2}
+EXTRA_PARAMS=${@: 1}
 
 echo ""
 echo "▶️ [scGPT] Validating bundle"
@@ -21,11 +14,11 @@ echo ""
 echo "▶️ [scGPT] Deploying bundle"
 echo ""
 
-databricks bundle deploy -t $ENV $EXTRA_PARAMS
+databricks bundle deploy $EXTRA_PARAMS
 
 echo ""
 echo "▶️ [scGPT] Running model registration job as a backend task"
 echo "🚨 This job might take a long time to finish. See Jobs & Pipeline tab for status"
 echo ""
 
-databricks bundle run -t $ENV register_scgpt $EXTRA_PARAMS --no-wait
+databricks bundle run register_scgpt $EXTRA_PARAMS --no-wait

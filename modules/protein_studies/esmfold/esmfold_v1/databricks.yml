@@ -6,32 +6,15 @@ include:
   - variables.yml
   - resources/*.yml
     
-# artifacts:
-#   esmfold:
-#     type: whl
-#     build: poetry build
-#     path: .
-
 targets:
-  dev:
-    mode: development
-    default: true
-    variables:
-      module_registration_experiment_name: "esmfold_genesis_workbench_modules"
-    workspace:
-      root_path: ${var.current_working_directory}
-      host: https://adb-830292400663869.9.azuredatabricks.net
-    permissions:
-      - user_name: ${var.current_user}
-        level: CAN_MANAGE
-
   prod:
     mode: production
+    default: true
     workspace:
-      host: https://adb-830292400663869.9.azuredatabricks.net
       root_path: ${var.current_working_directory}
+       #host: this will be read by DATABRICKS_HOST env variable
     permissions:
       - user_name: ${var.current_user}
         level: CAN_MANAGE
     run_as:
-      user_name: ${var.current_user}
+      user_name: ${var.current_user} #sp name should be used instead later.

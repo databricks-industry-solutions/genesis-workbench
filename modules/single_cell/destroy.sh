@@ -1,20 +1,17 @@
 #!/bin/bash
 set -e
 
-if [ "$#" -lt 2 ]; then
-    echo "Usage: $0 <env> <cloud>"
-    echo "Example: destroy dev aws"
-    exit 1
-fi
+CLOUD=$1
 
-ENV=$1
-CLOUD=$2
+EXTRA_PARAMS_CLOUD=$(paste -sd, "../../$CLOUD.env")
+EXTRA_PARAMS_GENERAL=$(paste -sd, "../../application.env")
 
-source env.env
-
-EXTRA_PARAMS_CLOUD=$(paste -sd, "$CLOUD.env")
-EXTRA_PARAMS_GENERAL=$(paste -sd, "env.env")
 EXTRA_PARAMS="$EXTRA_PARAMS_GENERAL,$EXTRA_PARAMS_CLOUD"
+
+if [[ -f "module.env" ]]; then
+    EXTRA_PARAMS_MODULE=$(paste -sd, "module.env")
+    EXTRA_PARAMS="$EXTRA_PARAMS,$EXTRA_PARAMS_MODULE"
+fi
 
 echo "Extra Params: $EXTRA_PARAMS"
 
@@ -23,10 +20,10 @@ echo "⚙️ Starting destroy of module Single Cell"
 for module in scgpt/scgpt_v0.2.4 scimilarity/scimilarity_v0.4.0_weights_v1.1
     do
         cd $module
-        echo "Running command destroy.sh $ENV --var=\"$EXTRA_PARAMS\" " 
+        echo "Running command destroy.sh --var=\"$EXTRA_PARAMS\" " 
         chmod +x destroy.sh
 
-        ./destroy.sh $ENV --var="$EXTRA_PARAMS"
+        ./destroy.sh --var="$EXTRA_PARAMS"
         cd ../..
     done
 
