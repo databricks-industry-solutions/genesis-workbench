@@ -6,7 +6,7 @@
 
 #parameters to the notebook
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
+dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("deploy_model_job_id", "1234", "Deploy Model Job ID")
 dbutils.widgets.text("admin_usage_dashboard_id", "1234", "ID of usage dashboard")
 dbutils.widgets.text("application_secret_scope", "dbx_genesis_workbench", "Secret Scope used by application")

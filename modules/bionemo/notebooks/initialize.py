@@ -6,11 +6,11 @@
 
 #parameters to the notebook
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
+dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("bionemo_esm_finetune_job_id", "1234", "BioNeMo ESM Fine Tune Job ID")
 dbutils.widgets.text("bionemo_esm_inference_job_id", "1234", "BioNeMo ESM Inference Job ID")
 dbutils.widgets.text("dev_user_prefix", "abc", "Prefix for resources")
-dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "Email of the user running the deploy")
+dbutils.widgets.text("user_email", "a@b.com", "Email of the user running the deploy")
 
 catalog = dbutils.widgets.get("core_catalog")
 schema = dbutils.widgets.get("core_schema")

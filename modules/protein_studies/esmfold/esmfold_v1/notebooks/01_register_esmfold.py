@@ -5,7 +5,7 @@
 # COMMAND ----------
 
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
+dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("model_name", "esmfold", "Model Name")
 dbutils.widgets.text("experiment_name", "dbx_genesis_workbench_modules", "Experiment Name")
 dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id")

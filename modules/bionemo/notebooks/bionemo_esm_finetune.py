@@ -23,7 +23,7 @@ dbutils.widgets.text("lr_multiplier", "1e2" , "Learning rate multiplier")
 #dbutils.widgets.text("scale_lr_layer", "regression_head" ,"Layers to scale Learning Rate")
 dbutils.widgets.text("micro_batch_size", "2" , "Micro batch size")
 dbutils.widgets.text("precision", "bf16-mixed", "Precision")
-dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Email")
+dbutils.widgets.text("user_email", "a@b.com", "User Email")
 
 catalog = dbutils.widgets.get("core_catalog")
 schema = dbutils.widgets.get("core_schema")

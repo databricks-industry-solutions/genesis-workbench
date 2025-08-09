@@ -2,7 +2,7 @@
 dbutils.widgets.text("core_catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("core_schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
 dbutils.widgets.text("run_alphafold_job_id", "167486110869223", "AlphaFold Job ID")
-dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "Email of the user running the deploy")
+dbutils.widgets.text("user_email", "a@b.com", "Email of the user running the deploy")
 dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
 
 catalog = dbutils.widgets.get("core_catalog")

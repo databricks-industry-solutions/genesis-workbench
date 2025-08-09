@@ -1,7 +1,7 @@
 # Databricks notebook source
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
-dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Id/Email")
+dbutils.widgets.text("schema", "genesis_schema", "Schema")
+dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
 dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
 dbutils.widgets.text("workload_type", "GPU_SMALL", "Workload Type for endpoints")
 
