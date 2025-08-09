@@ -102,14 +102,13 @@ echo ""
 echo "▶️ Running initialization job"
 echo ""
 
-databricks bundle run -t $ENV initial_setup_job --var="$EXTRA_PARAMS"
+databricks bundle run -t $ENV initialize_core_job --var="$EXTRA_PARAMS"
 
 echo ""
 echo "▶️ Deploying UI Application"
 echo ""
 
-databricks bundle run -t $ENV genesis_workbench_app --var="$EXTRA_PARAMS"
-
+#databricks bundle run -t $ENV genesis_workbench_app --var="$EXTRA_PARAMS"
 
 echo ""
 echo "▶️ Copying libraries to UC Volume"

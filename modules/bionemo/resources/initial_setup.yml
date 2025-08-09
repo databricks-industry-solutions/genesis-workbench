@@ -1,0 +1,39 @@
+resources:
+  jobs:
+    initial_setup_job:
+      name: dbx_bionemo_initial_setup
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: create_table_task
+          notebook_task:
+            notebook_path: ../../notebooks/initialize.py
+          max_retries: 0
+          timeout_seconds: 600 
+
+      environments:
+        - environment_key: Default
+          spec:
+            client: '1'
+            dependencies:
+              - ../../library/genesis_workbench/dist/*.whl
+              - databricks-sdk==0.50.0
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: bionemo_esm_finetune_job_id
+          default: ${resources.jobs.bionemo_esm_finetune.id}
+        - name: bionemo_esm_inference_job_id
+          default: ${resources.jobs.bionemo_esm_inference.id}
+        - name: databricks_app_name
+          default: ${var.app_name}
+        - name: dev_user_prefix
+          default: ${var.dev_user_prefix}       
+
+      tags: ${var.common_resource_tags}

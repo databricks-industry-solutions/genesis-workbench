@@ -33,6 +33,8 @@ resources:
           default: genesis_workbench
         - name: core_schema
           default: dev_srijit_nair_dbx_genesis_workbench_core
+        - name: model_volume
+          default: ${resources.volumes.bionemo_dir.name}
         - name: task_type
           default: regression
         - name: mlp_ft_dropout
@@ -62,9 +64,9 @@ resources:
         - job_cluster_key: job_cluster
           new_cluster:
             num_workers: 0
-            node_type_id: ${var.bionemo_cluster_a10_nodetype}
-            driver_node_type_id: ${var.bionemo_cluster_a10_nodetype}
-            spark_version: ${var.bionemo_cluster_dbr_version}
+            node_type_id: ${var.a10_node_type}
+            driver_node_type_id: ${var.a10_node_type}
+            spark_version: 15.4.x-scala2.12
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             single_user_name: ${workspace.current_user.userName}

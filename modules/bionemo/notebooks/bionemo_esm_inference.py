@@ -20,7 +20,6 @@ dbutils.widgets.text("user_email", "a@b.com", "User Email")
 
 catalog = dbutils.widgets.get("core_catalog")
 schema = dbutils.widgets.get("core_schema")
-                                  
 
 # COMMAND ----------
 

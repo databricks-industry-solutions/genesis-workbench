@@ -125,7 +125,8 @@ spark.sql("DROP TABLE IF EXISTS settings")
 spark.sql(f"""
 CREATE TABLE settings (
     key STRING,
-    value STRING
+    value STRING,
+    module STRING
 )
 """)
 
@@ -133,12 +134,10 @@ CREATE TABLE settings (
 
 query= f"""
     INSERT INTO settings VALUES
-    ('bionemo_esm_finetune_job_id', '{bionemo_esm_finetune_job_id}'),
-    ('bionemo_esm_inference_job_id', '{bionemo_esm_inference_job_id}'),
-    ('admin_usage_dashboard_id', '{admin_usage_dashboard_id}'),
-    ('databricks_app_name', '{databricks_app_name}'),    
-    ('deploy_model_job_id', '{deploy_model_job_id}'),
-    ('secret_scope', '{secret_scope}')
+    ('admin_usage_dashboard_id', '{admin_usage_dashboard_id}', 'core'),
+    ('databricks_app_name', '{databricks_app_name}','core'),    
+    ('deploy_model_job_id', '{deploy_model_job_id}', 'core'),
+    ('secret_scope', '{secret_scope}', 'core')
 """
 
 if dev_user_prefix:

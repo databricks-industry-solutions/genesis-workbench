@@ -1,16 +1,16 @@
 resources:
   jobs:
-    initial_setup_job:
-      name: dbx_gwb_initial_setup
+    initialize_core_job:
+      name: dbx_gwb_initialize_core
 
       email_notifications:
         on_failure:
           - ${var.current_user}
 
       tasks:
-        - task_key: create_table_task
+        - task_key: initialize_core_task
           notebook_task:
-            notebook_path: ../../notebooks/initialize.py
+            notebook_path: ../../notebooks/initialize_core.py
           max_retries: 0
 
         - task_key: "setup_permissions"

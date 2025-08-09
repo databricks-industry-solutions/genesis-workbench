@@ -53,7 +53,7 @@ spark.sql(f"USE SCHEMA {schema}")
 
 spark.sql(f"""
 INSERT INTO settings VALUES
-('run_alphafold_job_id', '{run_alphafold_job_id}')
+('run_alphafold_job_id', '{run_alphafold_job_id}', 'protein_studies')
 """)
 
 # COMMAND ----------

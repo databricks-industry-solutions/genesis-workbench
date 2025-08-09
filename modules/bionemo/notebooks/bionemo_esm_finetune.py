@@ -10,6 +10,7 @@ dbutils.widgets.text("should_use_lora", "false", "Should use LORA")
 dbutils.widgets.text("finetune_label", "esm_650m_ft_xyz", "A label using which these finetune weights are saved")
 dbutils.widgets.text("core_catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("core_schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
+dbutils.widgets.text("model_volume", "bionemo", "Volume where weights are stored")
 
 dbutils.widgets.text("task_type", "regression", "Task type")
 dbutils.widgets.text("mlp_ft_dropout", "0.25" , "Dropout")
@@ -90,6 +91,7 @@ scale_lr_layer = "regression_head" if task_type=="regression" else "classificati
 micro_batch_size = int(dbutils.widgets.get("micro_batch_size"))
 precision = dbutils.widgets.get("precision")
 user_email = dbutils.widgets.get("user_email")
+model_volume =  dbutils.widgets.get("model_volume")
 
 # COMMAND ----------
 
@@ -102,7 +104,7 @@ os.makedirs(work_dir + "/data/val")
 os.makedirs(work_dir + "/ft_weights")
 
 ft_weights_directory = f"{work_dir}/ft_weights"
-ft_weights_volume_location = f"/Volumes/{catalog}/{schema}/model_weights/esm2/{esm_variant}/{finetune_label}"
+ft_weights_volume_location = f"/Volumes/{catalog}/{schema}/{model_volume}/esm2/{esm_variant}/{finetune_label}"
 dbutils.fs.rm(ft_weights_volume_location, True)
 dbutils.fs.mkdirs(ft_weights_volume_location)
 

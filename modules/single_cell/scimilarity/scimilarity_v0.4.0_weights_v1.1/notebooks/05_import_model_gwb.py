@@ -73,8 +73,6 @@ from genesis_workbench.workbench import wait_for_job_run_completion
 # DBTITLE 1,scimilarity_gene_order
 model_uc_name=f"{catalog}.{schema}.scimilarity_gene_order"
 model_version = get_latest_model_version(model_uc_name)
-model_uri = f"models:/{model_uc_name}/{model_version}"
-print(model_uri)
 
 
 gwb_model_id_gene_order = import_model_from_uc(user_email=user_email,
@@ -109,8 +107,6 @@ run_id_gene_order = deploy_model(user_email=user_email,
 # DBTITLE 1,scimilarity_get_embedding
 model_uc_name=f"{catalog}.{schema}.scimilarity_get_embedding"
 model_version = get_latest_model_version(model_uc_name)
-model_uri = f"models:/{model_uc_name}/{model_version}"
-print(model_uri)
 
 gwb_model_id_get_embedding = import_model_from_uc(user_email=user_email,
                     model_category=ModelCategory.SINGLE_CELL,
@@ -144,8 +140,7 @@ run_id_get_embedding = deploy_model(user_email=user_email,
 # DBTITLE 1,scimilarity_search_nearest
 model_uc_name=f"{catalog}.{schema}.scimilarity_search_nearest"
 model_version = get_latest_model_version(model_uc_name)
-model_uri = f"models:/{model_uc_name}/{model_version}"
-print(model_uri)
+
 
 gwb_model_id_search = import_model_from_uc(user_email=user_email,
                     model_category=ModelCategory.SINGLE_CELL,

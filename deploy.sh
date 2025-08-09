@@ -32,6 +32,20 @@ cd modules/$CWD
 chmod +x deploy.sh
 ./deploy.sh $ENV
 
+echo "======================================="
+echo "⚙️ Running initialization job for $CWD"
+echo "======================================="
+
+cd modules/core
+
+source env.env
+EXTRA_PARAMS=$(paste -sd, "env.env")
+user_email=$(databricks current-user me | jq '.emails[0].value' | tr -d '"')
+        
+databricks bundle run -t $ENV --params "module=$CWD" initialize_module_job --var="$EXTRA_PARAMS"
+
+cd ../..
+
 if [ $? -eq 0 ]; then
     echo "================================"
     echo "✅ SUCCESS! Deployment complete."

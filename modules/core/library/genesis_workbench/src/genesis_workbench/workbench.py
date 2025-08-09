@@ -194,28 +194,42 @@ def wait_for_job_run_completion(run_id: int, timeout: int = 600, poll_interval: 
 
         time.sleep(poll_interval)
 
+def get_deployed_modules():
+    """ Get deployed modules from model table"""
+    
+    return_results = []
+    core_catalog_name = os.environ["CORE_CATALOG_NAME"]
+    core_schema_name = os.environ["CORE_SCHEMA_NAME"]
+    query = f"""
+        SELECT DISTINCT module FROM  {core_catalog_name}.{core_schema_name}.settings
+    """
+    result_df = execute_select_query(query)
+    
+    if len(result_df) > 0:
+        return_results = result_df.iloc[:, 0].tolist()
+
+    return return_results
+
+
 
 def initialize(core_catalog_name:str, core_schema_name:str, sql_warehouse_id:str, token=None):
     """Initilializes the env variables required for workbench"""
 
-    if not "___ENV_SET" in os.environ:
-        print("✳️ Initializing Genesis Workbench")
+    print("✳️ Initializing Genesis Workbench")
 
-        os.environ["CORE_CATALOG_NAME"]=core_catalog_name
-        os.environ["CORE_SCHEMA_NAME"]=core_schema_name
-        os.environ["SQL_WAREHOUSE"]=sql_warehouse_id
+    os.environ["CORE_CATALOG_NAME"]=core_catalog_name
+    os.environ["CORE_SCHEMA_NAME"]=core_schema_name
+    os.environ["SQL_WAREHOUSE"]=sql_warehouse_id
 
-        if token:
-            os.environ["IS_TOKEN_AUTH"]="Y"
-            os.environ["DATABRICKS_TOKEN"]=token
+    if token:
+        os.environ["IS_TOKEN_AUTH"]="Y"
+        os.environ["DATABRICKS_TOKEN"]=token
 
-        query = f"SELECT * FROM {core_catalog_name}.{core_schema_name}.settings"
-            
-        result_df = execute_select_query(query)
-        for idx, row in result_df.iterrows():
-            os.environ[ str(row['key']).upper()] = str(row['value'])
-
-        os.environ["___ENV_SET"] = "TRUE"
+    query = f"SELECT * FROM {core_catalog_name}.{core_schema_name}.settings"
+        
+    result_df = execute_select_query(query)
+    for idx, row in result_df.iterrows():
+        os.environ[ str(row['key']).upper()] = str(row['value'])
 
 
 def get_user_settings(user_email: str) -> dict:
@@ -283,3 +297,4 @@ def set_app_permissions_for_endpoint(endpoint_name:str):
         serving_endpoint_id=endpoint_id,
         access_control_list=acl
     )
+

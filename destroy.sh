@@ -19,20 +19,20 @@ read -p "Do you wish to continue? (y/n): " answer
 
 if [[ "$answer" =~ ^([yY][eE][sS]|[yY])$ ]]; then
 
-    # if [[ "$CWD" == "core" ]]; then
-    #     echo "Checking for dependencies"
-    #     find modules -type d | while read -r dir; do
-    #         if [[ "$(basename "$dir")" == "core" ]]; then
-    #             continue
-    #         fi
+    if [[ "$CWD" == "core" ]]; then
+        echo "Checking for dependencies"
+        find modules -type d | while read -r dir; do
+            if [[ "$(basename "$dir")" == "core" ]]; then
+                continue
+            fi
 
-    #         if [[ -e "$dir/.deployed" ]]; then
-    #             echo "🚫 Deployment exist in $dir. Cannot remove core module"
-    #             exit 1
-    #         fi
-    #     done
+            if [[ -e "$dir/.deployed" ]]; then
+                echo "🚫 Deployment exist in $dir. Cannot remove core module"
+                exit 1
+            fi
+        done
 
-    # fi
+    fi
 
     cd modules/$CWD
     chmod +x destroy.sh
@@ -47,8 +47,8 @@ if [[ "$answer" =~ ^([yY][eE][sS]|[yY])$ ]]; then
         
         echo "⏩️ Running job to delete all endpoints and archive the inference tables"
 
-        #databricks bundle run -t $ENV --params "model_category=$CWD,destroy_user_email=$user_email" destroy_endpoints_job --var="$EXTRA_PARAMS"
-        cd ..
+        databricks bundle run -t $ENV --params "model_category=$CWD,destroy_user_email=$user_email" destroy_endpoints_job --var="$EXTRA_PARAMS"
+        cd ../..
     fi
     
 

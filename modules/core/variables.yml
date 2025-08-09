@@ -18,6 +18,21 @@ variables:
       module: core
       created_by: ${var.current_user}
 
+  t4_node_type:
+    description: Node type for T4 GPUs
+
+  a10_node_type:
+    description: Node type for A10 GPUs
+
+  gpu_small_setting:
+    description: The config setting for GPU_SMALL
+
+  gpu_medium_setting:
+    description: The config setting for GPU_SMALL
+
+  gpu_large_setting:
+    description: The config setting for GPU_SMALL
+    
   sql_warehouse_id:
     description: Id of the SQL Warehouse that will be used by the app
 
@@ -68,3 +83,4 @@ variables:
   admin_user:
     description: The admin user for the app
     default: ${var.current_user}
+
