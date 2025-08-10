@@ -15,22 +15,14 @@ sync:
     - .
   
 targets:
-  dev:
-    mode: development
+  prod:
+    mode: production
     default: true
     workspace:
       root_path: ${var.current_working_directory}
-      host: https://adb-830292400663869.9.azuredatabricks.net
-    permissions:
-      - user_name: ${var.current_user}
-        level: CAN_MANAGE
-  prod:
-    mode: production
-    workspace:
-      host: https://adb-830292400663869.9.azuredatabricks.net
-      root_path: ${var.current_working_directory}
+       #host: this will be read by DATABRICKS_HOST env variable
     permissions:
       - user_name: ${var.current_user}
         level: CAN_MANAGE
     run_as:
-      user_name: ${var.current_user} #sp name should be used for mlops
+      user_name: ${var.current_user} #sp name should be used instead later.

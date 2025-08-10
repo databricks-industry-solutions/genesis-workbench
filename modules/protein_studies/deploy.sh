@@ -1,20 +1,17 @@
 #!/bin/bash
 set -e
 
-if [ "$#" -lt 2 ]; then
-    echo "Usage: $0 <env> <cloud>"
-    echo "Example: deploy dev aws"
-    exit 1
-fi
+CLOUD=$1
 
-ENV=$1
-CLOUD=$2
+EXTRA_PARAMS_CLOUD=$(paste -sd, "../../$CLOUD.env")
+EXTRA_PARAMS_GENERAL=$(paste -sd, "../../application.env")
 
-source env.env
-
-EXTRA_PARAMS_CLOUD=$(paste -sd, "$CLOUD.env")
-EXTRA_PARAMS_GENERAL=$(paste -sd, "env.env")
 EXTRA_PARAMS="$EXTRA_PARAMS_GENERAL,$EXTRA_PARAMS_CLOUD"
+
+if [[ -f "module.env" ]]; then
+    EXTRA_PARAMS_MODULE=$(paste -sd, "module.env")
+    EXTRA_PARAMS="$EXTRA_PARAMS,$EXTRA_PARAMS_MODULE"
+fi
 
 echo "Extra Params: $EXTRA_PARAMS"
 
@@ -28,8 +25,8 @@ for module in alphafold/alphafold_v2.3.2 boltz/boltz_1 esmfold/esmfold_v1 protei
         cd $module
         chmod +x deploy.sh
         
-        echo "Running command deploy.sh $ENV --var=\"$EXTRA_PARAMS\" " 
-        ./deploy.sh $ENV --var="$EXTRA_PARAMS" 
+        echo "Running command deploy.sh --var=\"$EXTRA_PARAMS\" " 
+        ./deploy.sh --var="$EXTRA_PARAMS" 
         cd ../..        
     done
 

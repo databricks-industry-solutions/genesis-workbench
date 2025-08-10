@@ -7,10 +7,13 @@ variables:
     description: Working directory or bundle root.
     default: /Workspace/Users/${var.current_user}/.bundle/genesis_workbench/${bundle.name}/${bundle.target}
   
+  workspace_url:
+    description: Workspace url for deployment
+
   serving_endpoint:
     description: queryable serving endpoint for app to access
     default: databricks-meta-llama-3-3-70b-instruct
-  
+
   common_resource_tags:
     description: Resource tags
     default: 

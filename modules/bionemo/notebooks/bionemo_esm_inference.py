@@ -9,6 +9,7 @@
 
 dbutils.widgets.text("core_catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("core_schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
+dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
 dbutils.widgets.text("is_base_model", "false", "Use Base Model?")
 dbutils.widgets.text("esm_variant", "650M", "ESM Variant")
 dbutils.widgets.text("task_type", "regression", "Task type: Regression or Classification")
@@ -69,7 +70,7 @@ data_location = dbutils.widgets.get("data_location")
 sequence_column_name = dbutils.widgets.get("sequence_column_name")
 result_location = dbutils.widgets.get("result_location")
 user_email = dbutils.widgets.get("user_email")
-
+sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
 # COMMAND ----------
 
 if os.path.exists(work_dir):

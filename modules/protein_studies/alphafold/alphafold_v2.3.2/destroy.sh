@@ -1,19 +1,12 @@
 #!/bin/bash
 
-if [ "$#" -lt 2 ]; then
-    echo "Usage: $0 <path_to_working_directory> <env> "
-    echo 'Example: destroy dev '
-    exit 1
-fi
-
-ENV=$1
-EXTRA_PARAMS=${@: 2}
+EXTRA_PARAMS=${@: 1}
 
 echo "=========================================================="
-echo "⚙️ Preparing to destroy module alphafold_v2.3.2 from $ENV"
+echo "⚙️ Preparing to destroy module alphafold_v2.3.2 "
 echo "=========================================================="
 
-databricks bundle destroy -t $ENV $EXTRA_PARAMS --auto-approve
+databricks bundle destroy $EXTRA_PARAMS --auto-approve
 
 if [ $? -eq 0 ]; then
     echo "✅ SUCCESS! Destroy complete."
