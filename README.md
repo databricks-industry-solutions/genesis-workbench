@@ -1,5 +1,5 @@
 # Genesis Workbench
-
+### **Blue print for a Life Sciences application on Databricks**
 ## Introduction
 
 ### $${\color{orange}Opportunity}$$
