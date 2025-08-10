@@ -5,7 +5,7 @@ A module is a deployable unit in Genesis Workbench. A module consist of sub-modu
 
 ##### Deploy
 
-<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deploy_process.png" alt="Deploy Process" width="400"/>
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deploy_process.png" alt="Deploy Process" width="700"/>
 
 - Deploy starts from the root `deploy.sh` script
 - Checks if `core` is deployed before modules
@@ -19,7 +19,7 @@ A module is a deployable unit in Genesis Workbench. A module consist of sub-modu
 - Creates a `.deployed` file in the module indicating deployment is complete. This file acts as a lock for accidental destroys 
 
 ##### Destroy
-<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/destroy_process.png" alt="Deploy Process" width="400"/>
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/destroy_process.png" alt="Deploy Process" width="700"/>
 - Destroy starts from the root `destroy.sh` script
 - Before `core` is destroyed, checks if all modules are destroyed
 - Initiate destroy of `module` by executing the `destroy.sh` of module
