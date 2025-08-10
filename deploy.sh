@@ -27,6 +27,7 @@ echo "================================"
 
 source application.env
 
+#export BUNDLE_VAR_databricks_host=$databricks_host
 
 cd modules/$CWD
 chmod +x deploy.sh

@@ -20,5 +20,5 @@ echo ""
 echo "▶️ [RFdiffusion] Running model registration job"
 echo "🚨 This job might take a long time to finish. See Jobs & Pipeline tab for status"
 echo ""
-databricks bundle run -register_rfdiffusion $EXTRA_PARAMS --no-wait
+databricks bundle run register_rfdiffusion $EXTRA_PARAMS --no-wait
 

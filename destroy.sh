@@ -1,12 +1,6 @@
 #!/bin/bash
 
 set -e 
-
-if [ "$#" -lt 3 ]; then
-    echo "Usage: destroy <module> <env> <cloud>"
-    echo 'Example: destroy core dev aws'
-    exit 1
-fi
  
 CWD=$1
 CLOUD=$2
