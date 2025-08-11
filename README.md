@@ -1,5 +1,5 @@
 # Genesis Workbench
-### **Blue print for a Life Sciences application on Databricks**
+### **A Blue print for a Life Sciences application on Databricks**
 ## Introduction
 
 ### $${\color{orange}Opportunity}$$
@@ -15,11 +15,13 @@ Despite their expertise in biology, many highly talented life science scientists
 ### $${\color{orange}Genesis}$$ $${\color{orange}Workbench}$$
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/gwb.png" alt="Generative AI in Life Sciences" width="700"/>
 
-Genesis Workbench from Databricks leverages the powerful capabilities of the Databricks platform—such as automated workflows, GPU-enabled clusters, model serving, and MLflow for experiment tracking and lifecycle management—to streamline and accelerate AI-driven research in life sciences. It builds an intuitive user interface using Databricks Apps to offer pre-packaged biological models alongside a curated set of workflows tailored specifically for life science scientists, enabling them to quickly get started without dealing with complex setup or infrastructure management.
+- Genesis Workbench offers a blueprint for using Databricks capabilities—like automated workflows, GPU clusters, model serving, and MLflow—to accelerate AI-driven life sciences research.
 
-As part of the collaboration between Databricks and NVIDIA, we are integrating NVIDIA's BioNeMo framework—a domain-specific platform for generative AI in digital biology—directly into its Genesis Workbench application. This integration enables life science researchers to easily access and deploy BioNeMo's advanced pre-trained models. The BioNeMo models come with optimizations from NVIDIA, ensuring high performance and efficiency on NVIDIA hardware for enterprise-scale workloads.
+- It features an intuitive Databricks Apps interface with pre-packaged biological models and tailored workflows, enabling scientists to start quickly without complex setup.
 
-Moreover, because Genesis Workbench is open source, it provides AI engineers with blueprints that serve as extensible templates, allowing easy customization and expansion to meet unique customer needs. This combination of robust platform features and flexible, ready-to-use components significantly reduces the non-biological workload on researchers and fosters faster innovation with generative AI in biology.
+- In collaboration with NVIDIA, BioNeMo—a generative AI framework for digital biology—is integrated for easy access to advanced pre-trained models.The BioNeMo models are optimized for NVIDIA hardware, delivering high performance and scalability for enterprise workloads.
+
+- Being open source, Genesis Workbench provides extensible templates for AI engineers, reducing non-biological workload and promoting rapid innovation in generative AI for biology.
 
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/happy_scientists.png" alt="Generative AI in Life Sciences" width="700"/>
 
