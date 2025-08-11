@@ -1,5 +1,41 @@
 # Installation Instructions
 
+### Module Deploy and Destroy process
+
+#### Anatomy
+A module is a deployable unit in Genesis Workbench. A module consist of sub-modules or models, each sub-modules having its own deployment process controlled by a `deploy.sh` and `destroy.sh`. This gives flexibility and autonomy to design sub-modules in a way it can be deployed from the module. Every sub-module can utuilize [Databricks Asset Bundles](https://docs.databricks.com/aws/en/dev-tools/bundles/) for configuring Databricks resources. The primary pattern followed in Genesis Workbench is to given below
+- Use Databricks Asset Bundles to create 
+ - Create a [Unity Catalog Volume](https://docs.databricks.com/aws/en/volumes/) in the Genesis Workbench schema.
+ - Create a [Job](https://docs.databricks.com/aws/en/jobs/) that runs the notebook containing the logic for [registering model(s) in Unity Catalog](https://docs.databricks.com/aws/en/machine-learning/manage-model-lifecycle/) as [PyFunc](https://mlflow.org/docs/latest/ml/traditional-ml/tutorials/creating-custom-pyfunc/part2-pyfunc-components/)
+ - Deploy the models to [Model Serving](https://www.databricks.com/product/model-serving) using Genesis Workbench library
+ - Update module specific settings in `settings` table
+
+##### Deploy
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deploy_process.png" alt="Deploy Process" width="700"/>
+
+- Deploy starts from the root `deploy.sh` script
+- Checks if `core` is deployed before modules
+- Initiate deploy of `module` by executing the `deploy.sh` of module
+  - Reads `application.env`, `aws/azure.env` and `module.env` if present
+  - Module deploys asset bundle that created the workflow that loads and registers the model and all related artifacts. This is a background process that might take many hours to complete.
+  - Registers all workflows to the `core` module and grant Databricks App access to workflows and endpoints, if necessary
+  - Deploys model endpoints if ncessary using common `core` module workflow  
+  - `core` module deploys the UI application as well
+- Add module specific values to `settings` table
+- Creates a `.deployed` file in the module indicating deployment is complete. This file acts as a lock for accidental destroys 
+
+##### Destroy
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/destroy_process.png" alt="Deploy Process" width="700"/>
+- Destroy starts from the root `destroy.sh` script
+- Before `core` is destroyed, checks if all modules are destroyed
+- Initiate destroy of `module` by executing the `destroy.sh` of module
+  - Reads `application.env`, `aws/azure.env` and `module.env` if present
+  - Module destroys asset bundle that destroys the model and all related artifacts
+  - Uses the job from core module to delete all endpoints, archive inference tables
+- Remove module specific values from `settings` table
+- Deletes the `.deployed` file in the module
+- 
 In order to install Genesis Workbench you'll clone the repo locally and then use the provided scripts to install the Workbench to a Databricks Workspace. 
 
 The scripts will use Databricks Asset Bundles and other CLI commands to install the application. The below diagram shows the installation process
