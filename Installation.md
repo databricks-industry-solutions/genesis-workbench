@@ -16,7 +16,7 @@ The primary pattern followed in Genesis Workbench is given below
 
 ##### Deploy
 
-Deploy gets initiated by running the `deploy.sh` script in the root folder using the syntax `./deploy.sh <module> <cloud>` . This script should be called aftaer the Prerequisites given below are completed
+Deploy gets initiated by running the `deploy.sh` script in the root folder using the syntax `./deploy.sh <module> <cloud>` . This script should be called after the Prerequisites given below are completed
 
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deploy_process.png" alt="Deploy Process" width="700"/>
 
@@ -45,10 +45,8 @@ The destroy script does the following:
   - Uses the job from core module to delete all endpoints, archive inference tables
 - Remove module specific values from `settings` table
 - Deletes the `.deployed` file in the module
-- 
-In order to install Genesis Workbench you'll clone the repo locally and then use the provided scripts to install the Workbench to a Databricks Workspace. 
 
-The scripts will use Databricks Asset Bundles and other CLI commands to install the application. The below diagram shows the installation process
+In order to install Genesis Workbench you'll clone the repo locally and then use the provided scripts to install the Workbench to a Databricks Workspace. The below diagram shows the resources being deployed into the workspace.
 <br>
 
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment.png" alt="Generative AI in Life Sciences" width="700"/>
@@ -70,8 +68,8 @@ The scripts will use Databricks Asset Bundles and other CLI commands to install 
  - The deploy script reads the configuration values from a set of `.env` files which you will need to manually create under each module. Details of the content is given below.
  - You need to identify a UC Catalog that the application will use. You can use an existing catalog or create a new one.
  - You need to identify a unique schema name that the application will use. If the schema does not exist it will be created by the deploy script<br> **NOTE:** The schema **must be exclusively for the Genesis Workbench application**.
- - You will need a SQL Warehouse to be used by the application. Follow the instructions given [here](https://docs.databricks.com/aws/en/compute/sql-warehouse/create) to create a `2X-Small` warehouse.
- - **NVIDIA BioNeMo Container Build**: If you are planning to use NVIDIA BioNeMo modules, you need to build a docker container and push it to a container repository. The `dockerfile` is provided at `/modules/bionemo/docker/` folder. The `build_docker.sh` file in the same directory has the commands that need to be executed to build the docker image. Please read the disclaimer in the README about usage of NVIDIA and BioNeMo.
+ - You will need a [SQL Warehouse](https://docs.databricks.com/aws/en/compute/sql-warehouse/) to be used by the application. Follow the instructions given [here](https://docs.databricks.com/aws/en/compute/sql-warehouse/create) to create a `2X-Small` warehouse.
+ - **NVIDIA BioNeMo Container Build**: If you are planning to use NVIDIA BioNeMo modules, you need to build a docker container and push it to a container repository. The `dockerfile` is provided at `/modules/bionemo/docker/` folder. The `build_docker.sh` file in the same directory has the commands that need to be executed to build the docker image. Please read the disclaimer in the README about usage of NVIDIA and BioNeMo. 
 
 ### Env files
 
@@ -133,12 +131,16 @@ gpu_large_setting=GPU_LARGE
 
 ## Running the installation
 **Step - 1:**
+Setup the prerequisites mentioned above.
+Clone the [Genesis Workbench repo](https://github.com/databricks-industry-solutions/genesis-workbench) to a local folder. The deploy script requires bash.
+
+**Step - 2:**
 Once you have installed and set up the Prerequisites, `core` module need to be installed first. 
 Any module can be installed by using the provided `deploy` script. The syntax to use the deploy script is `./deploy.sh <module> <cloud>`
 An example deploy command for `core` module in a workspace in Azure is:
  - `./deploy.sh core azure`
 
-**Step - 2:** Now we can start installing rest of the modules. It is recommended to install one module at a time and wait for all deployment jobs to coplete before deploying the next module
+**Step - 3:** Now we can start installing rest of the modules. It is recommended to install one module at a time and wait for all deployment jobs to coplete before deploying the next module
 Example:
 - To deploy module `protein_studies` module in the above workspace `./deploy.sh protein_studies azure`
 - To deploy module `single_cell` module in the above workspace `./deploy.sh single_cell azure`
