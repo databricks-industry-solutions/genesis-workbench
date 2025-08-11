@@ -16,9 +16,11 @@ The primary pattern followed in Genesis Workbench is given below
 
 ##### Deploy
 
+Deploy gets initiated by running the `deploy.sh` script in the root folder using the syntax `./deploy.sh <module> <cloud>` . This script should be called aftaer the Prerequisites given below are completed
+
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deploy_process.png" alt="Deploy Process" width="700"/>
 
-- Deploy starts from the root `deploy.sh` script
+The deploy script does the following:
 - Checks if `core` is deployed before modules
 - Initiate deploy of `module` by executing the `deploy.sh` of module
   - Reads `application.env`, `aws/azure.env` and `module.env` if present
@@ -30,8 +32,12 @@ The primary pattern followed in Genesis Workbench is given below
 - Creates a `.deployed` file in the module indicating deployment is complete. This file acts as a lock for accidental destroys 
 
 ##### Destroy
+
+Destroy gets initiated by running the `destroy.sh` script in the root folder using the syntax `./destroy.sh <module> <cloud>` . This script should be called aftaer the Prerequisites given below are completed
+
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/destroy_process.png" alt="Deploy Process" width="700"/>
-- Destroy starts from the root `destroy.sh` script
+
+The destroy script does the following:
 - Before `core` is destroyed, checks if all modules are destroyed
 - Initiate destroy of `module` by executing the `destroy.sh` of module
   - Reads `application.env`, `aws/azure.env` and `module.env` if present
