@@ -3,10 +3,14 @@
 ### Module Deploy and Destroy process
 
 #### Anatomy
-A module is a deployable unit in Genesis Workbench. A module consist of sub-modules or models, each sub-modules having its own deployment process controlled by a `deploy.sh` and `destroy.sh`. This gives flexibility and autonomy to design sub-modules in a way it can be deployed from the module. Every sub-module can utuilize [Databricks Asset Bundles](https://docs.databricks.com/aws/en/dev-tools/bundles/) for configuring Databricks resources. The primary pattern followed in Genesis Workbench is to given below
-- Use Databricks Asset Bundles to create 
+A module is a deployable unit in Genesis Workbench. A module consist of sub-modules or models, each sub-modules having its own deployment process controlled by a `deploy.sh` and `destroy.sh`. This gives flexibility and autonomy to design sub-modules in a way it can be deployed from the module. Every sub-module can utuilize [Databricks Asset Bundles](https://docs.databricks.com/aws/en/dev-tools/bundles/) for configuring Databricks resources. 
+
+The primary pattern followed in Genesis Workbench is given below
+- Use Databricks Asset Bundles to:
  - Create a [Unity Catalog Volume](https://docs.databricks.com/aws/en/volumes/) in the Genesis Workbench schema.
  - Create a [Job](https://docs.databricks.com/aws/en/jobs/) that runs the notebook containing the logic for [registering model(s) in Unity Catalog](https://docs.databricks.com/aws/en/machine-learning/manage-model-lifecycle/) as [PyFunc](https://mlflow.org/docs/latest/ml/traditional-ml/tutorials/creating-custom-pyfunc/part2-pyfunc-components/)
+- Use `deploy.sh` script to:
+ - Run the above workflow.
  - Deploy the models to [Model Serving](https://www.databricks.com/product/model-serving) using Genesis Workbench library
  - Update module specific settings in `settings` table
 
