@@ -5,12 +5,12 @@
 # COMMAND ----------
 
 # DBTITLE 1,install/load dependencies | # ~5mins (including initial data processing)
-# MAGIC %run ./utils 
+# MAGIC %run ./utils_20250801 
 
 # COMMAND ----------
 
 # DBTITLE 1,pinning mlflow == 2.22.0
-mlflow.__version__
+# mlflow.__version__
 
 # COMMAND ----------
 
@@ -24,53 +24,99 @@ CATALOG, DB_SCHEMA, MODEL_FAMILY, MODEL_NAME, EXPERIMENT_NAME
 # COMMAND ----------
 
 # DBTITLE 1,SCimilarity_SearchNearest
-import csv
-from typing import Any
+# import csv
+# from typing import Any, Optional
+# import mlflow
+# import numpy as np
+# import pandas as pd
+# from mlflow.pyfunc.model import PythonModelContext
+# from scimilarity import CellEmbedding, CellQuery
+# import torch
+
+# class SCimilarity_SearchNearest(mlflow.pyfunc.PythonModel):
+#     r"""Create MLFlow Pyfunc class for SCimilarity model."""
+
+#     def load_context(self, context: PythonModelContext):
+#         r"""Intialize pre-trained SCimilarity model.
+
+#         Parameters
+#         ----------
+#         context : PythonModelContext
+#             Context object for MLFlow model -- here we are loading the pretrained model weights.
+
+#         """
+#         self.cq = CellQuery(context.artifacts["model_path"])
+
+#     def predict(
+#         self,
+#         context: PythonModelContext,
+#         model_input: pd.DataFrame, 
+#         # params: Optional[dict[str, Any]],  ## move to model_input (as optional)
+#     ) -> pd.DataFrame:
+#         r"""Output prediction on model.
+
+#         Parameters
+#         ----------
+#         context : PythonModelContext
+#             Context object for MLFlow model.
+#         model_input : pd.DataFrame
+#             DataFrame containing embeddings.
+
+#         Returns
+#         -------
+#         pd.DataFrame
+#             The predicted classes.
+
+#         """
+#         embeddings = model_input.embedding[0] 
+        
+#         predictions = self.cq.search_nearest(embeddings, k=params["k"]) # external params dict
+
+#         results_dict = {
+#             "nn_idxs": [np_array.tolist() for np_array in predictions[0]],
+#             "nn_dists": [np_array.tolist() for np_array in predictions[1]],
+#             "results_metadata": predictions[2].to_dict()
+#         }
+#         results_df = pd.DataFrame([results_dict])
+#         return results_df
+
+# COMMAND ----------
+
+# DBTITLE 1,update  wrt signature + limitations of sdk WorkspaceClient
 import mlflow
 import numpy as np
 import pandas as pd
+import json
 from mlflow.pyfunc.model import PythonModelContext
-from scimilarity import CellEmbedding, CellQuery
-import torch
+from scimilarity import CellQuery
 
 class SCimilarity_SearchNearest(mlflow.pyfunc.PythonModel):
-    r"""Create MLFlow Pyfunc class for SCimilarity model."""
+    """Create MLFlow Pyfunc class for SCimilarity model."""
 
     def load_context(self, context: PythonModelContext):
-        r"""Intialize pre-trained SCimilarity model.
-
-        Parameters
-        ----------
-        context : PythonModelContext
-            Context object for MLFlow model -- here we are loading the pretrained model weights.
-
-        """
+        """Initialize pre-trained SCimilarity model."""
         self.cq = CellQuery(context.artifacts["model_path"])
 
     def predict(
         self,
         context: PythonModelContext,
-        model_input: pd.DataFrame, 
-        params: dict[str, Any], 
+        model_input: pd.DataFrame
     ) -> pd.DataFrame:
-        r"""Output prediction on model.
+        """Output prediction on model."""
+        # Extract embedding
+        embeddings = model_input.embedding[0]
 
-        Parameters
-        ----------
-        context : PythonModelContext
-            Context object for MLFlow model.
-        model_input : pd.DataFrame
-            DataFrame containing embeddings.
+        # Handle optional params column as JSON string
+        params = {"k": 100}
+        if "params" in model_input.columns:
+            raw_params = model_input["params"].iloc[0]
+            if raw_params is not None and not (isinstance(raw_params, float) and pd.isna(raw_params)):
+                try:
+                    params = json.loads(raw_params)
+                except Exception:
+                    params = {"k": 100}
 
-        Returns
-        -------
-        pd.DataFrame
-            The predicted classes.
-
-        """
-        embeddings = model_input.embedding[0] 
-        
-        predictions = self.cq.search_nearest(embeddings, k=params["k"]) # external params dict | or use params.get("k", 100)
+        predictions = self.cq.search_nearest(embeddings, k=params.get("k", 100))
 
         results_dict = {
             "nn_idxs": [np_array.tolist() for np_array in predictions[0]],
@@ -79,6 +125,10 @@ class SCimilarity_SearchNearest(mlflow.pyfunc.PythonModel):
         }
         results_df = pd.DataFrame([results_dict])
         return results_df
+
+# COMMAND ----------
+
+model_input.params[0]
 
 # COMMAND ----------
 
@@ -102,14 +152,35 @@ model.load_context(temp_context)
 
 # COMMAND ----------
 
+params: Optional[dict[str, Any]] = dict({"k": 100})
+params.values()
+
+# COMMAND ----------
+
 # DBTITLE 1,Specify example model_input
 ## Create a DataFrame containing the embeddings
 
 # cell_embeddings.dtype #dtype('float32')
 # cell_embeddings.shape #(1, 128)
 
-model_input = pd.DataFrame([{"embedding": cell_embeddings.tolist()[0]}])
+# model_input = pd.DataFrame([{"embedding": cell_embeddings.tolist()[0]}])
+model_input = pd.DataFrame([
+    {
+        "embedding": cell_embeddings.tolist()[0],  # list of floats
+        "params": json.dumps(params) #{"k": 100}  # JSON string
+    }
+])
+
+# Ensure embedding is a list of floats
+model_input["embedding"] = model_input["embedding"].apply(
+    lambda x: list(np.array(x, dtype=float)) if not isinstance(x, list) else x
+)
+
 display(model_input)
+
+# COMMAND ----------
+
+type(model_input["embedding"][0][0])
 
 # COMMAND ----------
 
@@ -120,13 +191,34 @@ spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "false")
 
 # DBTITLE 1,Test model_input + params
 # Call the predict method
-searchNearest_output = model.predict(temp_context, model_input, params={"k": 100})
+# searchNearest_output = model.predict(temp_context, model_input, params={"k": 100})
+
+searchNearest_output = model.predict(temp_context, model_input) #, params={"k": 100})
 
 display(searchNearest_output)
 
 # COMMAND ----------
 
-model.predict(temp_context, model_input, params={"k": 100})
+pd.DataFrame(searchNearest_output["results_metadata"][0])
+
+# COMMAND ----------
+
+# model.predict(temp_context, model_input, params={"k": 10})
+model.predict(temp_context, model_input)
+
+# COMMAND ----------
+
+model_input0 = pd.DataFrame([
+    {
+        "embedding": cell_embeddings.tolist()[0],
+        # "params": {"k": 100}
+    }
+])
+display(model_input0)
+
+# COMMAND ----------
+
+model.predict(temp_context, model_input0)
 
 # COMMAND ----------
 
@@ -138,10 +230,10 @@ model.predict(temp_context, model_input, params={"k": 100})
 # COMMAND ----------
 
 # DBTITLE 1,specify params
-# import json
+## import json
 
-params: dict[str, Any] = dict({"k": 100})
-params.values()
+# params: dict[str, Any] = dict({"k": 100})
+# params.values()
 
 
 # COMMAND ----------
@@ -156,20 +248,20 @@ from mlflow.models import infer_signature
 import pandas as pd
 
 # Define a concrete example input as a Pandas DataFrame
-example_input = model_input ## we will add params separately to keep it simple... but make a note on the usage input patterns 
+example_input = model_input.copy() ## we will add params separately to keep it simple... but make a note on the usage input patterns 
 
 # Ensure the example output is in a serializable format
 example_output = searchNearest_output
 
 # Create a Dict for params
-params: dict[str, Any] = dict({"k": 100}) ## could take any dict and if none provided defaults to example provided
+# params: dict[str, Any] = dict({"k": 100}) ## could take any dict and if none provided defaults to example provided
+# params: Optional[dict[str, Any]] = dict({"k": 100})
 
-
-# Infer the model signature
+# # Infer the model signature
 signature = infer_signature(
     model_input = model_input, #example_input,
     model_output = example_output,
-    params=params
+    # params=params
 )
 
 # COMMAND ----------
@@ -179,6 +271,68 @@ signature = infer_signature(
 # COMMAND ----------
 
 # DBTITLE 1,check signature
+signature
+
+## original signature with proper params key-value instead of being part of inputs
+# inputs: 
+#   ['embedding': Array(double) (required)]
+# outputs: 
+#   ['nn_idxs': Array(Array(long)) (required), 'nn_dists': Array(Array(double)) (required), 'results_metadata': string (required)]
+# params: 
+#   ['k': long (default: 100)]
+
+# COMMAND ----------
+
+# print("MLflow version:", mlflow.__version__) # no struct in mlflow 2.22.0
+
+# COMMAND ----------
+
+from mlflow.models.signature import ModelSignature
+from mlflow.types.schema import (
+    Schema,      # collection of column specs
+    ColSpec,     # a single column description
+    DataType,    # enum of primitive types
+    Array,       # wrapper for array types
+    # Struct is *not* needed for the solutions below
+)
+
+embedding_col = ColSpec(
+    name="embedding",
+    type=Array(DataType.double),   # <-- correct way to say “array<double>”
+    required=True,
+)
+
+params_col = ColSpec(
+    name="params",
+    type=DataType.string,          # the whole dict will be JSON‑encoded by the caller
+    required=False,
+)
+
+nn_idxs_col = ColSpec(
+    name="nn_idxs",
+    type=Array(Array(DataType.long)),   # array<array<long>>
+    required=True,
+)
+
+nn_dists_col = ColSpec(
+    name="nn_dists",
+    type=Array(Array(DataType.double)), # array<array<double>>
+    required=True,
+)
+
+metadata_col = ColSpec(
+    name="results_metadata",
+    type=DataType.string,
+    required=True,
+)
+
+signature = ModelSignature(
+    inputs=Schema([embedding_col, params_col]),
+    outputs=Schema([nn_idxs_col, nn_dists_col, metadata_col]),
+)
+
+# COMMAND ----------
+
 signature
 
 # COMMAND ----------
@@ -286,7 +440,8 @@ with mlflow.start_run() as run:
                   },    
         input_example = example_input, # without params -- has a default value in model signature OR to add separately during inference | (model_input, params) tuple formatting not quite right
        
-        signature = signature, ## params defined in signature https://mlflow.org/docs/latest/model/signatures/#inference-params
+        signature = signature, ## optional params defined in input signature https://mlflow.org/docs/latest/model/signatures/#inference-params
+        
         pip_requirements=SCimilarity_SearchNearest_requirements_path,     
         
         # registered_model_name=f"{CATALOG}.{SCHEMA}.{model_name}" ## to include directly wihout additonal load run_id checks   
@@ -322,13 +477,15 @@ loaded_model.input_example #, example_output
 # COMMAND ----------
 
 # DBTITLE 1,check params
-params = {"k": 10}  # Provide a default value for params
-# loaded_model.predict(loaded_model.input_example)
-loaded_model.predict(loaded_model.input_example, params=params)
+# params = {"k": 10}  # Provide a default value for params
+# # loaded_model.predict(loaded_model.input_example)
+# loaded_model.predict(loaded_model.input_example, params=params)
+
+loaded_model.predict(loaded_model.input_example)
 
 # COMMAND ----------
 
-loaded_model.predict(loaded_model.input_example)
+loaded_model.predict(model_input0)
 # loaded_model.predict(loaded_model.input_example, params)
 
 # COMMAND ----------
@@ -337,11 +494,16 @@ loaded_model.predict(loaded_model.input_example)
 # loaded_model.predict(loaded_model.input_example, params={"k": 100})
 # predictions = loaded_model.predict(loaded_model.input_example)
 
-predictions = loaded_model.predict(loaded_model.input_example, params)
-predictions
+# predictions = loaded_model.predict(loaded_model.input_example, params)
+# predictions
 
 # predictions = loaded_model.predict(loaded_model.input_example) # mlflow registered default params will kick-in 
 # print(predictions)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC
 
 # COMMAND ----------
 
