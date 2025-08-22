@@ -12,6 +12,7 @@ import time
 import pandas as pd
 from datetime import datetime, timedelta
 from dataclasses import dataclass
+from typing import List
 
 @dataclass
 class AppContext:
@@ -23,6 +24,7 @@ class UserInfo:
     user_email : str
     user_name: str
     user_id: str
+    user_groups: List[str]
     user_access_token:str
     user_display_name : str
 

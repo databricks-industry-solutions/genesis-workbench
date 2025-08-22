@@ -20,14 +20,29 @@ def get_user_info():
     user_access_token = headers.get("X-Forwarded-Access-Token")
     user_name=headers.get("X-Forwarded-Preferred-Username")
     user_display_name = ""
-    if user_access_token:
-        # Initialize WorkspaceClient with the user's token
-        w = WorkspaceClient(token=user_access_token, auth_type="pat")
-        # Get current user information
-        current_user = w.current_user.me()
-        # Display user information
-        user_display_name = current_user.display_name
+    user_groups = []
 
+    retry_count = 0
+    if user_access_token:
+        while retry_count <= 1:
+            try:    
+                if user_access_token:
+                    # Initialize WorkspaceClient with the user's token
+                    w = WorkspaceClient(token=user_access_token, auth_type="pat")
+                    # Get current user information
+                    current_user = w.current_user.me()
+                    # Display user information
+                    user_display_name = current_user.display_name
+                    user_groups = [g.display for g in current_user.groups]
+                    print(f"User belongs to following groups: {user_groups}")
+                    
+            except Exception as e:
+                print(f"Error getting user info: {e}")
+                retry_count += 1
+                if retry_count > 1:
+                    raise e
+                else:
+                    print(f"Retrying...")
 
     user_email = headers.get("X-Forwarded-Email")
     if not user_email or user_email.strip() == "":
@@ -38,7 +53,8 @@ def get_user_info():
         user_email = user_email,
         user_id=headers.get("X-Forwarded-User"),
         user_access_token = headers.get("X-Forwarded-Access-Token"),
-        user_display_name = user_display_name if user_display_name != "" else user_email
+        user_display_name = user_display_name if user_display_name != "" else user_email,
+        user_groups = user_groups
     )
 
 def open_run_window(job_id,run_id):

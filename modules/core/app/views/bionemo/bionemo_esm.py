@@ -40,12 +40,17 @@ def display_finetune_tab():
 
         with st.spinner("Launching finetuning job"):
             try:
+                train_data = train_data.strip()
+                evaluation_data = evaluation_data.strip()
+                finetune_label = finetune_label.strip()
+                experiment_name = experiment_name.strip()
+
                 if (train_data.endswith(".csv") and 
                     evaluation_data.endswith(".csv") and 
-                    train_data.strip().startswith("/Volumes") and
-                    evaluation_data.strip().startswith("/Volumes") 
+                    train_data.startswith("/Volumes") and
+                    evaluation_data.startswith("/Volumes") 
                 ):
-                    if finetune_label.strip() != "" and experiment_name.strip() != "":
+                    if finetune_label != "" and experiment_name != "":
                         run_id = start_esm2_finetuning(user_info=get_user_info(),
                                 esm_variant= esm_variant,
                                 train_data_volume_location=train_data,
@@ -104,12 +109,15 @@ def display_inference_tab():
             else:
                 st.write("There are no finetuned weights available")
 
+        else:
+            infer_ft_weights = None
+
         col1,col2 = st.columns([1,1])
         with col1:
             inf_task_type = st.selectbox("Task Type:",["regression","classification"])
             inf_data_location = st.text_input("Data Location:(UC Volume Path *.csv):","", help="A CSV file with `sequence` column")
             inf_sequence_column_name = st.text_input("Sequence Column Name:","", help="The column containing the sequence in the csv file")
-            inf_result_location = st.text_input("Result Location: (UC Volume Folder)","", help="Results will be saved as results.csv in the given folder")
+            inf_result_location = st.text_input("Result Location: (UC Volume Folder)","", help="Results will be saved as results.csv in the given folder. Please make sure the folder exists.")
             start_inference_button_clicked = st.form_submit_button("Run Inference")
         
     inference_started = False
@@ -117,7 +125,11 @@ def display_inference_tab():
         with st.spinner("Launching inference job"):
             try:
                 is_base_model = True if model_weight_source=="Base Model" else False,
-                selected_rows = infer_ft_weights.selection.rows
+                selected_rows = []
+                
+                if infer_ft_weights:
+                    selected_rows = infer_ft_weights.selection.rows
+
                 ft_run_id = 0
                 if len(selected_rows) > 0:
                     ft_run_id = finetuned_esm_weights_df.iloc[selected_rows]["Id"].iloc[0].item()

@@ -156,16 +156,31 @@ def set_selected_row_status():
 
 
 @st.dialog("View Structure", width="large")
-def display_view_alphafold_result_dialog(run_id: str, run_name:str):
+def display_view_alphafold_result_dialog():
+    
+    run_id = st.session_state["alphafold_run_search_result_df"].iloc[selected_row_for_view]["run_id"].iloc[0]
+    run_name = st.session_state["alphafold_run_search_result_df"].iloc[selected_row_for_view]["run_name"].iloc[0]    
     st.markdown(f"##### Run Name: {run_name}")
+    include_pdb = False
+    pdb_to_compare = None
+
     pdb_compare_c1, pdb_compare_c2 = st.columns([2,1], vertical_alignment="bottom")
     with pdb_compare_c1:
         af_run_compare_pbm_id = st.text_input("PDB Code: ")
     with pdb_compare_c2:
-        compare_pdb_btn = st.button("Compare")
+        compare_pdb_btn = st.button("Compare") 
+        
+    if len(af_run_compare_pbm_id.strip()) > 0:
+        include_pdb = True
+        pdb_to_compare = af_run_compare_pbm_id.strip()
+
     with st.spinner("Fetching result"):
-        html_to_display = view_structure_from_alphafold_run(run_id=run_id, run_name=run_name,pdb_code=None, include_pdb=False)
-        components.html(html_to_display, height=700)
+        try:
+            html_to_display = view_structure_from_alphafold_run(run_id=run_id, run_name=run_name,pdb_code=pdb_to_compare, include_pdb=include_pdb)
+            components.html(html_to_display, height=700)
+        except Exception as e:
+            st.error(f"An error occured: {e}")
+    
 
 
 
@@ -328,11 +343,8 @@ with protein_structure_prediction_tab:
             selected_row_for_view = alphafold_results_selected_row.selection.rows
             selected_alphafold_run_id = 0
             if len(selected_row_for_view) > 0:
-                selected_alphafold_run_id = st.session_state["alphafold_run_search_result_df"].iloc[selected_row_for_view]["run_id"].iloc[0]
-                selected_alphafold_run_name = st.session_state["alphafold_run_search_result_df"].iloc[selected_row_for_view]["run_name"].iloc[0]
-
                 if alphafold_result_view_btn :
-                    display_view_alphafold_result_dialog(run_id = selected_alphafold_run_id, run_name=selected_alphafold_run_name)
+                    display_view_alphafold_result_dialog()
 
 
 

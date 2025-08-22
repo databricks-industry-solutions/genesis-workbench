@@ -31,8 +31,8 @@ with st.spinner("Initializing"):
     user_settings = st.session_state["user_settings"]
 
 
-st.logo("images/blank.png", size="large", icon_image="images/dbx_logo_icon_2.png")
-st.sidebar.image("images/dbx_logo_1.png", width=200)
+st.logo("images/blank.png", size="large", icon_image="images/dbx_logo_1.png")
+st.sidebar.image("images/dbx_logo_1.png", width=600)
 
 home_page = st.Page(
     page="views/home.py",
