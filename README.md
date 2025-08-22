@@ -79,13 +79,14 @@ scGPT | torchvision==0.15.2+cu118 | BSD | https://github.com/pytorch/vision
 scGPT | flash-attn==2.5.8 | Apache-2.0 | https://github.com/Dao-AILab/flash-attention
 scGPT | scgpt==0.2.4 | MIT | https://github.com/bowang-lab/scGPT
 scGPT | wandb==0.19.11 | MIT | https://github.com/wandb/wandb
-SCimilarity | SCimilarity |	Apache2.0 | https://github.com/Genentech/scimilarity
+SCimilarity | SCimilarity v0.4.0 |	Apache2.0 | https://github.com/Genentech/scimilarity
 SCimilarity | Mlflow	| Apache2.0 | https://github.com/mlflow/mlflow
+SCimilarity | 'torch' / PyTorch | BSD-3-Clause | https://pypi.org/project/torch/2.7.1/
 SCimilarity | scanpy |	BSD 3-Clause | https://github.com/scverse/scanpy
 SCimilarity | numcodecs |	MIT | https://github.com/zarr-developers/numcodecs
-SCimilarity | tbb	| Apache2.0 | https://github.com/uxlfoundation/oneTBB [i think this is it?]
+SCimilarity | tbb	| Apache2.0 | https://github.com/uxlfoundation/oneTBB 
 SCimilarity | typing_extensions	| PSF | https://github.com/python/typing_extensions
-SCimilarity | numpy |	BSD [https://numpy.org/] | https://github.com/numpy/numpy
+SCimilarity | numpy  |	BSD | https://github.com/numpy/numpy 
 SCimilarity | pandas | BSD 3-Clause | https://github.com/pandas-dev/pandas
 SCimilarity | uv | Apache2.0 | https://github.com/astral-sh/uv
 RFDiffusion | RFDiffusion |	BSD-3 | https://github.com/RosettaCommons/RFdiffusion

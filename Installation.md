@@ -3,7 +3,7 @@
 ### Module Deploy and Destroy process
 
 #### Anatomy
-A module is a deployable unit in Genesis Workbench. A module consist of sub-modules or models, each sub-modules having its own deployment process controlled by a `deploy.sh` and `destroy.sh`. This gives flexibility and autonomy to design sub-modules in a way it can be deployed from the module. Every sub-module can utuilize [Databricks Asset Bundles](https://docs.databricks.com/aws/en/dev-tools/bundles/) for configuring Databricks resources. 
+A module is a deployable unit in Genesis Workbench. A module consist of sub-modules or models, each sub-modules having its own deployment process controlled by a `deploy.sh` and `destroy.sh`. This gives flexibility and autonomy to design sub-modules in a way it can be deployed from the module. Every sub-module can utilize [Databricks Asset Bundles](https://docs.databricks.com/aws/en/dev-tools/bundles/) for configuring Databricks resources. 
 
 The primary pattern followed in Genesis Workbench is given below
 - Use Databricks Asset Bundles to:
