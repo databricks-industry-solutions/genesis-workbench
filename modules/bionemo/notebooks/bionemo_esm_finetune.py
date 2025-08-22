@@ -172,6 +172,8 @@ db_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().api
 # COMMAND ----------
 
 from genesis_workbench.workbench import initialize
+os.environ["DATABRICKS_HOST"] = db_host
+os.environ["DATABRICKS_TOKEN"] = db_token
 initialize(core_catalog_name = catalog, core_schema_name = schema, sql_warehouse_id = sql_warehouse_id, token = db_token)
 
 # COMMAND ----------
@@ -203,13 +205,13 @@ from tensorboard.backend.event_processing import event_accumulator
 from genesis_workbench.models import set_mlflow_experiment
 
 is_finetune_success = False
-os.environ["DATABRICKS_HOST"] = db_host
-os.environ["DATABRICKS_TOKEN"] = db_token
+
 
 os.environ["MLFLOW_ENABLE_SYSTEM_METRICS_LOGGING"] = "true"
 
 experiment = set_mlflow_experiment(experiment_tag=experiment_name, user_email=user_email)
-mlflow.start_run(experiment_id=experiment.experiment_id, run_name=finetune_label)
+run_info = mlflow.start_run(experiment_id=experiment.experiment_id, run_name=finetune_label)
+run_id = run_info.info.run_id
 
 ft_params = {
     "esm_variant": esm_variant,
@@ -300,11 +302,14 @@ for file in os.listdir(checkpoint_path):
 # COMMAND ----------
 
 from genesis_workbench import bionemo
+import time
 
 # COMMAND ----------
 
 if is_finetune_success:
     #update the model deployment table
+    ft_id = time.time_ns()
+
     spark.sql(f"""
         INSERT INTO {catalog}.{schema}.bionemo_weights(
             ft_id,
@@ -319,11 +324,12 @@ if is_finetune_success:
             is_active,
             deactivated_timestamp
         ) VALUES (
+            {ft_id},
             '{finetune_label}',
             'esm2',
             '{esm_variant}',
             '{experiment_name}',
-            0,
+            '{run_id}',
             '{ft_weights_volume_location}',
             '{user_email}',
             CURRENT_TIMESTAMP(),
