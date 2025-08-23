@@ -12,7 +12,6 @@
 #install all dependencies
 %pip install scimilarity==0.4.0 typing_extensions>=4.14.0 scanpy==1.11.2 numcodecs==0.13.1 numpy==1.26.4 pandas==1.5.3 mlflow==2.22.0 cloudpickle==2.0.0 tbb>=2021.6.0 uv 
 
-
 dbutils.library.restartPython()
 
 # COMMAND ----------
@@ -173,7 +172,7 @@ def get_model_uri(model_name):
 
 def set_mlflow_experiment(experiment_tag, user_email):    
     w = WorkspaceClient()
-    mlflow_experiment_base_path = "Shared/dbx_genesis_workbench_models"
+    mlflow_experiment_base_path = "Shared/dbx_genesis_workbench_models" # wrt app defaults
     w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")
     experiment_path = f"/{mlflow_experiment_base_path}/{experiment_tag}"
     mlflow.set_registry_uri("databricks-uc")

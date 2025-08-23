@@ -16,30 +16,60 @@ from streamlit.components.v1 import html
 
 
 def get_user_info():
-    headers = st.context.headers
-    user_access_token = headers.get("X-Forwarded-Access-Token")
-    user_name=headers.get("X-Forwarded-Preferred-Username")
-    user_display_name = ""
-    if user_access_token:
-        # Initialize WorkspaceClient with the user's token
-        w = WorkspaceClient(token=user_access_token, auth_type="pat")
-        # Get current user information
-        current_user = w.current_user.me()
-        # Display user information
-        user_display_name = current_user.display_name
 
+    user_info = None
 
-    user_email = headers.get("X-Forwarded-Email")
-    if not user_email or user_email.strip() == "":
-        user_email = os.environ["USER_EMAIL"]
+    if "__gwb_user_info" not in st.session_state:
+        headers = st.context.headers
+        user_access_token = headers.get("X-Forwarded-Access-Token")
+        user_name=headers.get("X-Forwarded-Preferred-Username")
+        user_display_name = ""
+        user_groups = []
 
-    return UserInfo(
-        user_name=user_name,
-        user_email = user_email,
-        user_id=headers.get("X-Forwarded-User"),
-        user_access_token = headers.get("X-Forwarded-Access-Token"),
-        user_display_name = user_display_name if user_display_name != "" else user_email
-    )
+        user_groups_retrieved = False
+        retry_count = 0
+        if user_access_token:
+            while retry_count <= 1 and not user_groups_retrieved:
+                try:    
+                    if user_access_token:
+                        # Initialize WorkspaceClient with the user's token
+                        w = WorkspaceClient(token=user_access_token, auth_type="pat")
+                        # Get current user information
+                        current_user = w.current_user.me()
+                        # Display user information
+                        user_display_name = current_user.display_name
+                        user_groups = [g.display for g in current_user.groups]
+                        print(f"User belongs to following groups: {user_groups}")
+                        user_groups_retrieved = True
+
+                except Exception as e:
+                    print(f"Error getting user info: {e}")
+                    retry_count += 1
+                    if retry_count > 1:
+                        raise e
+                    else:
+                        print(f"Retrying...")
+
+        user_email = headers.get("X-Forwarded-Email")
+        if not user_email or user_email.strip() == "":
+            user_email = os.environ["USER_EMAIL"]
+
+        user_info = UserInfo(
+            user_name=user_name,
+            user_email = user_email,
+            user_id=headers.get("X-Forwarded-User"),
+            user_access_token = headers.get("X-Forwarded-Access-Token"),
+            user_display_name = user_display_name if user_display_name != "" else user_email,
+            user_groups = user_groups
+        )
+
+        st.session_state["__gwb_user_info"] = user_info
+
+    else:
+        user_info = st.session_state["__gwb_user_info"]
+
+    return user_info
+
 
 def open_run_window(job_id,run_id):
     host_name = os.getenv("DATABRICKS_HOSTNAME")    

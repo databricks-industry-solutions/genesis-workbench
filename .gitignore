@@ -20,3 +20,4 @@ mlruns
 lightning_logs
 .deployed
 .idea
+.dev
