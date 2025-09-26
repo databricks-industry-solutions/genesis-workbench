@@ -277,7 +277,8 @@ def display_import_model_uc_dialog(model_category: ModelCategory, success_callba
                 st.session_state["import_uc_model_info"] = model_info
             except Exception as e:                    
                 model_info_error = True
-                del st.session_state["import_uc_model_info"]
+                if "import_uc_model_info" in st.session_state:
+                    del st.session_state["import_uc_model_info"]
     
     if(model_info_error):
         st.error("Error fetching model details.")        
