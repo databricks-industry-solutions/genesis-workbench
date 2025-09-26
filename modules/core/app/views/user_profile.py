@@ -35,26 +35,31 @@ with st.spinner("Getting user information"):
     user_settings = st.session_state["user_settings"]
 
 with st.form("user_profile_setup_form", enter_to_submit=False):
+    
+    st.markdown("### General")
     st.text_input("Email:", user_info.user_email, disabled=True)
     display_name = st.text_input("Display Name:", user_settings["user_display_name"] if "user_display_name" in user_settings else user_info.user_display_name) 
 
-    st.markdown("#### Setup MLflow Experiment Location")
-    st.markdown("###### Create/Identify Folder")
-    st.write("Genesis Workbench might create experiments and log runs to those experiments. \
-            These experiments will be created in a workspace folder you specify. Please perfom the below steps.")
-    
-    st.write("- If you already have a folder that you would like to use, please specify it below.")
+    st.divider()
 
-    st.write("- If you dont, please create a new folder in your workspace folder and specify the folder name below.")
+    st.markdown("### MLflow Setup")
+    st.write("Genesis Workbench may create experiments to track your work and its recommended to create them inside your workspace folder.")
+    st.write(f"#### :material/keyboard_double_arrow_right: Step 1")    
+    st.write(f"##### Create a new folder in `/Workspace/Users/{user_info.user_email}/` ")
+    cc1,cc2 = st.columns([1,1])
+    with cc1:
+        st.image("images/demo_new_folder_small.gif" )
 
-    mlflow_experiment_folder = st.text_input(f"MLflow experiment folder inside : /Workspace/Users/{user_info.user_email}/","mlflow_experiments")
+    mlflow_experiment_folder = st.text_input(f"Enter the folder name:","mlflow_experiments")
 
-    st.markdown("###### Grant Permission")
-    st.write("Now you need to share the folder with the application so that Genesis Workbench has permission to create experiments/runs.")
-
-    st.write("Step 1: Navigate to the above workspace folder and click the `Share` button on top right corner.")
-    
-    st.write(f"Step 2: Grant `Can Manage` permission to this service principal: `{ os.environ['DATABRICKS_CLIENT_ID'] if 'DATABRICKS_CLIENT_ID' in os.environ else 'none' }` ")
+    st.write(f"#### :material/keyboard_double_arrow_right: Step 2")    
+    st.write(f"##### Grant Permission to the application service principal: `{ os.environ['DATABRICKS_CLIENT_ID'] if 'DATABRICKS_CLIENT_ID' in os.environ else 'none' }` ")
+    ac1,ac2 = st.columns([2,1])
+    with ac1:
+        st.image("images/set_permissions_small.gif" )
+    st.write(f"- Navigate to the above workspace folder and click the `Share` button on top right corner.")
+    st.write(f"- Grant `Can Manage` permission to the above service principal id")
+    st.write(f"- Click the `Check Folder Permission and Save` button below")
 
     profile_save_button = st.form_submit_button('Check Folder Permission and Save')
 
@@ -67,7 +72,7 @@ if profile_save_button:
             mlflow_check_success = True
             st.success("Experiment access verified.")
     except Exception as e:
-        st.error("Experiment folder access failed.")
+        st.error("Experiment folder access failed. Make sure the folder exists and access is granted to the application service principal.")
 
     if mlflow_check_success:
         try:
@@ -86,6 +91,6 @@ if profile_save_button:
             st.error("Save Failed. Try Again")
 
         with st.spinner("Reloading"):
-            time.sleep(3)                    
+            time.sleep(1)                    
             reload()
 
