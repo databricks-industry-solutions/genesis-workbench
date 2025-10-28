@@ -26,7 +26,7 @@ variables:
   cpu_large_node_type:
     description: Node type for CPU vms
 
-  gpu_xlarge_node_type:
+  cpu_xlarge_node_type:
     description: Node type for GPU vms
     
   core_catalog_name:
