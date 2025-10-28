@@ -12,7 +12,7 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/check_file_size.py
             base_parameters:
-              sample_path: ""
+              data_path: ""
             source: WORKSPACE
         - task_key: check_small
           depends_on:
@@ -44,7 +44,7 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
-              sample_path: ""
+              data_path: ""
             source: WORKSPACE
           job_cluster_key: run_gt_large_cluster
         - task_key: run_lt_large
@@ -54,7 +54,7 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
-              sample_path: ""
+              data_path: ""
             source: WORKSPACE
           job_cluster_key: run_lt_large_cluster
         - task_key: run_lt_medium
@@ -64,7 +64,7 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
-              sample_path: ""
+              data_path: ""
             source: WORKSPACE
           job_cluster_key: run_lt_medium_cluster
         - task_key: run_lt_small
@@ -74,7 +74,7 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
-              sample_path: ""
+              data_path: ""
             source: WORKSPACE
           job_cluster_key: run_lt_small_cluster
 

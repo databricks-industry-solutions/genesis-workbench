@@ -16,10 +16,17 @@ echo ""
 
 databricks bundle deploy $EXTRA_PARAMS
 
-# no need to run as we only wish to create the job for scanpy
-
-# echo ""
-# echo "▶️ [scanpy] creating the job definition for scanpy"
-# echo ""
-
-# databricks bundle {} $EXTRA_PARAMS --no-wait
+# Run registration job to grant app permissions
+if [[ ! -e ".deployed" ]]; then
+    echo ""
+    echo "▶️ [scanpy] Running registration job to grant app permissions"
+    echo ""
+    
+    databricks bundle run register_scanpy_job $EXTRA_PARAMS
+    
+    echo ""
+    echo "✅ [scanpy] Deployment complete"
+    echo ""
+    
+    date +"%Y-%m-%d %H:%M:%S" > .deployed
+fi
