@@ -15,49 +15,6 @@
 # COMMAND ----------
 
 # DBTITLE 1,SCimilarity_SearchNearest
-# import mlflow
-# import numpy as np
-# import pandas as pd
-# import json
-# from mlflow.pyfunc.model import PythonModelContext
-# from scimilarity import CellQuery
-
-# class SCimilarity_SearchNearest(mlflow.pyfunc.PythonModel):
-#     """Create MLFlow Pyfunc class for SCimilarity model."""
-
-#     def load_context(self, context: PythonModelContext):
-#         """Initialize pre-trained SCimilarity model."""
-#         self.cq = CellQuery(context.artifacts["model_path"])
-
-#     def predict(
-#         self,
-#         context: PythonModelContext,
-#         model_input: pd.DataFrame
-#     ) -> pd.DataFrame:
-#         """Output prediction on model."""
-#         # Extract embedding
-#         embeddings = model_input.embedding[0]
-
-#         # Handle optional params column as JSON string
-#         params = {"k": 100}
-#         if "params" in model_input.columns:
-#             raw_params = model_input["params"].iloc[0]
-#             if raw_params is not None and not (isinstance(raw_params, float) and pd.isna(raw_params)):
-#                 try:
-#                     params = json.loads(raw_params)
-#                 except Exception:
-#                     params = {"k": 100}
-
-#         predictions = self.cq.search_nearest(embeddings, k=params.get("k", 100))
-
-#         results_dict = {
-#             "nn_idxs": [np_array.tolist() for np_array in predictions[0]],
-#             "nn_dists": [np_array.tolist() for np_array in predictions[1]],
-#             "results_metadata": predictions[2].to_dict()
-#         }
-#         results_df = pd.DataFrame([results_dict])
-#         return results_df
-
 import mlflow
 import numpy as np
 import pandas as pd
@@ -329,11 +286,6 @@ example_input_with_optionalCols["params"] = example_input_with_optionalCols["par
 # Create example_output_with_optionalCols (even if no optional output columns)
 example_output_with_optionalCols = example_output.copy()
 
-# If you have optional output columns, add them here:
-# example_output_with_optionalCols["optional_field"] = pd.Series([None, "value"], dtype="string")
-# example_output_with_optionalCols["optional_field"] = example_output_with_optionalCols["optional_field"].apply(handle_array)
-
-#
 # Infer signature
 signature = infer_signature(model_input = example_input_with_optionalCols, 
                             model_output = example_output_with_optionalCols,
@@ -411,4 +363,5 @@ with mlflow.start_run(run_name=f'{model_name}', experiment_id=experiment.experim
 
 # COMMAND ----------
 
-
+# MAGIC %md
+# MAGIC
