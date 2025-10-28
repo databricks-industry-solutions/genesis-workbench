@@ -1,0 +1,46 @@
+variables:
+  current_user:
+    description: User deploying the bundle. Can apply to service principals as well.
+    default: ${workspace.current_user.userName}
+  
+  current_working_directory:
+    description: Working directory or bundle root.
+    default: /Users/${var.current_user}/.bundle/${bundle.name}/${bundle.target}
+
+  workspace_url:
+    description: Workspace url for deployment
+
+  common_resource_tags:
+    description: Resource tags
+    default:
+      application: genesis_workbench
+      module: scanpy
+      created_by: ${var.current_user}
+  
+  cpu_small_node_type:
+    description: Node type for CPU vms
+  
+  cpu_medium_node_type:
+    description: Node type for CPU vms
+
+  cpu_large_node_type:
+    description: Node type for CPU vms
+
+  gpu_xlarge_node_type:
+    description: Node type for GPU vms
+    
+  core_catalog_name:
+    description: primary catalog where data, models, and files are stored for this project.
+    #default: genesis_workbench
+  
+  core_schema_name:
+    description: The schema where core components will be installed.
+    #default: dbx_genesis_workbench_core 
+
+  module_schema_name:
+    description: The schema where a module components will be installed.
+    default: dev_yyang_genesis_workbench
+
+  sql_warehouse_id:
+    description: Id of the SQL Warehouse that will be used by the app
+  

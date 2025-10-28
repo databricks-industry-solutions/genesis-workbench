@@ -1,0 +1,186 @@
+resources:
+  jobs:
+    scanpy:
+      name: run_scanpy_gwb
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: check_file_size
+          notebook_task:
+            notebook_path: ../notebooks/check_file_size
+            base_parameters:
+              sample_path: ""
+            source: WORKSPACE
+        - task_key: check_small
+          depends_on:
+            - task_key: check_file_size
+          condition_task:
+            op: GREATER_THAN
+            left: "{{tasks.check_file_size.values.file_size_gb}}"
+            right: "4"
+        - task_key: check_medium
+          depends_on:
+            - task_key: check_small
+              outcome: "true"
+          condition_task:
+            op: GREATER_THAN
+            left: "{{tasks.check_file_size.values.file_size_gb}}"
+            right: "7"
+        - task_key: check_large
+          depends_on:
+            - task_key: check_medium
+              outcome: "true"
+          condition_task:
+            op: GREATER_THAN
+            left: "{{tasks.check_file_size.values.file_size_gb}}"
+            right: "14"
+        - task_key: run_gt_large
+          depends_on:
+            - task_key: check_large
+              outcome: "true"
+          notebook_task:
+            notebook_path: ../notebooks/analyze_single_h5ad
+            base_parameters:
+              sample_path: ""
+            source: WORKSPACE
+          job_cluster_key: run_gt_large_cluster
+        - task_key: run_lt_large
+          depends_on:
+            - task_key: check_large
+              outcome: "false"
+          notebook_task:
+            notebook_path: ../notebooks/analyze_single_h5ad
+            base_parameters:
+              sample_path: ""
+            source: WORKSPACE
+          job_cluster_key: run_lt_large_cluster
+        - task_key: run_lt_medium
+          depends_on:
+            - task_key: check_medium
+              outcome: "false"
+          notebook_task:
+            notebook_path: ../notebooks/analyze_single_h5ad
+            base_parameters:
+              sample_path: ""
+            source: WORKSPACE
+          job_cluster_key: run_lt_medium_cluster
+        - task_key: run_lt_small
+          depends_on:
+            - task_key: check_small
+              outcome: "false"
+          notebook_task:
+            notebook_path: ../notebooks/analyze_single_h5ad
+            base_parameters:
+              sample_path: ""
+            source: WORKSPACE
+          job_cluster_key: run_lt_small_cluster
+
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: experiment_name
+          default: scanpy_genesis_workbench
+        - name: user_email
+          default: ${var.current_user}
+        - name: data_path
+          default: 
+        - name: mlflow_experiment
+          default: scanpy_genesis_workbench
+        - name: mlflow_run_name
+          default: scanpy_genesis_workbench
+        - name: gene_name_column
+          default: gene_name
+        - name: min_genes
+          default: 200
+        - name: min_cells
+          default: 3
+        - name: pct_counts_mt
+          default: 5
+        - name: n_genes_by_counts
+          default: 2500
+        - name: target_sum
+          default: 10000
+        - name: n_top_genes
+          default: 500
+        - name: n_pcs
+          default: 50
+        - name: leiden_resolution
+          default: 0.2
+
+      job_clusters:
+        - job_cluster_key: run_gt_large_cluster
+          new_cluster:
+            cluster_name: ""
+            spark_version: 15.4.x-scala2.12
+            spark_conf:
+              spark.master: local[*, 4]
+              spark.databricks.cluster.profile: singleNode
+            node_type_id: ${var.cpu_xlarge_node_type}
+            driver_node_type_id: ${var.cpu_xlarge_node_type}
+            custom_tags:
+              ResourceClass: SingleNode
+            spark_env_vars:
+              PYSPARK_PYTHON: /databricks/python3/bin/python3
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            num_workers: 0
+        - job_cluster_key: run_lt_large_cluster
+          new_cluster:
+            cluster_name: ""
+            spark_version: 15.4.x-scala2.12
+            spark_conf:
+              spark.master: local[*, 4]
+              spark.databricks.cluster.profile: singleNode
+            node_type_id: ${var.cpu_large_node_type}
+            driver_node_type_id: ${var.cpu_large_node_type}
+            custom_tags:
+              ResourceClass: SingleNode
+            spark_env_vars:
+              PYSPARK_PYTHON: /databricks/python3/bin/python3
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            num_workers: 0
+        - job_cluster_key: run_lt_medium_cluster
+          new_cluster:
+            cluster_name: ""
+            spark_version: 15.4.x-scala2.12
+            spark_conf:
+              spark.master: local[*, 4]
+              spark.databricks.cluster.profile: singleNode
+            node_type_id: ${var.cpu_medium_node_type}
+            driver_node_type_id: ${var.cpu_medium_node_type}
+            custom_tags:
+              ResourceClass: SingleNode
+            spark_env_vars:
+              PYSPARK_PYTHON: /databricks/python3/bin/python3
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            num_workers: 0
+        - job_cluster_key: run_lt_small_cluster
+          new_cluster:
+            cluster_name: ""
+            spark_version: 15.4.x-scala2.12
+            spark_conf:
+              spark.master: local[*, 4]
+              spark.databricks.cluster.profile: singleNode
+            node_type_id: ${var.cpu_small_node_type}
+            driver_node_type_id: ${var.cpu_small_node_type}
+            custom_tags:
+              ResourceClass: SingleNode
+            spark_env_vars:
+              PYSPARK_PYTHON: /databricks/python3/bin/python3
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            num_workers: 0
+
+      tags: ${var.common_resource_tags}
