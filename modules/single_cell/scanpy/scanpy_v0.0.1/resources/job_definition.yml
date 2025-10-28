@@ -10,7 +10,7 @@ resources:
       tasks:
         - task_key: check_file_size
           notebook_task:
-            notebook_path: ../notebooks/check_file_size
+            notebook_path: ../notebooks/check_file_size.py
             base_parameters:
               sample_path: ""
             source: WORKSPACE
@@ -42,7 +42,7 @@ resources:
             - task_key: check_large
               outcome: "true"
           notebook_task:
-            notebook_path: ../notebooks/analyze_single_h5ad
+            notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
               sample_path: ""
             source: WORKSPACE
@@ -52,7 +52,7 @@ resources:
             - task_key: check_large
               outcome: "false"
           notebook_task:
-            notebook_path: ../notebooks/analyze_single_h5ad
+            notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
               sample_path: ""
             source: WORKSPACE
@@ -62,7 +62,7 @@ resources:
             - task_key: check_medium
               outcome: "false"
           notebook_task:
-            notebook_path: ../notebooks/analyze_single_h5ad
+            notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
               sample_path: ""
             source: WORKSPACE
@@ -72,7 +72,7 @@ resources:
             - task_key: check_small
               outcome: "false"
           notebook_task:
-            notebook_path: ../notebooks/analyze_single_h5ad
+            notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
               sample_path: ""
             source: WORKSPACE
@@ -84,12 +84,10 @@ resources:
           default: ${var.core_catalog_name}
         - name: schema
           default: ${var.core_schema_name}
-        - name: experiment_name
-          default: scanpy_genesis_workbench
         - name: user_email
           default: ${var.current_user}
         - name: data_path
-          default: 
+          default: dummy_data_path.h5ad
         - name: mlflow_experiment
           default: scanpy_genesis_workbench
         - name: mlflow_run_name

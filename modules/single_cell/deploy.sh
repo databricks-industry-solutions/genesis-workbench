@@ -13,6 +13,13 @@ if [[ -f "module.env" ]]; then
     EXTRA_PARAMS="$EXTRA_PARAMS,$EXTRA_PARAMS_MODULE"
 fi
 
+if [[ -f "module_${CLOUD}.env" ]]; then
+    EXTRA_PARAMS_MODULE_CLOUD=$(paste -sd, "module_${CLOUD}.env")
+else
+    EXTRA_PARAMS_MODULE_CLOUD=''
+fi
+EXTRA_PARAMS="$EXTRA_PARAMS,$EXTRA_PARAMS_MODULE_CLOUD"
+
 echo "Extra Params: $EXTRA_PARAMS"
 
 echo "###########################################"

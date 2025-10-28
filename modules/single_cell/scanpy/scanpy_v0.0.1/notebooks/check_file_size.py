@@ -1,6 +1,6 @@
 # Databricks notebook source
-dbutils.widgets.text("sample_path", "", "Sample Path")
-path = dbutils.widgets.get("sample_path")
+dbutils.widgets.text("data_path", "", "Data Path")
+path = dbutils.widgets.get("data_path")
 
 # COMMAND ----------
 
