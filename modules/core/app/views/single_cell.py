@@ -9,8 +9,7 @@ from genesis_workbench.models import (ModelCategory,
 
 from utils.streamlit_helper import (display_import_model_uc_dialog,
                                     display_deploy_model_dialog,
-                                    get_user_info,
-                                    open_run_window)
+                                    get_user_info)
 from utils.single_cell_analysis import start_scanpy_job, start_rapids_singlecell_job
 
 def reset_available_models():
@@ -263,8 +262,14 @@ def display_scanpy_analysis_tab():
                 #             user_info=user_info
                 #         )
                 #         
+                #         # Construct the run URL
+                #         host_name = os.getenv("DATABRICKS_HOSTNAME", "")
+                #         if not host_name.startswith("https://"):
+                #             host_name = "https://" + host_name
+                #         run_url = f"{host_name}/jobs/{rapids_job_id}/runs/{job_run_id}"
+                #         
                 #         st.success(f"✅ Job started successfully! Run ID: {job_run_id}")
-                #         st.button("View Run", on_click=lambda: open_run_window(rapids_job_id, job_run_id))
+                #         st.link_button("🔗 View Run in Databricks", run_url, type="primary")
                 # 
                 # except Exception as e:
                 #     st.error(f"❌ An error occurred while starting the job: {str(e)}")
