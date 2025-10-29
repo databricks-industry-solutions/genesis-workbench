@@ -194,8 +194,8 @@ sc.pl.pca(
 
 # COMMAND ----------
 
-# optionally add PCA coords into cell (var) table
-for i in range(adata._obsm['X_pca'].shape[1]):
+# optionally add PCA coords into cell (obs) table
+for i in range(4): #adata._obsm['X_pca'].shape[1]):
     adata.obs['PCA_'+str(i)] = adata._obsm['X_pca'][:,i]
 
 # COMMAND ----------
@@ -222,6 +222,9 @@ sc.tl.leiden(
 
 sc.tl.umap(adata)
 
+for i in range(2):
+    adata.obs['UMAP_'+str(i)] = adata._obsm['X_umap'][:,i]
+
 # COMMAND ----------
 
 sc.pl.umap(
@@ -230,6 +233,129 @@ sc.pl.umap(
     size=2,
     save='umap_cluster.png'
 )
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Find marker genes for each cluster
+
+# COMMAND ----------
+
+# Run differential expression analysis
+sc.tl.rank_genes_groups(adata, groupby="leiden", method="wilcoxon")
+
+# COMMAND ----------
+
+# Visualize top markers
+sc.pl.rank_genes_groups(adata, n_genes=20, sharey=False, save='_marker_genes.png')
+
+# COMMAND ----------
+
+# Extract top N marker genes per cluster
+n_markers_per_cluster = 10  # Adjust as needed
+
+# Get all unique marker genes across all clusters
+marker_genes = set()
+n_clusters = len(adata.obs['leiden'].unique())
+
+for i in range(n_clusters):
+    cluster_markers = adata.uns['rank_genes_groups']['names'][str(i)][:n_markers_per_cluster]
+    marker_genes.update(cluster_markers)
+
+marker_genes = list(marker_genes)
+print(f"Total unique marker genes: {len(marker_genes)}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Create marker gene dataframe for logging
+
+# COMMAND ----------
+
+# Create a DataFrame with top markers per cluster (for visualization)
+marker_df = pd.DataFrame(adata.uns["rank_genes_groups"]["names"]).head(n_markers_per_cluster)
+marker_df.to_csv(tmpdir.name + "/top_markers_per_cluster.csv", index=False)
+
+# Also save full marker gene list
+pd.DataFrame({'marker_genes': marker_genes}).to_csv(
+    tmpdir.name + "/top_marker_genes.csv", 
+    index=False
+)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Subsample the data to a maximum number of cells
+
+# COMMAND ----------
+import scipy
+import numpy as np
+
+adata_markers = adata[:, marker_genes].copy()
+
+max_cells = 10000
+if adata_markers.shape[0] > max_cells:
+    # Get cluster counts and proportions
+    cluster_counts = adata_markers.obs['leiden'].value_counts().sort_index()
+    total_cells = cluster_counts.sum()
+    
+    # Calculate target cells per cluster (proportional)
+    target_per_cluster = {}
+    for cluster_id, count in cluster_counts.items():
+        proportion = count / total_cells
+        target_per_cluster[cluster_id] = int(np.round(proportion * max_cells))
+    
+    # Adjust to ensure exactly max_cells (handle rounding errors)
+    current_total = sum(target_per_cluster.values())
+    if current_total != max_cells:
+        diff = max_cells - current_total
+        # Adjust the largest cluster
+        largest_cluster = cluster_counts.idxmax()
+        target_per_cluster[largest_cluster] += diff
+    
+    # Perform stratified sampling
+    np.random.seed(42)
+    sampled_indices = []
+    
+    for cluster_id, target_n in target_per_cluster.items():
+        # Get all cells in this cluster
+        cluster_mask = adata_markers.obs['leiden'] == cluster_id
+        cluster_cells = adata_markers.obs.index[cluster_mask]
+        
+        # Sample the target number (or all if cluster is smaller than target)
+        n_to_sample = min(target_n, len(cluster_cells))
+        sampled_cells = np.random.choice(cluster_cells, size=n_to_sample, replace=False)
+        sampled_indices.extend(sampled_cells)
+    
+    # Create the subsampled object
+    adata_markers = adata_markers[sampled_indices, :].copy()
+    print(f"Subsampled to {len(adata_markers)} cells")
+    print("\nCells per cluster (before → after):")
+    for cluster_id in sorted(cluster_counts.index):
+        before = cluster_counts[cluster_id]
+        after = (adata_markers.obs['leiden'] == cluster_id).sum()
+        pct_before = 100 * before / total_cells
+        pct_after = 100 * after / len(adata_markers)
+        print(f"  Cluster {cluster_id}: {before:>6} ({pct_before:>5.1f}%) → {after:>5} ({pct_after:>5.1f}%)")
+        # add to metrics
+        metrics[f"cluster_{cluster_id}_pct_before_subample"] = pct_before
+        metrics[f"cluster_{cluster_id}_pct_after_subample"] = pct_after
+        metrics[f"cluster_{cluster_id}_cells_before_subample"] = before
+        metrics[f"cluster_{cluster_id}_cells_after_subample"] = after
+
+# Convert to a flat DataFrame
+df_flat = adata_markers.obs.copy()
+
+# Add marker gene expression as columns
+# Convert sparse matrix to dense if needed
+if scipy.sparse.issparse(adata_markers.X):
+    expression_matrix = adata_markers.X.toarray()
+else:
+    expression_matrix = adata_markers.X
+
+# Add each marker gene as a column
+for i, gene in enumerate(marker_genes):
+    df_flat[f"expr_{gene}"] = expression_matrix[:, i]
 
 # COMMAND ----------
 
@@ -250,10 +376,13 @@ mlflow.set_experiment(parameters['mlflow_experiment'])
 
 # save adata and our figures to disk
 adata.write_h5ad(tmpdir.name+"/adata_output.h5ad")
+# save the flat dataframe to disk
+df_flat.to_parquet(tmpdir.name + "/markers_flat.parquet")
+
 
 t1 = time.time()
 total_time = t1-t0
-metrics = {'total_time': total_time}
+metrics['total_time'] = total_time
 
 if parameters['mlflow_run_name'] != '':
   run_name = None
