@@ -13,9 +13,11 @@ from utils.streamlit_helper import (display_import_model_uc_dialog,
 from utils.single_cell_analysis import (start_scanpy_job, 
                                         start_rapids_singlecell_job,
                                         download_singlecell_markers_df,
+                                        download_cluster_markers_mapping,
                                         get_mlflow_run_url,
                                         search_singlecell_runs)
 import plotly.express as px
+from mlflow.tracking import MlflowClient
 
 def reset_available_models():
     with st.spinner("Refreshing data.."):
@@ -333,47 +335,38 @@ def display_singlecell_results_viewer():
             st.warning(f"No runs found matching experiment: '{experiment_filter}'")
             return
     
-    # Step 1: Filter by experiment (dropdown)
-    experiments = sorted(runs_df['experiment'].unique().tolist())
-    
-    col1, col2 = st.columns([2, 2])
-    with col1:
-        selected_experiment = st.selectbox(
-            "Select Specific Experiment:",
-            ["All"] + experiments,
-            help="Further filter to a specific experiment from the list"
-        )
-    
-    # Filter runs by specific experiment (dropdown)
-    if selected_experiment != "All":
-        filtered_runs = runs_df[runs_df['experiment'] == selected_experiment]
-    else:
-        filtered_runs = runs_df
-    
-    with col2:
-        # Show run count
-        st.metric("Available Runs", len(filtered_runs))
-    
-    # Step 2: Select run
-    if len(filtered_runs) > 0:
+    # Select run - compact layout
+    if len(runs_df) > 0:
         # Create display names with date and status
-        filtered_runs['display_name'] = filtered_runs.apply(
+        runs_df['display_name'] = runs_df.apply(
             lambda row: f"{row['run_name']} ({row['experiment']}) - {row['start_time'].strftime('%Y-%m-%d %H:%M') if hasattr(row['start_time'], 'strftime') else row['start_time']}",
             axis=1
         )
         
-        run_options = dict(zip(filtered_runs['display_name'], filtered_runs['run_id']))
+        run_options = dict(zip(runs_df['display_name'], runs_df['run_id']))
         
-        selected_display = st.selectbox(
-            "Select Run to View:",
-            list(run_options.keys()),
-            help="Runs are sorted by most recent first"
-        )
+        # Compact layout: metric, dropdown, and button in columns
+        col1, col2, col3 = st.columns([1, 4, 1])
+        
+        with col1:
+            st.metric("Runs", len(runs_df), label_visibility="visible")
+        
+        with col2:
+            selected_display = st.selectbox(
+                "Select Run:",
+                list(run_options.keys()),
+                help="Runs sorted by most recent. Experiment name in parentheses.",
+                label_visibility="visible"
+            )
+        
+        with col3:
+            st.write("")  # Spacer to align button
+            load_button = st.button("Load", type="primary", use_container_width=True)
         
         run_id = run_options[selected_display]
         
-        # Load button
-        if st.button("📊 Load Selected Run", type="primary"):
+        # Load button action
+        if load_button:
             with st.spinner("Loading data from MLflow..."):
                 try:
                     df = download_singlecell_markers_df(run_id)
@@ -389,36 +382,13 @@ def display_singlecell_results_viewer():
                     st.info("💡 Tip: Make sure this run includes the markers_flat.parquet artifact")
                     return
     else:
-        st.warning(f"No runs found for experiment: {selected_experiment}")
+        st.warning("No runs found matching your criteria")
     
     # Step 3: Display if data is loaded
     if 'singlecell_df' in st.session_state:
         df = st.session_state['singlecell_df']
+        run_id = st.session_state.get('singlecell_run_id', '')
         mlflow_url = st.session_state.get('singlecell_mlflow_url', '')
-        
-        # Link to MLflow run
-        st.markdown("---")
-        st.info(
-            f"**View Standard Analysis Plots**: All analysis outputs (QC plots, "
-            f"PCA, highly variable genes, marker genes heatmap, UMAP, etc.) are available in the MLflow run."
-        )
-        st.link_button("🔗 Open MLflow Run (View All Plots & Artifacts)", mlflow_url, type="secondary")
-        
-        st.markdown("---")
-        
-        # Quick stats
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Total Cells", f"{len(df):,}")
-        with col2:
-            if 'leiden' in df.columns:
-                st.metric("Clusters", df['leiden'].nunique())
-        with col3:
-            expr_cols = [c for c in df.columns if c.startswith('expr_')]
-            st.metric("Marker Genes", len(expr_cols))
-        with col4:
-            if 'UMAP_1' in df.columns:
-                st.metric("Embeddings", "UMAP ✓")
         
         st.markdown("---")
         st.markdown("##### Interactive UMAP Visualization")
@@ -427,7 +397,7 @@ def display_singlecell_results_viewer():
         st.info(
             "📊 **Note:** This viewer displays a subsampled dataset (max 10,000 cells) with marker genes only "
             "for faster, interactive plotting. The complete output AnnData object with all genes is available "
-            "in the MLflow run (see link above)."
+            "in the MLflow run (see 'QC & Other Analysis Outputs' section below)."
         )
         
         # Identify column types
@@ -454,9 +424,31 @@ def display_singlecell_results_viewer():
                     cluster_options = obs_categorical
                 color_col = st.selectbox("Select cluster column:", cluster_options if cluster_options else ['leiden'])
             elif color_type == "Marker Gene":
-                # Show gene names without expr_ prefix
-                gene_options = sorted([c.replace('expr_', '') for c in expr_cols])
-                selected_gene = st.selectbox("Select gene:", gene_options)
+                # Calculate which cluster each gene is most expressed in
+                mean_expr_by_cluster = df.groupby('leiden')[expr_cols].mean()
+                
+                # For each gene, find the cluster with highest mean expression
+                gene_to_cluster = {}
+                for gene_col in expr_cols:
+                    gene_name = gene_col.replace('expr_', '')
+                    cluster_with_max = mean_expr_by_cluster[gene_col].idxmax()
+                    gene_to_cluster[gene_name] = cluster_with_max
+                
+                # Create annotated gene options: "GENE (Cluster X)"
+                gene_options_annotated = [
+                    f"{gene} (Cluster {gene_to_cluster[gene]})" 
+                    for gene in sorted(gene_to_cluster.keys())
+                ]
+                
+                # Create a mapping for reverse lookup
+                annotated_to_gene = {
+                    f"{gene} (Cluster {gene_to_cluster[gene]})": gene
+                    for gene in gene_to_cluster.keys()
+                }
+                
+                selected_gene_annotated = st.selectbox("Select gene:", gene_options_annotated)
+                # Extract the actual gene name from the annotated selection
+                selected_gene = annotated_to_gene[selected_gene_annotated]
                 color_col = f"expr_{selected_gene}"
             else:  # QC Metric
                 metric_options = [c for c in obs_numerical if c in ['n_genes', 'n_counts', 'pct_counts_mt', 'n_genes_by_counts']]
@@ -531,54 +523,201 @@ def display_singlecell_results_viewer():
             
             st.plotly_chart(fig, use_container_width=True)
         
-        # Heatmap section
+        # Quick stats - moved below plot
         st.markdown("---")
-        st.markdown("##### Marker Gene Expression by Cluster")
+        st.markdown("##### 📊 Dataset Summary")
+        col1, col2, col3, col4 = st.columns(4)
         
-        if st.checkbox("Show expression heatmap"):
+        with col1:
+            # Get total cells from MLflow metrics if available
+            try:
+                client = MlflowClient()
+                run_info = client.get_run(run_id)
+                total_cells_actual = run_info.data.metrics.get('total_cells_before_subsample', None)
+                if total_cells_actual:
+                    st.metric("Total Cells (Full)", f"{int(total_cells_actual):,}")
+                    st.caption(f"Viewing subsample of: {len(df):,}")
+                else:
+                    st.metric("Total Cells", f"{len(df):,}*")
+                    st.caption("*Subsampled")
+            except:
+                st.metric("Total Cells", f"{len(df):,}*")
+                st.caption("*Subsampled")
+        
+        with col2:
+            if 'leiden' in df.columns:
+                st.metric("Clusters", df['leiden'].nunique())
+        with col3:
+            st.metric("Marker Genes", len(expr_cols))
+        with col4:
+            if 'UMAP_0' in df.columns:
+                st.metric("Embeddings", "UMAP ✓")
+        
+        # Dot plot section
+        st.markdown("---")
+        with st.expander("Marker Gene Expression by Cluster", expanded=False):
             if 'leiden' in df.columns and expr_cols:
-                # Gene selection
-                col1, col2 = st.columns([2, 1])
+                # Load the cluster-to-marker mapping from MLflow
+                try:
+                    marker_mapping = download_cluster_markers_mapping(run_id)
+                except:
+                    marker_mapping = None
+                
+                # Gene selection - calculate top genes per cluster
+                col1, col2, col3 = st.columns([2, 1, 1])
                 with col1:
-                    selected_genes = st.multiselect(
-                        "Select genes to display:",
-                        [c.replace('expr_', '') for c in expr_cols],
-                        default=[c.replace('expr_', '') for c in expr_cols[:min(20, len(expr_cols))]],
-                        help="Leave empty to show all"
+                    n_top_genes = st.number_input(
+                        "Top genes per cluster:",
+                        min_value=1,
+                        max_value=20,
+                        value=3,
+                        help="Select top N marker genes per cluster (ranked by Wilcoxon test)"
                     )
+                    
+                    # Get ordered list of genes using Wilcoxon rankings
+                    ordered_genes_by_cluster = []
+                    
+                    if marker_mapping is not None:
+                        # Use the pre-computed marker rankings from scanpy
+                        for cluster_col in sorted(marker_mapping.columns, key=lambda x: int(x) if x.isdigit() else x):
+                            # Get top N genes for this cluster (already ranked by Wilcoxon)
+                            top_genes = marker_mapping[cluster_col].head(n_top_genes).dropna().tolist()
+                            ordered_genes_by_cluster.extend(top_genes)
+                    else:
+                        # Fallback: use z-score ranking if CSV not available
+                        mean_expr_by_cluster = df.groupby('leiden')[expr_cols].mean()
+                        mean_expr_zscored = (mean_expr_by_cluster - mean_expr_by_cluster.mean()) / mean_expr_by_cluster.std()
+                        
+                        for cluster in sorted(mean_expr_zscored.index):
+                            cluster_zscores = mean_expr_zscored.loc[cluster]
+                            top_genes = cluster_zscores.nlargest(n_top_genes).index.tolist()
+                            top_genes = [g.replace('expr_', '') for g in top_genes]
+                            ordered_genes_by_cluster.extend(top_genes)
+                    
+                    # Remove duplicates while preserving order
+                    ordered_genes = []
+                    seen = set()
+                    for gene in ordered_genes_by_cluster:
+                        if gene not in seen:
+                            ordered_genes.append(gene)
+                            seen.add(gene)
+                    
+                    # Allow user to customize selection
+                    selected_genes = st.multiselect(
+                        "Customize gene selection:",
+                        [c.replace('expr_', '') for c in expr_cols],
+                        default=ordered_genes,
+                        help="Pre-populated with top genes per cluster (ordered by cluster)"
+                    )
+                
                 with col2:
                     st.write("")
                     st.write("")
-                    scale_data = st.checkbox("Scale expression", value=True, help="Z-score normalization across clusters")
+                    scale_data = st.checkbox("Scale expression", value=True, help="Z-score normalization (enhances relative differences)")
+                
+                with col3:
+                    st.write("")
+                    st.write("")
+                    font_size = st.slider("Font size:", 10, 20, 14)
                 
                 if selected_genes:
+                    # Maintain the cluster-ordered gene list
                     expr_cols_to_plot = [f"expr_{g}" for g in selected_genes]
+                    genes_ordered = selected_genes  # Keep for x-axis ordering
                 else:
                     expr_cols_to_plot = expr_cols
+                    genes_ordered = [c.replace('expr_', '') for c in expr_cols]
                 
                 # Calculate mean expression per cluster
                 heatmap_data = df.groupby('leiden')[expr_cols_to_plot].mean()
                 heatmap_data.columns = [c.replace('expr_', '') for c in heatmap_data.columns]
                 
+                # Reorder columns to match cluster-based ordering
+                heatmap_data = heatmap_data[genes_ordered]
+                
                 # Optional scaling
                 if scale_data:
                     heatmap_data = (heatmap_data - heatmap_data.mean()) / heatmap_data.std()
                     color_label = "Z-score"
+                    color_scale = "RdBu_r"
                 else:
                     color_label = "Mean Expression"
+                    color_scale = "Viridis"
                 
-                # Create heatmap
-                fig_heatmap = px.imshow(
-                    heatmap_data.T,
-                    labels=dict(x="Cluster", y="Gene", color=color_label),
-                    aspect="auto",
-                    color_continuous_scale="RdBu_r" if scale_data else "Viridis",
-                    title=f"Marker Expression by Cluster ({color_label})"
+                # Prepare data for dot plot (convert from wide to long format)
+                dotplot_data = []
+                for cluster in heatmap_data.index:
+                    for gene in heatmap_data.columns:
+                        dotplot_data.append({
+                            'Cluster': str(cluster),
+                            'Gene': gene,
+                            'Expression': heatmap_data.loc[cluster, gene]
+                        })
+                
+                dotplot_df = pd.DataFrame(dotplot_data)
+                
+                # Create dot plot
+                # For size, use absolute values or original expression (size must be non-negative)
+                if scale_data:
+                    # When z-scored, use absolute values for size, but keep z-scores for color
+                    dotplot_df['Size'] = dotplot_df['Expression'].abs()
+                else:
+                    dotplot_df['Size'] = dotplot_df['Expression']
+                
+                fig_dotplot = px.scatter(
+                    dotplot_df,
+                    x='Gene',
+                    y='Cluster',
+                    color='Expression',  # Color by z-score (can be negative)
+                    size='Size',  # Size by absolute value (always positive)
+                    color_continuous_scale=color_scale,
+                    labels={'Expression': color_label},
+                    title=f"Marker Expression by Cluster ({color_label})",
+                    height=max(400, len(heatmap_data.index) * 50)
                 )
-                fig_heatmap.update_layout(height=max(400, len(heatmap_data.columns) * 20))
-                st.plotly_chart(fig_heatmap, use_container_width=True)
+                
+                # Update layout for better readability
+                fig_dotplot.update_traces(
+                    marker=dict(
+                        sizemode='diameter',
+                        sizeref=dotplot_df['Size'].max() / 15,  # Adjust dot size scaling
+                        line=dict(width=0.5, color='white')
+                    )
+                )
+                fig_dotplot.update_xaxes(tickangle=45, tickfont=dict(size=font_size))
+                fig_dotplot.update_yaxes(tickfont=dict(size=font_size))
+                fig_dotplot.update_layout(
+                    plot_bgcolor='white',
+                    xaxis=dict(showgrid=True, gridcolor='lightgray'),
+                    yaxis=dict(showgrid=True, gridcolor='lightgray'),
+                    font=dict(size=font_size),
+                    title=dict(font=dict(size=font_size + 2))
+                )
+                
+                st.plotly_chart(fig_dotplot, use_container_width=True)
             else:
                 st.warning("Clustering information or marker genes not available")
+        
+        # QC and additional analysis section
+        st.markdown("---")
+        with st.expander("QC & Other Analysis Outputs", expanded=False):
+            st.info(
+                "**View Standard Analysis Plots**: All analysis outputs (QC plots, "
+                "PCA, highly variable genes, marker genes heatmap, UMAP, etc.) are available in the MLflow run."
+                "We may add QC interactive vizualization here in the future."
+            )
+            st.link_button("🔗 Open MLflow Run (View All Plots & Artifacts)", mlflow_url, type="primary")
+            
+            st.markdown("---")
+            st.markdown("**About the MLflow Run:**")
+            st.markdown(
+                "- Quality control plots (cell/gene filtering, mitochondrial content)\n"
+                "- PCA and variance explained plots\n"
+                "- Highly variable genes identification\n"
+                "- Full-resolution UMAP (all cells, all genes)\n"
+                "- Marker genes heatmap\n"
+                "- Complete AnnData object with all genes"
+            )
         
         # Data table preview
         st.markdown("---")
@@ -688,7 +827,7 @@ with settings_tab:
 
 with processing_tab:
     # Sub-sections within processing tab
-    st.markdown("### 🔬 Raw Single Cell Analysis")
+    st.markdown("### Raw Single Cell Analysis")
     
     # Custom CSS to make tab text bigger
     st.markdown("""

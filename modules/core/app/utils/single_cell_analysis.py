@@ -150,6 +150,32 @@ def download_singlecell_markers_df(run_id: str) -> pd.DataFrame:
     return df
 
 
+def download_cluster_markers_mapping(run_id: str) -> pd.DataFrame:
+    """
+    Download the top_markers_per_cluster.csv from an MLflow run.
+    
+    Returns a DataFrame where columns are cluster IDs and values are ranked marker genes
+    (as determined by Wilcoxon rank-sum test in scanpy).
+    
+    Args:
+        run_id: The MLflow run ID
+    
+    Returns:
+        DataFrame with columns as cluster IDs, rows as gene rankings
+    """
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+    client = MlflowClient()
+    
+    # Download the CSV artifact
+    with tempfile.TemporaryDirectory() as tmpdir:
+        artifact_path = "top_markers_per_cluster.csv"
+        local_file = client.download_artifacts(run_id, artifact_path, dst_path=tmpdir)
+        df = pd.read_csv(local_file)
+    
+    return df
+
+
 def get_mlflow_run_url(run_id: str) -> str:
     """
     Construct the URL to an MLflow run

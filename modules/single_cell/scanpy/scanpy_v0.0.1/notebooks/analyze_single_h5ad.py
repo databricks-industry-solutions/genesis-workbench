@@ -110,6 +110,7 @@ sc.pp.calculate_qc_metrics(
 )
 
 current_cells = adata.shape[0]
+metrics['total_cells_starting'] = float(current_cells)
 
 # COMMAND ----------
 
@@ -300,6 +301,7 @@ if adata_markers.shape[0] > max_cells:
     # Get cluster counts and proportions
     cluster_counts = adata_markers.obs['leiden'].value_counts().sort_index()
     total_cells = cluster_counts.sum()
+    metrics['total_cells_before_subsample'] = float(total_cells)
     
     # Calculate target cells per cluster (proportional)
     target_per_cluster = {}
@@ -344,6 +346,9 @@ if adata_markers.shape[0] > max_cells:
         metrics[f"cluster_{cluster_id}_pct_after_subample"] = pct_after
         metrics[f"cluster_{cluster_id}_cells_before_subample"] = before
         metrics[f"cluster_{cluster_id}_cells_after_subample"] = after
+else:
+    # No subsampling needed
+    metrics['total_cells_before_subsample'] = float(adata_markers.shape[0])
 
 # Convert to a flat DataFrame
 df_flat = adata_markers.obs.copy()
