@@ -23,6 +23,7 @@ import time
 # COMMAND ----------
 
 dbutils.widgets.text("data_path", "", "Data Path")
+dbutils.widgets.text("user_email", "", "User Email")
 dbutils.widgets.text("mlflow_experiment", "", "MLflow Experiment")
 dbutils.widgets.text("mlflow_run_name", "", "MLflow Run Name")
 dbutils.widgets.text("gene_name_column", "gene_name", "Gene Name Column")
@@ -39,8 +40,9 @@ dbutils.widgets.text("leiden_resolution", "0.2", "Leiden Resolution")
 
 parameters = {
   'data_path':dbutils.widgets.get("data_path"),
+  'user_email':dbutils.widgets.get("user_email"),
   'mlflow_experiment':dbutils.widgets.get("mlflow_experiment"),
-  'mlflow_run_name':dbutils.widgets.get("mlflow_experiment"),
+  'mlflow_run_name':dbutils.widgets.get("mlflow_run_name"),
   'gene_name_column':dbutils.widgets.get("gene_name_column"),
   'min_genes': int(dbutils.widgets.get("min_genes")),
   'min_cells': int(dbutils.widgets.get("min_cells")),
@@ -371,8 +373,15 @@ for i, gene in enumerate(marker_genes):
 import mlflow
 mlflow.set_registry_uri("databricks-uc")
 
-# optionally set a directory for experiment (if do not gets tied to this notebook, sometimes convenient too)
-mlflow.set_experiment(parameters['mlflow_experiment'])
+# Set the MLflow experiment
+experiment = mlflow.set_experiment(parameters['mlflow_experiment'])
+
+# Tag the experiment for Genesis Workbench search
+mlflow.set_experiment_tags({
+    "used_by_genesis_workbench": "yes"
+})
+
+# COMMAND ----------
 
 # save adata and our figures to disk
 adata.write_h5ad(tmpdir.name+"/adata_output.h5ad")
@@ -384,16 +393,19 @@ t1 = time.time()
 total_time = t1-t0
 metrics['total_time'] = total_time
 
-if parameters['mlflow_run_name'] != '':
-  run_name = None
-else:
-  run_name = parameters['mlflow_run_name']
+run_name = parameters['mlflow_run_name'] if parameters['mlflow_run_name'] else None
 
-
-with mlflow.start_run(run_name=run_name) as run:
-  mlflow.log_metrics(metrics)
-  mlflow.log_params(parameters)
-  mlflow.log_artifacts(tmpdir.name)
+# Log to MLflow with proper tags for Genesis Workbench
+with mlflow.start_run(run_name=run_name, experiment_id=experiment.experiment_id) as run:
+    # Log metrics and params
+    mlflow.log_metrics(metrics)
+    mlflow.log_params(parameters)
+    mlflow.log_artifacts(tmpdir.name)
+    
+    # Set required tags for Genesis Workbench search
+    mlflow.set_tag("origin", "genesis_workbench")
+    mlflow.set_tag("created_by", parameters['user_email'])
+    mlflow.set_tag("processing_mode", "scanpy")
 
 # COMMAND ----------
 

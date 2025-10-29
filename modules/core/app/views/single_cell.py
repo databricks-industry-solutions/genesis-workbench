@@ -10,7 +10,12 @@ from genesis_workbench.models import (ModelCategory,
 from utils.streamlit_helper import (display_import_model_uc_dialog,
                                     display_deploy_model_dialog,
                                     get_user_info)
-from utils.single_cell_analysis import start_scanpy_job, start_rapids_singlecell_job
+from utils.single_cell_analysis import (start_scanpy_job, 
+                                        start_rapids_singlecell_job,
+                                        download_singlecell_markers_df,
+                                        get_mlflow_run_url,
+                                        search_singlecell_runs)
+import plotly.express as px
 
 def reset_available_models():
     with st.spinner("Refreshing data.."):
@@ -279,6 +284,333 @@ def display_scanpy_analysis_tab():
                 st.error(f"❌ Unknown mode: {mode}")
 
 
+def display_singlecell_results_viewer():
+    """Interactive viewer for single-cell analysis results (scanpy, rapids-singlecell, etc.)"""
+    
+    st.markdown("##### Single-Cell Results Viewer")
+    st.markdown("Select a completed single-cell analysis run to visualize")
+    
+    # Get user info
+    user_info = get_user_info()
+    
+    # Experiment filter at the top
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        experiment_filter = st.text_input(
+            "Filter by MLflow Experiment:",
+            value="scanpy_genesis_workbench",
+            help="Enter experiment name to filter runs (partial match supported). Leave blank to see all experiments."
+        )
+    with col2:
+        st.write("")  # Spacing
+        st.write("")
+        refresh_button = st.button("🔄 Refresh Runs", help="Reload available runs from MLflow")
+    
+    # Load or refresh runs list
+    if refresh_button or 'singlecell_runs_df' not in st.session_state:
+        with st.spinner("Searching for your single-cell analysis runs..."):
+            try:
+                runs_df = search_singlecell_runs(user_info.user_email)
+                st.session_state['singlecell_runs_df'] = runs_df
+                if len(runs_df) > 0:
+                    st.success(f"✅ Found {len(runs_df)} runs")
+                else:
+                    st.info("No single-cell analysis runs found. Run an analysis first!")
+            except Exception as e:
+                st.error(f"❌ Error searching runs: {str(e)}")
+                return
+    
+    runs_df = st.session_state.get('singlecell_runs_df', pd.DataFrame())
+    
+    if len(runs_df) == 0:
+        st.info("💡 No single-cell runs found. Go to 'Run New Analysis' to create one!")
+        return
+    
+    # Apply experiment text filter
+    if experiment_filter and experiment_filter.strip():
+        runs_df = runs_df[runs_df['experiment'].str.contains(experiment_filter.strip(), case=False, na=False)]
+        if len(runs_df) == 0:
+            st.warning(f"No runs found matching experiment: '{experiment_filter}'")
+            return
+    
+    # Step 1: Filter by experiment (dropdown)
+    experiments = sorted(runs_df['experiment'].unique().tolist())
+    
+    col1, col2 = st.columns([2, 2])
+    with col1:
+        selected_experiment = st.selectbox(
+            "Select Specific Experiment:",
+            ["All"] + experiments,
+            help="Further filter to a specific experiment from the list"
+        )
+    
+    # Filter runs by specific experiment (dropdown)
+    if selected_experiment != "All":
+        filtered_runs = runs_df[runs_df['experiment'] == selected_experiment]
+    else:
+        filtered_runs = runs_df
+    
+    with col2:
+        # Show run count
+        st.metric("Available Runs", len(filtered_runs))
+    
+    # Step 2: Select run
+    if len(filtered_runs) > 0:
+        # Create display names with date and status
+        filtered_runs['display_name'] = filtered_runs.apply(
+            lambda row: f"{row['run_name']} ({row['experiment']}) - {row['start_time'].strftime('%Y-%m-%d %H:%M') if hasattr(row['start_time'], 'strftime') else row['start_time']}",
+            axis=1
+        )
+        
+        run_options = dict(zip(filtered_runs['display_name'], filtered_runs['run_id']))
+        
+        selected_display = st.selectbox(
+            "Select Run to View:",
+            list(run_options.keys()),
+            help="Runs are sorted by most recent first"
+        )
+        
+        run_id = run_options[selected_display]
+        
+        # Load button
+        if st.button("📊 Load Selected Run", type="primary"):
+            with st.spinner("Loading data from MLflow..."):
+                try:
+                    df = download_singlecell_markers_df(run_id)
+                    mlflow_url = get_mlflow_run_url(run_id)
+                    
+                    st.session_state['singlecell_df'] = df
+                    st.session_state['singlecell_run_id'] = run_id
+                    st.session_state['singlecell_mlflow_url'] = mlflow_url
+                    
+                    st.success(f"✅ Loaded {len(df):,} cells with {len(df.columns)} features")
+                except Exception as e:
+                    st.error(f"❌ Error loading data: {str(e)}")
+                    st.info("💡 Tip: Make sure this run includes the markers_flat.parquet artifact")
+                    return
+    else:
+        st.warning(f"No runs found for experiment: {selected_experiment}")
+    
+    # Step 3: Display if data is loaded
+    if 'singlecell_df' in st.session_state:
+        df = st.session_state['singlecell_df']
+        mlflow_url = st.session_state.get('singlecell_mlflow_url', '')
+        
+        # Link to MLflow run
+        st.markdown("---")
+        st.info(
+            f"**View Standard Analysis Plots**: All analysis outputs (QC plots, "
+            f"PCA, highly variable genes, marker genes heatmap, UMAP, etc.) are available in the MLflow run."
+        )
+        st.link_button("🔗 Open MLflow Run (View All Plots & Artifacts)", mlflow_url, type="secondary")
+        
+        st.markdown("---")
+        
+        # Quick stats
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total Cells", f"{len(df):,}")
+        with col2:
+            if 'leiden' in df.columns:
+                st.metric("Clusters", df['leiden'].nunique())
+        with col3:
+            expr_cols = [c for c in df.columns if c.startswith('expr_')]
+            st.metric("Marker Genes", len(expr_cols))
+        with col4:
+            if 'UMAP_1' in df.columns:
+                st.metric("Embeddings", "UMAP ✓")
+        
+        st.markdown("---")
+        st.markdown("##### Interactive UMAP Visualization")
+        
+        # Info about subsampled data
+        st.info(
+            "📊 **Note:** This viewer displays a subsampled dataset (max 10,000 cells) with marker genes only "
+            "for faster, interactive plotting. The complete output AnnData object with all genes is available "
+            "in the MLflow run (see link above)."
+        )
+        
+        # Identify column types
+        expr_cols = [c for c in df.columns if c.startswith('expr_')]
+        obs_categorical = df.select_dtypes(include=['object', 'category']).columns.tolist()
+        obs_numerical = df.select_dtypes(include=['number']).columns.tolist()
+        # Remove UMAP/PC columns from numerical
+        obs_numerical = [c for c in obs_numerical if not c.startswith(('UMAP_', 'PC_'))]
+        
+        # Controls
+        col1, col2, col3 = st.columns([2, 2, 1])
+        
+        with col1:
+            color_type = st.selectbox(
+                "Color by:",
+                ["Cluster", "Marker Gene", "QC Metric"],
+                help="Choose what to color the cells by"
+            )
+        
+        with col2:
+            if color_type == "Cluster":
+                cluster_options = [c for c in obs_categorical if c in ['leiden', 'louvain', 'cluster']]
+                if not cluster_options:
+                    cluster_options = obs_categorical
+                color_col = st.selectbox("Select cluster column:", cluster_options if cluster_options else ['leiden'])
+            elif color_type == "Marker Gene":
+                # Show gene names without expr_ prefix
+                gene_options = sorted([c.replace('expr_', '') for c in expr_cols])
+                selected_gene = st.selectbox("Select gene:", gene_options)
+                color_col = f"expr_{selected_gene}"
+            else:  # QC Metric
+                metric_options = [c for c in obs_numerical if c in ['n_genes', 'n_counts', 'pct_counts_mt', 'n_genes_by_counts']]
+                if not metric_options:
+                    metric_options = obs_numerical[:5] if len(obs_numerical) > 0 else ['n_genes']
+                color_col = st.selectbox("Select metric:", metric_options)
+        
+        with col3:
+            point_size = st.slider("Point size:", 1, 10, 3)
+        
+        # Additional options
+        with st.expander("⚙️ Advanced Options"):
+            col_a, col_b = st.columns(2)
+            with col_a:
+                opacity = st.slider("Opacity:", 0.1, 1.0, 0.8)
+            with col_b:
+                color_scale = st.selectbox(
+                    "Color scale:",
+                    ["Viridis", "Plasma", "Blues", "Reds", "RdBu", "Portland", "Turbo"]
+                )
+        
+        # Create the plot
+        if 'UMAP_0' not in df.columns or 'UMAP_1' not in df.columns:
+            st.warning("⚠️ UMAP coordinates not found in data. Cannot display plot.")
+        else:
+            # Determine if categorical or continuous
+            is_categorical = color_col in obs_categorical or color_type == "Cluster"
+            
+            # Prepare hover data
+            hover_data_dict = {
+                'UMAP_0': ':.2f',
+                'UMAP_1': ':.2f',
+            }
+            # Add a few marker genes to hover
+            for gene_col in expr_cols[:3]:
+                hover_data_dict[gene_col] = ':.2f'
+            
+            if is_categorical:
+                fig = px.scatter(
+                    df,
+                    x='UMAP_0',
+                    y='UMAP_1',
+                    color=color_col,
+                    hover_data=hover_data_dict,
+                    title=f"UMAP colored by {color_col}",
+                    width=900,
+                    height=650
+                )
+            else:
+                fig = px.scatter(
+                    df,
+                    x='UMAP_0',
+                    y='UMAP_1',
+                    color=color_col,
+                    color_continuous_scale=color_scale.lower(),
+                    hover_data=hover_data_dict,
+                    title=f"UMAP colored by {color_col}",
+                    width=900,
+                    height=650
+                )
+            
+            # Update layout
+            fig.update_traces(
+                marker=dict(size=point_size, opacity=opacity, line=dict(width=0))
+            )
+            fig.update_layout(
+                plot_bgcolor='white',
+                xaxis=dict(showgrid=True, gridcolor='lightgray', title='UMAP 1'),
+                yaxis=dict(showgrid=True, gridcolor='lightgray', title='UMAP 2'),
+                font=dict(size=12)
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # Heatmap section
+        st.markdown("---")
+        st.markdown("##### Marker Gene Expression by Cluster")
+        
+        if st.checkbox("Show expression heatmap"):
+            if 'leiden' in df.columns and expr_cols:
+                # Gene selection
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    selected_genes = st.multiselect(
+                        "Select genes to display:",
+                        [c.replace('expr_', '') for c in expr_cols],
+                        default=[c.replace('expr_', '') for c in expr_cols[:min(20, len(expr_cols))]],
+                        help="Leave empty to show all"
+                    )
+                with col2:
+                    st.write("")
+                    st.write("")
+                    scale_data = st.checkbox("Scale expression", value=True, help="Z-score normalization across clusters")
+                
+                if selected_genes:
+                    expr_cols_to_plot = [f"expr_{g}" for g in selected_genes]
+                else:
+                    expr_cols_to_plot = expr_cols
+                
+                # Calculate mean expression per cluster
+                heatmap_data = df.groupby('leiden')[expr_cols_to_plot].mean()
+                heatmap_data.columns = [c.replace('expr_', '') for c in heatmap_data.columns]
+                
+                # Optional scaling
+                if scale_data:
+                    heatmap_data = (heatmap_data - heatmap_data.mean()) / heatmap_data.std()
+                    color_label = "Z-score"
+                else:
+                    color_label = "Mean Expression"
+                
+                # Create heatmap
+                fig_heatmap = px.imshow(
+                    heatmap_data.T,
+                    labels=dict(x="Cluster", y="Gene", color=color_label),
+                    aspect="auto",
+                    color_continuous_scale="RdBu_r" if scale_data else "Viridis",
+                    title=f"Marker Expression by Cluster ({color_label})"
+                )
+                fig_heatmap.update_layout(height=max(400, len(heatmap_data.columns) * 20))
+                st.plotly_chart(fig_heatmap, use_container_width=True)
+            else:
+                st.warning("Clustering information or marker genes not available")
+        
+        # Data table preview
+        st.markdown("---")
+        with st.expander("📊 View Raw Data Table"):
+            # Show selected columns
+            default_cols = ['leiden', 'UMAP_1', 'UMAP_2'] if 'leiden' in df.columns else ['UMAP_1', 'UMAP_2']
+            default_cols += expr_cols[:3]
+            
+            display_cols = st.multiselect(
+                "Select columns to display:",
+                df.columns.tolist(),
+                default=[c for c in default_cols if c in df.columns]
+            )
+            if display_cols:
+                st.dataframe(df[display_cols].head(100), use_container_width=True)
+                st.caption(f"Showing first 100 of {len(df):,} cells")
+        
+        # Download section
+        st.markdown("---")
+        col1, col2, col3 = st.columns([2, 1, 1])
+        with col2:
+            csv_data = df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download CSV",
+                data=csv_data,
+                file_name=f"singlecell_results_{st.session_state['singlecell_run_id'][:8]}.csv",
+                mime="text/csv"
+            )
+        with col3:
+            st.link_button("🔗 MLflow Run", mlflow_url, type="secondary")
+
+
 def display_embeddings_tab(deployed_models_df):
     
     col1,col2 = st.columns([1,1])
@@ -345,13 +677,37 @@ with st.spinner("Loading data"):
 
 st.title(":material/microbiology:  Single Cell Studies")
 
-settings_tab, scanpy_tab, embeddings_tab = st.tabs(["Settings", "Scanpy Analysis", "Embeddings"])
+settings_tab, processing_tab, embeddings_tab = st.tabs([
+    "Settings", 
+    "Raw Single Cell Processing",
+    "Embeddings"
+])
 
 with settings_tab:
     display_settings_tab(available_single_cell_models_df,deployed_single_cell_models_df)
 
-with scanpy_tab:
-    display_scanpy_analysis_tab()
+with processing_tab:
+    # Sub-sections within processing tab
+    st.markdown("### 🔬 Raw Single Cell Analysis")
+    
+    # Custom CSS to make tab text bigger
+    st.markdown("""
+    <style>
+    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
+        font-size: 1.1rem;
+        font-weight: 500;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Use tabs instead of nested expanders to avoid nesting issues
+    run_tab, view_tab = st.tabs(["Run New Analysis", "View Analysis Results"])
+    
+    with run_tab:
+        display_scanpy_analysis_tab()
+    
+    with view_tab:
+        display_singlecell_results_viewer()
 
 with embeddings_tab:
     display_embeddings_tab(deployed_single_cell_models_df)

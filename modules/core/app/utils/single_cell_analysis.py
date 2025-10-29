@@ -1,6 +1,10 @@
 from databricks.sdk import WorkspaceClient
 from utils.streamlit_helper import UserInfo
 from genesis_workbench.models import set_mlflow_experiment
+from mlflow.tracking import MlflowClient
+import mlflow
+import pandas as pd
+import tempfile
 import os
 
 def start_scanpy_job(
@@ -118,3 +122,122 @@ def start_rapids_singlecell_job(
     # )
     # 
     # return rapids_job_id, job_run.run_id
+
+
+def download_singlecell_markers_df(run_id: str) -> pd.DataFrame:
+    """
+    Download the markers_flat.parquet from an MLflow single-cell analysis run
+    
+    Works with scanpy, rapids-singlecell, or any tool that produces the standard
+    markers_flat.parquet artifact.
+    
+    Args:
+        run_id: The MLflow run ID
+    
+    Returns:
+        DataFrame with cells, embeddings, and marker expression
+    """
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+    client = MlflowClient()
+    
+    # Download the parquet artifact
+    with tempfile.TemporaryDirectory() as tmpdir:
+        artifact_path = "markers_flat.parquet"
+        local_file = client.download_artifacts(run_id, artifact_path, dst_path=tmpdir)
+        df = pd.read_parquet(local_file)
+    
+    return df
+
+
+def get_mlflow_run_url(run_id: str) -> str:
+    """
+    Construct the URL to an MLflow run
+    
+    Args:
+        run_id: The MLflow run ID
+    
+    Returns:
+        Full URL to the MLflow run in Databricks
+    """
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+    client = MlflowClient()
+    
+    # Get run info to get experiment ID
+    run = client.get_run(run_id)
+    experiment_id = run.info.experiment_id
+    
+    # Construct URL
+    host_name = os.getenv("DATABRICKS_HOSTNAME", "")
+    if not host_name.startswith("https://"):
+        host_name = "https://" + host_name
+    
+    url = f"{host_name}/ml/experiments/{experiment_id}/runs/{run_id}"
+    return url
+
+
+def search_singlecell_runs(user_email: str, processing_mode: str = None) -> pd.DataFrame:
+    """
+    Search for single-cell processing runs created by the user
+    
+    Works across all single-cell processing modes (scanpy, rapids-singlecell, etc.)
+    
+    Args:
+        user_email: Email of the user
+        processing_mode: Optional filter for specific mode (e.g., 'scanpy', 'rapids-singlecell')
+    
+    Returns:
+        DataFrame with run information (run_id, run_name, experiment_name, start_time, status)
+    """
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+    
+    # Find all experiments used by genesis workbench
+    experiment_list = mlflow.search_experiments(
+        filter_string=f"tags.used_by_genesis_workbench='yes'"
+    )
+    
+    if len(experiment_list) == 0:
+        return pd.DataFrame()
+    
+    # Get experiment IDs and names
+    experiments = {exp.experiment_id: exp.name for exp in experiment_list}
+    experiment_ids = list(experiments.keys())
+    
+    # Build filter string
+    filter_parts = [f"tags.created_by='{user_email}'", "tags.origin='genesis_workbench'"]
+    if processing_mode:
+        filter_parts.append(f"tags.processing_mode='{processing_mode}'")
+    
+    # Search for single-cell runs created by this user
+    try:
+        runs = mlflow.search_runs(
+            experiment_ids=experiment_ids,
+            filter_string=" AND ".join(filter_parts),
+            order_by=["start_time DESC"],
+            max_results=100
+        )
+    except Exception:
+        # Fallback if tag filtering doesn't work
+        runs = mlflow.search_runs(
+            experiment_ids=experiment_ids,
+            order_by=["start_time DESC"],
+            max_results=100
+        )
+    
+    if len(runs) == 0:
+        return pd.DataFrame()
+    
+    # Format the results
+    runs['experiment_name'] = runs['experiment_id'].map(experiments)
+    runs['experiment_simple'] = runs['experiment_name'].apply(lambda x: x.split('/')[-1] if '/' in x else x)
+    
+    # Select and rename columns
+    result_columns = ['run_id', 'tags.mlflow.runName', 'experiment_simple', 'start_time', 'status']
+    available_columns = [c for c in result_columns if c in runs.columns]
+    
+    result = runs[available_columns].copy()
+    result.columns = ['run_id', 'run_name', 'experiment', 'start_time', 'status'][:len(available_columns)]
+    
+    return result
