@@ -46,6 +46,12 @@ variables:
 
   gpu_large_setting:
     description: The config setting for large gpu
+  
+  gpu_t4_rapids_node_type:
+    description: Node type for T4 GPU rapids clusters
+  
+  gpu_ml_spark_version:
+    description: Spark version for GPU ML runtime
     
   core_catalog_name:
     description: primary catalog where data, models, and files are stored for this project.

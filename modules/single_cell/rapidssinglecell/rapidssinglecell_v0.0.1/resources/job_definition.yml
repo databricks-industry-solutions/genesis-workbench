@@ -1,0 +1,71 @@
+resources:
+  jobs:
+    rapidssinglecell:
+      name: run_rapidssinglecell_gwb
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: run_rapidssinglecell
+          notebook_task:
+            notebook_path: ../notebooks/analyze_single_h5ad.py
+            base_parameters:
+              data_path: ""
+            source: WORKSPACE
+          job_cluster_key: rapidssinglecell_cluster
+
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: user_email
+          default: ${var.current_user}
+        - name: data_path
+          default: dummy_data_path.h5ad
+        - name: mlflow_experiment
+          default: rapidssinglecell_genesis_workbench
+        - name: mlflow_run_name
+          default: rapidssinglecell_genesis_workbench
+        - name: gene_name_column
+          default: gene_name
+        - name: min_genes
+          default: 200
+        - name: min_cells
+          default: 3
+        - name: pct_counts_mt
+          default: 5
+        - name: n_genes_by_counts
+          default: 2500
+        - name: target_sum
+          default: 10000
+        - name: n_top_genes
+          default: 500
+        - name: n_pcs
+          default: 50
+        - name: leiden_resolution
+          default: 0.2
+
+      job_clusters:
+        - job_cluster_key: rapidssinglecell_cluster
+          new_cluster:
+            cluster_name: ""
+            spark_version: ${var.gpu_ml_spark_version}
+            spark_conf:
+              spark.master: local[*, 4]
+              spark.databricks.cluster.profile: singleNode
+            node_type_id: ${var.gpu_t4_rapids_node_type}
+            driver_node_type_id: ${var.gpu_t4_rapids_node_type}
+            custom_tags:
+              ResourceClass: SingleNode
+            spark_env_vars:
+              PYSPARK_PYTHON: /databricks/python3/bin/python3
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            num_workers: 0
+
+      tags: ${var.common_resource_tags}

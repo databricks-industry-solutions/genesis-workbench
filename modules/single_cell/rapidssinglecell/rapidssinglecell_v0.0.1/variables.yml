@@ -12,12 +12,24 @@ variables:
 
   common_resource_tags:
     description: Resource tags
-    default: 
+    default:
       application: genesis_workbench
-      module: scimilarity
+      module: rapidssinglecell
       created_by: ${var.current_user}
   
   cpu_node_type:
+    description: Node type for CPU vms
+
+  cpu_small_node_type:
+    description: Node type for CPU vms
+  
+  cpu_medium_node_type:
+    description: Node type for CPU vms
+
+  cpu_large_node_type:
+    description: Node type for CPU vms
+
+  cpu_xlarge_node_type:
     description: Node type for CPU vms
 
   t4_node_type:
@@ -35,37 +47,24 @@ variables:
   gpu_large_setting:
     description: The config setting for large gpu
   
-  cpu_small_node_type:
-    description: Node type for small CPU clusters
-  
-  cpu_medium_node_type:
-    description: Node type for medium CPU clusters
-  
-  cpu_large_node_type:
-    description: Node type for large CPU clusters
-  
-  cpu_xlarge_node_type:
-    description: Node type for xlarge CPU clusters
-  
   gpu_t4_rapids_node_type:
-    description: Node type for T4 GPU rapids clusters
+    description: Node type for small GPU clusters (rapids)
   
   gpu_ml_spark_version:
     description: Spark version for GPU ML runtime
-
+    
   core_catalog_name:
     description: primary catalog where data, models, and files are stored for this project.
+    #default: genesis_workbench
   
   core_schema_name:
     description: The schema where core components will be installed.
+    #default: dbx_genesis_workbench_core 
+
+  module_schema_name:
+    description: The schema where a module components will be installed.
+    default: dev_yyang_genesis_workbench
 
   sql_warehouse_id:
     description: Id of the SQL Warehouse that will be used by the app
-    
-  module_registration_experiment_name:
-    description: The experiment to which all registered modules are logged
-    default: gwb_modules_scimilarity ## dbx_genesis_workbench_modules
-
-  cache_dir:
-    description: The cache directory for SCimilarity model
-    default: scimilarity
+  

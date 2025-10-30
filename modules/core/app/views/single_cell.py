@@ -90,11 +90,13 @@ def display_scanpy_analysis_tab():
     with st.form("scanpy_analysis_form"):
         # Mode Selection
         st.markdown("**Analysis Mode:**")
-        mode = st.selectbox(
+        mode_display = st.selectbox(
             "Mode",
-            options=["scanpy", "rapids-singlecell"],
+            options=["scanpy", "rapids-singlecell [GPU-accelerated]"],
             label_visibility="collapsed"
         )
+        # Extract actual mode name
+        mode = "rapids-singlecell" if "rapids-singlecell" in mode_display else mode_display
         
         st.divider()
         
@@ -249,38 +251,36 @@ def display_scanpy_analysis_tab():
                     print(e)
             
             elif mode == "rapids-singlecell":
-                st.warning("⚠️ rapids-singlecell mode is not yet implemented. Coming soon!")
-                # TODO: When rapids-singlecell job is deployed, replace the warning above with:
-                # try:
-                #     with st.spinner("Starting rapids-singlecell analysis job..."):
-                #         rapids_job_id, job_run_id = start_rapids_singlecell_job(
-                #             data_path=data_path,
-                #             mlflow_experiment=mlflow_experiment,
-                #             mlflow_run_name=mlflow_run_name,
-                #             gene_name_column=gene_name_column,
-                #             min_genes=min_genes,
-                #             min_cells=min_cells,
-                #             pct_counts_mt=pct_counts_mt,
-                #             n_genes_by_counts=n_genes_by_counts,
-                #             target_sum=target_sum,
-                #             n_top_genes=n_top_genes,
-                #             n_pcs=n_pcs,
-                #             leiden_resolution=leiden_resolution,
-                #             user_info=user_info
-                #         )
-                #         
-                #         # Construct the run URL
-                #         host_name = os.getenv("DATABRICKS_HOSTNAME", "")
-                #         if not host_name.startswith("https://"):
-                #             host_name = "https://" + host_name
-                #         run_url = f"{host_name}/jobs/{rapids_job_id}/runs/{job_run_id}"
-                #         
-                #         st.success(f"✅ Job started successfully! Run ID: {job_run_id}")
-                #         st.link_button("🔗 View Run in Databricks", run_url, type="primary")
-                # 
-                # except Exception as e:
-                #     st.error(f"❌ An error occurred while starting the job: {str(e)}")
-                #     print(e)
+                try:
+                    with st.spinner("Starting rapids-singlecell analysis job..."):
+                        rapids_job_id, job_run_id = start_rapids_singlecell_job(
+                            data_path=data_path,
+                            mlflow_experiment=mlflow_experiment,
+                            mlflow_run_name=mlflow_run_name,
+                            gene_name_column=gene_name_column,
+                            min_genes=min_genes,
+                            min_cells=min_cells,
+                            pct_counts_mt=pct_counts_mt,
+                            n_genes_by_counts=n_genes_by_counts,
+                            target_sum=target_sum,
+                            n_top_genes=n_top_genes,
+                            n_pcs=n_pcs,
+                            leiden_resolution=leiden_resolution,
+                            user_info=user_info
+                        )
+                        
+                        # Construct the run URL
+                        host_name = os.getenv("DATABRICKS_HOSTNAME", "")
+                        if not host_name.startswith("https://"):
+                            host_name = "https://" + host_name
+                        run_url = f"{host_name}/jobs/{rapids_job_id}/runs/{job_run_id}"
+                        
+                        st.success(f"✅ Job started successfully! Run ID: {job_run_id}")
+                        st.link_button("🔗 View Run in Databricks", run_url, type="primary")
+                
+                except Exception as e:
+                    st.error(f"❌ An error occurred while starting the job: {str(e)}")
+                    print(e)
             
             else:
                 st.error(f"❌ Unknown mode: {mode}")

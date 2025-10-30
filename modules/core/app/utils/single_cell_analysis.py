@@ -81,47 +81,42 @@ def start_rapids_singlecell_job(
     """
     Trigger the rapids-singlecell analysis job with specified parameters
     Returns: (job_id, run_id) tuple
-    
-    TODO: Implement this function when rapids-singlecell job is deployed
     """
-    raise NotImplementedError("rapids-singlecell mode is not yet implemented")
+    w = WorkspaceClient()
     
-    # When implemented, follow this pattern (similar to scanpy):
-    # w = WorkspaceClient()
-    # 
-    # # Get job ID from settings table (loaded into env vars by initialize())
-    # rapids_job_id = os.environ.get("RUN_RAPIDS_SINGLECELL_JOB_ID")
-    # if not rapids_job_id:
-    #     raise RuntimeError("rapids-singlecell job not registered. Please deploy the rapids-singlecell module first.")
-    # 
-    # # Get full experiment path using user's mlflow folder
-    # experiment = set_mlflow_experiment(
-    #     experiment_tag=mlflow_experiment,
-    #     user_email=user_info.user_email
-    # )
-    # 
-    # job_run = w.jobs.run_now(
-    #     job_id=rapids_job_id,
-    #     job_parameters={
-    #         "catalog": os.environ["CORE_CATALOG_NAME"],
-    #         "schema": os.environ["CORE_SCHEMA_NAME"],
-    #         "user_email": user_info.user_email,
-    #         "data_path": data_path,
-    #         "mlflow_experiment": experiment.name,
-    #         "mlflow_run_name": mlflow_run_name,
-    #         "gene_name_column": gene_name_column,
-    #         "min_genes": str(min_genes),
-    #         "min_cells": str(min_cells),
-    #         "pct_counts_mt": str(pct_counts_mt),
-    #         "n_genes_by_counts": str(n_genes_by_counts),
-    #         "target_sum": str(target_sum),
-    #         "n_top_genes": str(n_top_genes),
-    #         "n_pcs": str(n_pcs),
-    #         "leiden_resolution": str(leiden_resolution),
-    #     }
-    # )
-    # 
-    # return rapids_job_id, job_run.run_id
+    # Get job ID from settings table (loaded into env vars by initialize())
+    rapids_job_id = os.environ.get("RUN_RAPIDSSINGLECELL_JOB_ID")
+    if not rapids_job_id:
+        raise RuntimeError("rapids-singlecell job not registered. Please deploy the rapids-singlecell module first.")
+    
+    # Get full experiment path using user's mlflow folder
+    experiment = set_mlflow_experiment(
+        experiment_tag=mlflow_experiment,  # Simple name from user
+        user_email=user_info.user_email
+    )
+    
+    job_run = w.jobs.run_now(
+        job_id=rapids_job_id,
+        job_parameters={
+            "catalog": os.environ["CORE_CATALOG_NAME"],
+            "schema": os.environ["CORE_SCHEMA_NAME"],
+            "user_email": user_info.user_email,
+            "data_path": data_path,
+            "mlflow_experiment": experiment.name,  # Full path like /Users/email/folder/experiment_name
+            "mlflow_run_name": mlflow_run_name,
+            "gene_name_column": gene_name_column,
+            "min_genes": str(min_genes),
+            "min_cells": str(min_cells),
+            "pct_counts_mt": str(pct_counts_mt),
+            "n_genes_by_counts": str(n_genes_by_counts),
+            "target_sum": str(target_sum),
+            "n_top_genes": str(n_top_genes),
+            "n_pcs": str(n_pcs),
+            "leiden_resolution": str(leiden_resolution),
+        }
+    )
+    
+    return rapids_job_id, job_run.run_id
 
 
 def download_singlecell_markers_df(run_id: str) -> pd.DataFrame:
