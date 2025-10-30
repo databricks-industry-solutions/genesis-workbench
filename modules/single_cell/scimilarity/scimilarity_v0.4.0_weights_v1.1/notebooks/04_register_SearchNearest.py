@@ -199,58 +199,8 @@ display(df0)
 
 # COMMAND ----------
 
-# DBTITLE 1,different input testing
-# # Test with params
-# test_input_with_params = pd.DataFrame([{
-#     "embedding": np.random.rand(256).tolist(),
-#     "params": json.dumps({"k": 50})
-# }])
-
-# # Test without params column
-# test_input_no_params = pd.DataFrame([{
-#     "embedding": np.random.rand(256).tolist()
-# }])
-
-# # Test with None params
-# test_input_none_params = pd.DataFrame([{
-#     "embedding": np.random.rand(256).tolist(),
-#     "params": None
-# }])
-
-# # Test with invalid params (should fallback to default)
-# test_input_invalid_params = pd.DataFrame([{
-#     "embedding": np.random.rand(256).tolist(),
-#     "params": "invalid json"
-# }])
-
-# COMMAND ----------
-
 # MAGIC %md
 # MAGIC #### Define MLflow Signature with local Model + Context
-
-# COMMAND ----------
-
-# DBTITLE 1,Define MLflow Signature
-# from mlflow.models import infer_signature
-# import pandas as pd
-
-# # Define a concrete example input as a Pandas DataFrame
-# example_input = model_input.copy() 
-# ## we will add params separately to keep it simple... but make a note on the usage input patterns 
-
-# # Ensure the example output is in a serializable format
-# example_output = searchNearest_output
-
-# # Create a Dict for params
-# # params: dict[str, Any] = dict({"k": 100}) ## could take any dict and if none provided defaults to example provided
-# # params: Optional[dict[str, Any]] = dict({"k": 100})
-
-# # # Infer the model signature
-# signature = infer_signature(
-#     model_input = model_input, #example_input,
-#     model_output = example_output,
-#     # params=params
-# )
 
 # COMMAND ----------
 
@@ -311,20 +261,6 @@ signature
 # COMMAND ----------
 
 # DBTITLE 1,Specify MODEL_TYPE & experiment_name
-# MODEL_TYPE = "Search_Nearest" ## 
-# # model_name = f"SCimilarity_{MODEL_TYPE}"  
-# model_name = f"{MODEL_NAME}_{MODEL_TYPE}"  
-
-# ## Set the experiment
-# user_path = f"/Users/{USER_EMAIL}"
-# # experiment_dir = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}" ## TO UPDATE
-# experiment_dir = f"{user_path}/mlflow_experiments/{EXPERIMENT_NAME}" ## same as MODEL_FAMILY from widget above
-# print(experiment_dir)
-
-# # experiment_name = f"{user_path}/mlflow_experiments/{MODEL_FAMILY}/{MODEL_TYPE}"
-# experiment_name = f"{experiment_dir}/{MODEL_TYPE}"
-# print(experiment_name)
-
 MODEL_TYPE = "Search_Nearest" 
 model_name= f"{MODEL_NAME}_{MODEL_TYPE}".lower()
 experiment = set_mlflow_experiment(experiment_tag=EXPERIMENT_NAME, user_email=USER_EMAIL)

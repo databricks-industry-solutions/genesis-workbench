@@ -38,7 +38,7 @@ numba.config.THREADING_LAYER = 'workqueue'  # Most compatible option
 
 # DBTITLE 1,gwb_variablesNparams
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("schema", "dev_mmt_core_demo", "Schema")
+dbutils.widgets.text("schema", "dev_mmt_core_test", "Schema")
 dbutils.widgets.text("model_name", "SCimilarity", "Model Name") 
 dbutils.widgets.text("experiment_name", "gwb_modules_scimilarity", "Experiment Name")
 dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id") 
@@ -178,7 +178,3 @@ def set_mlflow_experiment(experiment_tag, user_email):
     mlflow.set_registry_uri("databricks-uc")
     mlflow.set_tracking_uri("databricks")
     return mlflow.set_experiment(experiment_path)
-
-# COMMAND ----------
-
-
