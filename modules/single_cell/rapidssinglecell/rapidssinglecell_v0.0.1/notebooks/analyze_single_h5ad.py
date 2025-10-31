@@ -17,7 +17,7 @@
 # MAGIC %pip install cupy-cuda12x
 
 # MAGIC %pip install 'rapids-singlecell[rapids12]' --extra-index-url=https://pypi.nvidia.com #CUDA12
-# MAGIC %pip install igraph
+
 # MAGIC %restart_python
 
 # COMMAND ----------
@@ -60,7 +60,7 @@ dbutils.widgets.text("n_genes_by_counts", "2500", "Max Genes by Counts")
 dbutils.widgets.text("target_sum", "10000", "Target Sum for Normalization")
 dbutils.widgets.text("n_top_genes", "500", "Number of Highly Variable Genes")
 dbutils.widgets.text("n_pcs", "50", "Number of Principal Components")
-dbutils.widgets.text("leiden_resolution", "0.2", "Leiden Resolution")
+dbutils.widgets.text("cluster_resolution", "0.2", "Cluster Resolution")
 
 # COMMAND ----------
 
@@ -77,7 +77,7 @@ parameters = {
   'target_sum': int(float(dbutils.widgets.get("target_sum"))),
   'n_top_genes': int(dbutils.widgets.get("n_top_genes")),
   'n_pcs': int(dbutils.widgets.get("n_pcs")),
-  'leiden_resolution': float(dbutils.widgets.get("leiden_resolution")),
+  'cluster_resolution': float(dbutils.widgets.get("cluster_resolution")),
 }
 
 metrics = {}
@@ -206,10 +206,6 @@ sc.pl.pca(
 
 # COMMAND ----------
 
-rsc.get.anndata_to_CPU(adata)
-
-# COMMAND ----------
-
 # optionally add PCA coords into cell (obs) table
 for i in range(4): #adata.obsm['X_pca'].shape[1]):
     adata.obs['PCA_'+str(i)] = adata.obsm['X_pca'][:,i]
@@ -225,18 +221,19 @@ sc.pp.neighbors(adata)
 
 # COMMAND ----------
 
-sc.tl.leiden(
+rsc.tl.leiden(
     adata,
-    resolution=parameters['leiden_resolution'],
+    resolution=parameters['cluster_resolution'],
     random_state=0,
-    flavor="igraph",
-    n_iterations=2,
-    directed=False,
 )
+
+# Rename 'leiden' column to generic 'cluster' for consistency
+adata.obs['cluster'] = adata.obs['leiden']
+print(f"Leiden clustering complete. Found {len(adata.obs['cluster'].unique())} clusters.")
 
 # COMMAND ----------
 
-sc.tl.umap(adata)
+rsc.tl.umap(adata)
 
 for i in range(2):
     adata.obs['UMAP_'+str(i)] = adata.obsm['X_umap'][:,i]
@@ -245,10 +242,13 @@ for i in range(2):
 
 sc.pl.umap(
     adata,
-    color="leiden",
+    color="cluster",
     size=2,
     save='umap_cluster.png'
 )
+
+# COMMAND ----------
+rsc.get.anndata_to_CPU(adata)
 
 # COMMAND ----------
 
@@ -258,7 +258,7 @@ sc.pl.umap(
 # COMMAND ----------
 
 # Run differential expression analysis
-sc.tl.rank_genes_groups(adata, groupby="leiden", method="wilcoxon")
+sc.tl.rank_genes_groups(adata, groupby="cluster", method="wilcoxon")
 
 # COMMAND ----------
 
@@ -272,7 +272,7 @@ n_markers_per_cluster = 10  # Adjust as needed
 
 # Get all unique marker genes across all clusters
 marker_genes = set()
-n_clusters = len(adata.obs['leiden'].unique())
+n_clusters = len(adata.obs['cluster'].unique())
 
 for i in range(n_clusters):
     cluster_markers = adata.uns['rank_genes_groups']['names'][str(i)][:n_markers_per_cluster]
@@ -310,7 +310,7 @@ adata_markers = adata[:, marker_genes].copy()
 max_cells = 10000
 if adata_markers.shape[0] > max_cells:
     # Get cluster counts and proportions
-    cluster_counts = adata_markers.obs['leiden'].value_counts().sort_index()
+    cluster_counts = adata_markers.obs['cluster'].value_counts().sort_index()
     total_cells = cluster_counts.sum()
     metrics['total_cells_before_subsample'] = float(total_cells)
     
@@ -334,7 +334,7 @@ if adata_markers.shape[0] > max_cells:
     
     for cluster_id, target_n in target_per_cluster.items():
         # Get all cells in this cluster
-        cluster_mask = adata_markers.obs['leiden'] == cluster_id
+        cluster_mask = adata_markers.obs['cluster'] == cluster_id
         cluster_cells = adata_markers.obs.index[cluster_mask]
         
         # Sample the target number (or all if cluster is smaller than target)
@@ -348,7 +348,7 @@ if adata_markers.shape[0] > max_cells:
     print("\nCells per cluster (before → after):")
     for cluster_id in sorted(cluster_counts.index):
         before = cluster_counts[cluster_id]
-        after = (adata_markers.obs['leiden'] == cluster_id).sum()
+        after = (adata_markers.obs['cluster'] == cluster_id).sum()
         pct_before = 100 * before / total_cells
         pct_after = 100 * after / len(adata_markers)
         print(f"  Cluster {cluster_id}: {before:>6} ({pct_before:>5.1f}%) → {after:>5} ({pct_after:>5.1f}%)")

@@ -108,7 +108,7 @@ resources:
           default: 500
         - name: n_pcs
           default: 50
-        - name: leiden_resolution
+        - name: cluster_resolution
           default: 0.2
 
       job_clusters:

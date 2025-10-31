@@ -184,13 +184,13 @@ def display_scanpy_analysis_tab():
                 value=50,
                 step=5
             )
-            leiden_resolution = st.number_input(
-                "Leiden Resolution",
+            cluster_resolution = st.number_input(
+                "Cluster Resolution",
                 min_value=0.0,
                 max_value=2.0,
-                value=0.2,
-                step=0.1,
-                format="%.1f"
+                value=0.15,
+                step=0.05,
+                format="%.2f"
             )
         
         st.divider()
@@ -233,7 +233,7 @@ def display_scanpy_analysis_tab():
                             target_sum=target_sum,
                             n_top_genes=n_top_genes,
                             n_pcs=n_pcs,
-                            leiden_resolution=leiden_resolution,
+                            cluster_resolution=cluster_resolution,
                             user_info=user_info
                         )
                         
@@ -265,7 +265,7 @@ def display_scanpy_analysis_tab():
                             target_sum=target_sum,
                             n_top_genes=n_top_genes,
                             n_pcs=n_pcs,
-                            leiden_resolution=leiden_resolution,
+                            cluster_resolution=cluster_resolution,
                             user_info=user_info
                         )
                         
@@ -288,6 +288,17 @@ def display_scanpy_analysis_tab():
 
 def display_singlecell_results_viewer():
     """Interactive viewer for single-cell analysis results (scanpy, rapids-singlecell, etc.)"""
+    
+    # Helper function to find cluster column (supports legacy and new naming)
+    def get_cluster_column(df):
+        """Return the cluster column name (prioritizes 'cluster', falls back to 'leiden' or 'louvain')"""
+        if 'cluster' in df.columns:
+            return 'cluster'
+        elif 'leiden' in df.columns:
+            return 'leiden'
+        elif 'louvain' in df.columns:
+            return 'louvain'
+        return None
     
     st.markdown("##### Single-Cell Results Viewer")
     st.markdown("Select a completed single-cell analysis run to visualize")
@@ -425,31 +436,38 @@ def display_singlecell_results_viewer():
                 color_col = st.selectbox("Select cluster column:", cluster_options if cluster_options else ['leiden'])
             elif color_type == "Marker Gene":
                 # Calculate which cluster each gene is most expressed in
-                mean_expr_by_cluster = df.groupby('leiden')[expr_cols].mean()
-                
-                # For each gene, find the cluster with highest mean expression
-                gene_to_cluster = {}
-                for gene_col in expr_cols:
-                    gene_name = gene_col.replace('expr_', '')
-                    cluster_with_max = mean_expr_by_cluster[gene_col].idxmax()
-                    gene_to_cluster[gene_name] = cluster_with_max
-                
-                # Create annotated gene options: "GENE (Cluster X)"
-                gene_options_annotated = [
-                    f"{gene} (Cluster {gene_to_cluster[gene]})" 
-                    for gene in sorted(gene_to_cluster.keys())
-                ]
-                
-                # Create a mapping for reverse lookup
-                annotated_to_gene = {
-                    f"{gene} (Cluster {gene_to_cluster[gene]})": gene
-                    for gene in gene_to_cluster.keys()
-                }
-                
-                selected_gene_annotated = st.selectbox("Select gene:", gene_options_annotated)
-                # Extract the actual gene name from the annotated selection
-                selected_gene = annotated_to_gene[selected_gene_annotated]
-                color_col = f"expr_{selected_gene}"
+                cluster_col = get_cluster_column(df)
+                if not cluster_col:
+                    st.warning("⚠️ No cluster column found in data. Cannot annotate genes by cluster.")
+                    # Fallback: just use gene names without cluster annotation
+                    selected_gene = st.selectbox("Select gene:", sorted([c.replace('expr_', '') for c in expr_cols]))
+                    color_col = f"expr_{selected_gene}"
+                else:
+                    mean_expr_by_cluster = df.groupby(cluster_col)[expr_cols].mean()
+                    
+                    # For each gene, find the cluster with highest mean expression
+                    gene_to_cluster = {}
+                    for gene_col in expr_cols:
+                        gene_name = gene_col.replace('expr_', '')
+                        cluster_with_max = mean_expr_by_cluster[gene_col].idxmax()
+                        gene_to_cluster[gene_name] = cluster_with_max
+                    
+                    # Create annotated gene options: "GENE (Cluster X)"
+                    gene_options_annotated = [
+                        f"{gene} (Cluster {gene_to_cluster[gene]})" 
+                        for gene in sorted(gene_to_cluster.keys())
+                    ]
+                    
+                    # Create a mapping for reverse lookup
+                    annotated_to_gene = {
+                        f"{gene} (Cluster {gene_to_cluster[gene]})": gene
+                        for gene in gene_to_cluster.keys()
+                    }
+                    
+                    selected_gene_annotated = st.selectbox("Select gene:", gene_options_annotated)
+                    # Extract the actual gene name from the annotated selection
+                    selected_gene = annotated_to_gene[selected_gene_annotated]
+                    color_col = f"expr_{selected_gene}"
             else:  # QC Metric
                 metric_options = [c for c in obs_numerical if c in ['n_genes', 'n_counts', 'pct_counts_mt', 'n_genes_by_counts']]
                 if not metric_options:
@@ -545,8 +563,9 @@ def display_singlecell_results_viewer():
                 st.caption("*Subsampled")
         
         with col2:
-            if 'leiden' in df.columns:
-                st.metric("Clusters", df['leiden'].nunique())
+            cluster_col = get_cluster_column(df)
+            if cluster_col:
+                st.metric("Clusters", df[cluster_col].nunique())
         with col3:
             st.metric("Marker Genes", len(expr_cols))
         with col4:
@@ -556,7 +575,8 @@ def display_singlecell_results_viewer():
         # Dot plot section
         st.markdown("---")
         with st.expander("Marker Gene Expression by Cluster", expanded=False):
-            if 'leiden' in df.columns and expr_cols:
+            cluster_col = get_cluster_column(df)
+            if cluster_col and expr_cols:
                 # Load the cluster-to-marker mapping from MLflow
                 try:
                     marker_mapping = download_cluster_markers_mapping(run_id)
@@ -579,13 +599,13 @@ def display_singlecell_results_viewer():
                     
                     if marker_mapping is not None:
                         # Use the pre-computed marker rankings from scanpy
-                        for cluster_col in sorted(marker_mapping.columns, key=lambda x: int(x) if x.isdigit() else x):
+                        for cluster_id in sorted(marker_mapping.columns, key=lambda x: int(x) if x.isdigit() else x):
                             # Get top N genes for this cluster (already ranked by Wilcoxon)
-                            top_genes = marker_mapping[cluster_col].head(n_top_genes).dropna().tolist()
+                            top_genes = marker_mapping[cluster_id].head(n_top_genes).dropna().tolist()
                             ordered_genes_by_cluster.extend(top_genes)
                     else:
                         # Fallback: use z-score ranking if CSV not available
-                        mean_expr_by_cluster = df.groupby('leiden')[expr_cols].mean()
+                        mean_expr_by_cluster = df.groupby(cluster_col)[expr_cols].mean()
                         mean_expr_zscored = (mean_expr_by_cluster - mean_expr_by_cluster.mean()) / mean_expr_by_cluster.std()
                         
                         for cluster in sorted(mean_expr_zscored.index):
@@ -629,7 +649,7 @@ def display_singlecell_results_viewer():
                     genes_ordered = [c.replace('expr_', '') for c in expr_cols]
                 
                 # Calculate mean expression per cluster
-                heatmap_data = df.groupby('leiden')[expr_cols_to_plot].mean()
+                heatmap_data = df.groupby(cluster_col)[expr_cols_to_plot].mean()
                 heatmap_data.columns = [c.replace('expr_', '') for c in heatmap_data.columns]
                 
                 # Reorder columns to match cluster-based ordering
@@ -723,7 +743,8 @@ def display_singlecell_results_viewer():
         st.markdown("---")
         with st.expander("📊 View Raw Data Table"):
             # Show selected columns
-            default_cols = ['leiden', 'UMAP_1', 'UMAP_2'] if 'leiden' in df.columns else ['UMAP_1', 'UMAP_2']
+            cluster_col = get_cluster_column(df)
+            default_cols = [cluster_col, 'UMAP_0', 'UMAP_1'] if cluster_col else ['UMAP_0', 'UMAP_1']
             default_cols += expr_cols[:3]
             
             display_cols = st.multiselect(

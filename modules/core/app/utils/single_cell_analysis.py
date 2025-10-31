@@ -19,7 +19,7 @@ def start_scanpy_job(
     target_sum: int,
     n_top_genes: int,
     n_pcs: int,
-    leiden_resolution: float,
+    cluster_resolution: float,
     user_info: UserInfo
 ):
     """
@@ -56,7 +56,7 @@ def start_scanpy_job(
             "target_sum": str(target_sum),
             "n_top_genes": str(n_top_genes),
             "n_pcs": str(n_pcs),
-            "leiden_resolution": str(leiden_resolution),
+            "cluster_resolution": str(cluster_resolution),
         }
     )
     
@@ -75,7 +75,7 @@ def start_rapids_singlecell_job(
     target_sum: int,
     n_top_genes: int,
     n_pcs: int,
-    leiden_resolution: float,
+    cluster_resolution: float,
     user_info: UserInfo
 ):
     """
@@ -112,7 +112,7 @@ def start_rapids_singlecell_job(
             "target_sum": str(target_sum),
             "n_top_genes": str(n_top_genes),
             "n_pcs": str(n_pcs),
-            "leiden_resolution": str(leiden_resolution),
+            "cluster_resolution": str(cluster_resolution),
         }
     )
     
