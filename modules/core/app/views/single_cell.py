@@ -111,10 +111,27 @@ def display_scanpy_analysis_tab():
                 help="Path to the h5ad file in Unity Catalog Volumes"
             )
             gene_name_column = st.text_input(
-                "Gene Name Column",
-                value="gene_name",
-                help="Column name containing gene names"
+                "Gene Name Column (optional)",
+                value="",
+                placeholder="e.g., gene_name, feature_name",
+                help="Name of column in var containing gene names. Leave empty to use Ensembl reference mapping. Note: Gene names will be normalized to uppercase for consistent QC analysis."
             )
+            
+            # Conditional species selector
+            if not gene_name_column or gene_name_column.strip() == "":
+                species = st.selectbox(
+                    "Species",
+                    options=["hsapiens", "mmusculus", "rnorvegicus"],
+                    index=0,
+                    help="Species for Ensembl gene name mapping. Required when gene name column is not provided. Note: All gene names are normalized to uppercase for consistent QC detection (mitochondrial, ribosomal genes) regardless of input capitalization.",
+                    format_func=lambda x: {
+                        "hsapiens": "Human (Homo sapiens)",
+                        "mmusculus": "Mouse (Mus musculus)",
+                        "rnorvegicus": "Rat (Rattus norvegicus)"
+                    }[x]
+                )
+            else:
+                species = "hsapiens"  # Default, won't be used since gene_name_column is provided
             
             st.markdown("**MLflow Tracking:**")
             mlflow_experiment = st.text_input(
@@ -215,6 +232,11 @@ def display_scanpy_analysis_tab():
             st.error("Please provide MLflow experiment and run names")
             is_valid = False
         
+        # Validate gene name column or species is provided
+        if (not gene_name_column or gene_name_column.strip() == "") and (not species or species == ""):
+            st.error("❌ Please either provide a Gene Name Column OR select a Species for reference mapping.")
+            is_valid = False
+        
         if is_valid:
             user_info = get_user_info()
             
@@ -226,6 +248,7 @@ def display_scanpy_analysis_tab():
                             mlflow_experiment=mlflow_experiment,
                             mlflow_run_name=mlflow_run_name,
                             gene_name_column=gene_name_column,
+                            species=species,
                             min_genes=min_genes,
                             min_cells=min_cells,
                             pct_counts_mt=pct_counts_mt,
@@ -258,6 +281,7 @@ def display_scanpy_analysis_tab():
                             mlflow_experiment=mlflow_experiment,
                             mlflow_run_name=mlflow_run_name,
                             gene_name_column=gene_name_column,
+                            species=species,
                             min_genes=min_genes,
                             min_cells=min_cells,
                             pct_counts_mt=pct_counts_mt,

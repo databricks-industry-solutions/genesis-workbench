@@ -142,6 +142,7 @@ Boltz-1 | MODEL WEIGHTS |	MIT | https://github.com/jwohlwend/boltz
 Scanpy | scanpy==1.11.4 | BSD-3 | https://github.com/scverse/scanpy
 Scanpy | anndata | BSD-3 | https://github.com/scverse/anndata
 Scanpy | scikit-network | BSD-3 | https://github.com/sknetwork-team/scikit-network
+Scanpy | pybiomart | BSD-3 | https://github.com/jrderuiter/pybiomart
 Scanpy | Numpy | BSD-3 | https://github.com/numpy/numpy
 Scanpy | pandas | BSD-3 | https://github.com/pandas-dev/pandas
 Scanpy | scipy | BSD-3 | https://github.com/scipy/scipy

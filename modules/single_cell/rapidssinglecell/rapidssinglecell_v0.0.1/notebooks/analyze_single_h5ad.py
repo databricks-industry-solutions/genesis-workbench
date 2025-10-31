@@ -26,6 +26,7 @@ import scanpy as sc
 import cupy as cp
 import pandas as pd
 import numpy as np
+import os
 import scipy
 import tempfile
 import time
@@ -52,7 +53,10 @@ dbutils.widgets.text("data_path", "", "Data Path")
 dbutils.widgets.text("user_email", "", "User Email")
 dbutils.widgets.text("mlflow_experiment", "", "MLflow Experiment")
 dbutils.widgets.text("mlflow_run_name", "", "MLflow Run Name")
-dbutils.widgets.text("gene_name_column", "gene_name", "Gene Name Column")
+dbutils.widgets.text("catalog", "", "Catalog Name")
+dbutils.widgets.text("schema", "", "Schema Name")
+dbutils.widgets.text("gene_name_column", "", "Gene Name Column (optional)")
+dbutils.widgets.text("species", "hsapiens", "Species (hsapiens/mmusculus/rnorvegicus)")
 dbutils.widgets.text("min_genes", "200", "Min Genes per Cell")
 dbutils.widgets.text("min_cells", "3", "Min Cells per Gene")
 dbutils.widgets.text("pct_counts_mt", "5", "Max % Mitochondrial Counts")
@@ -69,7 +73,10 @@ parameters = {
   'user_email':dbutils.widgets.get("user_email"),
   'mlflow_experiment':dbutils.widgets.get("mlflow_experiment"),
   'mlflow_run_name':dbutils.widgets.get("mlflow_run_name"),
+  'catalog':dbutils.widgets.get("catalog"),
+  'schema':dbutils.widgets.get("schema"),
   'gene_name_column':dbutils.widgets.get("gene_name_column"),
+  'species':dbutils.widgets.get("species"),
   'min_genes': int(dbutils.widgets.get("min_genes")),
   'min_cells': int(dbutils.widgets.get("min_cells")),
   'pct_counts_mt': float(dbutils.widgets.get("pct_counts_mt")),
@@ -117,11 +124,66 @@ adata.obs_names_make_unique()
 if adata.raw is not None:
     adata = adata.raw.to_adata()
 
-GENE_NAME_COLUMN = parameters['gene_name_column']
-adata.var = adata.var.reset_index()
-adata.var[GENE_NAME_COLUMN] = adata.var[GENE_NAME_COLUMN].astype(str) 
-adata.var['Gene name'] = adata.var[GENE_NAME_COLUMN]
-adata.var = adata.var.set_index(GENE_NAME_COLUMN)
+# Load gene names: either from provided column or from Ensembl reference
+if parameters['gene_name_column'] and parameters['gene_name_column'].strip() != "":
+    # User provided gene name column - use it
+    GENE_NAME_COLUMN = parameters['gene_name_column']
+    adata.var = adata.var.reset_index()
+    adata.var[GENE_NAME_COLUMN] = adata.var[GENE_NAME_COLUMN].astype(str) 
+    adata.var['Gene name'] = adata.var[GENE_NAME_COLUMN]
+    # Normalize to uppercase for consistent QC
+    adata.var['Gene name'] = adata.var['Gene name'].str.upper()
+    # Set as index but keep column for easy access
+    adata.var = adata.var.set_index('Gene name', drop=False)
+    print(f"Using provided gene name column: {GENE_NAME_COLUMN}")
+else:
+    # No gene name column - load reference and join
+    if not parameters['species'] or parameters['species'].strip() == "":
+        raise ValueError("Species parameter is required when gene_name_column is not provided")
+    
+    CATALOG = parameters['catalog']
+    SCHEMA = parameters['schema']
+    ref_path = f'/Volumes/{CATALOG}/{SCHEMA}/rapids_reference/ensembl_genes_{parameters["species"]}.csv'
+    
+    if not os.path.exists(ref_path):
+        raise FileNotFoundError(
+            f"Reference table not found at {ref_path}. "
+            f"Please ensure the reference tables have been downloaded during deployment."
+        )
+    
+    ref_df = pd.read_csv(ref_path)
+    print(f"Loaded reference table for {parameters['species']}: {len(ref_df)} genes")
+    
+    # Join reference to var (Ensembl IDs in var.index)
+    adata.var = adata.var.reset_index()
+    adata.var.rename(columns={'index': 'ensembl_gene_id'}, inplace=True)
+    
+    # Merge with reference
+    adata.var = adata.var.merge(
+        ref_df, 
+        left_on='ensembl_gene_id', 
+        right_on='ensembl_gene_id',
+        how='left'
+    )
+    
+    # Use external_gene_name if available, otherwise fall back to Ensembl ID
+    adata.var['Gene name'] = adata.var['external_gene_name'].fillna(adata.var['ensembl_gene_id'])
+    
+    # Normalize to uppercase for consistent QC (before setting index)
+    adata.var['Gene name'] = adata.var['Gene name'].str.upper()
+    
+    # Calculate mapping success rate
+    mapped_count = (adata.var['Gene name'] != adata.var['ensembl_gene_id'].str.upper()).sum()
+    total_genes = len(adata.var)
+    mapping_rate = 100.0 * mapped_count / total_genes if total_genes > 0 else 0
+    metrics['gene_mapping_rate'] = mapping_rate
+    print(f"Mapped {mapped_count}/{total_genes} genes ({mapping_rate:.1f}%) using {parameters['species']} reference")
+    
+    # Set as index but keep column for easy access
+    adata.var = adata.var.set_index('Gene name', drop=False)
+
+# Make var names unique
+adata.var_names_make_unique()
 
 rsc.get.anndata_to_GPU(adata)
 
@@ -399,6 +461,8 @@ mlflow.set_experiment_tags({
 # COMMAND ----------
 
 # save adata and our figures to disk
+# Drop Gene name column before saving (only needed during analysis, causes conflict with index)
+adata.var = adata.var.drop(columns=['Gene name'], errors='ignore')
 adata.write_h5ad(tmpdir.name+"/adata_output.h5ad")
 # save the flat dataframe to disk
 df_flat.to_parquet(tmpdir.name + "/markers_flat.parquet")

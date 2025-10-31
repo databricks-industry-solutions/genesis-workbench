@@ -25,6 +25,12 @@ if [[ ! -e ".deployed" ]]; then
     databricks bundle run register_scanpy_job $EXTRA_PARAMS
     
     echo ""
+    echo "▶️ [scanpy] Downloading gene reference tables"
+    echo ""
+    
+    databricks bundle run download_gene_references_gwb $EXTRA_PARAMS
+    
+    echo ""
     echo "✅ [scanpy] Deployment complete"
     echo ""
     

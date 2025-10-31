@@ -45,6 +45,8 @@ resources:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
               data_path: ""
+              gene_name_column: ""
+              species: hsapiens
             source: WORKSPACE
           job_cluster_key: run_gt_large_cluster
         - task_key: run_lt_large
@@ -55,6 +57,8 @@ resources:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
               data_path: ""
+              gene_name_column: ""
+              species: hsapiens
             source: WORKSPACE
           job_cluster_key: run_lt_large_cluster
         - task_key: run_lt_medium
@@ -65,6 +69,8 @@ resources:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
               data_path: ""
+              gene_name_column: ""
+              species: hsapiens
             source: WORKSPACE
           job_cluster_key: run_lt_medium_cluster
         - task_key: run_lt_small
@@ -75,6 +81,8 @@ resources:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
               data_path: ""
+              gene_name_column: ""
+              species: hsapiens
             source: WORKSPACE
           job_cluster_key: run_lt_small_cluster
 

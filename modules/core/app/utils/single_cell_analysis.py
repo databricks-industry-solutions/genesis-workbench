@@ -12,6 +12,7 @@ def start_scanpy_job(
     mlflow_experiment: str,
     mlflow_run_name: str,
     gene_name_column: str,
+    species: str,
     min_genes: int,
     min_cells: int,
     pct_counts_mt: float,
@@ -49,6 +50,7 @@ def start_scanpy_job(
             "mlflow_experiment": experiment.name,  # Full path like /Users/email/folder/experiment_name
             "mlflow_run_name": mlflow_run_name,
             "gene_name_column": gene_name_column,
+            "species": species,
             "min_genes": str(min_genes),
             "min_cells": str(min_cells),
             "pct_counts_mt": str(pct_counts_mt),
@@ -68,6 +70,7 @@ def start_rapids_singlecell_job(
     mlflow_experiment: str,
     mlflow_run_name: str,
     gene_name_column: str,
+    species: str,
     min_genes: int,
     min_cells: int,
     pct_counts_mt: float,
@@ -105,6 +108,7 @@ def start_rapids_singlecell_job(
             "mlflow_experiment": experiment.name,  # Full path like /Users/email/folder/experiment_name
             "mlflow_run_name": mlflow_run_name,
             "gene_name_column": gene_name_column,
+            "species": species,
             "min_genes": str(min_genes),
             "min_cells": str(min_cells),
             "pct_counts_mt": str(pct_counts_mt),

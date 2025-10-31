@@ -13,6 +13,8 @@ resources:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
               data_path: ""
+              gene_name_column: ""
+              species: hsapiens
             source: WORKSPACE
           job_cluster_key: rapidssinglecell_cluster
 
@@ -31,7 +33,9 @@ resources:
         - name: mlflow_run_name
           default: rapidssinglecell_genesis_workbench
         - name: gene_name_column
-          default: gene_name
+          default: ""
+        - name: species
+          default: hsapiens
         - name: min_genes
           default: 200
         - name: min_cells
