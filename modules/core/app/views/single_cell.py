@@ -306,28 +306,87 @@ def display_singlecell_results_viewer():
     # Get user info
     user_info = get_user_info()
     
-    # Experiment filter at the top
-    col1, col2 = st.columns([3, 1])
-    with col1:
+    # Initialize session state for filters
+    if 'date_filter' not in st.session_state:
+        st.session_state['date_filter'] = None  # All time by default
+    if 'processing_mode_filter' not in st.session_state:
+        st.session_state['processing_mode_filter'] = "All"
+    
+    # Compact top row: Experiment (50%), Mode (15%), Time filters (25%), Refresh (10%)
+    main_col1, main_col2, main_col3, main_col4 = st.columns([5, 1.5, 2.5, 1])
+    
+    with main_col1:
         experiment_filter = st.text_input(
-            "Filter by MLflow Experiment:",
+            "MLflow Experiment:",
             value="scanpy_genesis_workbench",
-            help="Enter experiment name to filter runs (partial match supported). Leave blank to see all experiments."
+            help="Enter experiment name to filter runs (partial match supported)."
         )
-    with col2:
+    
+    with main_col2:
+        processing_mode_option = st.radio(
+            "Mode:",
+            ["All", "Scanpy", "Rapids-SingleCell"],
+            index=["All", "Scanpy", "Rapids-SingleCell"].index(st.session_state['processing_mode_filter']),
+            help="Filter by processing pipeline",
+            label_visibility="visible"
+        )
+        if processing_mode_option != st.session_state['processing_mode_filter']:
+            st.session_state['processing_mode_filter'] = processing_mode_option
+            if 'singlecell_runs_df' in st.session_state:
+                del st.session_state['singlecell_runs_df']
+    
+    with main_col3:
+        st.markdown("**Time Period:**")
+        # 2x2 grid for time filters
+        row1_col1, row1_col2 = st.columns(2)
+        with row1_col1:
+            if st.button("Today", use_container_width=True, help="Show runs from today"):
+                st.session_state['date_filter'] = 0
+                if 'singlecell_runs_df' in st.session_state:
+                    del st.session_state['singlecell_runs_df']
+        with row1_col2:
+            if st.button("Last 7 Days", use_container_width=True, help="Show runs from last week"):
+                st.session_state['date_filter'] = 7
+                if 'singlecell_runs_df' in st.session_state:
+                    del st.session_state['singlecell_runs_df']
+        
+        row2_col1, row2_col2 = st.columns(2)
+        with row2_col1:
+            if st.button("Last 30 Days", use_container_width=True, help="Show runs from last month"):
+                st.session_state['date_filter'] = 30
+                if 'singlecell_runs_df' in st.session_state:
+                    del st.session_state['singlecell_runs_df']
+        with row2_col2:
+            if st.button("All Time", use_container_width=True, help="Show all runs"):
+                st.session_state['date_filter'] = None
+                if 'singlecell_runs_df' in st.session_state:
+                    del st.session_state['singlecell_runs_df']
+    
+    with main_col4:
         st.write("")  # Spacing
-        st.write("")
-        refresh_button = st.button("🔄 Refresh Runs", help="Reload available runs from MLflow")
+        st.write("")  # Spacing
+        refresh_button = st.button("🔄 Refresh", use_container_width=True, help="Reload available runs from MLflow")
     
     # Load or refresh runs list
     if refresh_button or 'singlecell_runs_df' not in st.session_state:
         with st.spinner("Searching for your single-cell analysis runs..."):
             try:
-                runs_df = search_singlecell_runs(user_info.user_email)
+                # Convert processing mode to lowercase for tag matching
+                processing_mode = None
+                if st.session_state['processing_mode_filter'] != "All":
+                    processing_mode = st.session_state['processing_mode_filter'].lower().replace("-", "-")
+                    if processing_mode == "rapids-singlecell":
+                        processing_mode = "rapids-singlecell"
+                    elif processing_mode == "scanpy":
+                        processing_mode = "scanpy"
+                
+                runs_df = search_singlecell_runs(
+                    user_email=user_info.user_email,
+                    processing_mode=processing_mode,
+                    days_back=st.session_state['date_filter']
+                )
                 st.session_state['singlecell_runs_df'] = runs_df
-                if len(runs_df) > 0:
-                    st.success(f"✅ Found {len(runs_df)} runs")
-                else:
+                if len(runs_df) == 0:
                     st.info("No single-cell analysis runs found. Run an analysis first!")
             except Exception as e:
                 st.error(f"❌ Error searching runs: {str(e)}")
@@ -346,54 +405,72 @@ def display_singlecell_results_viewer():
             st.warning(f"No runs found matching experiment: '{experiment_filter}'")
             return
     
-    # Select run - compact layout
-    if len(runs_df) > 0:
-        # Create display names with date and status
-        runs_df['display_name'] = runs_df.apply(
-            lambda row: f"{row['run_name']} ({row['experiment']}) - {row['start_time'].strftime('%Y-%m-%d %H:%M') if hasattr(row['start_time'], 'strftime') else row['start_time']}",
-            axis=1
+    st.divider()
+    
+    # Sort by most recent (default)
+    runs_df = runs_df.sort_values('start_time', ascending=False)
+    
+    # Create display names with date and status
+    runs_df['display_name'] = runs_df.apply(
+        lambda row: f"{row['run_name']} ({row['experiment']}) - {row['start_time'].strftime('%Y-%m-%d %H:%M') if hasattr(row['start_time'], 'strftime') else row['start_time']}",
+        axis=1
+    )
+    
+    run_options = dict(zip(runs_df['display_name'], runs_df['run_id']))
+    
+    # Consolidated run selection: Run name filter (40%), Runs dropdown (50%), Load button (10%)
+    select_col1, select_col2, select_col3 = st.columns([4, 5, 1])
+    
+    with select_col1:
+        run_name_filter = st.text_input(
+            "Search by Run Name:",
+            value="",
+            placeholder="Type to filter runs...",
+            help="Enter run name to filter runs (partial match supported)."
         )
-        
-        run_options = dict(zip(runs_df['display_name'], runs_df['run_id']))
-        
-        # Compact layout: metric, dropdown, and button in columns
-        col1, col2, col3 = st.columns([1, 4, 1])
-        
-        with col1:
-            st.metric("Runs", len(runs_df), label_visibility="visible")
-        
-        with col2:
-            selected_display = st.selectbox(
-                "Select Run:",
-                list(run_options.keys()),
-                help="Runs sorted by most recent. Experiment name in parentheses.",
-                label_visibility="visible"
-            )
-        
-        with col3:
-            st.write("")  # Spacer to align button
-            load_button = st.button("Load", type="primary", use_container_width=True)
-        
-        run_id = run_options[selected_display]
-        
-        # Load button action
-        if load_button:
-            with st.spinner("Loading data from MLflow..."):
-                try:
-                    df = download_singlecell_markers_df(run_id)
-                    mlflow_url = get_mlflow_run_url(run_id)
-                    
-                    st.session_state['singlecell_df'] = df
-                    st.session_state['singlecell_run_id'] = run_id
-                    st.session_state['singlecell_mlflow_url'] = mlflow_url
-                    
-                    st.success(f"✅ Loaded {len(df):,} cells with {len(df.columns)} features")
-                except Exception as e:
-                    st.error(f"❌ Error loading data: {str(e)}")
-                    st.info("💡 Tip: Make sure this run includes the markers_flat.parquet artifact")
-                    return
+    
+    # Apply run name text filter
+    if run_name_filter and run_name_filter.strip():
+        filtered_runs = runs_df[runs_df['run_name'].str.contains(run_name_filter.strip(), case=False, na=False)]
+        if len(filtered_runs) == 0:
+            st.warning(f"No runs found matching run name: '{run_name_filter}'")
+            return
+        filtered_options = dict(zip(filtered_runs['display_name'], filtered_runs['run_id']))
     else:
-        st.warning("No runs found matching your criteria")
+        filtered_runs = runs_df
+        filtered_options = run_options
+    
+    with select_col2:
+        st.markdown(f"**{len(filtered_runs)} Runs:**")
+        selected_display = st.selectbox(
+            "Select:",
+            list(filtered_options.keys()),
+            help="Runs sorted by most recent. Experiment name in parentheses.",
+            label_visibility="collapsed"
+        )
+    
+    with select_col3:
+        st.write("")  # Spacer to align button
+        load_button = st.button("Load", type="primary", use_container_width=True)
+    
+    run_id = filtered_options[selected_display]
+    
+    # Load button action
+    if load_button:
+        with st.spinner("Loading data from MLflow..."):
+            try:
+                df = download_singlecell_markers_df(run_id)
+                mlflow_url = get_mlflow_run_url(run_id)
+                
+                st.session_state['singlecell_df'] = df
+                st.session_state['singlecell_run_id'] = run_id
+                st.session_state['singlecell_mlflow_url'] = mlflow_url
+                
+                st.success(f"✅ Loaded {len(df):,} cells with {len(df.columns)} features")
+            except Exception as e:
+                st.error(f"❌ Error loading data: {str(e)}")
+                st.info("💡 Tip: Make sure this run includes the markers_flat.parquet artifact")
+                return
     
     # Step 3: Display if data is loaded
     if 'singlecell_df' in st.session_state:

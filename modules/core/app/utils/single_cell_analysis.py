@@ -198,7 +198,7 @@ def get_mlflow_run_url(run_id: str) -> str:
     return url
 
 
-def search_singlecell_runs(user_email: str, processing_mode: str = None) -> pd.DataFrame:
+def search_singlecell_runs(user_email: str, processing_mode: str = None, days_back: int = None) -> pd.DataFrame:
     """
     Search for single-cell processing runs created by the user
     
@@ -207,6 +207,7 @@ def search_singlecell_runs(user_email: str, processing_mode: str = None) -> pd.D
     Args:
         user_email: Email of the user
         processing_mode: Optional filter for specific mode (e.g., 'scanpy', 'rapids-singlecell')
+        days_back: Optional filter to only show runs from last N days (None = all time)
     
     Returns:
         DataFrame with run information (run_id, run_name, experiment_name, start_time, status)
@@ -226,8 +227,12 @@ def search_singlecell_runs(user_email: str, processing_mode: str = None) -> pd.D
     experiments = {exp.experiment_id: exp.name for exp in experiment_list}
     experiment_ids = list(experiments.keys())
     
-    # Build filter string
-    filter_parts = [f"tags.created_by='{user_email}'", "tags.origin='genesis_workbench'"]
+    # Build filter string - only show successful runs
+    filter_parts = [
+        f"tags.created_by='{user_email}'", 
+        "tags.origin='genesis_workbench'",
+        "attributes.status='FINISHED'"  # Only successful runs
+    ]
     if processing_mode:
         filter_parts.append(f"tags.processing_mode='{processing_mode}'")
     
@@ -249,6 +254,29 @@ def search_singlecell_runs(user_email: str, processing_mode: str = None) -> pd.D
     
     if len(runs) == 0:
         return pd.DataFrame()
+    
+    # Apply date filter if specified
+    if days_back is not None and days_back >= 0:
+        if days_back == 0:
+            # For "Today", use start of today (midnight)
+            cutoff_date = pd.Timestamp.now().normalize()  # Sets time to 00:00:00
+        else:
+            # For other filters, go back N days from now
+            cutoff_date = pd.Timestamp.now() - pd.Timedelta(days=days_back)
+        
+        # Handle timezone-aware vs timezone-naive timestamps
+        # Convert both to timezone-naive for safe comparison
+        if hasattr(runs['start_time'].iloc[0], 'tz') and runs['start_time'].iloc[0].tz is not None:
+            # Timestamps are timezone-aware, convert to timezone-naive (local time)
+            runs_start_time = runs['start_time'].dt.tz_localize(None)
+        else:
+            # Already timezone-naive
+            runs_start_time = runs['start_time']
+        
+        runs = runs[runs_start_time >= cutoff_date]
+        
+        if len(runs) == 0:
+            return pd.DataFrame()
     
     # Format the results
     runs['experiment_name'] = runs['experiment_id'].map(experiments)
