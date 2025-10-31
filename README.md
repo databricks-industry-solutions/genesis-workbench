@@ -139,6 +139,25 @@ Boltz-1 | sentence-transformers>=2.7 |	Apache2.0 | https://github.com/UKPLab/sen
 Boltz-1 | pyspark |	Apache2.0 | https://github.com/apache/spark
 Boltz-1 | pandas |	BSD-3 | https://github.com/pandas-dev/pandas
 Boltz-1 | MODEL WEIGHTS |	MIT | https://github.com/jwohlwend/boltz
+Scanpy | scanpy==1.11.4 | BSD-3 | https://github.com/scverse/scanpy
+Scanpy | anndata | BSD-3 | https://github.com/scverse/anndata
+Scanpy | scikit-network | BSD-3 | https://github.com/sknetwork-team/scikit-network
+Scanpy | Numpy | BSD-3 | https://github.com/numpy/numpy
+Scanpy | pandas | BSD-3 | https://github.com/pandas-dev/pandas
+Scanpy | scipy | BSD-3 | https://github.com/scipy/scipy
+Rapids-SingleCell | rapids-singlecell | MIT | https://github.com/scverse/rapids_singlecell
+Rapids-SingleCell | cudf-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
+Rapids-SingleCell | cuml-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
+Rapids-SingleCell | cugraph-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
+Rapids-SingleCell | cucim-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
+Rapids-SingleCell | dask-cudf-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
+Rapids-SingleCell | nx-cugraph-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
+Rapids-SingleCell | cuxfilter-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
+Rapids-SingleCell | pylibraft-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
+Rapids-SingleCell | raft-dask-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
+Rapids-SingleCell | cuvs-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
+Rapids-SingleCell | cupy-cuda12x | MIT | https://github.com/cupy/cupy/
+Rapids-SingleCell | rmm (RAPIDS Memory Manager) | Apache-2.0 | https://github.com/rapidsai/rmm
 
 
 
