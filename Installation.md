@@ -128,6 +128,11 @@ gpu_medium_setting=GPU_LARGE <<-Since there is no GPU_MEDIUM in Azure
 gpu_large_setting=GPU_LARGE
 ```
 
+Additionally the single_cell module contains two files:
+ - module_aws.env.tmp
+ - module_azure.env.tmp
+
+You can remove the .tmp from these two files to use the standard compute settings for these modules. Note these two env files in single_cell contain only default compute settings and no secrets. 
 
 ## Running the installation
 **Step - 1:**
