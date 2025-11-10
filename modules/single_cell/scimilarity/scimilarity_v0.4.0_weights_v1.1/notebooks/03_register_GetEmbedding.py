@@ -255,48 +255,25 @@ example_input_with_optionalCols
 # DBTITLE 1,example_output_with_optionalCols
 import numpy as np
 import pandas as pd
-import json
-from mlflow.models import infer_signature
 
-# Define handle_array function
+# Define a function to handle arrays properly
 def handle_array(x):
     if isinstance(x, np.ndarray):
         return np.where(pd.isna(x), np.nan, x)
     else:
-        return None if pd.isna(x) else x
+        # return None if pd.isna(x) or np.nan else x ## None is required for Any | more flexible
+        return None if pd.isna(x) else x ## this works ok
 
-# Create base example_input
-example_input = pd.DataFrame([{
-    "embedding": np.random.rand(256).tolist()
-}])
+# List of optional columns
+optionalCols_list = [
+    "celltype_raw", "celltype_id", "sample", "study", "n_counts", "n_genes",
+    "celltype_name", "doublet_score", "pred_dbl", "Disease"
+]
 
-# Create base example_output
-example_output = pd.DataFrame([{
-    "nn_idxs": [[1, 2, 3]],
-    "nn_dists": [[0.1, 0.2, 0.3]],
-    "results_metadata": json.dumps({"k": 100})
-}])
+# Apply the function element-wise to all optional columns
+example_output_with_optionalCols[optionalCols_list] = example_output_with_optionalCols[optionalCols_list].applymap(handle_array)
 
-# Create example_input_with_optionalCols
-example_input_with_optionalCols = example_input.copy()
-example_input_with_optionalCols["params"] = pd.Series(
-    [None, json.dumps({"k": 100})], 
-    dtype="object"
-)
-
-# Apply handle_array to optional input columns
-example_input_with_optionalCols["params"] = example_input_with_optionalCols["params"].apply(handle_array)
-
-# Create example_output_with_optionalCols (even if no optional output columns)
-example_output_with_optionalCols = example_output.copy()
-
-# If you have optional output columns, add them here:
-# example_output_with_optionalCols["optional_field"] = pd.Series([None, "value"], dtype="string")
-# example_output_with_optionalCols["optional_field"] = example_output_with_optionalCols["optional_field"].apply(handle_array)
-
-# Infer signature
-signature = infer_signature(example_input_with_optionalCols, example_output_with_optionalCols)
-print(signature)
+example_output_with_optionalCols
 
 # COMMAND ----------
 
