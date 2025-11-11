@@ -10,7 +10,7 @@
 
 # DBTITLE 1,[gwb] pip install from requirements list
 #install all dependencies
-%pip install scimilarity==0.4.0 typing_extensions>=4.14.0 scanpy==1.11.2 numcodecs==0.13.1 numpy==1.26.4 pandas==1.5.3 mlflow==2.22.0 cloudpickle==2.0.0 tbb>=2021.6.0 uv 
+%pip install -q scimilarity==0.4.0 typing_extensions>=4.14.0 scanpy==1.11.2 numcodecs==0.13.1 numpy==1.26.4 pandas==1.5.3 mlflow==2.22.0 cloudpickle==2.0.0 tbb>=2021.6.0 uv 
 
 dbutils.library.restartPython()
 
@@ -37,8 +37,8 @@ numba.config.THREADING_LAYER = 'workqueue'  # Most compatible option
 # COMMAND ----------
 
 # DBTITLE 1,gwb_variablesNparams
-dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("schema", "dev_mmt_core_test", "Schema")
+dbutils.widgets.text("catalog", "<catalog_name>", "Catalog")
+dbutils.widgets.text("schema", "<schema_name>", "Schema")
 dbutils.widgets.text("model_name", "SCimilarity", "Model Name") 
 dbutils.widgets.text("experiment_name", "gwb_modules_scimilarity", "Experiment Name")
 dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id") 
