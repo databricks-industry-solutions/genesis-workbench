@@ -34,6 +34,24 @@ variables:
 
   gpu_large_setting:
     description: The config setting for large gpu
+  
+  cpu_small_node_type:
+    description: Node type for small CPU clusters
+  
+  cpu_medium_node_type:
+    description: Node type for medium CPU clusters
+  
+  cpu_large_node_type:
+    description: Node type for large CPU clusters
+  
+  cpu_xlarge_node_type:
+    description: Node type for xlarge CPU clusters
+  
+  gpu_t4_rapids_node_type:
+    description: Node type for T4 GPU rapids clusters
+  
+  gpu_ml_spark_version:
+    description: Spark version for GPU ML runtime
     
   core_catalog_name:
     description: primary catalog where data, models, and files are stored for this project.

@@ -1,0 +1,20 @@
+bundle:
+  name: genesis_workbench_scanpy
+  databricks_cli_version: ">=0.236.*"
+
+include:
+  - variables.yml
+  - resources/*.yml
+    
+targets:
+  prod:
+    mode: production
+    default: true
+    workspace:
+      root_path: ${var.current_working_directory}
+       #host: this will be read by DATABRICKS_HOST env variable
+    permissions:
+      - user_name: ${var.current_user}
+        level: CAN_MANAGE
+    run_as:
+      user_name: ${var.current_user} #sp name should be used instead later.

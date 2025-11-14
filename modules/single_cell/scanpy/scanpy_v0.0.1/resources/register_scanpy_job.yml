@@ -1,0 +1,33 @@
+resources:
+  jobs:
+    register_scanpy_job:
+      name: register_scanpy_job
+      
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+      
+      tasks:
+        - task_key: register_scanpy_task
+          notebook_task:
+            notebook_path: ../notebooks/register_scanpy_job.py
+      
+      environments:
+        - environment_key: default
+          spec:
+            client: '2'
+      
+      parameters:
+        - name: core_catalog
+          default: ${var.core_catalog_name}
+        - name: core_schema
+          default: ${var.core_schema_name}
+        - name: run_scanpy_job_id
+          default: ${resources.jobs.scanpy.id}
+        - name: user_email
+          default: ${var.current_user}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+      
+      tags: ${var.common_resource_tags}
+
