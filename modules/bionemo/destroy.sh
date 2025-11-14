@@ -33,3 +33,5 @@ else
     echo "❗️ ERROR! Destroy failed."
 fi
 
+
+rm .deployed
