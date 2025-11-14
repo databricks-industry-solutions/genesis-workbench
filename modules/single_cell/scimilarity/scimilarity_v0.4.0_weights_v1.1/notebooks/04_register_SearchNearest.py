@@ -15,61 +15,73 @@
 # COMMAND ----------
 
 # DBTITLE 1,SCimilarity_SearchNearest
-import csv
-from typing import Any
 import mlflow
 import numpy as np
 import pandas as pd
+import json
 from mlflow.pyfunc.model import PythonModelContext
-from scimilarity import CellEmbedding, CellQuery
-import torch
+from scimilarity import CellQuery
+from typing import Any, Dict
 
 class SCimilarity_SearchNearest(mlflow.pyfunc.PythonModel):
-    r"""Create MLFlow Pyfunc class for SCimilarity model."""
+    """Create MLFlow Pyfunc class for SCimilarity model."""
 
     def load_context(self, context: PythonModelContext):
-        r"""Intialize pre-trained SCimilarity model.
-
-        Parameters
-        ----------
-        context : PythonModelContext
-            Context object for MLFlow model -- here we are loading the pretrained model weights.
-
-        """
+        """Initialize pre-trained SCimilarity model."""
         self.cq = CellQuery(context.artifacts["model_path"])
 
     def predict(
         self,
         context: PythonModelContext,
-        model_input: pd.DataFrame, 
-        params: dict[str, Any], 
+        model_input: pd.DataFrame
     ) -> pd.DataFrame:
-        r"""Output prediction on model.
+        """Output prediction on model."""
+        # Extract embedding - handle both list and array formats
+        embeddings = model_input["embedding"].iloc[0]
+        if isinstance(embeddings, str):
+            embeddings = json.loads(embeddings)
+        embeddings = np.array(embeddings)
 
-        Parameters
-        ----------
-        context : PythonModelContext
-            Context object for MLFlow model.
-        model_input : pd.DataFrame
-            DataFrame containing embeddings.
+        # Handle optional params column as JSON string
+        params = self._parse_params(model_input)
+        k = params.get("k", 100) #If "k" is not present in params, use 100 as the default value.
 
-        Returns
-        -------
-        pd.DataFrame
-            The predicted classes.
+        # Perform search
+        predictions = self.cq.search_nearest(embeddings, k=k)
 
-        """
-        embeddings = model_input.embedding[0] 
-        
-        predictions = self.cq.search_nearest(embeddings, k=params["k"]) # external params dict
-
+        # Format results
         results_dict = {
             "nn_idxs": [np_array.tolist() for np_array in predictions[0]],
             "nn_dists": [np_array.tolist() for np_array in predictions[1]],
-            "results_metadata": predictions[2].to_dict()
+            "results_metadata": json.dumps(predictions[2].to_dict())  # Serialize to JSON string
         }
-        results_df = pd.DataFrame([results_dict])
-        return results_df
+        
+        return pd.DataFrame([results_dict])
+
+    def _parse_params(self, model_input: pd.DataFrame) -> Dict[str, Any]:
+        """Parse optional params column with robust error handling."""
+        default_params = {"k": 100}
+        
+        # Check if params column exists
+        if "params" not in model_input.columns:
+            return default_params
+        
+        raw_params = model_input["params"].iloc[0]
+        
+        # Handle None, NaN, or empty string
+        if raw_params is None or (isinstance(raw_params, float) and pd.isna(raw_params)) or raw_params == "":
+            return default_params
+        
+        # Parse JSON string
+        try:
+            params = json.loads(raw_params) if isinstance(raw_params, str) else raw_params
+            # Validate k parameter
+            if "k" in params and isinstance(params["k"], (int, float)) and params["k"] > 0:
+                return params
+            else:
+                return default_params
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return default_params
 
 # COMMAND ----------
 
@@ -93,13 +105,34 @@ model.load_context(temp_context)
 
 # COMMAND ----------
 
+# DBTITLE 1,specify params
+from typing import Optional, Any
+
+params: Optional[dict[str, Any]] = dict({"k": 10})
+params.values()
+
+# COMMAND ----------
+
 # DBTITLE 1,Specify example model_input
 ## Create a DataFrame containing the embeddings
 
 # cell_embeddings.dtype #dtype('float32')
 # cell_embeddings.shape #(1, 128)
 
-model_input = pd.DataFrame([{"embedding": cell_embeddings.tolist()[0]}])
+# model_input = pd.DataFrame([{"embedding": cell_embeddings.tolist()[0]}]) # previously where params was separate signature.
+
+model_input = pd.DataFrame([
+    {
+        "embedding": cell_embeddings.tolist()[0],  # list of floats
+        "params": json.dumps(params) #{"k": 100}  # JSON string
+    }
+])
+
+# Ensure embedding is a list of floats
+model_input["embedding"] = model_input["embedding"].apply(
+    lambda x: list(np.array(x, dtype=float)) if not isinstance(x, list) else x
+)
+
 display(model_input)
 
 # COMMAND ----------
@@ -109,24 +142,60 @@ spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "false")
 
 # COMMAND ----------
 
-# DBTITLE 1,Test model_input + params
+# DBTITLE 1,Test predict with model_input + params
 # Call the predict method
-searchNearest_output = model.predict(temp_context, model_input, params={"k": 100})
+# searchNearest_output = model.predict(temp_context, model_input, params={"k": 100})
+
+searchNearest_output = model.predict(temp_context, model_input) 
 
 display(searchNearest_output)
 
 # COMMAND ----------
 
-model.predict(temp_context, model_input, params={"k": 100})
+# DBTITLE 1,check prediction output
+import json
+import pandas as pd
+
+# JSON string
+json_string = searchNearest_output["results_metadata"].iloc[0]
+
+# Parse JSON and convert to DataFrame
+data = json.loads(json_string)
+df = pd.DataFrame(data)
+
+
+# Display the DataFrame
+display(df)
+print(f"\nShape: {df.shape}")
+print(f"\nColumns: {df.columns.tolist()}")
 
 # COMMAND ----------
 
-# DBTITLE 1,specify params
-# import json
+# DBTITLE 1,test without params
+model_input0 = pd.DataFrame([
+    {
+        "embedding": cell_embeddings.tolist()[0],
+        # "params": {"k": 100}
+    }
+])
+display(model_input0)
 
-params: dict[str, Any] = dict({"k": 100})
-params.values()
+# COMMAND ----------
 
+# DBTITLE 1,predict without params input
+output = model.predict(temp_context, model_input0)
+output
+
+# COMMAND ----------
+
+# DBTITLE 1,check that where params not specified -- k defaults to 100
+# JSON string
+json_string0 = output["results_metadata"].iloc[0]
+
+# Parse JSON and convert to DataFrame
+data0 = json.loads(json_string0)
+df0 = pd.DataFrame(data0)
+display(df0)
 
 # COMMAND ----------
 
@@ -136,30 +205,53 @@ params.values()
 # COMMAND ----------
 
 # DBTITLE 1,Define MLflow Signature
-from mlflow.models import infer_signature
+import numpy as np
 import pandas as pd
+import json
+from mlflow.models import infer_signature
 
-# Define a concrete example input as a Pandas DataFrame
-example_input = model_input ## we will add params separately to keep it simple... but make a note on the usage input patterns 
+# Define handle_array function
+def handle_array(x):
+    if isinstance(x, np.ndarray):
+        return np.where(pd.isna(x), np.nan, x)
+    else:
+        return None if pd.isna(x) else x
 
-# Ensure the example output is in a serializable format
+# Create base example_input
+example_input = model_input.copy() 
+
+# Create base example_output
 example_output = searchNearest_output
 
-# Create a Dict for params
-params: dict[str, Any] = dict({"k": 100}) ## could take any dict and if none provided defaults to example provided
-
-
-# Infer the model signature
-signature = infer_signature(
-    model_input = model_input, #example_input,
-    model_output = example_output,
-    params=params
+# Create example_input_with_optionalCols
+example_input_with_optionalCols = example_input.copy()
+example_input_with_optionalCols["params"] = pd.Series(
+    [None, json.dumps({"k": 100})], 
+    dtype="object"
 )
+
+# Apply handle_array to optional input columns
+example_input_with_optionalCols["params"] = example_input_with_optionalCols["params"].apply(handle_array)
+
+# Create example_output_with_optionalCols (even if no optional output columns)
+example_output_with_optionalCols = example_output.copy()
+
+# Infer signature
+signature = infer_signature(model_input = example_input_with_optionalCols, 
+                            model_output = example_output_with_optionalCols,
+                            #params ## omit -- move into input^
+                           )
+# print(signature)
 
 # COMMAND ----------
 
 # DBTITLE 1,check signature
 signature
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC
 
 # COMMAND ----------
 
@@ -204,3 +296,8 @@ with mlflow.start_run(run_name=f'{model_name}', experiment_id=experiment.experim
 
     run_id = run.info.run_id
     print("Model logged with run ID:", run_id)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC

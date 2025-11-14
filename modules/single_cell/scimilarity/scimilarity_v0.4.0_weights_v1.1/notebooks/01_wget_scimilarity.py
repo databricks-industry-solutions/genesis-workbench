@@ -4,11 +4,11 @@
 # COMMAND ----------
 
 # DBTITLE 1,gwb_variablesNparams
-dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("schema", "genesis_schema", "Schema")
+dbutils.widgets.text("catalog", "<catalog_name>", "Catalog")
+dbutils.widgets.text("schema", "<schema_name>", "Schema")
 dbutils.widgets.text("model_name", "SCimilarity", "Model Name") 
 dbutils.widgets.text("experiment_name", "gwb_modules_scimilarity", "Experiment Name")
-dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id") 
+dbutils.widgets.text("sql_warehouse_id", "<sqlw123>", "SQL Warehouse Id") 
 dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
 dbutils.widgets.text("cache_dir", "scimilarity", "Cache dir")
 
@@ -64,7 +64,7 @@ print("sampledata_path :", sampledata_path)
 
 # COMMAND ----------
 
-# DBTITLE 1,test scimilarity_setup -- ~60++mins?
+# DBTITLE 1,(classic compute) scimilarity_setup -- ~60++mins?
 import os
 import subprocess
 import logging
@@ -199,3 +199,8 @@ def setup_scimilarity(base_dir=f"/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}",
 # If running directly (not imported)
 if __name__ == "__main__":
     setup_scimilarity()
+
+# COMMAND ----------
+
+# DBTITLE 0,RUN data samples processing
+# %run extractNsave_DiseaseCellTypeSamples
