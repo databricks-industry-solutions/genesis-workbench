@@ -938,11 +938,18 @@ with st.spinner("Loading data"):
 
 st.title(":material/microbiology:  Single Cell Studies")
 
-settings_tab, processing_tab, embeddings_tab = st.tabs([
+# settings_tab, processing_tab, embeddings_tab = st.tabs([
+#     "Settings", 
+#     "Raw Single Cell Processing",
+#     "Embeddings"
+# ])
+
+settings_tab, processing_tab = st.tabs([
     "Settings", 
     "Raw Single Cell Processing",
-    "Embeddings"
+    # "Embeddings"
 ])
+
 
 with settings_tab:
     display_settings_tab(available_single_cell_models_df,deployed_single_cell_models_df)
@@ -970,5 +977,5 @@ with processing_tab:
     with view_tab:
         display_singlecell_results_viewer()
 
-with embeddings_tab:
-    display_embeddings_tab(deployed_single_cell_models_df)
+# with embeddings_tab:
+#     display_embeddings_tab(deployed_single_cell_models_df)

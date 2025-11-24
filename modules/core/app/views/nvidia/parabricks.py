@@ -40,9 +40,9 @@ data_vol = "/Volumes/my_catalog/my_schema/my_colume/data/"
 ```
 """)
 
-view_parabricks_sample = st.button("See In action")
-if view_parabricks_sample:
-    show_sample_notebook()
+# view_parabricks_sample = st.button("See In action")
+# if view_parabricks_sample:
+#     show_sample_notebook()
 
-st.link_button("Open Notebook", url="/app/static/run_parabricks.html")
+# st.link_button("Open Notebook", url="/app/static/run_parabricks.html")
 
