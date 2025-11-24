@@ -1,0 +1,18 @@
+resources:
+  jobs:
+    download_gene_references_gwb:
+      name: download_gene_references_gwb
+      
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+      
+      tasks:
+        - task_key: download_references
+          notebook_task:
+            notebook_path: ../notebooks/download_gene_references.py
+            source: WORKSPACE
+
+

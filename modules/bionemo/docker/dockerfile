@@ -104,6 +104,8 @@ COPY python-lsp-requirements.txt /databricks/.
 
 RUN /databricks/python-lsp/bin/pip install -r /databricks/python-lsp-requirements.txt
 
+
+#following is patch for a bug in NVIDIA bionemo package.. probly fixed soon
 RUN rm /usr/local/lib/python3.12/dist-packages/bionemo/esm2/scripts/finetune_esm2.py
 
 COPY finetune_esm2.py /usr/local/lib/python3.12/dist-packages/bionemo/esm2/scripts

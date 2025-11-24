@@ -3,7 +3,7 @@
 ### Module Deploy and Destroy process
 
 #### Anatomy
-A module is a deployable unit in Genesis Workbench. A module consist of sub-modules or models, each sub-modules having its own deployment process controlled by a `deploy.sh` and `destroy.sh`. This gives flexibility and autonomy to design sub-modules in a way it can be deployed from the module. Every sub-module can utilize [Databricks Asset Bundles](https://docs.databricks.com/aws/en/dev-tools/bundles/) for configuring Databricks resources. 
+A module is a deployable unit in Genesis Workbench. A module consist of sub-modules or models, each sub-modules having its own deployment process controlled by a **`deploy.sh`** and **`destroy.sh`**. This gives flexibility and autonomy to design sub-modules in a way it can be deployed from the module. Every sub-module can utilize [Databricks Asset Bundles](https://docs.databricks.com/aws/en/dev-tools/bundles/) for configuring Databricks resources. 
 
 The primary pattern followed in Genesis Workbench is given below
 - Use Databricks Asset Bundles to:
@@ -33,18 +33,22 @@ The deploy script does the following:
 
 ##### Destroy
 
-Destroy gets initiated by running the `destroy.sh` script in the root folder using the syntax `./destroy.sh <module> <cloud>` . This script should be called aftaer the Prerequisites given below are completed
+Destroy gets initiated by running the `destroy.sh` script in the root folder using the syntax `./destroy.sh <module> <cloud>` . This script should be called after the Prerequisites given below are completed
 
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/destroy_process.png" alt="Deploy Process" width="700"/>
 
 The destroy script does the following:
-- Before `core` is destroyed, checks if all modules are destroyed
-- Initiate destroy of `module` by executing the `destroy.sh` of module
+- Before `core` is destroyed, checks if all modules are destroyed 
+  - If not, it alerts the user to which module are still deployed and why the `core` cannot be destroyed: 
+    - `🚫 Deployment exist in modules/<name_of_module> Cannot remove core module`
+  - Destroy `module` by executing the `destroy.sh` of module e.g. 
+    - `./destroy.sh <module_name> <cloud_name>`
+- When `core` is being destroyed, `destroy.sh` triggers the following processes: 
   - Reads `application.env`, `aws/azure.env` and `module.env` if present
   - Module destroys asset bundle that destroys the model and all related artifacts
   - Uses the job from core module to delete all endpoints, archive inference tables
-- Remove module specific values from `settings` table
-- Deletes the `.deployed` file in the module
+  - Remove module specific values from `settings` table
+  - Deletes the `.deployed` file in the module
 
 In order to install Genesis Workbench you'll clone the repo locally and then use the provided scripts to install the Workbench to a Databricks Workspace. The below diagram shows the resources being deployed into the workspace.
 <br>
@@ -128,6 +132,11 @@ gpu_medium_setting=GPU_LARGE <<-Since there is no GPU_MEDIUM in Azure
 gpu_large_setting=GPU_LARGE
 ```
 
+Additionally the single_cell module contains two files:
+ - module_aws.env.tmp
+ - module_azure.env.tmp
+
+You can remove the .tmp from these two files to use the standard compute settings for these modules. Note these two env files in single_cell contain only default compute settings and no secrets. 
 
 ## Running the installation
 **Step - 1:**

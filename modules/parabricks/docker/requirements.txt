@@ -1,0 +1,15 @@
+six
+jedi
+ipython
+ipython-genutils
+numpy
+pandas
+pyarrow
+matplotlib
+Jinja2
+ipykernel
+protobuf
+pyccolo
+grpcio
+grpcio-status
+databricks-sdk

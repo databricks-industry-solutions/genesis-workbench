@@ -1,0 +1,8 @@
+resources:
+  volumes:
+    rapids_reference:
+      name: rapids_reference
+      catalog_name: ${var.core_catalog_name}
+      schema_name: ${var.core_schema_name}
+      volume_type: MANAGED
+
