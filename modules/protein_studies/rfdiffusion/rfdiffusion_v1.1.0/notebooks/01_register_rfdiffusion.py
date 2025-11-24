@@ -40,6 +40,8 @@ os.environ["DATABRICKS_TOKEN"]=databricks_token
 # MAGIC cd /rfd
 # MAGIC rm -rf RFdiffusion
 # MAGIC git clone https://github.com/RosettaCommons/RFdiffusion.git
+# MAGIC cd RFdiffusion
+# MAGIC git checkout e22092420281c644b928e64d490044dfca4f9175
 
 # COMMAND ----------
 

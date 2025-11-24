@@ -53,7 +53,15 @@ with st.form("user_profile_setup_form", enter_to_submit=False):
     mlflow_experiment_folder = st.text_input(f"Enter the folder name:","mlflow_experiments")
 
     st.write(f"#### :material/keyboard_double_arrow_right: Step 2")    
-    st.write(f"##### Grant Permission to the application service principal: `{ os.environ['DATABRICKS_CLIENT_ID'] if 'DATABRICKS_CLIENT_ID' in os.environ else 'none' }` ")
+    st.write(f"##### Grant Permission to the below application service principal:")
+    c1,c2 = st.columns([4,8])
+    with c1:
+        st.write(f"""
+                ```
+                { os.environ['DATABRICKS_CLIENT_ID'] if 'DATABRICKS_CLIENT_ID' in os.environ else 'none' }
+                ```
+        """)
+
     ac1,ac2 = st.columns([2,1])
     with ac1:
         st.image("images/set_permissions_small.gif" )

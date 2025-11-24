@@ -78,8 +78,14 @@ monitoring_alerts_page = st.Page(
 )
 
 bionemo_esm_page = st.Page(
-    page="views/bionemo/bionemo_esm.py",
+    page="views/nvidia/bionemo_esm.py",
     title="NVIDIA BioNeMo©",
+    icon=":material/genetics:"
+)
+
+parabricks_page = st.Page(
+    page="views/nvidia/parabricks.py",
+    title="NVIDIA Parabricks©",
     icon=":material/genetics:"
 )
 
@@ -96,6 +102,8 @@ if "single_cell" in deployed_modules:
     workbench_pages.append(single_cell_page)
 if "bionemo" in deployed_modules:
     workbench_pages.append(bionemo_esm_page)
+if "parabricks" in deployed_modules:
+    workbench_pages.append(parabricks_page)
 
 
 menu_pages = {

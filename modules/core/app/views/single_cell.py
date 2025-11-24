@@ -87,7 +87,7 @@ def display_settings_tab(available_models_df,deployed_models_df):
 def display_scanpy_analysis_tab():
     st.markdown("###### Run Scanpy Analysis")
     
-    with st.form("scanpy_analysis_form"):
+    with st.form("scanpy_analysis_form", enter_to_submit=False):
         # Mode Selection
         st.markdown("**Analysis Mode:**")
         mode_display = st.selectbox(
@@ -337,7 +337,7 @@ def display_singlecell_results_viewer():
         st.session_state['processing_mode_filter'] = "All"
     
     # Compact top row: Experiment (50%), Mode (15%), Time filters (25%), Refresh (10%)
-    main_col1, main_col2, main_col3, main_col4 = st.columns([5, 1.5, 2.5, 1])
+    main_col1, main_col2, main_col3, main_col4 = st.columns([5, 1.5, 2.5, 1], vertical_alignment="bottom")
     
     with main_col1:
         experiment_filter = st.text_input(
@@ -443,7 +443,7 @@ def display_singlecell_results_viewer():
     run_options = dict(zip(runs_df['display_name'], runs_df['run_id']))
     
     # Consolidated run selection: Run name filter (40%), Runs dropdown (50%), Load button (10%)
-    select_col1, select_col2, select_col3 = st.columns([4, 5, 1])
+    select_col1, select_col2, select_col3 = st.columns([4, 5, 1], vertical_alignment="bottom")
     
     with select_col1:
         run_name_filter = st.text_input(
