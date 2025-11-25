@@ -33,6 +33,4 @@ if [[ ! -e ".deployed" ]]; then
     echo ""
     echo "✅ [scanpy] Deployment complete"
     echo ""
-    
-    date +"%Y-%m-%d %H:%M:%S" > .deployed
 fi
