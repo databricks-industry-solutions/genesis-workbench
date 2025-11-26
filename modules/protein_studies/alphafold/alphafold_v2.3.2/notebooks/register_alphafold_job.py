@@ -1,12 +1,12 @@
 # Databricks notebook source
-dbutils.widgets.text("core_catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("core_schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
+dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
+dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
 dbutils.widgets.text("run_alphafold_job_id", "167486110869223", "AlphaFold Job ID")
 dbutils.widgets.text("user_email", "a@b.com", "Email of the user running the deploy")
 dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
 
-catalog = dbutils.widgets.get("core_catalog")
-schema = dbutils.widgets.get("core_schema")
+catalog = dbutils.widgets.get("catalog")
+schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
@@ -29,8 +29,8 @@ print(gwb_library_path)
 
 # COMMAND ----------
 
-catalog = dbutils.widgets.get("core_catalog")
-schema = dbutils.widgets.get("core_schema")
+catalog = dbutils.widgets.get("catalog")
+schema = dbutils.widgets.get("schema")
 run_alphafold_job_id = dbutils.widgets.get("run_alphafold_job_id")
 user_email = dbutils.widgets.get("user_email")
 sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
