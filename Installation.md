@@ -116,7 +116,7 @@ Cloud configuration is used to specify what instance type to use and endpoint co
 ```
 cpu_node_type=i3.4xlarge
 t4_node_type=g4dn.4xlarge
-a10_node_type=g5.8xlarge
+a10_node_type=g5.16xlarge
 gpu_small_setting=GPU_SMALL
 gpu_medium_setting=GPU_MEDIUM
 gpu_large_setting=MULTIGPU_MEDIUM <<-Since there is no GPU_LARGE in AWS

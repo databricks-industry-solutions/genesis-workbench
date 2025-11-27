@@ -34,5 +34,4 @@ if [[ ! -e ".deployed" ]]; then
     echo "✅ [rapidssinglecell] Deployment complete"
     echo ""
     
-    date +"%Y-%m-%d %H:%M:%S" > .deployed
 fi

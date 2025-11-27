@@ -114,7 +114,7 @@ if [[ ! -e ".deployed" ]]; then
   echo "▶️ Running initialization job"
   echo ""
 
-  #databricks bundle run initialize_core_job --var="$EXTRA_PARAMS"
+  databricks bundle run initialize_core_job --var="$EXTRA_PARAMS"
 fi
 
 echo ""

@@ -75,7 +75,7 @@ resources:
         - name: schema
           default: ${var.core_schema_name}
         - name: model_volume
-          default: ${resources.volumes.alphafold_volume.name}
+          default: alphafold
         - name: user_email
           default: ${var.current_user}      
         - name: protein_sequence

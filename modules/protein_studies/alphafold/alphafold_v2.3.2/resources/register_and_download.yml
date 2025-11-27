@@ -103,7 +103,7 @@ resources:
         - name: model_name
           default: alphafold2
         - name: model_volume
-          default: ${resources.volumes.alphafold_volume.name}
+          default: alphafold
         - name: user_email
           default: ${var.current_user}
         - name: sql_warehouse_id 
