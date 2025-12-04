@@ -13,12 +13,7 @@
 # COMMAND ----------
 
 # DBTITLE 1,run utils and override catalog/schema variables
-# MAGIC %run ./utils $catalog="main" $schema="dbdemos_genesis_workbench"
-
-# COMMAND ----------
-
-# DBTITLE 1,run utils for specified catalog.schema
-# %run ./utils $catalog="genesis_workbench" $schema="dev_mmt_core_demo" 
+# MAGIC %run ./utils $catalog="genesis_workbench" $schema="mmt_gwb_demo" 
 
 # COMMAND ----------
 
@@ -134,8 +129,6 @@ celltype_myofib_sample_pd
 import os
 
 output_dir = f"/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}/data/adams_etal_2020/{disease_name}/{celltype_name.replace(' ','-')}"
-print(output_dir)
-
 os.makedirs(output_dir, exist_ok=True)
 
 celltype_myofib_sample_pd.to_csv(
