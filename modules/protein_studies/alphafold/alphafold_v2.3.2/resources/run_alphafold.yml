@@ -120,7 +120,7 @@ resources:
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD
             num_workers: 0
-      
+            #need to add on-demand for AWS
       tags: ${var.common_resource_tags}
 
       queue:
