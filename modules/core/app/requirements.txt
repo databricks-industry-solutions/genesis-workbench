@@ -1,7 +1,7 @@
 streamlit==1.44.0
 databricks-sdk==0.50.0
 databricks-sql-connector==4.0.2
-mlflow==2.22.0
+mlflow==3.5.0rc0
 mlflow[databricks]
 py3Dmol==2.4.0
 biopython
