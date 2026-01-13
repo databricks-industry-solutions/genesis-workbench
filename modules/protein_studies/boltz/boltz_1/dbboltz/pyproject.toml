@@ -16,7 +16,7 @@ dependencies = [
   "sentence-transformers>=2.7",
   "pyspark",
   "pandas",
-  "mlflow==2.15.1",
+  "mlflow==3.5.0",
   "cloudpickle==2.2.1",
 ]
 
