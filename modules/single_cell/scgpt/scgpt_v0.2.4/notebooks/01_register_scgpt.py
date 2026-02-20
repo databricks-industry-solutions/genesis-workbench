@@ -70,7 +70,10 @@ print(f"Model dir: {model_dir}")
 
 # with the file ID, for example, the | blood                     | Pretrained on 10.3 million blood and bone marrow cells. |
 # [link](https://drive.google.com/drive/folders/1kkug5C7NjvXIwQGGaGoqXTk_Lb_pDrBU?usp=sharing) |
-id = "1kkug5C7NjvXIwQGGaGoqXTk_Lb_pDrBU"
+########################################################
+# Feb 19, 2026 update to use whole-human (recommended) model instead of blood model. | [link](https://drive.google.com/drive/folders/1oWh_-ZRdhtoGQ2Fw24HP41FgLoomVo-y?usp=sharing) |
+# ########################################################
+id = "1oWh_-ZRdhtoGQ2Fw24HP41FgLoomVo-y"
 # gdown.download(id=id, )
 gdown_return = gdown.download_folder(id=id, output=f"{model_dir}/")
 
