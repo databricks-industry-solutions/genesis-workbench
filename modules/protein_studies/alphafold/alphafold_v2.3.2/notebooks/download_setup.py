@@ -19,12 +19,14 @@ spark.sql(f"CREATE VOLUME IF NOT EXISTS {CATALOG}.{SCHEMA}.{MODEL_VOLUME}")
 # COMMAND ----------
 
 # MAGIC %sh
+# MAGIC set -euo pipefail
 # MAGIC apt-get update
 # MAGIC apt-get --no-install-recommends -y install aria2
 
 # COMMAND ----------
 
-# MAGIC %sh 
+# MAGIC %sh
+# MAGIC set -euo pipefail 
 # MAGIC mkdir -p /app
 # MAGIC cd /app
 # MAGIC git clone https://github.com/google-deepmind/alphafold.git
@@ -34,6 +36,7 @@ spark.sql(f"CREATE VOLUME IF NOT EXISTS {CATALOG}.{SCHEMA}.{MODEL_VOLUME}")
 # COMMAND ----------
 
 # MAGIC %sh
+# MAGIC set -euo pipefail
 # MAGIC cd /local_disk0
 # MAGIC mkdir -p downloads
 

@@ -4,7 +4,9 @@
 # COMMAND ----------
 
 # MAGIC %sh
+# MAGIC set -euo pipefail
 # MAGIC if [ ! -d "$MODEL_VOLUME/datasets/pdb_mmcif" ]; then
+# MAGIC     export TAR_OPTIONS="--no-same-owner"
 # MAGIC     echo "Downloading pdb_mmcif"
 # MAGIC     cd /app/alphafold/scripts
 # MAGIC     NEWLINE='aria2c "https://files.wwpdb.org/pub/pdb/data/status/obsolete.dat" --dir="${ROOT_DIR}"'

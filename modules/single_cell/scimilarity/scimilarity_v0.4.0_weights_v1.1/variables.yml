@@ -15,7 +15,7 @@ variables:
     default: 
       application: genesis_workbench
       module: scimilarity
-      created_by: ${var.current_user}
+      created_by: ${workspace.current_user.short_name}
   
   cpu_node_type:
     description: Node type for CPU vms

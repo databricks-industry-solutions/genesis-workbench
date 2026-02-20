@@ -27,7 +27,7 @@ st.markdown(f"You can run Pararicks commands in any notebook attached to the abo
 st.markdown("""
 Example:
 ```
-data_vol = "/Volumes/my_catalog/my_schema/my_colume/data/"
+data_vol = "/Volumes/my_catalog/my_schema/my_volume/data/"
 ```
 ```            
 !pbrun germline \\

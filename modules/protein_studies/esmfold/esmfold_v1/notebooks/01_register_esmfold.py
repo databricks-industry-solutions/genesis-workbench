@@ -223,10 +223,11 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
             
             "mlflow==2.15.1",
             "cloudpickle==2.2.1",
-            "transformers>4.0",
+            "transformers==4.57.3",
             "torch>2.0",
             "torchvision", 
             "accelerate>0.31",
+            "setuptools<82"
         ],
         input_example=test_input,
         signature=signature,

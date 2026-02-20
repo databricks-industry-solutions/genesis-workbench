@@ -291,12 +291,12 @@ def deploy_model_endpoint(catalog_name: str,
             scale_to_zero_enabled=scale_to_zero,
         )
     ]
-    auto_capture_config = AutoCaptureConfigInput(
-        catalog_name=catalog_name,
-        schema_name=schema_name,
-        table_name_prefix=f"{endpoint_name}_serving",
-        enabled=True,
-    )
+    # auto_capture_config = AutoCaptureConfigInput(
+    #     catalog_name=catalog_name,
+    #     schema_name=schema_name,
+    #     table_name_prefix=f"{endpoint_name}_serving",
+    #     enabled=True,
+    # )
 
     print(f"Checking if endpoint: {endpoint_name} exists")
     
@@ -308,7 +308,7 @@ def deploy_model_endpoint(catalog_name: str,
         endpoint_details = w.serving_endpoints.update_config_and_wait(
             name=endpoint_name,
             served_entities=served_entities,
-            auto_capture_config=auto_capture_config,
+            #auto_capture_config=auto_capture_config,
             timeout = timedelta(minutes=180)
         )
     except errors.platform.ResourceDoesNotExist as e:
@@ -319,7 +319,7 @@ def deploy_model_endpoint(catalog_name: str,
             config=EndpointCoreConfigInput(
                 name=endpoint_name,
                 served_entities=served_entities,
-                auto_capture_config=auto_capture_config
+                #auto_capture_config=auto_capture_config
             ),
             tags=[
                 EndpointTag(key="application", value="genesis_workbench"),
@@ -327,6 +327,8 @@ def deploy_model_endpoint(catalog_name: str,
             ],
             timeout = timedelta(minutes=180) #wait upto three hours. some models take very long
         )
+
+        
 
     return endpoint_details
 

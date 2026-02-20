@@ -306,6 +306,7 @@ with mlflow.start_run(run_name=f'{model_name}', experiment_id=experiment.experim
         input_example=model_input, 
         signature=signature,
         pip_requirements=[
+            "setuptools<82",
             "mlflow==2.22.0",
             "cloudpickle==2.0.0",
             "scanpy==1.11.2",
