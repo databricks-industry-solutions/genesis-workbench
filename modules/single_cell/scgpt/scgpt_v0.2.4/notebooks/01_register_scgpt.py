@@ -86,13 +86,16 @@ print(f"Model dir: {model_dir}")
 #: downnload data
 import wget
 import os
-file_url = "https://figshare.com/ndownloader/files/25717328"
+# old url: https://figshare.com/ndownloader/files/25717328, which will download a 0kb size file due to 
+# This usually happens because the Figshare “ndownloader” URL now returns a blocked/redirect/challenge response to non-browser clients, so your script creates the output file but receives no real payload (or gets a 403/HTML instead of the .h5ad). Servers commonly enforce this via User-Agent or similar bot checks, which shows up as HTTP 403 “Forbidden” for bare urllib-style requests
+file_url = "https://api.figshare.com/v2/file/download/25717328"
 file_path = f'{cache_full_path}/data/'
 os.makedirs(os.path.dirname(file_path), exist_ok=True)
 file_path = f'{cache_full_path}/data/file.h5ad'
 print(f"Dataset dir: {file_path}")
 
 wget.download(file_url, str(file_path))
+
 
 
 # COMMAND ----------
