@@ -2,7 +2,10 @@ resources:
   jobs:
     download_gene_references_gwb:
       name: download_gene_references_gwb
-      
+      tags:
+        application: genesis_workbench
+        module: single_cell
+
       parameters:
         - name: catalog
           default: ${var.core_catalog_name}
