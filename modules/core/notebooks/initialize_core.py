@@ -142,8 +142,12 @@ app = w.apps.get(name=databricks_app_name)
 
 # COMMAND ----------
 
-spark.sql(f"GRANT USE CATALOG ON CATALOG {catalog} TO `{app.service_principal_client_id}`")
-spark.sql(f"GRANT ALL PRIVILEGES ON SCHEMA {catalog}.{schema} TO `{app.service_principal_client_id}`")
+try:
+    spark.sql(f"GRANT USE CATALOG ON CATALOG {catalog} TO `{app.service_principal_client_id}`")
+    spark.sql(f"GRANT ALL PRIVILEGES ON SCHEMA {catalog}.{schema} TO `{app.service_principal_client_id}`")
+except Exception as e:
+    print(f"⚠️ Grant failed (may already be inherited): {e}")
+    print("Continuing — verify SP has access to catalog/schema.")
 
 # COMMAND -----------
 #Granting dashboard access to the app service principal
