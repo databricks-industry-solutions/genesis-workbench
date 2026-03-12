@@ -83,6 +83,10 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
+            # On-demand avoids spot preemption during long-running model
+            # registration/download jobs
+            aws_attributes:
+              availability: ON_DEMAND
 
         - job_cluster_key: job_cluster_gene_order
           new_cluster:
@@ -99,7 +103,9 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
-        
+            aws_attributes:
+              availability: ON_DEMAND
+
         - job_cluster_key: job_cluster_get_embedding
           new_cluster:
             num_workers: 0
@@ -115,7 +121,9 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
-        
+            aws_attributes:
+              availability: ON_DEMAND
+
         - job_cluster_key: job_cluster_search_nearest
           new_cluster:
             num_workers: 0
@@ -131,8 +139,10 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
+            aws_attributes:
+              availability: ON_DEMAND
 
-        ## critical for model training 
+        ## critical for model training
         ## singleNode GPU options: ## Standard_NV36ads_A10_v5 #440gigs #'Standard_NC16as_T4_v3' #110gigs #'Standard_NC4as_T4_v3'  
         ## 14.3.x-gpu-ml-scala2.12
 
