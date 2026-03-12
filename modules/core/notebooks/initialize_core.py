@@ -142,6 +142,11 @@ app = w.apps.get(name=databricks_app_name)
 
 # COMMAND ----------
 
+# GRANT requires MANAGE on the catalog, which the deployer may not have on shared
+# catalogs (e.g. hls_amer_catalog). This is non-fatal when the SP already inherits
+# access — for example, if "account users" has ALL_PRIVILEGES on the catalog, all
+# service principals (including the app SP) already have USE CATALOG + ALL PRIVILEGES
+# on the schema, making these GRANTs redundant.
 try:
     spark.sql(f"GRANT USE CATALOG ON CATALOG {catalog} TO `{app.service_principal_client_id}`")
     spark.sql(f"GRANT ALL PRIVILEGES ON SCHEMA {catalog}.{schema} TO `{app.service_principal_client_id}`")
