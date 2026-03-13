@@ -59,5 +59,8 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
+            # On-demand avoids spot preemption during inference jobs on AWS
+            aws_attributes:
+              availability: ON_DEMAND
 
       tags: ${var.common_resource_tags}
