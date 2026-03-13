@@ -216,12 +216,127 @@ databricks jobs update --json '{
 
 ---
 
+## Deploy Protein Studies
+
+```bash
+./deploy.sh protein_studies aws
+```
+
+**Sub-modules deployed (all SUCCESS as of 2026-03-13):**
+| Sub-module | Status | Notes |
+|------------|--------|-------|
+| alphafold | DEPLOYED | 7/7 download tasks succeeded after 5 attempts (see AlphaFold section below) |
+| esmfold | DEPLOYED | Re-run with ON_DEMAND succeeded |
+| boltz | DEPLOYED | Re-run with ON_DEMAND succeeded |
+| rfdiffusion | DEPLOYED | Model registration succeeded |
+| protein_mpnn | DEPLOYED | Model registration succeeded |
+
+### Spot Instance Fix (2026-03-12)
+
+Jobs `register_esmfold`, `register_boltz`, and `alphafold_register_and_downloads` failed
+due to AWS spot instance preemption. Added `aws_attributes: availability: ON_DEMAND` to
+all 16 job clusters across 10 YAML files and redeployed the 3 affected sub-modules.
+
+See [redeploy-failed-jobs.md](redeploy-failed-jobs.md) for targeted redeploy commands.
+
+### Redeploy Attempt 2 (2026-03-12)
+
+After adding ON_DEMAND and redeploying, esmfold failed again with "driver is lost"
+(not spot preemption — possible OOM on `g4dn.4xlarge`). Also discovered
+`download_uniprot_cluster` in alphafold was missing `aws_attributes` — fixed and
+redeployed. All 3 jobs re-triggered:
+
+```bash
+databricks jobs run-now 747548824052399 --profile fe-vm-hls-amer  # esmfold
+databricks jobs run-now 970641084894060 --profile fe-vm-hls-amer  # boltz
+databricks jobs run-now 151110797461064 --profile fe-vm-hls-amer  # alphafold
+```
+
+### Results (2026-03-13)
+
+- **Boltz:** SUCCESS — ON_DEMAND fix resolved it (previous failure was spot preemption)
+- **ESMFold:** SUCCESS — ON_DEMAND fix resolved it (previous "driver is lost" was spot preemption, not OOM as suspected)
+- **AlphaFold:** 6/7 tasks SUCCESS, `pdb_mmcif` completed download of 250,359 structures and copying to Volume. See `alphafold-debug-summary-slack.md` for the condensed writeup.
+
+**Auth note:** The default CLI profile points to `e2-demo-field-eng`, not `fe-vm-hls-amer`.
+Always pass `--profile fe-vm-hls-amer` to all `databricks` commands, or re-auth will
+silently target the wrong workspace.
+
+### AlphaFold Download Failures (2026-03-12)
+
+The `alphafold_register_and_downloads` job partially succeeded. 4 of 7 tasks completed:
+
+| Task | Status | Error |
+|------|--------|-------|
+| register_run_job | SUCCESS | |
+| common_files | SUCCESS | |
+| download_mgnifyPLUS | SUCCESS | |
+| download_params | SUCCESS | |
+| download_uniprot | FAILED | `download_uniprot.sh` exit code 2 — likely network/disk issue during large download |
+| download_unirefs | FAILED | `download_uniref90.sh` exit code 2 — likely network/disk issue during large download |
+| pdb_mmcif | FAILED | `download_pdb_mmcif.sh` exit code 10 (aria2c error) — download failure from wwpdb.org |
+
+**Root cause:** AlphaFold v2.3.2 download scripts use FTP URLs (`ftp://ftp.ebi.ac.uk`,
+`ftp://ftp.uniprot.org`) and rsync (port 33444), both of which are blocked on AWS
+Databricks clusters. The same files are available over HTTPS.
+
+**Fix applied in `download_setup.py`:**
+1. `sed` commands patch FTP→HTTPS in `download_uniprot.sh`, `download_uniref90.sh`,
+   `download_pdb_mmcif.sh`, and `download_pdb_seqres.sh`
+2. A Python cell creates `download_pdb_mmcif_https.sh` — replaces the rsync-based bulk
+   download with `aria2c` against the EBI HTTPS mirror
+   (`https://ftp.ebi.ac.uk/pub/databases/pdb/data/structures/divided/mmCIF/`).
+3. `download_pdb_mmcif.py` updated to call the HTTPS script instead of the original
+
+**Four distinct issues, each only visible after fixing the previous one:**
+
+| Layer | Issue | Symptom | Fix |
+|-------|-------|---------|-----|
+| 1. Infra | Spot instance preemption | `Cluster terminated because driver node is a spot instance` | Added `aws_attributes: availability: ON_DEMAND` to all job clusters |
+| 2. Network | FTP/rsync blocked on AWS VPC | aria2c `0B/0B` for 5 min then `errorCode=2 Timeout` on `ftp://` URLs; rsync `Connection timed out` on port 33444 | `sed` patches FTP→HTTPS in download scripts; HTTPS replacement script for rsync |
+| 3. Notebook format | Heredocs inside `# MAGIC %sh` cells are malformed | Script created by heredoc had quoting/escaping errors, exit code 1 | Moved script creation to a Python cell (`with open(...) as f: f.write(script)`) |
+| 4. Script bugs | `grep`/`sed` left trailing `"` in subdir names (`aa"` not `aa`); `wget -r` silently failed on HTTPS dir listings | wget hit `BASE_URL/aa"/` (nonexistent), downloaded 0 files, `find -empty -delete` removed `raw/` dir — all hidden by `|| true` + `2>/dev/null` | Replaced wget with aria2c: parse actual `.cif.gz` links per subdir, batch download with 16 parallel connections. Added file count verification (exit on zero). |
+| 5. HTML parsing | `sed 's/[^a-z0-9]//g'` kept "href" prefix (alphanumeric) | All 1119 subdirs parsed as `href0a` instead of `0a`, every dir showed `(0 files)`, verification caught 0 total and exited with error | Replaced sed with `cut -d'"' -f2 \| tr -d '/'` to extract value between quotes |
+
+**Key lessons:**
+- Never use `|| true` + `2>/dev/null` together — it hides all evidence of failure
+- `wget -r` on HTTPS directory listings is unreliable; `aria2c` with explicit URLs is better
+- Always add a verification step after bulk downloads (count files, exit on zero)
+- When debugging layered failures, each fix may expose a different underlying issue
+- When stripping non-alphanumeric chars, remember the field name itself (e.g. "href") may be alphanumeric — use positional extraction (`cut`, field splitting) instead of character-class deletion
+- The HTTPS replacement is slower than rsync (per-subdir `curl` to list files) but provides clear progress: aria2c logs each file with speed, and the outer loop shows `[N/1119] Downloading XX/ (M files)...`
+
+The downloads are idempotent (guarded by `if [ ! -d "$MODEL_VOLUME/datasets/..." ]`),
+so re-running the job will skip completed downloads and retry only the missing ones.
+
+**Note on retries:** The alphafold job provisions all 6 clusters on every run, even if
+most tasks skip immediately (data already exists). This wastes ~$0.50/cluster on
+provisioning clusters that aren't needed. For targeted retries of individual tasks,
+consider running the specific notebook on an all-purpose cluster instead.
+
+**To retry the full job:** Redeploy alphafold bundle first (to upload modified notebooks), then re-trigger:
+```bash
+cd modules/protein_studies/alphafold/alphafold_v2.3.2
+databricks bundle deploy --profile fe-vm-hls-amer \
+  --var="$(paste -sd, ../../../../application.env),$(paste -sd, ../../../../aws.env)"
+databricks jobs run-now 151110797461064 --profile fe-vm-hls-amer
+```
+
+### ON_DEMAND Rationale
+
+All job clusters use `aws_attributes: availability: ON_DEMAND` instead of spot instances.
+GWB jobs are long-running (hours for model downloads/registration), non-checkpointed,
+and partially non-idempotent. Spot preemption wastes all compute up to the preemption
+point. The ~30-40% cost premium for ON_DEMAND is negligible compared to wasted spot
+compute and manual re-triggering overhead.
+
+---
+
 ## Modules Not Yet Deployed
 
 | Module | Notes |
 |--------|-------|
-| `protein_studies` | Ready to deploy: `./deploy.sh protein_studies aws` |
-| `bionemo` | Requires valid Docker/NGC credentials in `modules/core/env.env` |
+| `bionemo` | Requires valid Docker/NGC credentials in `modules/bionemo/module.env` |
 
 ---
 
