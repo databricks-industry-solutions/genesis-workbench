@@ -85,24 +85,26 @@ def display_settings_tab(available_models_df,deployed_models_df):
 
 
 def display_scanpy_analysis_tab():
-    st.markdown("###### Run Scanpy Analysis")
-    
+    st.markdown("###### Run Analysis")
+
+    # Mode selection OUTSIDE form so defaults update on change
+    st.markdown("**Analysis Mode:**")
+    mode_display = st.selectbox(
+        "Mode",
+        options=["scanpy", "rapids-singlecell [GPU-accelerated]"],
+        label_visibility="collapsed",
+        key="scanpy_mode_selector"
+    )
+    mode = "rapids-singlecell" if "rapids-singlecell" in mode_display else mode_display
+    default_experiment = "rapidssinglecell_genesis_workbench" if mode == "rapids-singlecell" else "scanpy_genesis_workbench"
+    default_run_name = "rapidssinglecell_analysis" if mode == "rapids-singlecell" else "scanpy_analysis"
+
     with st.form("scanpy_analysis_form", enter_to_submit=False):
-        # Mode Selection
-        st.markdown("**Analysis Mode:**")
-        mode_display = st.selectbox(
-            "Mode",
-            options=["scanpy", "rapids-singlecell [GPU-accelerated]"],
-            label_visibility="collapsed"
-        )
-        # Extract actual mode name
-        mode = "rapids-singlecell" if "rapids-singlecell" in mode_display else mode_display
-        
         st.divider()
-        
+
         # Data Input
         col1, col2 = st.columns([1, 1])
-        
+
         with col1:
             st.markdown("**Data Configuration:**")
             data_path = st.text_input(
@@ -116,7 +118,7 @@ def display_scanpy_analysis_tab():
                 placeholder="e.g., gene_name, feature_name",
                 help="Name of column in var containing gene names. Leave empty to use Ensembl reference mapping. Note: Gene names will be normalized to uppercase for consistent QC analysis."
             )
-            
+
             # Conditional species selector
             if not gene_name_column or gene_name_column.strip() == "":
                 species = st.selectbox(
@@ -132,16 +134,16 @@ def display_scanpy_analysis_tab():
                 )
             else:
                 species = "hsapiens"  # Default, won't be used since gene_name_column is provided
-            
+
             st.markdown("**MLflow Tracking:**")
             mlflow_experiment = st.text_input(
                 "MLflow Experiment Name",
-                value="scanpy_genesis_workbench",
+                value=default_experiment,
                 help="Simple experiment name (will be created in your MLflow folder)"
             )
             mlflow_run_name = st.text_input(
                 "MLflow Run Name",
-                value="scanpy_analysis",
+                value=default_run_name,
                 help="Name for this specific analysis run"
             )
         
@@ -342,8 +344,8 @@ def display_singlecell_results_viewer():
     with main_col1:
         experiment_filter = st.text_input(
             "MLflow Experiment:",
-            value="scanpy_genesis_workbench",
-            help="Enter experiment name to filter runs (partial match supported)."
+            value="genesis_workbench",
+            help="Enter experiment name to filter runs (partial match supported). Default shows both scanpy and rapids-singlecell experiments."
         )
     
     with main_col2:

@@ -19,6 +19,8 @@ spark.sql(f"CREATE VOLUME IF NOT EXISTS {CATALOG}.{SCHEMA}.{MODEL_VOLUME}")
 # COMMAND ----------
 
 # MAGIC %sh
+# MAGIC set -euo pipefail
+# MAGIC export TAR_OPTIONS="--no-same-owner"
 # MAGIC mkdir -p /local_disk0/common/
 # MAGIC wget -q -P /local_disk0/common/ \
 # MAGIC   https://git.scicore.unibas.ch/schwede/openstructure/-/raw/7102c63615b64735c4941278d92b554ec94415f8/modules/mol/alg/src/stereo_chemical_props.txt

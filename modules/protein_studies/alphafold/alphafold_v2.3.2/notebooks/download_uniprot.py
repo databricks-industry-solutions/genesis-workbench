@@ -4,7 +4,9 @@
 # COMMAND ----------
 
 # MAGIC %sh
+# MAGIC set -euo pipefail
 # MAGIC if [ ! -d "$MODEL_VOLUME/datasets/uniprot" ]; then
+# MAGIC   export TAR_OPTIONS="--no-same-owner"
 # MAGIC   echo "Downloading uniprot"
 # MAGIC   cd /app/alphafold/scripts
 # MAGIC   ./download_uniprot.sh /local_disk0/downloads

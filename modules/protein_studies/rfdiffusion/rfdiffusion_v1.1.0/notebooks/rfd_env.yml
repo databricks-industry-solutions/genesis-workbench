@@ -10,6 +10,7 @@ dependencies:
   - pip:
     - --extra-index-url https://download.pytorch.org/whl/cu113
     - --find-links https://data.dgl.ai/wheels/repo.html 
+    - setuptools<82
     - dgl-cu113
     - hydra-core
     - pyrsistent

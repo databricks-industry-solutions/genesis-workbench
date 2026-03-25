@@ -14,9 +14,9 @@ dbutils.widgets.text("is_base_model", "false", "Use Base Model?")
 dbutils.widgets.text("esm_variant", "650M", "ESM Variant")
 dbutils.widgets.text("task_type", "regression", "Task type: Regression or Classification")
 dbutils.widgets.text("finetune_run_id", "3", "Finetune Run Id")
-dbutils.widgets.text("data_location", "/Volumes/srijit_nair/bionemo/esm2/ft_data/BLAT_ECOLX_Tenaillon2013_metadata_train.csv", "Training data location")
+dbutils.widgets.text("data_location", "", "Training data location")
 dbutils.widgets.text("sequence_column_name", "sequence", "Column name containing the sequence")
-dbutils.widgets.text("result_location", "/Volumes/genesis_workbench/dev_srijit_nair_dbx_genesis_workbench_core/esm_finetune", "Result Location in UC Volume")
+dbutils.widgets.text("result_location", "", "Result Location in UC Volume")
 dbutils.widgets.text("user_email", "a@b.com", "User Email")
 
 catalog = dbutils.widgets.get("core_catalog")
@@ -216,12 +216,19 @@ for key, val in results.items():
 # COMMAND ----------
 
 results_df = pd.read_csv(workdir_data_file)
-results_df["predictions"] = [r[0] for r in results["regression_output"].tolist()]
+if "classification_output" in results and results["classification_output"] is not None:
+    results_df["predictions"] = [r.argmax().item() for r in results["classification_output"].tolist()]
+elif "regression_output" in results and results["regression_output"] is not None:
+    results_df["predictions"] = [r[0] for r in results["regression_output"].tolist()]
+else:
+    available_keys = [k for k, v in results.items() if v is not None]
+    raise KeyError(f"No regression_output or classification_output found in results. Available keys: {available_keys}")
 results_df
 
 # COMMAND ----------
 
 # Save the DataFrame to a CSV file
 results_file_name = f"{result_location}/results.csv"
+os.makedirs(result_location, exist_ok=True)
 print(f"Writing to {results_file_name}")
 results_df.to_csv(results_file_name, index=False)

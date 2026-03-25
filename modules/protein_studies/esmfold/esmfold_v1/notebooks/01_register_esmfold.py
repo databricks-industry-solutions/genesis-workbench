@@ -227,6 +227,7 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
             "torch>2.0",
             "torchvision", 
             "accelerate>0.31",
+            "setuptools<82"
         ],
         input_example=test_input,
         signature=signature,
