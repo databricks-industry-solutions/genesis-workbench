@@ -95,3 +95,40 @@ from genesis_workbench.workbench import set_app_permissions_for_job
 
 set_app_permissions_for_job(job_id=bionemo_esm_finetune_job_id, user_email=user_email)
 set_app_permissions_for_job(job_id=bionemo_esm_inference_job_id, user_email=user_email)
+
+# COMMAND ----------
+
+# Download sample ESM2 fine-tuning data (BLAT_ECOLX beta-lactamase fitness landscape)
+# Source: https://github.com/ziul-bio/SWAT (MIT License)
+# Original data: Jacquier et al., PNAS 2013 — "Capturing the mutational landscape of TEM-1 beta-lactamase"
+import urllib.request, csv, random, os
+
+sample_data_dir = f"/Volumes/{catalog}/{schema}/bionemo/esm2/ft_data"
+train_path = f"{sample_data_dir}/BLAT_ECOLX_Tenaillon2013_metadata_train.csv"
+eval_path = f"{sample_data_dir}/BLAT_ECOLX_Tenaillon2013_metadata_eval.csv"
+
+if not os.path.exists(train_path):
+    print("Downloading BLAT_ECOLX sample fine-tuning data...")
+    os.makedirs(sample_data_dir, exist_ok=True)
+    url = "https://raw.githubusercontent.com/ziul-bio/SWAT/main/data/DMS_metadata/BLAT_ECOLX_Tenaillon2013_metadata.csv"
+    tmp_file = "/tmp/BLAT_ECOLX_full.csv"
+    urllib.request.urlretrieve(url, tmp_file)
+
+    with open(tmp_file) as f:
+        reader = csv.reader(f)
+        header = next(reader)
+        rows = list(reader)
+
+    random.seed(42)
+    random.shuffle(rows)
+    split = int(len(rows) * 0.8)
+
+    for fpath, data in [(train_path, rows[:split]), (eval_path, rows[split:])]:
+        with open(fpath, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
+            writer.writerows(data)
+
+    print(f"Sample data written: {len(rows[:split])} train, {len(rows[split:])} eval")
+else:
+    print(f"Sample data already exists at {sample_data_dir}")

@@ -30,11 +30,11 @@ resources:
         - name: finetune_run_id
           default: 3
         - name: data_location
-          default: /Volumes/my_catalog/schema/volume/folder/BLAT_ECOLX_Tenaillon2013_metadata_train.csv
+          default: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/bionemo/esm2/ft_data/BLAT_ECOLX_Tenaillon2013_metadata_train.csv
         - name: sequence_column_name
           default: sequence
         - name: result_location
-          default: /Volumes/my_catalog/schema/volume/folder
+          default: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/bionemo/esm2/ft_data
         - name: user_email
           default: a@b.com
 
@@ -59,5 +59,8 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
+            # On-demand avoids spot preemption during inference jobs on AWS
+            aws_attributes:
+              availability: ON_DEMAND
 
       tags: ${var.common_resource_tags}

@@ -8,7 +8,15 @@ from utils.streamlit_helper import get_user_info
 from databricks.sdk import WorkspaceClient
 from genesis_workbench.workbench import get_user_settings, save_user_settings
 
-def test_mlflow_experiment(user_email, base_folder, ):     
+def test_mlflow_experiment(user_email, base_folder, ):
+    """Verify the user's MLflow experiment folder exists and the app SP has access.
+
+    This folder (/Workspace/Users/<email>/<base_folder>/) is where the app stores
+    per-user experiment runs when users trigger workflows (protein folding, single cell
+    analysis, bionemo fine-tuning). This is separate from the shared system-level
+    experiments at /Shared/dbx_genesis_workbench_models/ which are populated at deploy
+    time by module registration jobs.
+    """
     w = WorkspaceClient()
     mlflow_experiment_base_path = f"Users/{user_email}/{base_folder}"
     w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")

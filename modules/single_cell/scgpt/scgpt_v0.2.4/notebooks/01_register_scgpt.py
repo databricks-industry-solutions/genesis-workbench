@@ -70,7 +70,10 @@ print(f"Model dir: {model_dir}")
 
 # with the file ID, for example, the | blood                     | Pretrained on 10.3 million blood and bone marrow cells. |
 # [link](https://drive.google.com/drive/folders/1kkug5C7NjvXIwQGGaGoqXTk_Lb_pDrBU?usp=sharing) |
-id = "1kkug5C7NjvXIwQGGaGoqXTk_Lb_pDrBU"
+########################################################
+# Feb 19, 2026 update to use whole-human (recommended) model instead of blood model. | [link](https://drive.google.com/drive/folders/1oWh_-ZRdhtoGQ2Fw24HP41FgLoomVo-y?usp=sharing) |
+# ########################################################
+id = "1oWh_-ZRdhtoGQ2Fw24HP41FgLoomVo-y"
 # gdown.download(id=id, )
 gdown_return = gdown.download_folder(id=id, output=f"{model_dir}/")
 
@@ -83,13 +86,16 @@ print(f"Model dir: {model_dir}")
 #: downnload data
 import wget
 import os
-file_url = "https://figshare.com/ndownloader/files/25717328"
+# old url: https://figshare.com/ndownloader/files/25717328, which will download a 0kb size file due to 
+# This usually happens because the Figshare “ndownloader” URL now returns a blocked/redirect/challenge response to non-browser clients, so your script creates the output file but receives no real payload (or gets a 403/HTML instead of the .h5ad). Servers commonly enforce this via User-Agent or similar bot checks, which shows up as HTTP 403 “Forbidden” for bare urllib-style requests
+file_url = "https://api.figshare.com/v2/file/download/25717328"
 file_path = f'{cache_full_path}/data/'
 os.makedirs(os.path.dirname(file_path), exist_ok=True)
 file_path = f'{cache_full_path}/data/file.h5ad'
 print(f"Dataset dir: {file_path}")
 
 wget.download(file_url, str(file_path))
+
 
 
 # COMMAND ----------

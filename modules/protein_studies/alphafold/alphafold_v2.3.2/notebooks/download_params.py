@@ -4,7 +4,9 @@
 # COMMAND ----------
 
 # MAGIC %sh
+# MAGIC set -euo pipefail
 # MAGIC if [ ! -d "$MODEL_VOLUME/datasets/params" ]; then
+# MAGIC   export TAR_OPTIONS="--no-same-owner"
 # MAGIC   cd /app/alphafold/scripts
 # MAGIC   ./download_alphafold_params.sh /local_disk0/downloads
 # MAGIC   cd /

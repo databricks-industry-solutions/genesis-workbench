@@ -4,7 +4,12 @@ dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_mmt_core_test", "Schema") #dev_mmt_core_test# gets overwritten during DAB deployment 
 dbutils.widgets.text("user_email", "may.merkletan@databricks.com", "User Id/Email")
 dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
-dbutils.widgets.text("workload_type", "GPU_SMALL", "Workload Type for endpoints")
+dbutils.widgets.text("gene_order_workload_type", "CPU", "Workload Type for gene_order")
+dbutils.widgets.text("gene_order_workload_size", "Small", "Workload Size for gene_order")
+dbutils.widgets.text("get_embedding_workload_type", "MULTIGPU_MEDIUM", "Workload Type for get_embedding")
+dbutils.widgets.text("get_embedding_workload_size", "Small", "Workload Size for get_embedding")
+dbutils.widgets.text("search_nearest_workload_type", "MULTIGPU_MEDIUM", "Workload Type for search_nearest")
+dbutils.widgets.text("search_nearest_workload_size", "Small", "Workload Size for search_nearest")
 
 
 catalog = dbutils.widgets.get("catalog")
@@ -45,7 +50,12 @@ catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 user_email = dbutils.widgets.get("user_email")
 sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
-workload_type = dbutils.widgets.get("workload_type")
+gene_order_workload_type = dbutils.widgets.get("gene_order_workload_type")
+gene_order_workload_size = dbutils.widgets.get("gene_order_workload_size")
+get_embedding_workload_type = dbutils.widgets.get("get_embedding_workload_type")
+get_embedding_workload_size = dbutils.widgets.get("get_embedding_workload_size")
+search_nearest_workload_type = dbutils.widgets.get("search_nearest_workload_type")
+search_nearest_workload_size = dbutils.widgets.get("search_nearest_workload_size")
 
 # COMMAND ----------
 
@@ -88,6 +98,7 @@ gwb_model_id_gene_order = import_model_from_uc(user_email=user_email,
 
 # COMMAND ----------
 
+# gene_order is a lightweight lookup — CPU + Small is sufficient
 run_id_gene_order = deploy_model(user_email=user_email,
                 gwb_model_id=gwb_model_id_gene_order,
                 deployment_name=f"SCimilarity_Gene_Order",
@@ -96,8 +107,8 @@ run_id_gene_order = deploy_model(user_email=user_email,
                 output_adapter_str="none",
                 sample_input_data_dict_as_json="none",
                 sample_params_as_json="none",
-                workload_type=workload_type,
-                workload_size="Small")
+                workload_type=gene_order_workload_type,
+                workload_size=gene_order_workload_size)
 
 # COMMAND ----------
 
@@ -121,6 +132,7 @@ gwb_model_id_get_embedding = import_model_from_uc(user_email=user_email,
 
 # COMMAND ----------
 
+# get_embedding runs neural network inference — needs GPU
 run_id_get_embedding = deploy_model(user_email=user_email,
                 gwb_model_id=gwb_model_id_get_embedding,
                 deployment_name=f"Scimilarity_Get_Embedding",
@@ -129,8 +141,8 @@ run_id_get_embedding = deploy_model(user_email=user_email,
                 output_adapter_str="none",
                 sample_input_data_dict_as_json="none",
                 sample_params_as_json="none",
-                workload_type=workload_type,
-                workload_size="Small")
+                workload_type=get_embedding_workload_type,
+                workload_size=get_embedding_workload_size)
 
 # COMMAND ----------
 
@@ -154,6 +166,8 @@ gwb_model_id_search = import_model_from_uc(user_email=user_email,
 
 # COMMAND ----------
 
+# search_nearest is CPU-bound (FAISS vector search on ~23M cell reference).
+# Uses separate workload params — defaults to CPU + Large for sufficient RAM.
 run_id_search = deploy_model(user_email=user_email,
                 gwb_model_id=gwb_model_id_search,
                 deployment_name=f"Scimilarity_Search_Nearest",
@@ -162,8 +176,8 @@ run_id_search = deploy_model(user_email=user_email,
                 output_adapter_str="none",
                 sample_input_data_dict_as_json="none",
                 sample_params_as_json="none",
-                workload_type=workload_type,
-                workload_size="Small")
+                workload_type=search_nearest_workload_type,
+                workload_size=search_nearest_workload_size)
 
 # COMMAND ----------
 

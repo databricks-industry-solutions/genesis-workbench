@@ -1,7 +1,14 @@
-resources:
-  experiments:
-    bundle_registration:
-      name: /Users/${var.current_user}/${var.module_registration_experiment_name}
-      permissions:
-        - level: CAN_READ
-          group_name: users
+# Commented out: this DAB resource creates an experiment at
+# /Users/<current_user>/dbx_genesis_workbench_modules, but nothing writes to it.
+# The registration notebooks call set_mlflow_experiment(..., shared=True) which
+# routes runs to /Shared/dbx_genesis_workbench_models/ instead (hardcoded in
+# genesis_workbench/models.py:114). This resource just creates an empty,
+# confusing experiment under the user's path.
+#
+# resources:
+#   experiments:
+#     bundle_registration:
+#       name: /Users/${var.current_user}/${var.module_registration_experiment_name}
+#       permissions:
+#         - level: CAN_READ
+#           group_name: users

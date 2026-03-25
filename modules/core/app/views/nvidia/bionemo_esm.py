@@ -114,7 +114,7 @@ def display_inference_tab():
 
         col1,col2 = st.columns([1,1])
         with col1:
-            inf_task_type = st.selectbox("Task Type:",["regression","classification"])
+            inf_task_type = st.selectbox("Task Type:",["regression","classification"], help="Must match the task type used during fine-tuning. If mismatched, the notebook will auto-detect from the model output.")
             inf_data_location = st.text_input("Data Location:(UC Volume Path *.csv):","", help="A CSV file with `sequence` column")
             inf_sequence_column_name = st.text_input("Sequence Column Name:","", help="The column containing the sequence in the csv file")
             inf_result_location = st.text_input("Result Location: (UC Volume Folder)","", help="Results will be saved as results.csv in the given folder. Please make sure the folder exists.")

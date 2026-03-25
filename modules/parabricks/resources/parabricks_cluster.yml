@@ -21,5 +21,7 @@ resources:
       custom_tags:
         ResourceClass: SingleNode
         #tags: ${var.common_resource_tags}
+      aws_attributes:
+        availability: ON_DEMAND
 
 

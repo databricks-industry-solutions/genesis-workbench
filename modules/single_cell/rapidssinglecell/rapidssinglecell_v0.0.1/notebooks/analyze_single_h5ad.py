@@ -16,7 +16,7 @@
 
 # MAGIC %pip install cupy-cuda12x
 
-# MAGIC %pip install 'rapids-singlecell[rapids12]' --extra-index-url=https://pypi.nvidia.com #CUDA12
+# MAGIC %pip install 'rapids-singlecell[rapids12]' scikit-learn==1.5.* numpy<2 --extra-index-url=https://pypi.nvidia.com #CUDA12
 
 # MAGIC %restart_python
 

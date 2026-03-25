@@ -155,6 +155,9 @@ with mlflow.start_run(run_name=model_name, experiment_id=experiment.experiment_i
                   },
         input_example=example_input,
         signature=signature,
+        pip_requirements=[
+            "setuptools<82"
+        ],
         registered_model_name=f"{CATALOG}.{SCHEMA}.{model_name}"
     )
 
