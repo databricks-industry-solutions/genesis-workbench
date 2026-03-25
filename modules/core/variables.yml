@@ -58,7 +58,12 @@ variables:
     description: Name of the databricks app for UI
 
   module_registration_experiment_name:
-    description: The experiment to which all registered modules are logged
+    description: >
+      Experiment tag passed to registration notebooks. At runtime, notebooks call
+      set_mlflow_experiment(experiment_tag=<this value>, shared=True), which creates
+      the experiment under /Shared/dbx_genesis_workbench_models/<this value>.
+      Note: this variable is NOT used to set the experiment path directly — the
+      shared base path is hardcoded in genesis_workbench/models.py.
     default: dbx_genesis_workbench_modules
 
   default_admin_group:

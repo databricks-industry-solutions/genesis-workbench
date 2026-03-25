@@ -129,6 +129,9 @@ resources:
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD
             num_workers: 0
+            # On-demand avoids spot preemption during multi-hour model downloads
+            aws_attributes:
+              availability: ON_DEMAND
 
         - job_cluster_key: download_params_cluster
           new_cluster:
@@ -145,6 +148,8 @@ resources:
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD
             num_workers: 0
+            aws_attributes:
+              availability: ON_DEMAND
 
         - job_cluster_key: download_unirefs_cluster
           new_cluster:
@@ -161,6 +166,8 @@ resources:
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD
             num_workers: 0
+            aws_attributes:
+              availability: ON_DEMAND
 
         - job_cluster_key: download_mgnifyPLUS_cluster
           new_cluster:
@@ -177,6 +184,8 @@ resources:
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD
             num_workers: 0
+            aws_attributes:
+              availability: ON_DEMAND
 
         - job_cluster_key: download_uniprot_cluster
           new_cluster:
@@ -193,6 +202,8 @@ resources:
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD
             num_workers: 0
+            aws_attributes:
+              availability: ON_DEMAND
 
         - job_cluster_key: pdb_mmcif_cluster
           new_cluster:
@@ -208,7 +219,9 @@ resources:
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD
             num_workers: 0
-      
+            aws_attributes:
+              availability: ON_DEMAND
+
       tags: ${var.common_resource_tags}
 
       queue:

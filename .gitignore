@@ -11,6 +11,7 @@ scratch/**
 poetry.lock
 .DS_Store
 *.gz
+*.whl
 env.env
 module.env
 application.env

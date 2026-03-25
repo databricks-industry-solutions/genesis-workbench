@@ -49,6 +49,9 @@ Despite their expertise in biology, many highly talented life science scientists
 ## $${\color{orange}Installation}$$
 Read the [Installation Guide](https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/Installation.md)
 
+## $${\color{orange}Changelog}$$
+See [CHANGELOG.md](CHANGELOG.md) for deployment fixes, known issues, and configuration notes.
+
 ## $${\color{orange}Troubleshooting}$$
 Read the Troubleshooting guide
 

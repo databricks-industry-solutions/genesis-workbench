@@ -4,8 +4,8 @@
 # COMMAND ----------
 
 dbutils.widgets.text("esm_variant", "650M", "ESM Variant")
-dbutils.widgets.text("train_data_location", "/Volumes/srijit_nair/bionemo/esm2/ft_data/BLAT_ECOLX_Tenaillon2013_metadata_train.csv", "Training data location")
-dbutils.widgets.text("validation_data_location", "/Volumes/srijit_nair/bionemo/esm2/ft_data/BLAT_ECOLX_Tenaillon2013_metadata_eval.csv", "Validation data location")
+dbutils.widgets.text("train_data_location", "", "Training data location")
+dbutils.widgets.text("validation_data_location", "", "Validation data location")
 dbutils.widgets.text("should_use_lora", "false", "Should use LORA")
 dbutils.widgets.text("finetune_label", "esm_650m_ft_xyz", "A label using which these finetune weights are saved")
 dbutils.widgets.text("core_catalog", "genesis_workbench", "Catalog")

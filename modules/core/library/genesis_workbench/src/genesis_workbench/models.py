@@ -21,7 +21,9 @@ from databricks.sdk.service.serving import (
         AutoCaptureConfigInput,
         ServingEndpointDetailed,
         ServingModelWorkloadType,
-        EndpointTag
+        EndpointTag,
+        AiGatewayConfig,
+        AiGatewayInferenceTableConfig,
     )
 
 from .workbench import (UserInfo, 
@@ -99,12 +101,23 @@ class ModelDeploymentInfo:
     is_active: bool 
     deactivated_timestamp : datetime
 
-def set_mlflow_experiment(experiment_tag, user_email, host=None, token=None, shared=False): 
+def set_mlflow_experiment(experiment_tag, user_email, host=None, token=None, shared=False):
+    """Route MLflow experiments to one of two base paths:
+
+    - shared=True  -> /Shared/dbx_genesis_workbench_models/<experiment_tag>
+      Used by deploy-time module registration jobs (register_boltz, register_esmfold, etc.)
+      to log system-level model artifacts. These runs are created once at deploy time.
+
+    - shared=False -> /Users/<user_email>/<mlflow_experiment_folder>/<experiment_tag>
+      Used by the app UI when users run workflows (protein folding, single cell analysis,
+      bionemo fine-tuning). The folder name (default "mlflow_experiments") is configured
+      in the app's Profile page and stored in user_settings.
+    """
 
     user_settings = get_user_settings(user_email=user_email)
 
     if host and not host.startswith("https://"):
-        host = f"https://{host}"    
+        host = f"https://{host}"
 
     w = WorkspaceClient() if not token else WorkspaceClient(host=host, token=token, auth_type="pat")
 
@@ -291,6 +304,7 @@ def deploy_model_endpoint(catalog_name: str,
             scale_to_zero_enabled=scale_to_zero,
         )
     ]
+    # [LEGACY] AutoCaptureConfigInput — replaced with AiGatewayConfig below
     # auto_capture_config = AutoCaptureConfigInput(
     #     catalog_name=catalog_name,
     #     schema_name=schema_name,
@@ -298,8 +312,22 @@ def deploy_model_endpoint(catalog_name: str,
     #     enabled=True,
     # )
 
+    # [Updated during deploy-fe-vm-hls-amer setup for Merck demo]
+    # Previous AutoCaptureConfigInput is legacy — use AiGatewayConfig instead.
+    # Uncomment the block below + the put_ai_gateway calls to enable
+    # inference tables on all GWB endpoints.
+    #
+    # ai_gateway_config = AiGatewayConfig(
+    #     inference_table_config=AiGatewayInferenceTableConfig(
+    #         catalog_name=catalog_name,
+    #         schema_name=schema_name,
+    #         table_name_prefix=f"{endpoint_name}_serving",
+    #         enabled=True,
+    #     ),
+    # )
+
     print(f"Checking if endpoint: {endpoint_name} exists")
-    
+
     try:
         # try to update the endpoint if already have one
         existing_endpoint = w.serving_endpoints.get(endpoint_name)
@@ -308,9 +336,13 @@ def deploy_model_endpoint(catalog_name: str,
         endpoint_details = w.serving_endpoints.update_config_and_wait(
             name=endpoint_name,
             served_entities=served_entities,
-            #auto_capture_config=auto_capture_config,
             timeout = timedelta(minutes=180)
         )
+        # [Uncomment to enable AI Gateway inference tables on update]
+        # w.serving_endpoints.put_ai_gateway(
+        #     name=endpoint_name,
+        #     inference_table_config=ai_gateway_config.inference_table_config,
+        # )
     except errors.platform.ResourceDoesNotExist as e:
         # if no endpoint yet, make it, wait for it to spin up, and put model on endpoint
         print(f"Creating new endpoint {endpoint_name}")
@@ -319,8 +351,9 @@ def deploy_model_endpoint(catalog_name: str,
             config=EndpointCoreConfigInput(
                 name=endpoint_name,
                 served_entities=served_entities,
-                #auto_capture_config=auto_capture_config
             ),
+            # [Uncomment to enable AI Gateway inference tables on create]
+            # ai_gateway=ai_gateway_config,
             tags=[
                 EndpointTag(key="application", value="genesis_workbench"),
                 EndpointTag(key="created_by", value=creating_user_email)

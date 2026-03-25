@@ -1,4 +1,8 @@
 # Databricks notebook source
+# /// script
+# [tool.databricks.environment]
+# environment_version = "4"
+# ///
 # MAGIC %md
 # MAGIC ### Extract `Disease-CellType-Samples` 
 # MAGIC #### save as `.h5ad` to UC Volumes (via `/tmp/{path}`)
@@ -12,19 +16,28 @@
 
 # COMMAND ----------
 
-# DBTITLE 1,run utils and override catalog/schema variables
-# MAGIC %run ./utils $catalog="genesis_workbench" $schema="dev_mmt_core_demo" 
+# DBTITLE 1,widgets: catalog and schema
+## if using notebook interactively -- uncomment to specify cataloge.schema and model family
+# dbutils.widgets.dropdown("catalog", "hls_amer_catalog", ["genesis_workbench", "hls_amer_catalog"], "Catalog")
+# dbutils.widgets.dropdown("schema", "mmt_genesis_workbench", ["dev_mmt_core_demo", "mmt_genesis_workbench"], "Schema")
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC
+# DBTITLE 1,run utils and override catalog/schema variables
+# MAGIC %run ./utils
 
 # COMMAND ----------
 
 # DBTITLE 1,saved adams data sample path
+# import scanpy as sc
+
 # path of adams file 
-# adams_data = sc.read_h5ad('/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}/data/adams_etal_2020/GSE136831_subsample.h5ad')
+# adams_data = sc.read_h5ad(f'/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}/data/adams_etal_2020/GSE136831_subsample.h5ad')
+
+# COMMAND ----------
+
+# adams.var.columns
+# Index(['row_names', 'ID', 'mt'], dtype='object')
 
 # COMMAND ----------
 
@@ -70,7 +83,6 @@
 
 # DBTITLE 1,We will use existing celltype_sample : myofibroblast for bulk embedding batch inference
 # celltype_myofib
-
 # celltype_myofib.obs.celltype_id.unique() | Categories (1, object): ['CL:0000186']
 
 # COMMAND ----------

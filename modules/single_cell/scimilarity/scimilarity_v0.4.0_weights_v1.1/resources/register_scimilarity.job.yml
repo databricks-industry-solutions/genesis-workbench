@@ -37,13 +37,22 @@ resources:
             notebook_path: ../notebooks/04_register_SearchNearest.py 
 
         #this task can utilize serverless runtime with python 3.11
-        - task_key: update_model_catalog_scimilarity_models_task
-          depends_on: 
+        - task_key: importNserve_scimilarity_models_task
+          depends_on:
             - task_key: "register_GeneOrder_task"
             - task_key: "register_GetEmbedding_task"
             - task_key: "register_SearchNearest_task"
           notebook_task:
-            notebook_path: ../notebooks/05_import_model_gwb.py
+            notebook_path: ../notebooks/05_importNserve_model_gwb.py
+
+        # Extract disease/celltype sample data for 06b endpoint testing
+        # Runs in parallel with register tasks after wget completes
+        - task_key: extract_sample_data_task
+          depends_on:
+            - task_key: wget_SCimilarity_task
+          job_cluster_key: job_cluster_search_nearest
+          notebook_task:
+            notebook_path: ../notebooks/06a_extractNsave_DiseaseCellTypeSamples.py
 
       environments: ## serverless
         - environment_key: default
@@ -65,8 +74,18 @@ resources:
           default: ${var.sql_warehouse_id}
         - name: user_email
           default: ${var.current_user}
-        - name: workload_type
-          default: ${var.gpu_large_setting}
+        - name: gene_order_workload_type
+          default: CPU
+        - name: gene_order_workload_size
+          default: Small
+        - name: get_embedding_workload_type
+          default: MULTIGPU_MEDIUM
+        - name: get_embedding_workload_size
+          default: Small
+        - name: search_nearest_workload_type
+          default: MULTIGPU_MEDIUM
+        - name: search_nearest_workload_size
+          default: Small  # Keep Small (0-4 concurrency) — Medium OOMs loading ~23M cell reference
 
       job_clusters:
         - job_cluster_key: job_cluster_wget
@@ -83,6 +102,10 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
+            # On-demand avoids spot preemption during long-running model
+            # registration/download jobs
+            aws_attributes:
+              availability: ON_DEMAND
 
         - job_cluster_key: job_cluster_gene_order
           new_cluster:
@@ -99,7 +122,9 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
-        
+            aws_attributes:
+              availability: ON_DEMAND
+
         - job_cluster_key: job_cluster_get_embedding
           new_cluster:
             num_workers: 0
@@ -115,7 +140,9 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
-        
+            aws_attributes:
+              availability: ON_DEMAND
+
         - job_cluster_key: job_cluster_search_nearest
           new_cluster:
             num_workers: 0
@@ -131,8 +158,10 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
+            aws_attributes:
+              availability: ON_DEMAND
 
-        ## critical for model training 
+        ## critical for model training
         ## singleNode GPU options: ## Standard_NV36ads_A10_v5 #440gigs #'Standard_NC16as_T4_v3' #110gigs #'Standard_NC4as_T4_v3'  
         ## 14.3.x-gpu-ml-scala2.12
 

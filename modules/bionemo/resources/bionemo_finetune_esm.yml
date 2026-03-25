@@ -24,9 +24,9 @@ resources:
         - name: esm_variant
           default: 650M
         - name: train_data_location
-          default: /Volumes/my_catalog/schema/volume/folder/BLAT_ECOLX_Tenaillon2013_metadata_train.csv
+          default: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/bionemo/esm2/ft_data/BLAT_ECOLX_Tenaillon2013_metadata_train.csv
         - name: validation_data_location
-          default: /Volumes/my_catalog/schema/volume/folder/BLAT_ECOLX_Tenaillon2013_metadata_eval.csv
+          default: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/bionemo/esm2/ft_data/BLAT_ECOLX_Tenaillon2013_metadata_eval.csv
         - name: should_use_lora
           default: false
         - name: finetune_label
@@ -79,7 +79,9 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
+            # On-demand avoids spot preemption during long-running
+            # model fine-tuning jobs on AWS
+            aws_attributes:
+              availability: ON_DEMAND
 
       tags: ${var.common_resource_tags}
-
-
