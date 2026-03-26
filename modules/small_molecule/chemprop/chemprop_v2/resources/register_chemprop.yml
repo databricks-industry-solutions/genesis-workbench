@@ -1,0 +1,70 @@
+resources:
+  jobs:
+    register_chemprop:
+      name: register_chemprop
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: pretrained_bbbp_inference
+          environment_key: chemprop_env
+          notebook_task:
+            notebook_path: ../notebooks/01_chemprop_pretrained_inference.py
+
+        - task_key: toxicity_classifier
+          environment_key: chemprop_env
+          notebook_task:
+            notebook_path: ../notebooks/02_chemprop_toxicity_classifier.py
+
+        - task_key: multitask_admet_regressor
+          environment_key: chemprop_admet_env
+          notebook_task:
+            notebook_path: ../notebooks/03_chemprop_multitask_admet.py
+
+      environments:
+        - environment_key: chemprop_env
+          spec:
+            client: "1"
+            dependencies:
+              - chemprop>=2.0.0
+              - rdkit
+              - torch>=2.0
+              - lightning
+              - mlflow>=2.15
+              - databricks-sdk>=0.50.0
+              - databricks-sql-connector>=4.0.2
+
+        - environment_key: chemprop_admet_env
+          spec:
+            client: "1"
+            dependencies:
+              - chemprop>=2.0.0
+              - rdkit
+              - torch>=2.0
+              - lightning
+              - mlflow>=2.15
+              - databricks-sdk>=0.50.0
+              - databricks-sql-connector>=4.0.2
+              - PyTDC
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: model_name
+          default: chemprop
+        - name: cache_dir
+          default: ${resources.volumes.chemprop_cache_dir.name}
+        - name: experiment_name
+          default: ${var.module_registration_experiment_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: user_email
+          default: ${var.current_user}
+        - name: workload_type
+          default: ${var.gpu_small_setting}
+
+      tags: ${var.common_resource_tags}
