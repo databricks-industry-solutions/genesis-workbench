@@ -25,7 +25,7 @@ echo "Extra Params: $EXTRA_PARAMS"
 echo "##############################################"
 echo "⏩️ Starting deploy of Small Molecule module  #"
 
-for module in chemprop/chemprop_v2
+for module in chemprop/chemprop_v2 open_babel/open_babel_v3
     do
         echo "###########################################"
         echo "Deploying $module"
