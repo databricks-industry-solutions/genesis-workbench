@@ -10,6 +10,8 @@ resources:
       tasks:
         - task_key: run_rapidssinglecell
           environment_key: gpu_env
+          compute:
+            hardware_accelerator: "GPU_1xA10"
           notebook_task:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
@@ -21,14 +23,12 @@ resources:
       environments:
         - environment_key: gpu_env
           spec:
-            client: '4'
+            environment_version: "4"
             dependencies:
               - --extra-index-url https://download.pytorch.org/whl/cu121
               - rapids-singlecell
-              - scikit-learn==1.5.*
+              - scikit-learn>=1.5,<1.6
               - numpy<2
-            serverless_gpu:
-              gpu_type: A10
 
       parameters:
         - name: catalog

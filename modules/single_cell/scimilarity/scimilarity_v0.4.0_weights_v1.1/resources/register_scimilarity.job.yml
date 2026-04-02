@@ -10,6 +10,8 @@ resources:
       tasks:
         - task_key: wget_SCimilarity_task
           environment_key: gpu_env
+          compute:
+            hardware_accelerator: "GPU_1xA10"
           notebook_task:
             notebook_path: ../notebooks/01_wget_scimilarity.py
 
@@ -17,6 +19,8 @@ resources:
           depends_on:
             - task_key: wget_SCimilarity_task
           environment_key: gpu_env
+          compute:
+            hardware_accelerator: "GPU_1xA10"
           notebook_task:
             notebook_path: ../notebooks/02_register_GeneOrder.py
 
@@ -24,6 +28,8 @@ resources:
           depends_on:
             - task_key: wget_SCimilarity_task
           environment_key: gpu_env
+          compute:
+            hardware_accelerator: "GPU_1xA10"
           notebook_task:
             notebook_path: ../notebooks/03_register_GetEmbedding.py
 
@@ -31,6 +37,8 @@ resources:
           depends_on:
             - task_key: wget_SCimilarity_task
           environment_key: gpu_env
+          compute:
+            hardware_accelerator: "GPU_1xA10"
           notebook_task:
             notebook_path: ../notebooks/04_register_SearchNearest.py
 
@@ -49,23 +57,23 @@ resources:
           depends_on:
             - task_key: wget_SCimilarity_task
           environment_key: gpu_env
+          compute:
+            hardware_accelerator: "GPU_1xA10"
           notebook_task:
             notebook_path: ../notebooks/06a_extractNsave_DiseaseCellTypeSamples.py
 
       environments:
         - environment_key: gpu_env
           spec:
-            client: '4'
+            environment_version: "4"
             dependencies:
               - --extra-index-url https://download.pytorch.org/whl/cu121
               - torch>=2.4
               - mlflow>=2.15
               - databricks-sdk>=0.50.0
-            serverless_gpu:
-              gpu_type: A10
         - environment_key: default
           spec:
-            client: '4'
+            environment_version: "4"
 
       parameters:
         - name: catalog

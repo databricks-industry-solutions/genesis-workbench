@@ -10,20 +10,20 @@ resources:
       tasks:
         - task_key: register_boltz_task
           environment_key: gpu_env
+          compute:
+            hardware_accelerator: "GPU_1xA10"
           notebook_task:
             notebook_path: ../notebooks/01_register_boltz.py
 
       environments:
         - environment_key: gpu_env
           spec:
-            client: '4'
+            environment_version: "4"
             dependencies:
               - --extra-index-url https://download.pytorch.org/whl/cu121
               - torch>=2.4
               - mlflow>=2.15
               - databricks-sdk>=0.50.0
-            serverless_gpu:
-              gpu_type: A10
 
       parameters:
         - name: catalog
