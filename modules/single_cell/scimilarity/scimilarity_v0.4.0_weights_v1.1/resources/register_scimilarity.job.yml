@@ -8,40 +8,38 @@ resources:
           - ${var.current_user}
 
       tasks:
-        #this task can use serverless (OR 14.3 LTS L runtime)
-        - task_key: wget_SCimilarity_task # register_scimilarity_task
-          ## use serverless when files already exist in the cache_dir
-          job_cluster_key: job_cluster_wget # maybe faster than serverless?
+        - task_key: wget_SCimilarity_task
+          environment_key: gpu_env
           notebook_task:
             notebook_path: ../notebooks/01_wget_scimilarity.py
 
         - task_key: register_GeneOrder_task
-          depends_on: 
+          depends_on:
             - task_key: wget_SCimilarity_task
-          job_cluster_key: job_cluster_gene_order
+          environment_key: gpu_env
           notebook_task:
-            notebook_path: ../notebooks/02_register_GeneOrder.py 
-        
-        - task_key: register_GetEmbedding_task
-          depends_on: 
-            - task_key: wget_SCimilarity_task
-          job_cluster_key: job_cluster_get_embedding
-          notebook_task:
-            notebook_path: ../notebooks/03_register_GetEmbedding.py 
-        
-        - task_key: register_SearchNearest_task
-          depends_on: 
-            - task_key: wget_SCimilarity_task
-          job_cluster_key: job_cluster_search_nearest
-          notebook_task:
-            notebook_path: ../notebooks/04_register_SearchNearest.py 
+            notebook_path: ../notebooks/02_register_GeneOrder.py
 
-        #this task can utilize serverless runtime with python 3.11
+        - task_key: register_GetEmbedding_task
+          depends_on:
+            - task_key: wget_SCimilarity_task
+          environment_key: gpu_env
+          notebook_task:
+            notebook_path: ../notebooks/03_register_GetEmbedding.py
+
+        - task_key: register_SearchNearest_task
+          depends_on:
+            - task_key: wget_SCimilarity_task
+          environment_key: gpu_env
+          notebook_task:
+            notebook_path: ../notebooks/04_register_SearchNearest.py
+
         - task_key: importNserve_scimilarity_models_task
           depends_on:
             - task_key: "register_GeneOrder_task"
             - task_key: "register_GetEmbedding_task"
             - task_key: "register_SearchNearest_task"
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/05_importNserve_model_gwb.py
 
@@ -50,15 +48,25 @@ resources:
         - task_key: extract_sample_data_task
           depends_on:
             - task_key: wget_SCimilarity_task
-          job_cluster_key: job_cluster_search_nearest
+          environment_key: gpu_env
           notebook_task:
             notebook_path: ../notebooks/06a_extractNsave_DiseaseCellTypeSamples.py
 
-      environments: ## serverless
+      environments:
+        - environment_key: gpu_env
+          spec:
+            client: '4'
+            dependencies:
+              - --extra-index-url https://download.pytorch.org/whl/cu121
+              - torch>=2.4
+              - mlflow>=2.15
+              - databricks-sdk>=0.50.0
+            serverless_gpu:
+              gpu_type: A10
         - environment_key: default
           spec:
-            client: '2'
-            
+            client: '4'
+
       parameters:
         - name: catalog
           default: ${var.core_catalog_name}
@@ -67,9 +75,9 @@ resources:
         - name: model_name
           default: SCimilarity
         - name: cache_dir
-          default: ${resources.volumes.scimilarity.name} 
+          default: ${resources.volumes.scimilarity.name}
         - name: experiment_name
-          default: ${var.module_registration_experiment_name} 
+          default: ${var.module_registration_experiment_name}
         - name: sql_warehouse_id
           default: ${var.sql_warehouse_id}
         - name: user_email
@@ -86,86 +94,5 @@ resources:
           default: MULTIGPU_MEDIUM
         - name: search_nearest_workload_size
           default: Small  # Keep Small (0-4 concurrency) — Medium OOMs loading ~23M cell reference
-
-      job_clusters:
-        - job_cluster_key: job_cluster_wget
-          new_cluster:
-            num_workers: 0
-            node_type_id: ${var.a10_node_type} 
-            driver_node_type_id: ${var.a10_node_type}  
-            spark_version: '14.3.x-gpu-ml-scala2.12'
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: local[*]
-            custom_tags:
-              ResourceClass: SingleNode
-            # On-demand avoids spot preemption during long-running model
-            # registration/download jobs
-            aws_attributes:
-              availability: ON_DEMAND
-
-        - job_cluster_key: job_cluster_gene_order
-          new_cluster:
-            num_workers: 0
-            ### NEED larger compute for SCimilarity
-            node_type_id: ${var.a10_node_type}  
-            driver_node_type_id: ${var.a10_node_type}  
-            spark_version: '14.3.x-gpu-ml-scala2.12'
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: local[*]
-            custom_tags:
-              ResourceClass: SingleNode
-            aws_attributes:
-              availability: ON_DEMAND
-
-        - job_cluster_key: job_cluster_get_embedding
-          new_cluster:
-            num_workers: 0
-            ### NEED larger compute for SCimilarity
-            node_type_id: ${var.a10_node_type}   
-            driver_node_type_id: ${var.a10_node_type}  
-            spark_version: '14.3.x-gpu-ml-scala2.12'
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: local[*]
-            custom_tags:
-              ResourceClass: SingleNode
-            aws_attributes:
-              availability: ON_DEMAND
-
-        - job_cluster_key: job_cluster_search_nearest
-          new_cluster:
-            num_workers: 0
-            ### NEED larger RAM compute for SCimilarity: search_nearest
-            node_type_id: ${var.a10_node_type} 
-            driver_node_type_id: ${var.a10_node_type}   
-            spark_version: '14.3.x-gpu-ml-scala2.12'
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: local[*]
-            custom_tags:
-              ResourceClass: SingleNode
-            aws_attributes:
-              availability: ON_DEMAND
-
-        ## critical for model training
-        ## singleNode GPU options: ## Standard_NV36ads_A10_v5 #440gigs #'Standard_NC16as_T4_v3' #110gigs #'Standard_NC4as_T4_v3'  
-        ## 14.3.x-gpu-ml-scala2.12
-
-        ## singleNode CPU options: # Standard_E48ads_v5 #384gigs # Standard_E32ads_v5 #256gigs 
-        ## 14.3.x-cpu-ml-scala2.12
 
       tags: ${var.common_resource_tags}

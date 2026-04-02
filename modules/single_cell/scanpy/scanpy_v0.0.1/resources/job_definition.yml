@@ -9,6 +9,7 @@ resources:
 
       tasks:
         - task_key: check_file_size
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/check_file_size.py
             base_parameters:
@@ -41,6 +42,7 @@ resources:
           depends_on:
             - task_key: check_large
               outcome: "true"
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
@@ -48,11 +50,11 @@ resources:
               gene_name_column: ""
               species: hsapiens
             source: WORKSPACE
-          job_cluster_key: run_gt_large_cluster
         - task_key: run_lt_large
           depends_on:
             - task_key: check_large
               outcome: "false"
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
@@ -60,11 +62,11 @@ resources:
               gene_name_column: ""
               species: hsapiens
             source: WORKSPACE
-          job_cluster_key: run_lt_large_cluster
         - task_key: run_lt_medium
           depends_on:
             - task_key: check_medium
               outcome: "false"
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
@@ -72,11 +74,11 @@ resources:
               gene_name_column: ""
               species: hsapiens
             source: WORKSPACE
-          job_cluster_key: run_lt_medium_cluster
         - task_key: run_lt_small
           depends_on:
             - task_key: check_small
               outcome: "false"
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
@@ -84,8 +86,11 @@ resources:
               gene_name_column: ""
               species: hsapiens
             source: WORKSPACE
-          job_cluster_key: run_lt_small_cluster
 
+      environments:
+        - environment_key: default
+          spec:
+            client: '4'
 
       parameters:
         - name: catalog
@@ -118,83 +123,5 @@ resources:
           default: 50
         - name: cluster_resolution
           default: 0.2
-
-      job_clusters:
-        - job_cluster_key: run_gt_large_cluster
-          new_cluster:
-            cluster_name: ""
-            spark_version: 15.4.x-scala2.12
-            spark_conf:
-              spark.master: local[*, 4]
-              spark.databricks.cluster.profile: singleNode
-            node_type_id: ${var.cpu_xlarge_node_type}
-            driver_node_type_id: ${var.cpu_xlarge_node_type}
-            custom_tags:
-              ResourceClass: SingleNode
-            spark_env_vars:
-              PYSPARK_PYTHON: /databricks/python3/bin/python3
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            runtime_engine: STANDARD
-            num_workers: 0
-            aws_attributes:
-              availability: ON_DEMAND
-        - job_cluster_key: run_lt_large_cluster
-          new_cluster:
-            cluster_name: ""
-            spark_version: 15.4.x-scala2.12
-            spark_conf:
-              spark.master: local[*, 4]
-              spark.databricks.cluster.profile: singleNode
-            node_type_id: ${var.cpu_large_node_type}
-            driver_node_type_id: ${var.cpu_large_node_type}
-            custom_tags:
-              ResourceClass: SingleNode
-            spark_env_vars:
-              PYSPARK_PYTHON: /databricks/python3/bin/python3
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            runtime_engine: STANDARD
-            num_workers: 0
-            aws_attributes:
-              availability: ON_DEMAND
-        - job_cluster_key: run_lt_medium_cluster
-          new_cluster:
-            cluster_name: ""
-            spark_version: 15.4.x-scala2.12
-            spark_conf:
-              spark.master: local[*, 4]
-              spark.databricks.cluster.profile: singleNode
-            node_type_id: ${var.cpu_medium_node_type}
-            driver_node_type_id: ${var.cpu_medium_node_type}
-            custom_tags:
-              ResourceClass: SingleNode
-            spark_env_vars:
-              PYSPARK_PYTHON: /databricks/python3/bin/python3
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            runtime_engine: STANDARD
-            num_workers: 0
-            aws_attributes:
-              availability: ON_DEMAND
-        - job_cluster_key: run_lt_small_cluster
-          new_cluster:
-            cluster_name: ""
-            spark_version: 15.4.x-scala2.12
-            spark_conf:
-              spark.master: local[*, 4]
-              spark.databricks.cluster.profile: singleNode
-            node_type_id: ${var.cpu_small_node_type}
-            driver_node_type_id: ${var.cpu_small_node_type}
-            custom_tags:
-              ResourceClass: SingleNode
-            spark_env_vars:
-              PYSPARK_PYTHON: /databricks/python3/bin/python3
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            runtime_engine: STANDARD
-            num_workers: 0
-            aws_attributes:
-              availability: ON_DEMAND
 
       tags: ${var.common_resource_tags}

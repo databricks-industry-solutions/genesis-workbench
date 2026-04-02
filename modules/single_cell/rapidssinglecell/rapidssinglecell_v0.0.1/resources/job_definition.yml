@@ -9,6 +9,7 @@ resources:
 
       tasks:
         - task_key: run_rapidssinglecell
+          environment_key: gpu_env
           notebook_task:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
@@ -16,8 +17,18 @@ resources:
               gene_name_column: ""
               species: hsapiens
             source: WORKSPACE
-          job_cluster_key: rapidssinglecell_cluster
 
+      environments:
+        - environment_key: gpu_env
+          spec:
+            client: '4'
+            dependencies:
+              - --extra-index-url https://download.pytorch.org/whl/cu121
+              - rapids-singlecell
+              - scikit-learn==1.5.*
+              - numpy<2
+            serverless_gpu:
+              gpu_type: A10
 
       parameters:
         - name: catalog
@@ -52,26 +63,5 @@ resources:
           default: 50
         - name: cluster_resolution
           default: 0.2
-
-      job_clusters:
-        - job_cluster_key: rapidssinglecell_cluster
-          new_cluster:
-            cluster_name: ""
-            spark_version: ${var.gpu_ml_spark_version}
-            spark_conf:
-              spark.master: local[*, 4]
-              spark.databricks.cluster.profile: singleNode
-            node_type_id: ${var.gpu_t4_rapids_node_type}
-            driver_node_type_id: ${var.gpu_t4_rapids_node_type}
-            custom_tags:
-              ResourceClass: SingleNode
-            spark_env_vars:
-              PYSPARK_PYTHON: /databricks/python3/bin/python3
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            runtime_engine: STANDARD
-            num_workers: 0
-            aws_attributes:
-              availability: ON_DEMAND
 
       tags: ${var.common_resource_tags}
