@@ -55,7 +55,22 @@ schema = dbutils.widgets.get("schema")
 # MAGIC     einops==0.8.2 \
 # MAGIC     transformers==5.5.0 \
 # MAGIC     jaxtyping
-# MAGIC %pip install -q --no-deps "proteinfoundation @ git+https://github.com/NVIDIA-Digital-Bio/Proteina-Complexa.git"
+
+# COMMAND ----------
+
+import subprocess, os
+
+_proteina_clone_dir = "/tmp/proteina_complexa_repo"
+if not os.path.exists(_proteina_clone_dir):
+    subprocess.run(
+        ["git", "clone", "--depth=1",
+         "https://github.com/NVIDIA-Digital-Bio/Proteina-Complexa.git",
+         _proteina_clone_dir],
+        check=True,
+    )
+subprocess.check_call(
+    ["pip", "install", "-q", "--no-deps", _proteina_clone_dir]
+)
 
 # COMMAND ----------
 
