@@ -1,74 +1,29 @@
 # Databricks notebook source
-# DBTITLE 1,Protein Search UC Configuration
+# DBTITLE 1,Declare notebook widgets (pre-filled by DAB job parameters at deploy time)
 
-SCHEMA_NAME = "ai_driven_drug_discovery"
-ENDPOINT_NAME = "az_openai_gpt4o"
+dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
+dbutils.widgets.text("schema", "ai_driven_drug_discovery", "Schema")
+dbutils.widgets.text("volume_name", "protein_seq", "Volume Name")
+dbutils.widgets.text("external_endpoint_name", "az_openai_gpt4o", "AI Gateway Endpoint")
+dbutils.widgets.text("user_email", "a@b.com", "User Email")
+dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id")
+dbutils.widgets.text("experiment_name", "dbx_genesis_workbench_modules", "Experiment Name")
 
 # COMMAND ----------
 
-# DBTITLE 1,Setup UC paths from job parameters
+# DBTITLE 1,Read widget values and ensure UC resources exist
 
-def setup_uc_paths(print_endpoint: bool = False, silent: bool = True) -> dict:
-    """
-    Setup Unity Catalog resources using DAB job parameters.
+catalog = dbutils.widgets.get("catalog")
+schema = dbutils.widgets.get("schema")
+volume_name = dbutils.widgets.get("volume_name")
 
-    Reads catalog, schema, volume_name, and external_endpoint_name from
-    job parameters (passed via dbutils.widgets). The volume_name is
-    provisioned by the DAB volumes resource and passed as a job parameter.
+spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog}")
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.{schema}")
+spark.sql(f"CREATE VOLUME IF NOT EXISTS {catalog}.{schema}.{volume_name}")
 
-    Returns:
-        Dictionary with catalog_name, schema_name, volume_name,
-        external_endpoint_name, volume_location, schema_path, volume_path
-    """
-    catalog_name = dbutils.widgets.get("catalog")
-    schema_name = dbutils.widgets.get("schema") if _widget_exists("schema") else SCHEMA_NAME
-    volume_name = dbutils.widgets.get("volume_name")
-    external_endpoint_name = (
-        dbutils.widgets.get("external_endpoint_name")
-        if _widget_exists("external_endpoint_name")
-        else ENDPOINT_NAME
-    )
+volume_location = f"/Volumes/{catalog}/{schema}/{volume_name}"
 
-    if not catalog_name:
-        raise ValueError("Job parameter 'catalog' is required but was empty.")
-    if not volume_name:
-        raise ValueError("Job parameter 'volume_name' is required but was empty.")
-
-    spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog_name}")
-    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog_name}.{schema_name}")
-    spark.sql(f"CREATE VOLUME IF NOT EXISTS {catalog_name}.{schema_name}.{volume_name}")
-
-    volume_location = f"/Volumes/{catalog_name}/{schema_name}/{volume_name}"
-    schema_path = f"{catalog_name}.{schema_name}"
-    volume_path = f"{catalog_name}.{schema_name}.{volume_name}"
-
-    uc_config = {
-        "catalog_name": catalog_name,
-        "schema_name": schema_name,
-        "volume_name": volume_name,
-        "external_endpoint_name": external_endpoint_name,
-        "volume_location": volume_location,
-        "schema_path": schema_path,
-        "volume_path": volume_path,
-    }
-
-    if not silent:
-        print("=" * 70)
-        print("UC Paths Configured (from job parameters)")
-        print("=" * 70)
-        for key, value in uc_config.items():
-            if key == "external_endpoint_name" and not print_endpoint:
-                continue
-            print(f"{key}: {value}")
-        print("=" * 70)
-
-    return uc_config
-
-
-def _widget_exists(name: str) -> bool:
-    """Check whether a widget/job parameter exists."""
-    try:
-        dbutils.widgets.get(name)
-        return True
-    except Exception:
-        return False
+print(f"catalog:         {catalog}")
+print(f"schema:          {schema}")
+print(f"volume_name:     {volume_name}")
+print(f"volume_location: {volume_location}")

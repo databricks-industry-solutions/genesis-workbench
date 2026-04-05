@@ -13,17 +13,15 @@
 
 # COMMAND ----------
 
-# DBTITLE 1,Run utils
+# DBTITLE 1,Run utils (declares widgets, creates UC resources)
 # MAGIC %run ./utils
 
 # COMMAND ----------
 
-# DBTITLE 1,Configure UC paths
-uc_config = setup_uc_paths(silent=False)
-
-catalog_name = uc_config["catalog_name"]
-schema_name = uc_config["schema_name"]
-volume_name = uc_config["volume_name"]
+# DBTITLE 1,Read widget values
+catalog = dbutils.widgets.get("catalog")
+schema = dbutils.widgets.get("schema")
+volume_name = dbutils.widgets.get("volume_name")
 
 # COMMAND ----------
 
@@ -32,7 +30,7 @@ from pyspark.sql import Row
 from Bio import SeqIO
 
 records = []
-file_path = f"/Volumes/{catalog_name}/{schema_name}/{volume_name}/uniprot_sprot.fasta"
+file_path = f"/Volumes/{catalog}/{schema}/{volume_name}/uniprot_sprot.fasta"
 
 with open(file_path, "r") as f:
     for record in SeqIO.parse(f, "fasta"):
@@ -46,7 +44,7 @@ with open(file_path, "r") as f:
 
 df = spark.createDataFrame(records)
 df.write.format("delta").mode("overwrite").saveAsTable(
-    f"{catalog_name}.{schema_name}.bronze_protein"
+    f"{catalog}.{schema}.bronze_protein"
 )
 
 print(f"Bronze table created with {df.count()} records")
@@ -56,7 +54,7 @@ print(f"Bronze table created with {df.count()} records")
 # DBTITLE 1,Extract protein info into Silver table
 from pyspark.sql.functions import regexp_extract
 
-fasta_df = spark.table(f"{catalog_name}.{schema_name}.bronze_protein")
+fasta_df = spark.table(f"{catalog}.{schema}.bronze_protein")
 
 os_regex = r"OS=([^ ]+ [^ ]+|\([^)]+\))"
 ox_regex = r"OX=(\d+)"
@@ -80,7 +78,7 @@ fasta_df = fasta_df.withColumn(
 )
 
 fasta_df.write.format("delta").mode("overwrite").saveAsTable(
-    f"{catalog_name}.{schema_name}.silver_protein"
+    f"{catalog}.{schema}.silver_protein"
 )
 
 print("Silver table created")
@@ -106,12 +104,12 @@ def get_molecular_weight_pandas_udf(sequence: pd.Series) -> pd.Series:
     return sequence.apply(calculate_mw)
 
 
-df = spark.table(f"{catalog_name}.{schema_name}.silver_protein")
+df = spark.table(f"{catalog}.{schema}.silver_protein")
 df = df.withColumn("Molecular_Weight", get_molecular_weight_pandas_udf(df["Sequence"]))
 df = df.drop("Description")
 
 df.write.format("delta").mode("overwrite").saveAsTable(
-    f"{catalog_name}.{schema_name}.enriched_protein"
+    f"{catalog}.{schema}.enriched_protein"
 )
 
 print("Enriched table created")
@@ -119,4 +117,4 @@ print("Enriched table created")
 # COMMAND ----------
 
 # DBTITLE 1,Preview enriched protein table
-display(spark.table(f"{catalog_name}.{schema_name}.enriched_protein"))
+display(spark.table(f"{catalog}.{schema}.enriched_protein"))

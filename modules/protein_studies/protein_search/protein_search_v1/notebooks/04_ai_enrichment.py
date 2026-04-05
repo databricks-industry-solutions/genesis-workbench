@@ -12,18 +12,21 @@
 
 # COMMAND ----------
 
-# DBTITLE 1,Run utils
+# DBTITLE 1,Run utils (declares widgets, creates UC resources)
 # MAGIC %run ./utils
 
 # COMMAND ----------
 
-# DBTITLE 1,Configure UC paths
-uc_config = setup_uc_paths(print_endpoint=True, silent=False)
+# DBTITLE 1,Read widget values
+catalog = dbutils.widgets.get("catalog")
+schema = dbutils.widgets.get("schema")
+volume_name = dbutils.widgets.get("volume_name")
+external_endpoint_name = dbutils.widgets.get("external_endpoint_name")
 
-catalog_name = uc_config["catalog_name"]
-schema_name = uc_config["schema_name"]
-volume_name = uc_config["volume_name"]
-external_endpoint_name = uc_config["external_endpoint_name"]
+print(f"catalog:                 {catalog}")
+print(f"schema:                  {schema}")
+print(f"volume_name:             {volume_name}")
+print(f"external_endpoint_name:  {external_endpoint_name}")
 
 # COMMAND ----------
 
@@ -37,13 +40,13 @@ external_endpoint_name = uc_config["external_endpoint_name"]
 # COMMAND ----------
 
 # DBTITLE 1,Extract unique organism names
-sDF = spark.table(f"{catalog_name}.{schema_name}.proteinclassification_tiny")
+sDF = spark.table(f"{catalog}.{schema}.proteinclassification_tiny")
 
 sDF.select("OrganismName").distinct().write.mode("overwrite").option(
     "mergeSchema", "true"
-).saveAsTable(f"{catalog_name}.{schema_name}.tinysample_organism_info")
+).saveAsTable(f"{catalog}.{schema}.tinysample_organism_info")
 
-organism_count = spark.table(f"{catalog_name}.{schema_name}.tinysample_organism_info").count()
+organism_count = spark.table(f"{catalog}.{schema}.tinysample_organism_info").count()
 print(f"Unique organisms: {organism_count}")
 
 # COMMAND ----------
@@ -65,16 +68,16 @@ orginfo_sDF = spark.sql(f"""
                 ),
                 responseFormat => 'STRUCT<simple_term: STRING, meaning: STRING>'
             ) AS parsed
-        FROM {catalog_name}.{schema_name}.tinysample_organism_info
+        FROM {catalog}.{schema}.tinysample_organism_info
     )
 """)
 
 orginfo_sDF.write.mode("overwrite").option("mergeSchema", "true").saveAsTable(
-    f"{catalog_name}.{schema_name}.tinysample_organism_info_scientificNsimple"
+    f"{catalog}.{schema}.tinysample_organism_info_scientificNsimple"
 )
 
-print(f"Written to {catalog_name}.{schema_name}.tinysample_organism_info_scientificNsimple")
-display(spark.table(f"{catalog_name}.{schema_name}.tinysample_organism_info_scientificNsimple"))
+print(f"Written to {catalog}.{schema}.tinysample_organism_info_scientificNsimple")
+display(spark.table(f"{catalog}.{schema}.tinysample_organism_info_scientificNsimple"))
 
 # COMMAND ----------
 
@@ -140,8 +143,8 @@ if not endpoint_exists:
             ai_gateway=AiGatewayConfig(
                 usage_tracking_config=AiGatewayUsageTrackingConfig(enabled=True),
                 inference_table_config=AiGatewayInferenceTableConfig(
-                    catalog_name=catalog_name,
-                    schema_name=schema_name,
+                    catalog_name=catalog,
+                    schema_name=schema,
                     enabled=True,
                 ),
             ),
@@ -187,9 +190,9 @@ SELECT
     p.OrganismName,
     o.Organism_SimpleTerm
 FROM
-    {catalog_name}.{schema_name}.proteinclassification_tiny p
+    {catalog}.{schema}.proteinclassification_tiny p
 JOIN
-    {catalog_name}.{schema_name}.tinysample_organism_info_scientificNsimple o
+    {catalog}.{schema}.tinysample_organism_info_scientificNsimple o
     ON p.OrganismName = o.OrganismName
 """
 
@@ -222,7 +225,7 @@ df_enriched = (
     )
 )
 
-output_table = f"{catalog_name}.{schema_name}.tinysample_organism_protein_research_info"
+output_table = f"{catalog}.{schema}.tinysample_organism_protein_research_info"
 spark.sql(f"DROP TABLE IF EXISTS {output_table}")
 df_enriched.write.mode("overwrite").saveAsTable(output_table)
 
@@ -231,4 +234,4 @@ print(f"Results saved to {output_table}")
 # COMMAND ----------
 
 # DBTITLE 1,Preview protein research results
-display(spark.table(f"{catalog_name}.{schema_name}.tinysample_organism_protein_research_info"))
+display(spark.table(f"{catalog}.{schema}.tinysample_organism_protein_research_info"))

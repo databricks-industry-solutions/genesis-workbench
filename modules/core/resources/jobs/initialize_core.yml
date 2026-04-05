@@ -48,6 +48,8 @@ resources:
           default: ${var.core_schema_name}
         - name: deploy_model_job_id
           default: ${resources.jobs.deploy_model_job.id}
+        - name: start_all_endpoints_job_id
+          default: ${resources.jobs.start_all_endpoints_job.id}
         - name: databricks_app_name
           default: ${var.app_name}
         - name: dev_user_prefix

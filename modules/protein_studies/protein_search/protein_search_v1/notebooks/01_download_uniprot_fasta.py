@@ -15,17 +15,15 @@
 
 # COMMAND ----------
 
-# DBTITLE 1,Run utils
+# DBTITLE 1,Run utils (declares widgets, creates UC resources)
 # MAGIC %run ./utils
 
 # COMMAND ----------
 
-# DBTITLE 1,Configure UC paths
-uc_config = setup_uc_paths(silent=False)
-
-catalog_name = uc_config["catalog_name"]
-schema_name = uc_config["schema_name"]
-volume_name = uc_config["volume_name"]
+# DBTITLE 1,Read widget values
+catalog = dbutils.widgets.get("catalog")
+schema = dbutils.widgets.get("schema")
+volume_name = dbutils.widgets.get("volume_name")
 
 # COMMAND ----------
 
@@ -34,7 +32,7 @@ import requests
 import gzip
 
 url = "https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz"
-output_path = f"/Volumes/{catalog_name}/{schema_name}/{volume_name}/uniprot_sprot.fasta"
+output_path = f"/Volumes/{catalog}/{schema}/{volume_name}/uniprot_sprot.fasta"
 
 response = requests.get(url, stream=True)
 response.raise_for_status()
@@ -50,7 +48,7 @@ print(f"Downloaded FASTA to {output_path}")
 # DBTITLE 1,Verify downloaded FASTA file
 from Bio import SeqIO
 
-fasta_path = f"/Volumes/{catalog_name}/{schema_name}/{volume_name}/uniprot_sprot.fasta"
+fasta_path = f"/Volumes/{catalog}/{schema}/{volume_name}/uniprot_sprot.fasta"
 
 records = list(SeqIO.parse(fasta_path, "fasta"))
 

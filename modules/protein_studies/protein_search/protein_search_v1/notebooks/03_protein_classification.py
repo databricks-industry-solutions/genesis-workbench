@@ -15,8 +15,15 @@
 
 # COMMAND ----------
 
-# DBTITLE 1,Run utils
+# DBTITLE 1,Run utils (declares widgets, creates UC resources)
 # MAGIC %run ./utils
+
+# COMMAND ----------
+
+# DBTITLE 1,Read widget values
+catalog = dbutils.widgets.get("catalog")
+schema = dbutils.widgets.get("schema")
+volume_name = dbutils.widgets.get("volume_name")
 
 # COMMAND ----------
 
@@ -38,26 +45,17 @@ print(f"Model loaded on device: {'cuda' if torch.cuda.is_available() else 'cpu'}
 
 # COMMAND ----------
 
-# DBTITLE 1,Configure UC paths
-uc_config = setup_uc_paths(silent=False)
-
-catalog_name = uc_config["catalog_name"]
-schema_name = uc_config["schema_name"]
-volume_name = uc_config["volume_name"]
-
-# COMMAND ----------
-
 # DBTITLE 1,Downsample enriched protein data
-spark.sql(f"USE {catalog_name}.{schema_name}")
+spark.sql(f"USE {catalog}.{schema}")
 
 spark.sql(f"""
-    CREATE OR REPLACE TABLE {catalog_name}.{schema_name}.tiny_sample_data AS
+    CREATE OR REPLACE TABLE {catalog}.{schema}.tiny_sample_data AS
     SELECT *
-    FROM {catalog_name}.{schema_name}.enriched_protein
+    FROM {catalog}.{schema}.enriched_protein
     TABLESAMPLE (0.5 PERCENT) REPEATABLE (42)
 """)
 
-print(f"Sample size: {spark.table(f'{catalog_name}.{schema_name}.tiny_sample_data').count()} records")
+print(f"Sample size: {spark.table(f'{catalog}.{schema}.tiny_sample_data').count()} records")
 
 # COMMAND ----------
 
@@ -65,13 +63,13 @@ print(f"Sample size: {spark.table(f'{catalog_name}.{schema_name}.tiny_sample_dat
 from pyspark.sql import functions as F, types as T
 import pandas as pd
 
-schema = T.StructType([
+schema_struct = T.StructType([
     T.StructField("label", T.StringType(), True),
     T.StructField("score", T.FloatType(), True),
 ])
 
 
-@F.pandas_udf(schema)
+@F.pandas_udf(schema_struct)
 def classify_protein(sequences: pd.Series) -> pd.DataFrame:
     results = [pipeline(sequence) for sequence in sequences]
     labels = [result[0]["label"] for result in results]
@@ -81,7 +79,7 @@ def classify_protein(sequences: pd.Series) -> pd.DataFrame:
 # COMMAND ----------
 
 # DBTITLE 1,Run batch classification
-df = spark.read.table(f"{catalog_name}.{schema_name}.tiny_sample_data")
+df = spark.read.table(f"{catalog}.{schema}.tiny_sample_data")
 
 df = df.withColumn("spaced_sequence", F.expr("concat_ws(' ', split(Sequence, ''))"))
 df = df.withColumn("spaced_sequence", F.expr("trim(spaced_sequence)"))
@@ -95,7 +93,7 @@ display(df.limit(100))
 
 # DBTITLE 1,Write classified proteins to UC
 df.write.mode("overwrite").option("mergeSchema", "true").saveAsTable(
-    f"{catalog_name}.{schema_name}.proteinclassification_tiny"
+    f"{catalog}.{schema}.proteinclassification_tiny"
 )
 
-print(f"Classified {df.count()} proteins written to {catalog_name}.{schema_name}.proteinclassification_tiny")
+print(f"Classified {df.count()} proteins written to {catalog}.{schema}.proteinclassification_tiny")

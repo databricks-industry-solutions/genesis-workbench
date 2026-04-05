@@ -294,7 +294,7 @@ if model_deployed:
             deploy_model_uc_version,
             model_deployed_date,
             model_deployed_by,
-            model_deploy_platform, 
+            model_deploy_platform,
             model_endpoint_name,
             model_invoke_url,
             is_active,

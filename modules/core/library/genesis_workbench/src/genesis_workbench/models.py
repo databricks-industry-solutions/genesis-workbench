@@ -98,7 +98,7 @@ class ModelDeploymentInfo:
     model_deploy_platform : ModelDeployPlatform
     model_endpoint_name: str    
     model_invoke_url : str
-    is_active: bool 
+    is_active: bool
     deactivated_timestamp : datetime
 
 def set_mlflow_experiment(experiment_tag, user_email, host=None, token=None, shared=False):
