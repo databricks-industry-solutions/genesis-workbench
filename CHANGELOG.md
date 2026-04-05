@@ -10,6 +10,38 @@ Added ability to start all deployed model serving endpoints and keep them alive 
 - **Settings UI**: Added "Endpoint Management" tab in Settings with a duration picker and "Start All Endpoints" button. Detects if a keep-alive job is already running and shows estimated end time instead of allowing a duplicate launch
 - **Wiring**: Job ID stored in `settings` table as `start_all_endpoints_job_id`, loaded into env by `workbench.initialize()`, passed through `initialize_core.yml` → `initialize_core.py`
 
+### Small Molecule — new model sub-modules
+
+#### DiffDock
+Added [DiffDock](https://github.com/gcorso/DiffDock) molecular docking model as a new sub-module (`diffdock/diffdock_v1`). DiffDock uses diffusion generative modeling to predict 3D binding poses for protein–ligand complexes, with a score model (reverse diffusion) and a confidence model to rank predicted poses.
+
+- **New sub-module**: `modules/small_molecule/diffdock/diffdock_v1/` — full DAB bundle with `databricks.yml`, `variables.yml`, `deploy.sh`, `destroy.sh`
+- **Job resource**: `register_diffdock.yml` — dedicated GPU cluster (DBR 14.3 LTS ML GPU, A10G single node) for checkpoint download and model registration
+- **Volume**: `volumes.yml` — managed UC volume for DiffDock artifact caching
+- **Notebook**: `01_register_diffdock.py` — installs DiffDock + PyG extensions, clones DiffDock repo, computes ESM embeddings, runs inference to pre-download model weights, defines `DiffDockModel` PyFunc wrapper with lazy loading (to avoid 300s serving timeout), registers to UC via `mlflow.pyfunc.log_model`, imports into GWB and deploys serving endpoint
+- **Key design**: Lazy model loading in `DiffDockModel.predict()` — defers heavy ESM2 and DiffDock score/confidence model loading until first prediction call to circumvent model serving endpoint startup timeouts
+- **Artifacts bundled**: DiffDock repo, ESM2 weights (~2.5 GB), score model, confidence model — all packaged as MLflow artifacts to prevent re-downloading during serving
+- Updated parent `modules/small_molecule/deploy.sh` and `destroy.sh` to include `diffdock/diffdock_v1` in the module loop
+
+#### Proteina-Complexa
+Added NVIDIA [Proteina-Complexa](https://github.com/NVIDIA-Digital-Bio/Proteina-Complexa) protein binder design models as a new sub-module (`proteina_complexa/proteina_complexa_v1`). Proteina-Complexa is a generative flow-matching model that designs novel protein binders for protein targets, small-molecule ligands, and scaffolds functional motifs — all in a fully atomistic manner.
+
+- **New sub-module**: `modules/small_molecule/proteina_complexa/proteina_complexa_v1/` — full DAB bundle with `databricks.yml`, `variables.yml`, `deploy.sh`, `destroy.sh`
+- **Job resource**: `register_proteina_complexa.yml` — dedicated GPU cluster (DBR 15.4 ML GPU, A10G single node) for NGC checkpoint download and multi-model registration
+- **Volume**: `volumes.yml` — managed UC volume for checkpoint caching
+- **Notebook**: `01_register_proteina_complexa.py` — installs proteinfoundation + PyG extensions + transitive deps (atomworks, graphein, openfold, etc.), downloads 3 sets of checkpoints from NGC, defines base `_ProteinaComplexaBase` PyFunc class with 3 variant subclasses, registers all 3 models to UC, imports each into GWB and deploys serving endpoints
+- **3 model variants registered**:
+  | Model | UC Name | Use Case |
+  |-------|---------|----------|
+  | `proteina-complexa` | `proteina_complexa` | Protein-protein binder design |
+  | `proteina-complexa-ligand` | `proteina_complexa_ligand` | Small-molecule ligand binder design |
+  | `proteina-complexa-ame` | `proteina_complexa_ame` | Motif scaffolding with ligand context |
+- **Code bundling**: Stages `proteinfoundation`, `openfold`, and `graphein` as `code_paths` — avoids broken build from graphein's invalid PEP 440 specifier and openfold's missing Python 3.12 support
+- **NGC checkpoint patch**: Patches `concat_pair_feature_factory.py` to match NGC checkpoint dims (272→271) — NGC checkpoints were trained without `CrossSequenceChainIndexPairFeat`
+- Updated parent `modules/small_molecule/deploy.sh` and `destroy.sh` to include `proteina_complexa/proteina_complexa_v1` in the module loop
+
+---
+
 ### Protein Studies — deployment fixes
 
 #### ESMFold
