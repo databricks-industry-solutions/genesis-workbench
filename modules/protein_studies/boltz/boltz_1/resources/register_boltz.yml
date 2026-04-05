@@ -8,23 +8,12 @@ resources:
           - ${var.current_user}
 
       tasks:
+        #this task need serverless runtime with python 3.11
         - task_key: register_boltz_task
-          environment_key: gpu_env
-          compute:
-            hardware_accelerator: "GPU_1xA10"
+          job_cluster_key: job_cluster
           notebook_task:
             notebook_path: ../notebooks/01_register_boltz.py
-
-      environments:
-        - environment_key: gpu_env
-          spec:
-            environment_version: "4"
-            dependencies:
-              - --extra-index-url https://download.pytorch.org/whl/cu121
-              - torch>=2.4
-              - mlflow>=2.15
-              - databricks-sdk>=0.50.0
-
+            
       parameters:
         - name: catalog
           default: ${var.core_catalog_name}
@@ -42,6 +31,24 @@ resources:
           default: ${var.current_user}
         - name: workload_type
           default: ${var.gpu_small_setting}
+
+      job_clusters:
+        - job_cluster_key: job_cluster
+          new_cluster:
+            num_workers: 0
+            node_type_id: ${var.t4_node_type}
+            driver_node_type_id: ${var.t4_node_type}
+            spark_version: '15.4.x-gpu-ml-scala2.12'
+            aws_attributes:
+              availability: ON_DEMAND
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
 
       tags: ${var.common_resource_tags}
             

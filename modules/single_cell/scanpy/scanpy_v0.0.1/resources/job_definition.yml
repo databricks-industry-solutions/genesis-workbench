@@ -15,6 +15,7 @@ resources:
             base_parameters:
               data_path: ""
             source: WORKSPACE
+
         - task_key: check_small
           depends_on:
             - task_key: check_file_size
@@ -22,6 +23,7 @@ resources:
             op: GREATER_THAN
             left: "{{tasks.check_file_size.values.file_size_gb}}"
             right: "4"
+
         - task_key: check_medium
           depends_on:
             - task_key: check_small
@@ -30,6 +32,7 @@ resources:
             op: GREATER_THAN
             left: "{{tasks.check_file_size.values.file_size_gb}}"
             right: "7"
+
         - task_key: check_large
           depends_on:
             - task_key: check_medium
@@ -38,6 +41,7 @@ resources:
             op: GREATER_THAN
             left: "{{tasks.check_file_size.values.file_size_gb}}"
             right: "14"
+
         - task_key: run_gt_large
           depends_on:
             - task_key: check_large
@@ -50,6 +54,7 @@ resources:
               gene_name_column: ""
               species: hsapiens
             source: WORKSPACE
+
         - task_key: run_lt_large
           depends_on:
             - task_key: check_large
@@ -62,6 +67,7 @@ resources:
               gene_name_column: ""
               species: hsapiens
             source: WORKSPACE
+
         - task_key: run_lt_medium
           depends_on:
             - task_key: check_medium
@@ -74,6 +80,7 @@ resources:
               gene_name_column: ""
               species: hsapiens
             source: WORKSPACE
+
         - task_key: run_lt_small
           depends_on:
             - task_key: check_small

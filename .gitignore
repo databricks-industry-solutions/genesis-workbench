@@ -22,4 +22,5 @@ lightning_logs
 .idea
 .dev
 _dev
-local/**/*
+local/*
+!local/README.md

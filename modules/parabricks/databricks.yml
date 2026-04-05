@@ -1,5 +1,5 @@
 bundle:
-  name: parabricks
+  name: genesis_workbench_parabricks
   databricks_cli_version: ">=0.295.*"
 
 include:
