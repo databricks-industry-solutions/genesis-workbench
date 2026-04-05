@@ -1,5 +1,29 @@
 # Genesis Workbench — Changelog
 
+## add_small_molecule_studies (2026-04-05)
+
+### Start All Endpoints feature
+Added ability to start all deployed model serving endpoints and keep them alive for a configurable duration (1–12 hours). Useful for demos where endpoints must not scale to zero.
+
+- **New notebook**: `modules/core/notebooks/start_all_endpoints.py` — queries `model_deployments` for active endpoints, retrieves `input_example` from MLflow model registry, starts endpoints via REST API, and pings them every 15 minutes using parallel requests
+- **New job**: `modules/core/resources/jobs/start_all_endpoints.yml` — DAB job definition (max 1 concurrent run)
+- **Settings UI**: Added "Endpoint Management" tab in Settings with a duration picker and "Start All Endpoints" button. Detects if a keep-alive job is already running and shows estimated end time instead of allowing a duplicate launch
+- **Wiring**: Job ID stored in `settings` table as `start_all_endpoints_job_id`, loaded into env by `workbench.initialize()`, passed through `initialize_core.yml` → `initialize_core.py`
+
+### Protein Studies — deployment fixes
+
+#### ESMFold
+- Reverted registration job from serverless GPU back to dedicated GPU cluster (`15.4.x-gpu-ml-scala2.12`) — serverless env installed CPU-only torch causing CUDA driver mismatch on serving endpoint
+- Added `aws_attributes: availability: ON_DEMAND` to prevent spot preemption during long registration jobs
+- Reverted `databricks.yml` CLI version to `>=0.236.*`
+
+#### Boltz
+- Reverted all files to match known working commit (`8348954`): dedicated GPU cluster, `flash_attn==1.0.9`, `torch==2.3.1+cu121`, `mlflow==2.15.1`, `cloudpickle==2.2.1`
+- `flash_attn==2.8.3` was incompatible with `boltz==0.4.0` (removed `flash_attn_unpadded_kvpacked_func` API)
+- Added `aws_attributes: availability: ON_DEMAND`
+
+---
+
 ## deploy/fe-vm-hls-amer (2026-03-18)
 
 Deployment to `fe-vm-hls-amer` (AWS) — all modules verified working (51/51 checks passed).

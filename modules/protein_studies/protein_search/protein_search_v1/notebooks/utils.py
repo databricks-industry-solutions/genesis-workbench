@@ -17,9 +17,6 @@ catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 volume_name = dbutils.widgets.get("volume_name")
 
-spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog}")
-spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.{schema}")
-spark.sql(f"CREATE VOLUME IF NOT EXISTS {catalog}.{schema}.{volume_name}")
 
 volume_location = f"/Volumes/{catalog}/{schema}/{volume_name}"
 
