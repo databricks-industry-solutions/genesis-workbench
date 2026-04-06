@@ -148,21 +148,49 @@ for _, row in endpoints_df.iterrows():
         model_uri = f"models:/{model_uc_name}/{model_uc_version}"
         model_info = mlflow.models.get_model_info(model_uri)
 
-        input_example = model_info.input_example
-        if input_example is not None:
-            import pandas as pd
-            if isinstance(input_example, pd.DataFrame):
-                payload = {"dataframe_split": input_example.to_dict(orient="split")}
-            elif isinstance(input_example, list):
-                payload = {"inputs": input_example}
-            elif isinstance(input_example, dict) and "columns" in input_example and "data" in input_example:
-                payload = {"dataframe_split": input_example}
+        if model_info.saved_input_example_info:
+            artifact_path = model_info.saved_input_example_info.get("artifact_path")
+            input_example_type = model_info.saved_input_example_info.get("type")
+
+            local_path = None
+            # Strategy 1: models:/ URI
+            try:
+                local_path = mlflow.artifacts.download_artifacts(
+                    artifact_uri=f"models:/{model_uc_name}/{model_uc_version}/{artifact_path}")
+            except Exception:
+                pass
+            # Strategy 2: run_id + model/<artifact>
+            if local_path is None and model_info.run_id:
+                try:
+                    local_path = mlflow.artifacts.download_artifacts(
+                        run_id=model_info.run_id, artifact_path=f"model/{artifact_path}")
+                except Exception:
+                    pass
+            # Strategy 3: run_id + <artifact> at root
+            if local_path is None and model_info.run_id:
+                try:
+                    local_path = mlflow.artifacts.download_artifacts(
+                        run_id=model_info.run_id, artifact_path=artifact_path)
+                except Exception:
+                    pass
+
+            if local_path is None:
+                print(f"WARNING: Could not download input_example for {ep_name}. Skipping.")
+                continue
+
+            with open(local_path, 'r') as f:
+                raw_example = json.load(f)
+
+            if input_example_type == "dataframe" or ("columns" in raw_example and "data" in raw_example):
+                payload = {"dataframe_split": raw_example}
+            elif isinstance(raw_example, list):
+                payload = {"inputs": raw_example}
             else:
-                payload = {"inputs": [input_example]}
+                payload = {"inputs": [raw_example]}
 
             endpoint_payloads[ep_name] = payload
             endpoint_names.append(ep_name)
-            print(f"Loaded input_example for endpoint: {ep_name}")
+            print(f"Loaded input_example for endpoint: {ep_name} (type: {input_example_type})")
         else:
             print(f"WARNING: No input_example found for {ep_name} (model: {model_uc_name}/{model_uc_version}). Skipping.")
     except Exception as e:
