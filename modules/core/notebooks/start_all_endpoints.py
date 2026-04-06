@@ -100,7 +100,7 @@ def send_request(databricks_instance, endpoint_name, payload, token):
         if response.status_code == 200:
             print(f"Endpoint {endpoint_name} responded successfully.")
         else:
-            print(f"Endpoint {endpoint_name} returned status {response.status_code}. Probably still waking up.")
+            print(f"Endpoint {endpoint_name} returned status {response.status_code}: {response.text[:300]}")
     except Exception as e:
         print(f"Error sending request to endpoint {endpoint_name}: {e}")
 
@@ -181,7 +181,11 @@ for _, row in endpoints_df.iterrows():
             with open(local_path, 'r') as f:
                 raw_example = json.load(f)
 
-            if input_example_type == "dataframe" or ("columns" in raw_example and "data" in raw_example):
+            # Determine correct serving format
+            # Some input_example.json files are already wrapped (have dataframe_split/inputs key)
+            if isinstance(raw_example, dict) and any(k in raw_example for k in ("dataframe_split", "dataframe_records", "inputs", "instances")):
+                payload = raw_example
+            elif input_example_type == "dataframe" or (isinstance(raw_example, dict) and "columns" in raw_example and "data" in raw_example):
                 payload = {"dataframe_split": raw_example}
             elif isinstance(raw_example, list):
                 payload = {"inputs": raw_example}
@@ -190,7 +194,7 @@ for _, row in endpoints_df.iterrows():
 
             endpoint_payloads[ep_name] = payload
             endpoint_names.append(ep_name)
-            print(f"Loaded input_example for endpoint: {ep_name} (type: {input_example_type})")
+            print(f"Loaded input_example for endpoint: {ep_name} (type: {input_example_type}, format: {list(payload.keys())})")
         else:
             print(f"WARNING: No input_example found for {ep_name} (model: {model_uc_name}/{model_uc_version}). Skipping.")
     except Exception as e:
