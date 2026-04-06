@@ -148,51 +148,21 @@ for _, row in endpoints_df.iterrows():
         model_uri = f"models:/{model_uc_name}/{model_uc_version}"
         model_info = mlflow.models.get_model_info(model_uri)
 
-        if model_info.saved_input_example_info:
-            artifact_path = model_info.saved_input_example_info.get("artifact_path")
-            input_example_type = model_info.saved_input_example_info.get("type")
-
-            # Try multiple strategies to download the input_example artifact
-            local_path = None
-            download_errors = []
-
-            # Strategy 1: Use the models:/ URI directly (works for most UC models)
-            try:
-                local_path = mlflow.artifacts.download_artifacts(artifact_uri=f"models:/{model_uc_name}/{model_uc_version}/{artifact_path}")
-            except Exception as e1:
-                download_errors.append(f"models:/ URI: {e1}")
-
-            # Strategy 2: Use run_id with just the filename
-            if local_path is None and model_info.run_id:
-                try:
-                    local_path = mlflow.artifacts.download_artifacts(run_id=model_info.run_id, artifact_path=f"model/{artifact_path}")
-                except Exception as e2:
-                    download_errors.append(f"run_id+model/: {e2}")
-
-            # Strategy 3: Use run_id with just the filename at root
-            if local_path is None and model_info.run_id:
-                try:
-                    local_path = mlflow.artifacts.download_artifacts(run_id=model_info.run_id, artifact_path=artifact_path)
-                except Exception as e3:
-                    download_errors.append(f"run_id+root: {e3}")
-
-            if local_path is None:
-                print(f"WARNING: All download strategies failed for {ep_name}: {download_errors}. Skipping.")
-                continue
-            with open(local_path, 'r') as f:
-                raw_example = json.load(f)
-
-            # Wrap in the correct serving format
-            if input_example_type == "dataframe" or ("columns" in raw_example and "data" in raw_example):
-                payload = {"dataframe_split": raw_example}
-            elif isinstance(raw_example, list):
-                payload = {"inputs": raw_example}
+        input_example = model_info.input_example
+        if input_example is not None:
+            import pandas as pd
+            if isinstance(input_example, pd.DataFrame):
+                payload = {"dataframe_split": input_example.to_dict(orient="split")}
+            elif isinstance(input_example, list):
+                payload = {"inputs": input_example}
+            elif isinstance(input_example, dict) and "columns" in input_example and "data" in input_example:
+                payload = {"dataframe_split": input_example}
             else:
-                payload = {"inputs": [raw_example]}
+                payload = {"inputs": [input_example]}
 
             endpoint_payloads[ep_name] = payload
             endpoint_names.append(ep_name)
-            print(f"Loaded input_example for endpoint: {ep_name} (type: {input_example_type})")
+            print(f"Loaded input_example for endpoint: {ep_name}")
         else:
             print(f"WARNING: No input_example found for {ep_name} (model: {model_uc_name}/{model_uc_version}). Skipping.")
     except Exception as e:

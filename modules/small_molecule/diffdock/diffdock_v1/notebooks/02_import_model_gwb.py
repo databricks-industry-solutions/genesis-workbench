@@ -161,44 +161,22 @@ uc_version = endpoint_df.iloc[0]["deploy_model_uc_version"]
 print(f"Endpoint: {endpoint_name}")
 print(f"Model: {uc_name}/{uc_version}")
 
-# Load the input_example from the registered model and convert to serving format
+# Load the input_example directly from the model info
 mlflow.set_registry_uri("databricks-uc")
 model_info = mlflow.models.get_model_info(f"models:/{uc_name}/{uc_version}")
-artifact_info = model_info.saved_input_example_info
-if artifact_info:
-    artifact_path = artifact_info.get("artifact_path")
-    artifact_type = artifact_info.get("type")
+input_example = model_info.input_example
 
-    local_path = None
-    try:
-        local_path = mlflow.artifacts.download_artifacts(artifact_uri=f"models:/{uc_name}/{uc_version}/{artifact_path}")
-    except Exception:
-        pass
-    if local_path is None and model_info.run_id:
-        try:
-            local_path = mlflow.artifacts.download_artifacts(run_id=model_info.run_id, artifact_path=f"model/{artifact_path}")
-        except Exception:
-            pass
-    if local_path is None and model_info.run_id:
-        try:
-            local_path = mlflow.artifacts.download_artifacts(run_id=model_info.run_id, artifact_path=artifact_path)
-        except Exception:
-            pass
-    with open(local_path, 'r') as f:
-        raw_example = json.load(f)
-
-    # The serving endpoint expects the payload wrapped in a top-level key.
-    # MLflow input_example artifacts for DataFrames are stored as pandas-split
-    # JSON (with "columns" and "data" keys) but need to be wrapped as
-    # {"dataframe_split": ...} for the /invocations endpoint.
-    if artifact_type == "dataframe" or ("columns" in raw_example and "data" in raw_example):
-        warmup_payload = {"dataframe_split": raw_example}
-    elif isinstance(raw_example, list):
-        warmup_payload = {"inputs": raw_example}
+if input_example is not None:
+    import pandas as pd
+    if isinstance(input_example, pd.DataFrame):
+        warmup_payload = {"dataframe_split": input_example.to_dict(orient="split")}
+    elif isinstance(input_example, list):
+        warmup_payload = {"inputs": input_example}
+    elif isinstance(input_example, dict) and "columns" in input_example and "data" in input_example:
+        warmup_payload = {"dataframe_split": input_example}
     else:
-        warmup_payload = {"inputs": [raw_example]}
-
-    print(f"Loaded warm-up payload (type: {artifact_type}, keys: {list(warmup_payload.keys())})")
+        warmup_payload = {"inputs": [input_example]}
+    print(f"Loaded warm-up payload (keys: {list(warmup_payload.keys())})")
 else:
     print("No input_example found in model. Skipping warm-up.")
     dbutils.notebook.exit("No input_example for warm-up")
