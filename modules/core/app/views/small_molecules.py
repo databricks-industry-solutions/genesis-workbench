@@ -6,8 +6,11 @@ from genesis_workbench.models import (ModelCategory,
                                       get_available_models,
                                       get_deployed_models)
 
+import mlflow
+from genesis_workbench.models import set_mlflow_experiment
 from utils.streamlit_helper import (get_user_info,
                                     display_deploy_model_dialog,
+                                    open_mlflow_experiment_window,
                                     display_import_model_uc_dialog)
 
 from utils.small_molecule_tools import (hit_diffdock,
@@ -95,6 +98,10 @@ with diffdock_tab:
                                        help="Paste PDB content for the target protein")
             num_samples = st.slider("Number of poses:", min_value=1, max_value=20, value=5,
                                     help="Number of docking poses to generate")
+
+            st.markdown("**MLflow Tracking:**")
+            diffdock_mlflow_experiment = st.text_input("MLflow Experiment:", value="gwb_molecular_docking", key="diffdock_mlflow_exp")
+            diffdock_mlflow_run_name = st.text_input("Run Name:", key="diffdock_mlflow_run")
             run_docking = st.form_submit_button("Run Docking", type="primary")
 
     with viewer_col:
@@ -118,6 +125,10 @@ with diffdock_tab:
             else:
                 st.error(f"Pose generation failed: {ligand_sdf}")
 
+            if "diffdock_experiment_id" in st.session_state:
+                st.button("View MLflow Experiment", key="diffdock_mlflow_btn",
+                          on_click=lambda: open_mlflow_experiment_window(st.session_state["diffdock_experiment_id"]))
+
             with st.expander("All docking results"):
                 st.dataframe(
                     results_df[["rank", "confidence"]],
@@ -129,12 +140,20 @@ with diffdock_tab:
         if not protein_pdb.strip() or not ligand_smiles.strip():
             st.error("Both protein PDB and molecule SMILES are required.")
         else:
+            user_info = get_user_info()
+            experiment = set_mlflow_experiment(experiment_tag=diffdock_mlflow_experiment, user_email=user_info.user_email,
+                                               host=None, token=None, shared=True)
+
             with st.spinner("Running DiffDock molecular docking..."):
+              with mlflow.start_run(run_name=diffdock_mlflow_run_name, experiment_id=experiment.experiment_id) as run:
+                mlflow.log_params({"ligand_smiles": ligand_smiles, "num_samples": num_samples})
                 try:
                     results_df = hit_diffdock(protein_pdb, ligand_smiles, num_samples)
                     if len(results_df) > 0:
+                        mlflow.log_dict(results_df[["rank", "confidence"]].to_dict(), "diffdock_results.json")
                         st.session_state["diffdock_results"] = results_df
                         st.session_state["diffdock_protein_pdb"] = protein_pdb
+                        st.session_state["diffdock_experiment_id"] = experiment.experiment_id
                         st.rerun()
                     else:
                         st.error("DiffDock returned no results.")

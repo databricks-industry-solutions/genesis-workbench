@@ -2,6 +2,9 @@
 
 import streamlit as st
 import streamlit.components.v1 as components
+import mlflow
+from genesis_workbench.models import set_mlflow_experiment
+from utils.streamlit_helper import get_user_info, open_mlflow_experiment_window
 from utils.small_molecule_tools import (
     hit_proteina_complexa_ame, hit_esmfold,
     molstar_html_pdb, molstar_html_multi_pdb,
@@ -79,6 +82,10 @@ def render():
                                         help="Run ProteinMPNN to optimize the scaffold sequence while preserving motif geometry")
             validate_esmfold = st.checkbox("Validate with ESMFold", value=True,
                                            help="Fold the designed sequence with ESMFold to verify structural integrity")
+
+            st.markdown("**MLflow Tracking:**")
+            mlflow_experiment = st.text_input("MLflow Experiment:", value="gwb_motif_scaffolding", key="motif_mlflow_exp")
+            mlflow_run_name = st.text_input("Run Name:", key="motif_mlflow_run")
             run_btn = st.form_submit_button("Generate Scaffolds", type="primary")
 
     with viewer_col:
@@ -120,6 +127,10 @@ def render():
             seq = row.get("mpnn_sequence", row["sequence"])
             st.markdown(f"**Sequence:** `{seq}`")
 
+            if "scaffold_experiment_id" in st.session_state:
+                st.button("View MLflow Experiment", key="scaffold_mlflow_btn",
+                          on_click=lambda: open_mlflow_experiment_window(st.session_state["scaffold_experiment_id"]))
+
             with st.expander("All scaffolds"):
                 display_cols = ["sample_id", "sequence", "rewards"]
                 if "mpnn_sequence" in results_df.columns:
@@ -136,66 +147,80 @@ def render():
             st.error("Motif PDB is required.")
             return
 
-        # Calculate total steps for progress bar
+        user_info = get_user_info()
+        experiment = set_mlflow_experiment(experiment_tag=mlflow_experiment, user_email=user_info.user_email,
+                                           host=None, token=None, shared=True)
+
         total_steps = 1 + (1 if optimize_mpnn else 0) + (1 if validate_esmfold else 0)
         step = 0
 
         with status_container:
             progress = st.progress(0, text="Generating scaffolds with Proteina-Complexa-AME...")
-        try:
-            results_df = hit_proteina_complexa_ame(
-                target_pdb=motif_pdb, target_chain=target_chain,
-                binder_length_min=scaffold_len_min, binder_length_max=scaffold_len_max,
-                num_samples=num_samples,
-            )
-        except Exception as e:
-            st.error(f"Motif scaffolding failed: {e}")
-            return
+            spinner = st.empty()
+        with spinner, st.spinner("Running.."):
+          with mlflow.start_run(run_name=mlflow_run_name, experiment_id=experiment.experiment_id) as run:
+            mlflow.log_params({"target_chain": target_chain, "scaffold_len_min": scaffold_len_min,
+                               "scaffold_len_max": scaffold_len_max, "num_samples": num_samples,
+                               "optimize_mpnn": optimize_mpnn, "validate_esmfold": validate_esmfold})
 
-        if len(results_df) == 0:
-            st.error("No scaffolds returned.")
-            return
+            try:
+                results_df = hit_proteina_complexa_ame(
+                    target_pdb=motif_pdb, target_chain=target_chain,
+                    binder_length_min=scaffold_len_min, binder_length_max=scaffold_len_max,
+                    num_samples=num_samples,
+                )
+            except Exception as e:
+                st.error(f"Motif scaffolding failed: {e}")
+                return
 
-        step += 1
-        progress.progress(int(step / total_steps * 100), text="Scaffolds generated")
+            if len(results_df) == 0:
+                st.error("No scaffolds returned.")
+                return
 
-        if optimize_mpnn:
-            mpnn_seqs = []
-            total = len(results_df)
-            for idx, (_, row) in enumerate(results_df.iterrows()):
-                base_pct = int(step / total_steps * 100)
-                next_pct = int((step + 1) / total_steps * 100)
-                pct = base_pct + int((idx + 1) / total * (next_pct - base_pct))
-                progress.progress(pct, text=f"Optimizing sequence {idx+1}/{total} with ProteinMPNN...")
-                try:
-                    seqs = _hit_proteinmpnn(row["pdb_output"])
-                    mpnn_seqs.append(seqs[0] if isinstance(seqs, list) and seqs else row["sequence"])
-                except Exception:
-                    mpnn_seqs.append(row["sequence"])
-            results_df["mpnn_sequence"] = mpnn_seqs
+            mlflow.log_dict(results_df.to_dict(), "proteina_complexa_ame_results.json")
             step += 1
+            progress.progress(int(step / total_steps * 100), text="Scaffolds generated")
 
-        if validate_esmfold:
-            esmfold_pdbs = []
-            validated = []
-            seq_col = "mpnn_sequence" if "mpnn_sequence" in results_df.columns else "sequence"
-            total = len(results_df)
-            for idx, (_, row) in enumerate(results_df.iterrows()):
-                base_pct = int(step / total_steps * 100)
-                next_pct = int((step + 1) / total_steps * 100)
-                pct = base_pct + int((idx + 1) / total * (next_pct - base_pct))
-                progress.progress(pct, text=f"Validating scaffold {idx+1}/{total} with ESMFold...")
-                try:
-                    pdb = hit_esmfold(row[seq_col])
-                    esmfold_pdbs.append(pdb)
-                    validated.append(True)
-                except Exception:
-                    esmfold_pdbs.append(None)
-                    validated.append(False)
-            results_df["esmfold_pdb"] = esmfold_pdbs
-            results_df["esmfold_validated"] = validated
+            if optimize_mpnn:
+                mpnn_seqs = []
+                total = len(results_df)
+                for idx, (_, row) in enumerate(results_df.iterrows()):
+                    base_pct = int(step / total_steps * 100)
+                    next_pct = int((step + 1) / total_steps * 100)
+                    pct = base_pct + int((idx + 1) / total * (next_pct - base_pct))
+                    progress.progress(pct, text=f"Optimizing sequence {idx+1}/{total} with ProteinMPNN...")
+                    try:
+                        seqs = _hit_proteinmpnn(row["pdb_output"])
+                        mpnn_seqs.append(seqs[0] if isinstance(seqs, list) and seqs else row["sequence"])
+                    except Exception:
+                        mpnn_seqs.append(row["sequence"])
+                results_df["mpnn_sequence"] = mpnn_seqs
+                mlflow.log_dict({"mpnn_sequences": mpnn_seqs}, "proteinmpnn_results.json")
+                step += 1
 
-        progress.progress(100, text="Complete")
-        st.session_state["scaffold_results"] = results_df
-        st.session_state["scaffold_motif_pdb"] = motif_pdb
-        st.rerun()
+            if validate_esmfold:
+                esmfold_pdbs = []
+                validated = []
+                seq_col = "mpnn_sequence" if "mpnn_sequence" in results_df.columns else "sequence"
+                total = len(results_df)
+                for idx, (_, row) in enumerate(results_df.iterrows()):
+                    base_pct = int(step / total_steps * 100)
+                    next_pct = int((step + 1) / total_steps * 100)
+                    pct = base_pct + int((idx + 1) / total * (next_pct - base_pct))
+                    progress.progress(pct, text=f"Validating scaffold {idx+1}/{total} with ESMFold...")
+                    try:
+                        pdb = hit_esmfold(row[seq_col])
+                        esmfold_pdbs.append(pdb)
+                        validated.append(True)
+                    except Exception:
+                        esmfold_pdbs.append(None)
+                        validated.append(False)
+                results_df["esmfold_pdb"] = esmfold_pdbs
+                results_df["esmfold_validated"] = validated
+                mlflow.log_dict({"esmfold_validated": validated}, "esmfold_validation.json")
+
+            progress.progress(100, text="Complete")
+            st.session_state["scaffold_results"] = results_df
+            st.session_state["scaffold_motif_pdb"] = motif_pdb
+            st.session_state["scaffold_experiment_id"] = experiment.experiment_id
+            st.rerun()

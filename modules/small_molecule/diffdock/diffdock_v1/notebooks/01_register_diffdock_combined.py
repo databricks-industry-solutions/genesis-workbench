@@ -389,88 +389,30 @@ torch.cuda.empty_cache()
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Define MLflow PyFunc wrappers
+# MAGIC ### Define MLflow PyFunc wrapper
 # MAGIC
-# MAGIC Two separate models for split-endpoint deployment:
-# MAGIC - **ESMEmbeddingsModel**: Computes ESM2 protein embeddings (lightweight, fast startup)
-# MAGIC - **DiffDockScoringModel**: Runs diffusion sampling with pre-computed embeddings (no ESM2 loading)
+# MAGIC The `DiffDockModel` class wraps the full DiffDock pipeline (ESM embeddings,
+# MAGIC score model, confidence model, reverse diffusion) as an MLflow PyFunc.
+# MAGIC
+# MAGIC Uses lazy loading: `load_context()` stores paths only (completes in seconds),
+# MAGIC while models are loaded on the first `predict()` call. This avoids the
+# MAGIC 300-second model-loading timeout on Databricks Model Serving endpoints.
 
 # COMMAND ----------
 
-import base64, pickle
-
-class ESMEmbeddingsModel(mlflow.pyfunc.PythonModel):
-    """Compute ESM2 per-chain embeddings for a protein PDB. Returns base64-encoded tensors."""
-
-    def load_context(self, context):
-        import torch, esm as esm_module
-
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        esm_dir = context.artifacts.get("esm_model_dir")
-        if esm_dir:
-            import os
-            esm_pt = os.path.join(esm_dir, "esm2_t33_650M_UR50D.pt")
-            self.esm_model, self.esm_alphabet = esm_module.pretrained.load_model_and_alphabet_local(esm_pt)
-        else:
-            self.esm_model, self.esm_alphabet = esm_module.pretrained.esm2_t33_650M_UR50D()
-        self.esm_model = self.esm_model.eval().to(self.device)
-        self.esm_batch_converter = self.esm_alphabet.get_batch_converter()
-        print(f"ESM2 loaded on {self.device}")
-
-    def predict(self, context, model_input: pd.DataFrame) -> pd.DataFrame:
-        import os, torch
-        from Bio.PDB import PDBParser
-
-        three_to_one = {
-            "ALA": "A", "CYS": "C", "ASP": "D", "GLU": "E", "PHE": "F",
-            "GLY": "G", "HIS": "H", "ILE": "I", "LYS": "K", "LEU": "L",
-            "MET": "M", "ASN": "N", "PRO": "P", "GLN": "Q", "ARG": "R",
-            "SER": "S", "THR": "T", "VAL": "V", "TRP": "W", "TYR": "Y",
-        }
-        parser = PDBParser(QUIET=True)
-        all_results = []
-
-        for _, row in model_input.iterrows():
-            import tempfile
-            with tempfile.NamedTemporaryFile(suffix=".pdb", mode="w", delete=False) as f:
-                f.write(row["protein_pdb"])
-                tmp_pdb = f.name
-
-            try:
-                structure = parser.get_structure("protein", tmp_pdb)
-                embeddings = {}
-                for model in structure:
-                    for chain in model:
-                        seq = "".join(three_to_one.get(r.get_resname().strip(), "") for r in chain)
-                        if not seq:
-                            continue
-                        label = f"protein.pdb_{chain.id}"
-                        _, _, toks = self.esm_batch_converter([(label, seq)])
-                        toks = toks.to(self.device)
-                        with torch.no_grad():
-                            results = self.esm_model(toks, repr_layers=[33], return_contacts=False)
-                        truncated = results["representations"][33][0, 1:len(seq)+1].clone().cpu()
-                        embeddings[label] = base64.b64encode(pickle.dumps(truncated.numpy())).decode()
-                        del toks, results
-                        torch.cuda.empty_cache()
-
-                all_results.append({"embeddings_b64": json.dumps(embeddings)})
-            finally:
-                os.unlink(tmp_pdb)
-
-        return pd.DataFrame(all_results)
-
-
-class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
-    """DiffDock scoring with pre-computed ESM embeddings. No ESM2 loading needed."""
+class DiffDockModel(mlflow.pyfunc.PythonModel):
+    """MLflow PyFunc wrapper for DiffDock. Pure Python inference, no subprocess."""
 
     def _add_code_paths(self, context):
+        """Ensure DiffDock code directories are on sys.path."""
         import sys, os
+
         repo_dir = context.artifacts.get("repo_dir", "")
         if repo_dir:
             if repo_dir in sys.path:
                 sys.path.remove(repo_dir)
             sys.path.insert(0, repo_dir)
+
         for art_path in context.artifacts.values():
             model_root = os.path.dirname(os.path.dirname(art_path))
             code_dir = os.path.join(model_root, "code")
@@ -481,28 +423,48 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                 break
 
     def load_context(self, context):
+        """Lightweight context setup — stores paths, defers model loading."""
         import sys, os
+
         self._context = context
         self.repo_dir = context.artifacts["repo_dir"]
         self._add_code_paths(context)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._models_loaded = False
-        print(f"DiffDock scoring context stored (lazy loading). Device: {self.device}")
+        print(f"DiffDock context stored (lazy loading). Device: {self.device}")
 
     def _ensure_models_loaded(self):
+        """Load all neural network models on first call."""
         if self._models_loaded:
             return
+
         import os, yaml, torch
+        import esm as esm_module
         from argparse import Namespace
         from functools import partial
 
         self._add_code_paths(self._context)
+
+        # DiffDock's torus.py loads .npy files via relative paths (np.load('.score.npy')).
+        # On serving endpoints the CWD is not the code directory, so we must chdir.
         os.chdir(self.repo_dir)
 
         from utils.diffusion_utils import t_to_sigma as t_to_sigma_compl
         from utils.utils import get_model
 
         context = self._context
+
+        esm_dir = context.artifacts.get("esm_model_dir")
+        if esm_dir:
+            esm_pt = os.path.join(esm_dir, "esm2_t33_650M_UR50D.pt")
+            print(f"Loading ESM2 from artifact: {esm_pt}")
+            self.esm_model, self.esm_alphabet = esm_module.pretrained.load_model_and_alphabet_local(esm_pt)
+        else:
+            print("Downloading ESM2 (no artifact bundled)...")
+            self.esm_model, self.esm_alphabet = esm_module.pretrained.esm2_t33_650M_UR50D()
+        self.esm_model = self.esm_model.eval().to(self.device)
+        self.esm_batch_converter = self.esm_alphabet.get_batch_converter()
+
         score_dir = context.artifacts.get("score_model_dir")
         conf_dir = context.artifacts.get("confidence_model_dir")
 
@@ -513,18 +475,55 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
 
         self.t_to_sigma = partial(t_to_sigma_compl, args=self.score_model_args)
 
-        self.score_model = get_model(self.score_model_args, self.device, t_to_sigma=self.t_to_sigma, no_parallel=True)
+        self.score_model = get_model(
+            self.score_model_args, self.device,
+            t_to_sigma=self.t_to_sigma, no_parallel=True,
+        )
         ckpt = [f for f in os.listdir(score_dir) if f.endswith(".pt")][0]
-        self.score_model.load_state_dict(torch.load(os.path.join(score_dir, ckpt), map_location="cpu"), strict=True)
+        self.score_model.load_state_dict(
+            torch.load(os.path.join(score_dir, ckpt), map_location="cpu"), strict=True,
+        )
         self.score_model = self.score_model.to(self.device).eval()
 
-        self.confidence_model = get_model(self.confidence_args, self.device, t_to_sigma=self.t_to_sigma, no_parallel=True, confidence_mode=True)
+        self.confidence_model = get_model(
+            self.confidence_args, self.device,
+            t_to_sigma=self.t_to_sigma, no_parallel=True, confidence_mode=True,
+        )
         conf_ckpt = [f for f in os.listdir(conf_dir) if f.endswith(".pt")][0]
-        self.confidence_model.load_state_dict(torch.load(os.path.join(conf_dir, conf_ckpt), map_location="cpu"), strict=True)
+        self.confidence_model.load_state_dict(
+            torch.load(os.path.join(conf_dir, conf_ckpt), map_location="cpu"), strict=True,
+        )
         self.confidence_model = self.confidence_model.to(self.device).eval()
 
         self._models_loaded = True
-        print(f"DiffDock score + confidence models loaded on {self.device}")
+        print(f"DiffDock models loaded on {self.device}")
+
+    def _compute_esm_embeddings(self, protein_path, esm_output_dir):
+        import os, torch
+        from Bio.PDB import PDBParser
+
+        three_to_one = {
+            "ALA": "A", "CYS": "C", "ASP": "D", "GLU": "E", "PHE": "F",
+            "GLY": "G", "HIS": "H", "ILE": "I", "LYS": "K", "LEU": "L",
+            "MET": "M", "ASN": "N", "PRO": "P", "GLN": "Q", "ARG": "R",
+            "SER": "S", "THR": "T", "VAL": "V", "TRP": "W", "TYR": "Y",
+        }
+        parser = PDBParser(QUIET=True)
+        structure = parser.get_structure("protein", protein_path)
+        os.makedirs(esm_output_dir, exist_ok=True)
+
+        for model in structure:
+            for chain in model:
+                seq = "".join(three_to_one.get(r.get_resname().strip(), "") for r in chain)
+                if not seq:
+                    continue
+                label = f"{os.path.basename(protein_path)}_{chain.id}"
+                _, _, toks = self.esm_batch_converter([(label, seq)])
+                toks = toks.to(self.device)
+                with torch.no_grad():
+                    results = self.esm_model(toks, repr_layers=[33], return_contacts=False)
+                truncated = results["representations"][33][0, 1:len(seq)+1].clone().cpu()
+                torch.save({'representations': {33: truncated}}, os.path.join(esm_output_dir, f"{label}.pt"))
 
     def predict(self, context, model_input: pd.DataFrame) -> pd.DataFrame:
         import sys, copy, os, tempfile
@@ -549,7 +548,6 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
             pdb_content = row["protein_pdb"]
             smiles = row["ligand_smiles"]
             n_samples = int(row.get("samples_per_complex", 10))
-            embeddings_b64_json = row.get("esm_embeddings_b64", "{}")
 
             try:
                 with tempfile.TemporaryDirectory() as tmpdir:
@@ -557,14 +555,8 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                     with open(pdb_path, "w") as f:
                         f.write(pdb_content)
 
-                    # Decode pre-computed ESM embeddings from base64
                     esm_out = os.path.join(tmpdir, "esm2_output")
-                    os.makedirs(esm_out, exist_ok=True)
-                    embeddings_dict = json.loads(embeddings_b64_json)
-                    for label, b64_data in embeddings_dict.items():
-                        tensor_np = pickle.loads(base64.b64decode(b64_data))
-                        tensor = torch.from_numpy(tensor_np)
-                        torch.save({'representations': {33: tensor}}, os.path.join(esm_out, f"{label}.pt"))
+                    self._compute_esm_embeddings(pdb_path, esm_out)
 
                     dataset = PDBBind(
                         root="", transform=None,
@@ -608,7 +600,10 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                     for orig_complex_graph in loader:
                         try:
                             data_list = [copy.deepcopy(orig_complex_graph) for _ in range(n_samples)]
-                            randomize_position(data_list, self.score_model_args.no_torsion, False, self.score_model_args.tr_sigma_max)
+                            randomize_position(
+                                data_list, self.score_model_args.no_torsion, False,
+                                self.score_model_args.tr_sigma_max,
+                            )
 
                             if confidence_complex_dict is not None:
                                 name = orig_complex_graph.name[0]
@@ -659,24 +654,20 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Register both models in Unity Catalog
+# MAGIC ### Register model in Unity Catalog
 
 # COMMAND ----------
 
 from mlflow.models.signature import ModelSignature
 from mlflow.types.schema import Schema, ColSpec
 
-esm_signature = ModelSignature(
-    inputs=Schema([ColSpec("string", "protein_pdb")]),
-    outputs=Schema([ColSpec("string", "embeddings_b64")]),
-)
+# COMMAND ----------
 
-scoring_signature = ModelSignature(
+signature = ModelSignature(
     inputs=Schema([
         ColSpec("string", "protein_pdb"),
         ColSpec("string", "ligand_smiles"),
         ColSpec("long", "samples_per_complex"),
-        ColSpec("string", "esm_embeddings_b64"),
     ]),
     outputs=Schema([
         ColSpec("long", "rank"),
@@ -694,16 +685,7 @@ torch_base = torch_version.split("+")[0]
 cuda_tag = torch_version.split("+")[1] if "+" in torch_version else "cu118"
 pyg_whl_url = f"https://data.pyg.org/whl/torch-{torch_base}+{cuda_tag}.html"
 
-# ESM endpoint only needs these
-esm_pip_requirements = [
-    f"torch=={torch_base}",
-    "fair-esm==2.0.0",
-    "biopython==1.79",
-    "pandas==1.5.3",
-]
-
-# DiffDock scoring endpoint needs PyG + chemistry libs (no fair-esm)
-scoring_pip_requirements = [
+pip_requirements = [
     f"torch=={torch_base}",
     f"torch-geometric=={get_version('torch-geometric')}",
     f"torch-scatter=={get_version('torch-scatter')}",
@@ -719,12 +701,17 @@ scoring_pip_requirements = [
     "pandas==1.5.3",
     "biopandas==0.4.1",
     "prody==2.6.1",
+    "fair-esm==2.0.0",
 ]
+
+print(f"PyG find-links: {pyg_whl_url}")
+for r in pip_requirements:
+    print(f"  {r}")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Stage code, bundle artifacts, and log models
+# MAGIC ### Stage code, bundle artifacts, and log model
 
 # COMMAND ----------
 
@@ -747,7 +734,6 @@ mlflow.set_registry_uri("databricks-uc")
 
 experiment = set_mlflow_experiment(experiment_tag=experiment_name, user_email=user_email)
 
-# Stage DiffDock code (for scoring model only)
 STAGE_DIR = os.path.join(WORK_DIR, "diffdock_staged")
 if os.path.exists(STAGE_DIR):
     shutil.rmtree(STAGE_DIR)
@@ -778,9 +764,8 @@ for root, dirs, files in os.walk(STAGE_DIR):
         print(f"  Added __init__.py to {os.path.relpath(root, STAGE_DIR)}/")
 
 code_items = [os.path.join(STAGE_DIR, item) for item in os.listdir(STAGE_DIR)]
-print(f"Staged {len(code_items)} items for scoring model")
+print(f"Staged {len(code_items)} items")
 
-# Bundle ESM2 weights
 ESM_SAVE_DIR = os.path.join(WORK_DIR, "esm2_model")
 if os.path.exists(ESM_SAVE_DIR):
     shutil.rmtree(ESM_SAVE_DIR)
@@ -802,7 +787,7 @@ if esm_bundled == 0:
         "Run the ESM embedding cell first to download and cache the model."
     )
 
-# Build a trimmed PDB for input_example
+# Build a trimmed PDB (first 30 residues of chain A) for the input_example.
 with open(pdb_path) as f:
     full_pdb_lines = f.readlines()
 
@@ -824,68 +809,38 @@ for line in full_pdb_lines:
         continue
 trimmed_lines.append("END\n")
 example_pdb = "".join(trimmed_lines)
-print(f"Trimmed input_example PDB: {len(seen_resseq)} residues")
+print(f"Trimmed input_example PDB: {len(seen_resseq)} residues, "
+      f"{len(trimmed_lines)} lines, {len(example_pdb)} chars")
 
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC #### Register Model 1: ESM Embeddings
-
-# COMMAND ----------
-
-esm_model_name = f"{model_name}_esm_embeddings"
-
-with mlflow.start_run(run_name=esm_model_name, experiment_id=experiment.experiment_id):
-    mlflow.log_params({"model": "ESM2 Embeddings for DiffDock", "runtime": "DBR 14.3 LTS ML GPU"})
-
-    esm_model_info = mlflow.pyfunc.log_model(
-        artifact_path="model",
-        python_model=ESMEmbeddingsModel(),
-        artifacts={"esm_model_dir": ESM_SAVE_DIR},
-        pip_requirements=esm_pip_requirements,
-        signature=esm_signature,
-        input_example=pd.DataFrame([{"protein_pdb": example_pdb}]),
-        registered_model_name=f"{catalog}.{schema}.{esm_model_name}",
-    )
-
-print(f"Registered ESM: {catalog}.{schema}.{esm_model_name}")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC #### Register Model 2: DiffDock Scoring
-
-# COMMAND ----------
-
-with mlflow.start_run(run_name=model_name, experiment_id=experiment.experiment_id):
+with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experiment_id):
     mlflow.log_params({
-        "model": "DiffDock Scoring (no ESM)",
+        "model": "DiffDock",
         "version": "v1.0 (commit 0f9c419)",
         "pytorch_version": torch.__version__,
         "pyg_version": get_version("torch-geometric"),
         "runtime": "DBR 14.3 LTS ML GPU",
+        "esm_bundled": True,
     })
 
-    scoring_model_info = mlflow.pyfunc.log_model(
+    model_info = mlflow.pyfunc.log_model(
         artifact_path="model",
-        python_model=DiffDockScoringModel(),
+        python_model=DiffDockModel(),
         artifacts={
             "repo_dir": DIFFDOCK_DIR,
             "score_model_dir": SCORE_MODEL_DIR,
             "confidence_model_dir": CONFIDENCE_MODEL_DIR,
+            "esm_model_dir": ESM_SAVE_DIR,
         },
         code_path=code_items,
-        pip_requirements=[f"--find-links {pyg_whl_url}"] + scoring_pip_requirements,
-        signature=scoring_signature,
+        pip_requirements=[f"--find-links {pyg_whl_url}"] + pip_requirements,
+        signature=signature,
         input_example=pd.DataFrame([{
             "protein_pdb": example_pdb,
             "ligand_smiles": SMILES,
             "samples_per_complex": 5,
-            "esm_embeddings_b64": "{}",
         }]),
         registered_model_name=f"{catalog}.{schema}.{model_name}",
     )
 
-print(f"Registered DiffDock Scoring: {catalog}.{schema}.{model_name}")
-print(f"ESM URI: {esm_model_info.model_uri}")
-print(f"Scoring URI: {scoring_model_info.model_uri}")
+print(f"Registered: {catalog}.{schema}.{model_name}")
+print(f"Model URI: {model_info.model_uri}")

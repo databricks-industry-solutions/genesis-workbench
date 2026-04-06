@@ -33,14 +33,32 @@ MOLSTAR_DARK_CSS = """
 
 
 def _query_endpoint(endpoint_name: str, payload: dict) -> dict:
-    """Send a request to a model serving endpoint using REST API."""
-    host = workspace_client.config.host.rstrip("/")
-    token = workspace_client.config.token
-    url = f"{host}/serving-endpoints/{endpoint_name}/invocations"
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    resp = requests.post(url, headers=headers, json=payload, timeout=600)
-    resp.raise_for_status()
-    return resp.json()
+    """Send a request to a model serving endpoint using the Databricks SDK.
+    Uses the same auth as WorkspaceClient (handles OAuth SP, PAT, etc.)."""
+    from databricks.sdk.service.serving import DataframeSplitInput
+
+    kwargs = {}
+    if "dataframe_split" in payload:
+        ds = payload["dataframe_split"]
+        kwargs["dataframe_split"] = DataframeSplitInput(
+            columns=ds.get("columns"),
+            data=ds.get("data"),
+        )
+    elif "inputs" in payload:
+        kwargs["inputs"] = payload["inputs"]
+    elif "instances" in payload:
+        kwargs["instances"] = payload["instances"]
+    elif "dataframe_records" in payload:
+        kwargs["dataframe_records"] = payload["dataframe_records"]
+    else:
+        kwargs["inputs"] = payload
+
+    response = workspace_client.serving_endpoints.query(name=endpoint_name, **kwargs)
+    # Convert SDK response to dict
+    result = response.as_dict() if hasattr(response, "as_dict") else response
+    if hasattr(response, "predictions"):
+        result = {"predictions": response.predictions}
+    return result
 
 EXAMPLE_PDB = """ATOM      1  N   GLN A   1     -17.226 -15.172  28.982  1.00 38.93           N
 ATOM      2  CA  GLN A   1     -17.260 -14.625  27.604  1.00 32.79           C

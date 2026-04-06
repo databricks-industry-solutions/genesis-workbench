@@ -2,6 +2,9 @@
 
 import streamlit as st
 import streamlit.components.v1 as components
+import mlflow
+from genesis_workbench.models import set_mlflow_experiment
+from utils.streamlit_helper import get_user_info, open_mlflow_experiment_window
 from utils.small_molecule_tools import (
     hit_proteina_complexa, hit_esmfold,
     molstar_html_pdb, molstar_html_multi_pdb,
@@ -39,6 +42,10 @@ def render():
             num_samples = st.slider("Number of designs:", min_value=1, max_value=10, value=2)
             validate_esmfold = st.checkbox("Validate with ESMFold", value=True,
                                            help="Run ESMFold on designed sequences to verify they fold correctly")
+
+            st.markdown("**MLflow Tracking:**")
+            mlflow_experiment = st.text_input("MLflow Experiment:", value="gwb_binder_design", key="binder_mlflow_exp")
+            mlflow_run_name = st.text_input("Run Name:", key="binder_mlflow_run")
             run_btn = st.form_submit_button("Design Binders", type="primary")
 
     with viewer_col:
@@ -79,6 +86,10 @@ def render():
 
             st.markdown(f"**Designed Sequence:** `{row['sequence']}`")
 
+            if "binder_experiment_id" in st.session_state:
+                st.button("View MLflow Experiment", key="binder_mlflow_btn",
+                          on_click=lambda: open_mlflow_experiment_window(st.session_state["binder_experiment_id"]))
+
             with st.expander("All designs"):
                 display_cols = ["sample_id", "sequence", "rewards"]
                 if "esmfold_pdb" in results_df.columns:
@@ -93,43 +104,57 @@ def render():
             st.error("Target protein PDB is required.")
             return
 
+        user_info = get_user_info()
+        experiment = set_mlflow_experiment(experiment_tag=mlflow_experiment, user_email=user_info.user_email,
+                                           host=None, token=None, shared=True)
+
         with status_container:
             progress = st.progress(0, text="Generating binder designs with Proteina-Complexa...")
-        try:
-            results_df = hit_proteina_complexa(
-                target_pdb=target_pdb, target_chain=target_chain,
-                hotspot_residues=hotspot_residues,
-                binder_length_min=binder_len_min, binder_length_max=binder_len_max,
-                num_samples=num_samples,
-            )
-        except Exception as e:
-            st.error(f"Binder design failed: {e}")
-            return
+            spinner = st.empty()
+        with spinner, st.spinner("Running.."):
+          with mlflow.start_run(run_name=mlflow_run_name, experiment_id=experiment.experiment_id) as run:
+            mlflow.log_params({"target_chain": target_chain, "hotspot_residues": hotspot_residues,
+                               "binder_len_min": binder_len_min, "binder_len_max": binder_len_max,
+                               "num_samples": num_samples, "validate_esmfold": validate_esmfold})
 
-        if len(results_df) == 0:
-            st.error("No designs returned.")
-            return
+            try:
+                results_df = hit_proteina_complexa(
+                    target_pdb=target_pdb, target_chain=target_chain,
+                    hotspot_residues=hotspot_residues,
+                    binder_length_min=binder_len_min, binder_length_max=binder_len_max,
+                    num_samples=num_samples,
+                )
+            except Exception as e:
+                st.error(f"Binder design failed: {e}")
+                return
 
-        progress.progress(50, text="Binder designs generated")
+            if len(results_df) == 0:
+                st.error("No designs returned.")
+                return
 
-        if validate_esmfold:
-            esmfold_pdbs = []
-            validated = []
-            total = len(results_df)
-            for idx, (_, row) in enumerate(results_df.iterrows()):
-                pct = 50 + int((idx + 1) / total * 45)
-                progress.progress(pct, text=f"Validating design {idx+1}/{total} with ESMFold...")
-                try:
-                    pdb = hit_esmfold(row["sequence"])
-                    esmfold_pdbs.append(pdb)
-                    validated.append(True)
-                except Exception:
-                    esmfold_pdbs.append(None)
-                    validated.append(False)
-            results_df["esmfold_pdb"] = esmfold_pdbs
-            results_df["esmfold_validated"] = validated
+            mlflow.log_dict(results_df.to_dict(), "proteina_complexa_results.json")
+            progress.progress(50, text="Binder designs generated")
 
-        progress.progress(100, text="Complete")
-        st.session_state["binder_results"] = results_df
-        st.session_state["binder_target_pdb"] = target_pdb
-        st.rerun()
+            if validate_esmfold:
+                esmfold_pdbs = []
+                validated = []
+                total = len(results_df)
+                for idx, (_, row) in enumerate(results_df.iterrows()):
+                    pct = 50 + int((idx + 1) / total * 45)
+                    progress.progress(pct, text=f"Validating design {idx+1}/{total} with ESMFold...")
+                    try:
+                        pdb = hit_esmfold(row["sequence"])
+                        esmfold_pdbs.append(pdb)
+                        validated.append(True)
+                    except Exception:
+                        esmfold_pdbs.append(None)
+                        validated.append(False)
+                results_df["esmfold_pdb"] = esmfold_pdbs
+                results_df["esmfold_validated"] = validated
+                mlflow.log_dict({"esmfold_validated": validated}, "esmfold_validation.json")
+
+            progress.progress(100, text="Complete")
+            st.session_state["binder_results"] = results_df
+            st.session_state["binder_target_pdb"] = target_pdb
+            st.session_state["binder_experiment_id"] = experiment.experiment_id
+            st.rerun()
