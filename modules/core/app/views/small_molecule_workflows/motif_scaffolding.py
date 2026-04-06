@@ -48,13 +48,11 @@ WORKFLOW_DESCRIPTION = (
 
 def _hit_proteinmpnn(pdb_str: str) -> list:
     """Call ProteinMPNN endpoint."""
-    from utils.small_molecule_tools import _get_endpoint_name, workspace_client
-    endpoint_name = _get_endpoint_name("proteinmpnn")
-    response = workspace_client.serving_endpoints.query(
-        name=endpoint_name,
-        inputs=[pdb_str]
-    )
-    return response.predictions
+    from utils.streamlit_helper import get_endpoint_name
+    from utils.small_molecule_tools import _query_endpoint
+    endpoint_name = get_endpoint_name("ProteinMPNN")
+    result = _query_endpoint(endpoint_name, {"inputs": [pdb_str]})
+    return result.get("predictions", result)
 
 
 def render():
@@ -84,6 +82,7 @@ def render():
             run_btn = st.form_submit_button("Generate Scaffolds", type="primary")
 
     with viewer_col:
+        status_container = st.container()
         viewer_placeholder = st.empty()
 
         if "scaffold_results" in st.session_state and st.session_state["scaffold_results"] is not None:
@@ -92,6 +91,7 @@ def render():
             selected_idx = st.selectbox(
                 "Select scaffold:",
                 options=results_df.index,
+                key="motif_scaffold_selector",
                 format_func=lambda i: f"Scaffold {results_df.loc[i, 'sample_id']} — "
                                       f"Reward: {results_df.loc[i, 'rewards']:.4f}" if results_df.loc[i, 'rewards'] else
                                       f"Scaffold {results_df.loc[i, 'sample_id']}"
@@ -136,48 +136,66 @@ def render():
             st.error("Motif PDB is required.")
             return
 
-        with st.spinner("Running Proteina-Complexa-AME scaffolding..."):
-            try:
-                results_df = hit_proteina_complexa_ame(
-                    target_pdb=motif_pdb, target_chain=target_chain,
-                    binder_length_min=scaffold_len_min, binder_length_max=scaffold_len_max,
-                    num_samples=num_samples,
-                )
-            except Exception as e:
-                st.error(f"Motif scaffolding failed: {e}")
-                return
+        # Calculate total steps for progress bar
+        total_steps = 1 + (1 if optimize_mpnn else 0) + (1 if validate_esmfold else 0)
+        step = 0
+
+        with status_container:
+            progress = st.progress(0, text="Generating scaffolds with Proteina-Complexa-AME...")
+        try:
+            results_df = hit_proteina_complexa_ame(
+                target_pdb=motif_pdb, target_chain=target_chain,
+                binder_length_min=scaffold_len_min, binder_length_max=scaffold_len_max,
+                num_samples=num_samples,
+            )
+        except Exception as e:
+            st.error(f"Motif scaffolding failed: {e}")
+            return
 
         if len(results_df) == 0:
             st.error("No scaffolds returned.")
             return
 
+        step += 1
+        progress.progress(int(step / total_steps * 100), text="Scaffolds generated")
+
         if optimize_mpnn:
-            with st.spinner("Optimizing sequences with ProteinMPNN..."):
-                mpnn_seqs = []
-                for _, row in results_df.iterrows():
-                    try:
-                        seqs = _hit_proteinmpnn(row["pdb_output"])
-                        mpnn_seqs.append(seqs[0] if isinstance(seqs, list) and seqs else row["sequence"])
-                    except Exception:
-                        mpnn_seqs.append(row["sequence"])
-                results_df["mpnn_sequence"] = mpnn_seqs
+            mpnn_seqs = []
+            total = len(results_df)
+            for idx, (_, row) in enumerate(results_df.iterrows()):
+                base_pct = int(step / total_steps * 100)
+                next_pct = int((step + 1) / total_steps * 100)
+                pct = base_pct + int((idx + 1) / total * (next_pct - base_pct))
+                progress.progress(pct, text=f"Optimizing sequence {idx+1}/{total} with ProteinMPNN...")
+                try:
+                    seqs = _hit_proteinmpnn(row["pdb_output"])
+                    mpnn_seqs.append(seqs[0] if isinstance(seqs, list) and seqs else row["sequence"])
+                except Exception:
+                    mpnn_seqs.append(row["sequence"])
+            results_df["mpnn_sequence"] = mpnn_seqs
+            step += 1
 
         if validate_esmfold:
-            with st.spinner("Validating with ESMFold..."):
-                esmfold_pdbs = []
-                validated = []
-                seq_col = "mpnn_sequence" if "mpnn_sequence" in results_df.columns else "sequence"
-                for _, row in results_df.iterrows():
-                    try:
-                        pdb = hit_esmfold(row[seq_col])
-                        esmfold_pdbs.append(pdb)
-                        validated.append(True)
-                    except Exception:
-                        esmfold_pdbs.append(None)
-                        validated.append(False)
-                results_df["esmfold_pdb"] = esmfold_pdbs
-                results_df["esmfold_validated"] = validated
+            esmfold_pdbs = []
+            validated = []
+            seq_col = "mpnn_sequence" if "mpnn_sequence" in results_df.columns else "sequence"
+            total = len(results_df)
+            for idx, (_, row) in enumerate(results_df.iterrows()):
+                base_pct = int(step / total_steps * 100)
+                next_pct = int((step + 1) / total_steps * 100)
+                pct = base_pct + int((idx + 1) / total * (next_pct - base_pct))
+                progress.progress(pct, text=f"Validating scaffold {idx+1}/{total} with ESMFold...")
+                try:
+                    pdb = hit_esmfold(row[seq_col])
+                    esmfold_pdbs.append(pdb)
+                    validated.append(True)
+                except Exception:
+                    esmfold_pdbs.append(None)
+                    validated.append(False)
+            results_df["esmfold_pdb"] = esmfold_pdbs
+            results_df["esmfold_validated"] = validated
 
+        progress.progress(100, text="Complete")
         st.session_state["scaffold_results"] = results_df
         st.session_state["scaffold_motif_pdb"] = motif_pdb
         st.rerun()

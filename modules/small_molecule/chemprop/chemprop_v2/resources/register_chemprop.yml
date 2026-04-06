@@ -7,57 +7,54 @@ resources:
         on_failure:
           - ${var.current_user}
 
+      job_clusters:
+        - job_cluster_key: chemprop_gpu_cluster
+          new_cluster:
+            num_workers: 0
+            node_type_id: ${var.a10_node_type}
+            driver_node_type_id: ${var.a10_node_type}
+            spark_version: '15.4.x-gpu-ml-scala2.12'
+            aws_attributes:
+              availability: ON_DEMAND
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+
       tasks:
         - task_key: pretrained_bbbp_inference
-          environment_key: chemprop_env
+          job_cluster_key: chemprop_gpu_cluster
           notebook_task:
             notebook_path: ../notebooks/01_chemprop_pretrained_inference.py
+            base_parameters:
+              model_name: chemprop_bbbp
+              cache_dir: chemprop_bbbp_cache
 
         - task_key: toxicity_classifier
-          environment_key: chemprop_env
+          job_cluster_key: chemprop_gpu_cluster
           notebook_task:
             notebook_path: ../notebooks/02_chemprop_toxicity_classifier.py
+            base_parameters:
+              model_name: chemprop_clintox
+              cache_dir: chemprop_clintox_cache
 
         - task_key: multitask_admet_regressor
-          environment_key: chemprop_admet_env
+          job_cluster_key: chemprop_gpu_cluster
           notebook_task:
             notebook_path: ../notebooks/03_chemprop_multitask_admet.py
-
-      environments:
-        - environment_key: chemprop_env
-          spec:
-            client: "4"
-            dependencies:
-              - chemprop>=2.0.0
-              - rdkit
-              - torch>=2.0
-              - lightning
-              - mlflow>=2.15
-              - databricks-sdk>=0.50.0
-              - databricks-sql-connector>=4.0.2
-
-        - environment_key: chemprop_admet_env
-          spec:
-            client: "4"
-            dependencies:
-              - chemprop>=2.0.0
-              - rdkit
-              - torch>=2.0
-              - lightning
-              - mlflow>=2.15
-              - databricks-sdk>=0.50.0
-              - databricks-sql-connector>=4.0.2
-              - PyTDC
+            base_parameters:
+              model_name: chemprop_admet
+              cache_dir: chemprop_admet_cache
 
       parameters:
         - name: catalog
           default: ${var.core_catalog_name}
         - name: schema
           default: ${var.core_schema_name}
-        - name: model_name
-          default: chemprop
-        - name: cache_dir
-          default: ${resources.volumes.chemprop_cache_dir.name}
         - name: experiment_name
           default: ${var.module_registration_experiment_name}
         - name: sql_warehouse_id

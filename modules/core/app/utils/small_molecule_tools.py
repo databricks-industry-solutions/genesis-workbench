@@ -11,6 +11,26 @@ logger = logging.getLogger(__name__)
 
 workspace_client = WorkspaceClient()
 
+MOLSTAR_DARK_CSS = """
+<style>
+    body { background: #1e1e1e; margin: 0; }
+    .msp-plugin { background: #1e1e1e !important; }
+    .msp-plugin .msp-layout-static { background: #1e1e1e !important; }
+    .msp-plugin .msp-scrollable-container { background: #252526 !important; }
+    .msp-plugin .msp-btn { background: #333 !important; color: #ccc !important; }
+    .msp-plugin .msp-form-control { background: #333 !important; color: #ccc !important; border-color: #555 !important; }
+    .msp-plugin .msp-control-group-header { background: #2d2d2d !important; color: #ccc !important; }
+    .msp-plugin .msp-section-header { color: #ccc !important; }
+    .msp-plugin .msp-icon { color: #aaa !important; }
+    .msp-plugin .msp-semi-transparent-background { background: rgba(30,30,30,0.8) !important; }
+    .msp-plugin .msp-log-entry { color: #ccc !important; }
+    .msp-plugin .msp-tree-row { color: #ccc !important; }
+    .msp-plugin .msp-control-row { color: #ccc !important; }
+    .msp-plugin .msp-accent-offset { background: #333 !important; }
+    .msp-plugin .msp-representation-entry { background: #2d2d2d !important; }
+</style>
+"""
+
 
 def _query_endpoint(endpoint_name: str, payload: dict) -> dict:
     """Send a request to a model serving endpoint using REST API."""
@@ -55,12 +75,7 @@ EXAMPLE_SMILES = "COc(cc1)ccc1C#N"
 
 def hit_diffdock(protein_pdb: str, ligand_smiles: str, samples_per_complex: int = 10) -> pd.DataFrame:
     """Call DiffDock model serving endpoint and return ranked docking poses."""
-    dev_user_prefix = os.environ.get("DEV_USER_PREFIX", None)
-    if dev_user_prefix and dev_user_prefix.lower() in ("none", ""):
-        dev_user_prefix = None
-
-    endpoint_name = f"gwb_{dev_user_prefix}_diffdock_v1_endpoint" if dev_user_prefix else "gwb_diffdock_v1_endpoint"
-
+    endpoint_name = get_endpoint_name("DiffDock")
     logger.info(f"Sending DiffDock request to endpoint: {endpoint_name}")
     result = _query_endpoint(endpoint_name, {
         "dataframe_split": {
@@ -83,12 +98,13 @@ def molstar_html_protein_and_sdf(protein_pdb: str, ligand_sdf: str) -> str:
         <head>
             <script src="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.js"></script>
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.css">
+            """ + MOLSTAR_DARK_CSS + """
         </head>
         <body>
             <div id="viewer" style="width: 100%; height: 500px;"></div>
             <script>
                 (async function() {{
-                    const viewer = new rcsbMolstar.Viewer("viewer");
+                    const viewer = new rcsbMolstar.Viewer("viewer", {{layoutShowLog: false, backgroundColor: 0x1e1e1e}});
 
                     const pdbData = "{pdb_b64}";
                     const pdbBlob = new Blob([atob(pdbData)], {{ type: "text/plain" }});
@@ -107,18 +123,14 @@ def molstar_html_protein_and_sdf(protein_pdb: str, ligand_sdf: str) -> str:
     return f"""<iframe style="width: 100%; height: 520px; border: none;" srcdoc='{html_str}'></iframe>"""
 
 
-def _get_endpoint_name(model_name: str) -> str:
-    dev_user_prefix = os.environ.get("DEV_USER_PREFIX", None)
-    if dev_user_prefix and dev_user_prefix.lower() in ("none", ""):
-        dev_user_prefix = None
-    return f"gwb_{dev_user_prefix}_{model_name}_endpoint" if dev_user_prefix else f"gwb_{model_name}_endpoint"
+from utils.streamlit_helper import get_endpoint_name
 
 
 def hit_proteina_complexa(target_pdb: str, target_chain: str = "A",
                           hotspot_residues: str = "", binder_length_min: int = 50,
                           binder_length_max: int = 80, num_samples: int = 2) -> pd.DataFrame:
     """Call Proteina-Complexa binder design endpoint."""
-    endpoint_name = _get_endpoint_name("proteina_complexa")
+    endpoint_name = get_endpoint_name("Proteina-Complexa Binder")
     logger.info(f"Sending Proteina-Complexa request to: {endpoint_name}")
     result = _query_endpoint(endpoint_name, {
         "dataframe_split": {
@@ -134,7 +146,7 @@ def hit_proteina_complexa(target_pdb: str, target_chain: str = "A",
 def hit_proteina_complexa_ligand(target_pdb: str, binder_length_min: int = 50,
                                   binder_length_max: int = 80, num_samples: int = 2) -> pd.DataFrame:
     """Call Proteina-Complexa ligand binder design endpoint."""
-    endpoint_name = _get_endpoint_name("proteina_complexa_ligand")
+    endpoint_name = get_endpoint_name("Proteina-Complexa Ligand")
     logger.info(f"Sending Proteina-Complexa-Ligand request to: {endpoint_name}")
     result = _query_endpoint(endpoint_name, {
         "dataframe_split": {
@@ -151,7 +163,7 @@ def hit_proteina_complexa_ame(target_pdb: str, target_chain: str = "B",
                                binder_length_min: int = 50, binder_length_max: int = 80,
                                num_samples: int = 2) -> pd.DataFrame:
     """Call Proteina-Complexa AME motif scaffolding endpoint."""
-    endpoint_name = _get_endpoint_name("proteina_complexa_ame")
+    endpoint_name = get_endpoint_name("Proteina-Complexa AME")
     logger.info(f"Sending Proteina-Complexa-AME request to: {endpoint_name}")
     result = _query_endpoint(endpoint_name, {
         "dataframe_split": {
@@ -166,7 +178,7 @@ def hit_proteina_complexa_ame(target_pdb: str, target_chain: str = "B",
 
 def hit_esmfold(sequence: str) -> str:
     """Call ESMFold endpoint to predict protein structure from sequence."""
-    endpoint_name = _get_endpoint_name("esmfold")
+    endpoint_name = get_endpoint_name("ESMFold")
     logger.info(f"Sending ESMFold request to: {endpoint_name}")
     result = _query_endpoint(endpoint_name, {"inputs": [sequence]})
     return result.get("predictions", result)[0]
@@ -181,12 +193,13 @@ def molstar_html_pdb(pdb: str) -> str:
         <head>
             <script src="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.js"></script>
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.css">
+            """ + MOLSTAR_DARK_CSS + """
         </head>
         <body>
             <div id="viewer" style="width: 100%; height: 500px;"></div>
             <script>
                 (async function() {{
-                    const viewer = new rcsbMolstar.Viewer("viewer");
+                    const viewer = new rcsbMolstar.Viewer("viewer", {{layoutShowLog: false, backgroundColor: 0x1e1e1e}});
                     const pdbData = "{pdb_b64}";
                     const blob = new Blob([atob(pdbData)], {{ type: "text/plain" }});
                     const url = URL.createObjectURL(blob);
@@ -206,12 +219,13 @@ def molstar_html_multi_pdb(pdbs: list) -> str:
         <head>
             <script src="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.js"></script>
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.css">
+            """ + MOLSTAR_DARK_CSS + """
         </head>
         <body>
             <div id="viewer" style="width: 100%; height: 500px;"></div>
             <script>
                 (async function() {
-                    const viewer = new rcsbMolstar.Viewer("viewer");"""
+                    const viewer = new rcsbMolstar.Viewer("viewer", {layoutShowLog: false, backgroundColor: 0x1e1e1e});"""
     for i, pdb in enumerate(pdbs):
         pdb_b64 = base64.b64encode(pdb.encode()).decode()
         html_str += f"""

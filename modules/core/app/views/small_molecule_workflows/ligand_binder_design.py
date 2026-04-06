@@ -54,6 +54,7 @@ def render():
             run_btn = st.form_submit_button("Design Ligand Binders", type="primary")
 
     with viewer_col:
+        status_container = st.container()
         viewer_placeholder = st.empty()
 
         if "ligand_binder_results" in st.session_state and st.session_state["ligand_binder_results"] is not None:
@@ -62,6 +63,7 @@ def render():
             selected_idx = st.selectbox(
                 "Select design:",
                 options=results_df.index,
+                key="ligand_binder_design_selector",
                 format_func=lambda i: f"Design {results_df.loc[i, 'sample_id']} — "
                                       f"Reward: {results_df.loc[i, 'rewards']:.4f}" if results_df.loc[i, 'rewards'] else
                                       f"Design {results_df.loc[i, 'sample_id']}"
@@ -97,36 +99,42 @@ def render():
             st.error("Ligand PDB (HETATM records) is required.")
             return
 
-        with st.spinner("Running Proteina-Complexa-Ligand design..."):
-            try:
-                results_df = hit_proteina_complexa_ligand(
-                    target_pdb=ligand_pdb,
-                    binder_length_min=binder_len_min, binder_length_max=binder_len_max,
-                    num_samples=num_samples,
-                )
-            except Exception as e:
-                st.error(f"Ligand binder design failed: {e}")
-                return
+        with status_container:
+            progress = st.progress(0, text="Designing ligand binders with Proteina-Complexa-Ligand...")
+        try:
+            results_df = hit_proteina_complexa_ligand(
+                target_pdb=ligand_pdb,
+                binder_length_min=binder_len_min, binder_length_max=binder_len_max,
+                num_samples=num_samples,
+            )
+        except Exception as e:
+            st.error(f"Ligand binder design failed: {e}")
+            return
 
         if len(results_df) == 0:
             st.error("No designs returned.")
             return
 
-        if validate_diffdock and ligand_smiles.strip():
-            with st.spinner("Validating designs with DiffDock..."):
-                dock_sdfs = []
-                dock_scores = []
-                for _, row in results_df.iterrows():
-                    try:
-                        dock_df = hit_diffdock(row["pdb_output"], ligand_smiles, samples_per_complex=5)
-                        best = dock_df.sort_values("confidence", ascending=False).iloc[0]
-                        dock_sdfs.append(best["ligand_sdf"])
-                        dock_scores.append(best["confidence"])
-                    except Exception:
-                        dock_sdfs.append(None)
-                        dock_scores.append(None)
-                results_df["best_dock_sdf"] = dock_sdfs
-                results_df["dock_confidence"] = dock_scores
+        progress.progress(50, text="Ligand binder designs generated")
 
+        if validate_diffdock and ligand_smiles.strip():
+            dock_sdfs = []
+            dock_scores = []
+            total = len(results_df)
+            for idx, (_, row) in enumerate(results_df.iterrows()):
+                pct = 50 + int((idx + 1) / total * 45)
+                progress.progress(pct, text=f"Validating design {idx+1}/{total} with DiffDock docking...")
+                try:
+                    dock_df = hit_diffdock(row["pdb_output"], ligand_smiles, samples_per_complex=5)
+                    best = dock_df.sort_values("confidence", ascending=False).iloc[0]
+                    dock_sdfs.append(best["ligand_sdf"])
+                    dock_scores.append(best["confidence"])
+                except Exception:
+                    dock_sdfs.append(None)
+                    dock_scores.append(None)
+            results_df["best_dock_sdf"] = dock_sdfs
+            results_df["dock_confidence"] = dock_scores
+
+        progress.progress(100, text="Complete")
         st.session_state["ligand_binder_results"] = results_df
         st.rerun()

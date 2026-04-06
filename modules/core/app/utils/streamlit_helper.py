@@ -13,6 +13,32 @@ from genesis_workbench.models import (ModelCategory,
 
 from databricks.sdk import WorkspaceClient
 from streamlit.components.v1 import html
+from genesis_workbench.workbench import execute_select_query
+
+_endpoint_cache = {}
+
+def get_endpoint_name(model_name: str) -> str:
+    """Look up the serving endpoint name from model_deployments table by model name."""
+    if model_name in _endpoint_cache:
+        return _endpoint_cache[model_name]
+
+    core_catalog = os.environ["CORE_CATALOG_NAME"]
+    core_schema = os.environ["CORE_SCHEMA_NAME"]
+
+    query = f"""
+        SELECT model_endpoint_name
+        FROM {core_catalog}.{core_schema}.model_deployments md
+        JOIN {core_catalog}.{core_schema}.models m ON md.model_id = m.model_id
+        WHERE m.model_name = '{model_name}' AND md.is_active = true
+        ORDER BY md.deployment_id DESC LIMIT 1
+    """
+    result_df = execute_select_query(query)
+    if len(result_df) == 0:
+        raise RuntimeError(f"No active deployment found for model '{model_name}'")
+
+    endpoint_name = result_df.iloc[0]["model_endpoint_name"]
+    _endpoint_cache[model_name] = endpoint_name
+    return endpoint_name
 
 
 def get_user_info():

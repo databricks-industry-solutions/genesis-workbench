@@ -55,7 +55,7 @@ from genesis_workbench.workbench import wait_for_job_run_completion
 
 # COMMAND ----------
 
-model_name = "diffdock_v1"
+model_name = "diffdock"
 model_uc_name = f"{catalog}.{schema}.{model_name}"
 model_version = get_latest_model_version(model_uc_name)
 
@@ -130,9 +130,11 @@ artifact_info = model_info.saved_input_example_info
 if artifact_info:
     artifact_path = artifact_info.get("artifact_path")
     artifact_type = artifact_info.get("type")
-    local_path = mlflow.artifacts.download_artifacts(
-        artifact_uri=f"{model_info.model_uri}/{artifact_path}"
-    )
+    if artifact_path.startswith("dbfs:") or artifact_path.startswith("/") or artifact_path.startswith("s3:"):
+        download_uri = artifact_path
+    else:
+        download_uri = f"{model_info.model_uri}/{artifact_path}"
+    local_path = mlflow.artifacts.download_artifacts(artifact_uri=download_uri)
     with open(local_path, 'r') as f:
         raw_example = json.load(f)
 

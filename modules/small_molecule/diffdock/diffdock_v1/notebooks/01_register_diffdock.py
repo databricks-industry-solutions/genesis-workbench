@@ -547,7 +547,7 @@ class DiffDockModel(mlflow.pyfunc.PythonModel):
         for _, row in model_input.iterrows():
             pdb_content = row["protein_pdb"]
             smiles = row["ligand_smiles"]
-            n_samples = int(row.get("samples_per_complex", 40))
+            n_samples = int(row.get("samples_per_complex", 10))
 
             try:
                 with tempfile.TemporaryDirectory() as tmpdir:
@@ -595,7 +595,7 @@ class DiffDockModel(mlflow.pyfunc.PythonModel):
                         confidence_complex_dict = {d.name: d for d in conf_dataset}
 
                     loader = PyGDataLoader(dataset=dataset, batch_size=1, shuffle=False)
-                    tr_schedule = get_t_schedule(inference_steps=20)
+                    tr_schedule = get_t_schedule(inference_steps=10)
 
                     for orig_complex_graph in loader:
                         try:
@@ -612,7 +612,7 @@ class DiffDockModel(mlflow.pyfunc.PythonModel):
                                 conf_data = None
 
                             data_list, confidence = sampling(
-                                data_list=data_list, model=self.score_model, inference_steps=19,
+                                data_list=data_list, model=self.score_model, inference_steps=9,
                                 tr_schedule=tr_schedule, rot_schedule=tr_schedule, tor_schedule=tr_schedule,
                                 device=self.device, t_to_sigma=self.t_to_sigma, model_args=self.score_model_args,
                                 confidence_model=self.confidence_model, confidence_data_list=conf_data,

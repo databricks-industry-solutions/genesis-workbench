@@ -32,7 +32,7 @@ resources:
         - name: schema
           default: ${var.core_schema_name}
         - name: model_name
-          default: diffdock_v1
+          default: diffdock
         - name: cache_dir
           default: ${resources.volumes.diffdock_cache_dir.name}
         - name: experiment_name

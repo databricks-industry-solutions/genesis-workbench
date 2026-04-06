@@ -30,7 +30,7 @@ schema = dbutils.widgets.get("schema")
 # COMMAND ----------
 
 # MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.2
-# MAGIC %pip install chemprop>=2.0.0 rdkit torch>=2.0 lightning
+# MAGIC %pip install chemprop==2.0.5 rdkit torch>=2.0 lightning scikit-learn>=1.4
 
 # COMMAND ----------
 

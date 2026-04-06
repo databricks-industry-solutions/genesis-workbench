@@ -42,6 +42,7 @@ def render():
             run_btn = st.form_submit_button("Design Binders", type="primary")
 
     with viewer_col:
+        status_container = st.container()
         viewer_placeholder = st.empty()
 
         if "binder_results" in st.session_state and st.session_state["binder_results"] is not None:
@@ -50,6 +51,7 @@ def render():
             selected_idx = st.selectbox(
                 "Select design:",
                 options=results_df.index,
+                key="binder_design_selector",
                 format_func=lambda i: f"Design {results_df.loc[i, 'sample_id']} — "
                                       f"Reward: {results_df.loc[i, 'rewards']:.4f}" if results_df.loc[i, 'rewards'] else
                                       f"Design {results_df.loc[i, 'sample_id']}"
@@ -91,37 +93,43 @@ def render():
             st.error("Target protein PDB is required.")
             return
 
-        with st.spinner("Running Proteina-Complexa binder design..."):
-            try:
-                results_df = hit_proteina_complexa(
-                    target_pdb=target_pdb, target_chain=target_chain,
-                    hotspot_residues=hotspot_residues,
-                    binder_length_min=binder_len_min, binder_length_max=binder_len_max,
-                    num_samples=num_samples,
-                )
-            except Exception as e:
-                st.error(f"Binder design failed: {e}")
-                return
+        with status_container:
+            progress = st.progress(0, text="Generating binder designs with Proteina-Complexa...")
+        try:
+            results_df = hit_proteina_complexa(
+                target_pdb=target_pdb, target_chain=target_chain,
+                hotspot_residues=hotspot_residues,
+                binder_length_min=binder_len_min, binder_length_max=binder_len_max,
+                num_samples=num_samples,
+            )
+        except Exception as e:
+            st.error(f"Binder design failed: {e}")
+            return
 
         if len(results_df) == 0:
             st.error("No designs returned.")
             return
 
-        if validate_esmfold:
-            with st.spinner("Validating designs with ESMFold..."):
-                esmfold_pdbs = []
-                validated = []
-                for _, row in results_df.iterrows():
-                    try:
-                        pdb = hit_esmfold(row["sequence"])
-                        esmfold_pdbs.append(pdb)
-                        validated.append(True)
-                    except Exception:
-                        esmfold_pdbs.append(None)
-                        validated.append(False)
-                results_df["esmfold_pdb"] = esmfold_pdbs
-                results_df["esmfold_validated"] = validated
+        progress.progress(50, text="Binder designs generated")
 
+        if validate_esmfold:
+            esmfold_pdbs = []
+            validated = []
+            total = len(results_df)
+            for idx, (_, row) in enumerate(results_df.iterrows()):
+                pct = 50 + int((idx + 1) / total * 45)
+                progress.progress(pct, text=f"Validating design {idx+1}/{total} with ESMFold...")
+                try:
+                    pdb = hit_esmfold(row["sequence"])
+                    esmfold_pdbs.append(pdb)
+                    validated.append(True)
+                except Exception:
+                    esmfold_pdbs.append(None)
+                    validated.append(False)
+            results_df["esmfold_pdb"] = esmfold_pdbs
+            results_df["esmfold_validated"] = validated
+
+        progress.progress(100, text="Complete")
         st.session_state["binder_results"] = results_df
         st.session_state["binder_target_pdb"] = target_pdb
         st.rerun()

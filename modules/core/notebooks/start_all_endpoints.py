@@ -153,9 +153,14 @@ for _, row in endpoints_df.iterrows():
             artifact_path = model_info.saved_input_example_info.get("artifact_path")
             input_example_type = model_info.saved_input_example_info.get("type")
 
-            local_path = mlflow.artifacts.download_artifacts(
-                artifact_uri=f"{model_info.model_uri}/{artifact_path}"
-            )
+            # artifact_path may be a relative name (e.g., "input_example.json")
+            # or a full URI (e.g., "dbfs:/..."). Handle both.
+            if artifact_path.startswith("dbfs:") or artifact_path.startswith("/") or artifact_path.startswith("s3:"):
+                download_uri = artifact_path
+            else:
+                download_uri = f"{model_info.model_uri}/{artifact_path}"
+
+            local_path = mlflow.artifacts.download_artifacts(artifact_uri=download_uri)
             with open(local_path, 'r') as f:
                 raw_example = json.load(f)
 

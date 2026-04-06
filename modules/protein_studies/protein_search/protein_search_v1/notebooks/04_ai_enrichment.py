@@ -67,8 +67,8 @@ orginfo_sDF = spark.sql(f"""
                         'for this scientific organism name: ', OrganismName,
                         '. Respond with JSON only: {{"simple_term": "...", "meaning": "..."}}'
                     ),
-                    responseFormat => 'STRING'
-                ),
+                    responseFormat => 'STRUCT<response: STRING>'
+                ).response,
                 'simple_term STRING, meaning STRING'
             ) AS parsed
         FROM {catalog}.{schema}.tinysample_organism_info
@@ -159,8 +159,8 @@ df_enriched = (
                 ai_query(
                     '{foundation_model_endpoint}',
                     concat('{SYSTEM_PROMPT} Protein: \"', replace(ProteinName, '"', ''), '\"{RESEARCH_JSON_INSTRUCTION}'),
-                    responseFormat => 'STRING'
-                )
+                    responseFormat => 'STRUCT<response: STRING>'
+                ).response
             """),
             "information STRING, recent_research STRING, under_researched_areas STRING",
         ),

@@ -93,7 +93,7 @@ with diffdock_tab:
                                           help="SMILES string for the small molecule ligand")
             protein_pdb = st.text_area("Target Protein (PDB):", value=EXAMPLE_PDB, height=300,
                                        help="Paste PDB content for the target protein")
-            num_samples = st.slider("Number of poses:", min_value=1, max_value=40, value=10,
+            num_samples = st.slider("Number of poses:", min_value=1, max_value=20, value=5,
                                     help="Number of docking poses to generate")
             run_docking = st.form_submit_button("Run Docking", type="primary")
 
