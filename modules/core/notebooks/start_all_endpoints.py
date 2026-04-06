@@ -62,8 +62,10 @@ def start_endpoint(databricks_instance, endpoint_name, token):
     response = requests.post(url, headers=headers)
     if response.status_code == 200:
         print(f"Successfully started endpoint: {endpoint_name}")
+    elif response.status_code == 400 and "already" in response.text.lower():
+        print(f"Endpoint {endpoint_name} is already running.")
     else:
-        print(f"Failed to start endpoint: {endpoint_name}, Status Code: {response.status_code}, Response: {response.text}")
+        print(f"Failed to start endpoint: {endpoint_name}, Status Code: {response.status_code}, Response: {response.text[:200]}")
 
 def check_endpoint_status(databricks_instance, endpoint_name, token):
     url = f"https://{databricks_instance}/api/2.0/serving-endpoints/{endpoint_name}"
