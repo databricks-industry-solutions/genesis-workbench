@@ -42,7 +42,7 @@ resources:
         - name: user_email
           default: ${var.current_user}
         - name: workload_type
-          default: ${var.gpu_small_setting}
+          default: ${var.gpu_medium_setting}
           
       job_clusters:
         - job_cluster_key: diffdock_gpu_cluster

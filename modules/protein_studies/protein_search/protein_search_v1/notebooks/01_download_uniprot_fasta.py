@@ -5,7 +5,7 @@
 # MAGIC Downloads the Swiss-Prot FASTA file from [UniProt](https://www.uniprot.org/help/downloads)
 # MAGIC and saves it to a Unity Catalog Volume.
 # MAGIC
-# MAGIC Source: https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz
+# MAGIC Source: https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz
 
 # COMMAND ----------
 
@@ -31,7 +31,7 @@ volume_name = dbutils.widgets.get("volume_name")
 import requests
 import gzip
 
-url = "https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz"
+url = "https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz"
 output_path = f"/Volumes/{catalog}/{schema}/{volume_name}/uniprot_sprot.fasta"
 
 response = requests.get(url, stream=True)

@@ -167,7 +167,7 @@ else:
 invoke_url = f"https://{db_host}/serving-endpoints/{endpoint_name}/invocations"
 max_attempts = 5
 request_timeout = 600  # 10 minutes per attempt
-delay_between_attempts = 180  # 3 minutes
+delay_between_attempts = 300  # 5 minutes
 
 warmup_success = False
 for attempt in range(1, max_attempts + 1):
