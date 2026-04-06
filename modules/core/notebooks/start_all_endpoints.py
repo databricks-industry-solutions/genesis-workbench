@@ -149,19 +149,36 @@ for _, row in endpoints_df.iterrows():
         model_info = mlflow.models.get_model_info(model_uri)
 
         if model_info.saved_input_example_info:
-            # Load the actual input example artifact using run_id (most reliable)
             artifact_path = model_info.saved_input_example_info.get("artifact_path")
             input_example_type = model_info.saved_input_example_info.get("type")
-            run_id = model_info.run_id
 
-            # Use run_id-based download to avoid malformed model_uri paths
-            if run_id:
-                artifact_sub_path = f"{model_info.artifact_path}/{artifact_path}" if model_info.artifact_path else artifact_path
-                local_path = mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path=artifact_sub_path)
-            elif artifact_path.startswith("dbfs:") or artifact_path.startswith("/") or artifact_path.startswith("s3:"):
-                local_path = mlflow.artifacts.download_artifacts(artifact_uri=artifact_path)
-            else:
-                local_path = mlflow.artifacts.download_artifacts(artifact_uri=f"{model_info.model_uri}/{artifact_path}")
+            # Try multiple strategies to download the input_example artifact
+            local_path = None
+            download_errors = []
+
+            # Strategy 1: Use the models:/ URI directly (works for most UC models)
+            try:
+                local_path = mlflow.artifacts.download_artifacts(artifact_uri=f"models:/{model_uc_name}/{model_uc_version}/{artifact_path}")
+            except Exception as e1:
+                download_errors.append(f"models:/ URI: {e1}")
+
+            # Strategy 2: Use run_id with just the filename
+            if local_path is None and model_info.run_id:
+                try:
+                    local_path = mlflow.artifacts.download_artifacts(run_id=model_info.run_id, artifact_path=f"model/{artifact_path}")
+                except Exception as e2:
+                    download_errors.append(f"run_id+model/: {e2}")
+
+            # Strategy 3: Use run_id with just the filename at root
+            if local_path is None and model_info.run_id:
+                try:
+                    local_path = mlflow.artifacts.download_artifacts(run_id=model_info.run_id, artifact_path=artifact_path)
+                except Exception as e3:
+                    download_errors.append(f"run_id+root: {e3}")
+
+            if local_path is None:
+                print(f"WARNING: All download strategies failed for {ep_name}: {download_errors}. Skipping.")
+                continue
             with open(local_path, 'r') as f:
                 raw_example = json.load(f)
 

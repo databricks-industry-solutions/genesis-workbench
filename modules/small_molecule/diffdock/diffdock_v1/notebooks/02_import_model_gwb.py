@@ -168,14 +168,22 @@ artifact_info = model_info.saved_input_example_info
 if artifact_info:
     artifact_path = artifact_info.get("artifact_path")
     artifact_type = artifact_info.get("type")
-    run_id = model_info.run_id
-    if run_id:
-        artifact_sub_path = f"{model_info.artifact_path}/{artifact_path}" if model_info.artifact_path else artifact_path
-        local_path = mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path=artifact_sub_path)
-    elif artifact_path.startswith("dbfs:") or artifact_path.startswith("/") or artifact_path.startswith("s3:"):
-        local_path = mlflow.artifacts.download_artifacts(artifact_uri=artifact_path)
-    else:
-        local_path = mlflow.artifacts.download_artifacts(artifact_uri=f"{model_info.model_uri}/{artifact_path}")
+
+    local_path = None
+    try:
+        local_path = mlflow.artifacts.download_artifacts(artifact_uri=f"models:/{uc_name}/{uc_version}/{artifact_path}")
+    except Exception:
+        pass
+    if local_path is None and model_info.run_id:
+        try:
+            local_path = mlflow.artifacts.download_artifacts(run_id=model_info.run_id, artifact_path=f"model/{artifact_path}")
+        except Exception:
+            pass
+    if local_path is None and model_info.run_id:
+        try:
+            local_path = mlflow.artifacts.download_artifacts(run_id=model_info.run_id, artifact_path=artifact_path)
+        except Exception:
+            pass
     with open(local_path, 'r') as f:
         raw_example = json.load(f)
 
