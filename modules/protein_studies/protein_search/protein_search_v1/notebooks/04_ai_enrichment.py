@@ -3,10 +3,9 @@
 # MAGIC ## AI-Driven Protein Enrichment
 # MAGIC
 # MAGIC Uses [`ai_query()`](https://docs.databricks.com/en/sql/language-manual/functions/ai_query.html)
-# MAGIC with structured outputs to:
-# MAGIC 1. Convert scientific organism names to layman-friendly terms via Foundation Model APIs
-# MAGIC 2. Optionally create an external model serving endpoint (Azure OpenAI GPT-4o)
-# MAGIC 3. Extract protein research information (recent findings, under-researched areas) for drug discovery
+# MAGIC with Databricks Foundation Model APIs to:
+# MAGIC 1. Convert scientific organism names to layman-friendly terms
+# MAGIC 2. Extract protein research information (recent findings, under-researched areas) for drug discovery
 # MAGIC
 # MAGIC All LLM calls use `ai_query()` directly with `responseFormat` -- no UDF registration needed.
 
@@ -21,12 +20,12 @@
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 volume_name = dbutils.widgets.get("volume_name")
-external_endpoint_name = dbutils.widgets.get("external_endpoint_name")
+foundation_model_endpoint = dbutils.widgets.get("foundation_model_endpoint")
 
-print(f"catalog:                 {catalog}")
-print(f"schema:                  {schema}")
-print(f"volume_name:             {volume_name}")
-print(f"external_endpoint_name:  {external_endpoint_name}")
+print(f"catalog:                      {catalog}")
+print(f"schema:                       {schema}")
+print(f"volume_name:                  {volume_name}")
+print(f"foundation_model_endpoint:    {foundation_model_endpoint}")
 
 # COMMAND ----------
 
@@ -60,13 +59,17 @@ orginfo_sDF = spark.sql(f"""
     FROM (
         SELECT
             OrganismName,
-            ai_query(
-                'databricks-claude-sonnet-4-5',
-                CONCAT(
-                    'As a knowledgeable encyclopedia, provide a simple layman term and brief meaning ',
-                    'for this scientific organism name: ', OrganismName
+            from_json(
+                ai_query(
+                    'databricks-claude-sonnet-4-5',
+                    CONCAT(
+                        'As a knowledgeable encyclopedia, provide a simple layman term and brief meaning ',
+                        'for this scientific organism name: ', OrganismName,
+                        '. Respond with JSON only: {{"simple_term": "...", "meaning": "..."}}'
+                    ),
+                    responseFormat => 'STRING'
                 ),
-                responseFormat => 'STRUCT<simple_term: STRING, meaning: STRING>'
+                'simple_term STRING, meaning STRING'
             ) AS parsed
         FROM {catalog}.{schema}.tinysample_organism_info
     )
@@ -82,81 +85,23 @@ display(spark.table(f"{catalog}.{schema}.tinysample_organism_info_scientificNsim
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Part 2: Create External Model Serving Endpoint (Optional)
-# MAGIC
-# MAGIC Uses the Databricks SDK to create an Azure OpenAI GPT-4o external endpoint
-# MAGIC for protein research queries. Skip if the endpoint already exists.
+# MAGIC ### Part 2: Validate Foundation Model Endpoint
 
 # COMMAND ----------
 
-# DBTITLE 1,Check / create external endpoint
+# DBTITLE 1,Validate foundation model endpoint exists
 from databricks.sdk import WorkspaceClient
-from databricks.sdk.service.serving import (
-    EndpointCoreConfigInput,
-    ServedEntityInput,
-    ExternalModel,
-    OpenAiConfig,
-    AiGatewayConfig,
-    AiGatewayUsageTrackingConfig,
-    AiGatewayInferenceTableConfig,
-)
 
 w = WorkspaceClient()
 
-endpoint_exists = False
 try:
-    w.serving_endpoints.get(external_endpoint_name)
-    endpoint_exists = True
-    print(f"Endpoint '{external_endpoint_name}' already exists — skipping creation.")
-except Exception:
-    print(f"Endpoint '{external_endpoint_name}' not found — will attempt creation if secrets are configured.")
-
-if not endpoint_exists:
-    scope_name = "<your_scope_name>"
-    scope_key = "openai_api_key"
-    openai_api_base = "https://<your-resource>.openai.azure.com/"
-    openai_deployment_name = "gpt-4o-2024-11-20"
-    openai_api_version = "2025-01-01-preview"
-
-    try:
-        w.serving_endpoints.create(
-            name=external_endpoint_name,
-            config=EndpointCoreConfigInput(
-                served_entities=[
-                    ServedEntityInput(
-                        name="az-openai-completions",
-                        external_model=ExternalModel(
-                            name="gpt-4o",
-                            provider="openai",
-                            task="llm/v1/chat",
-                            openai_config=OpenAiConfig(
-                                openai_api_type="azure",
-                                openai_api_key=f"{{{{secrets/{scope_name}/{scope_key}}}}}",
-                                openai_api_base=openai_api_base,
-                                openai_deployment_name=openai_deployment_name,
-                                openai_api_version=openai_api_version,
-                            ),
-                        ),
-                    )
-                ]
-            ),
-            ai_gateway=AiGatewayConfig(
-                usage_tracking_config=AiGatewayUsageTrackingConfig(enabled=True),
-                inference_table_config=AiGatewayInferenceTableConfig(
-                    catalog_name=catalog,
-                    schema_name=schema,
-                    enabled=True,
-                ),
-            ),
-            tags=[
-                {"key": "application", "value": "genesis_workbench"},
-                {"key": "module", "value": "protein_search"},
-            ],
-        )
-        print(f"Endpoint '{external_endpoint_name}' created successfully.")
-    except Exception as e:
-        print(f"Endpoint creation skipped or failed: {e}")
-        print("Continuing — the endpoint may need manual configuration for your Azure OpenAI credentials.")
+    ep = w.serving_endpoints.get(foundation_model_endpoint)
+    print(f"Endpoint '{foundation_model_endpoint}' found (state: {ep.state.ready if ep.state else 'unknown'})")
+except Exception as e:
+    raise RuntimeError(
+        f"Foundation model endpoint '{foundation_model_endpoint}' not found. "
+        f"Ensure the endpoint exists before running this workflow. Error: {e}"
+    )
 
 # COMMAND ----------
 
@@ -164,7 +109,7 @@ if not endpoint_exists:
 # MAGIC ### Part 3: Extract Protein Research Information
 # MAGIC
 # MAGIC Joins classified proteins with simplified organism names, then calls
-# MAGIC `ai_query()` on the external endpoint to extract research insights
+# MAGIC `ai_query()` on the foundation model endpoint to extract research insights
 # MAGIC for each protein.
 
 # COMMAND ----------
@@ -202,16 +147,23 @@ print(f"Base dataset row count: {df_base.count()}")
 # COMMAND ----------
 
 # DBTITLE 1,Enrich with protein research info via ai_query
+RESEARCH_JSON_INSTRUCTION = (
+    ' Respond with JSON only: {"information": "...", "recent_research": "...", "under_researched_areas": "..."}'
+)
+
 df_enriched = (
     df_base.withColumn(
         "researchDict",
-        F.expr(f"""
-            ai_query(
-                '{external_endpoint_name}',
-                concat('{SYSTEM_PROMPT} Protein: \"', replace(ProteinName, '"', ''), '\"'),
-                responseFormat => 'STRUCT<information: STRING, recent_research: STRING, under_researched_areas: STRING>'
-            )
-        """),
+        F.from_json(
+            F.expr(f"""
+                ai_query(
+                    '{foundation_model_endpoint}',
+                    concat('{SYSTEM_PROMPT} Protein: \"', replace(ProteinName, '"', ''), '\"{RESEARCH_JSON_INSTRUCTION}'),
+                    responseFormat => 'STRING'
+                )
+            """),
+            "information STRING, recent_research STRING, under_researched_areas STRING",
+        ),
     )
     .select(
         "OrganismName",

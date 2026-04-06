@@ -123,18 +123,31 @@ uc_version = endpoint_df.iloc[0]["deploy_model_uc_version"]
 print(f"Endpoint: {endpoint_name}")
 print(f"Model: {uc_name}/{uc_version}")
 
-# Load the input_example from the registered model
+# Load the input_example from the registered model and convert to serving format
 mlflow.set_registry_uri("databricks-uc")
 model_info = mlflow.models.get_model_info(f"models:/{uc_name}/{uc_version}")
 artifact_info = model_info.saved_input_example_info
 if artifact_info:
     artifact_path = artifact_info.get("artifact_path")
+    artifact_type = artifact_info.get("type")
     local_path = mlflow.artifacts.download_artifacts(
         artifact_uri=f"{model_info.model_uri}/{artifact_path}"
     )
     with open(local_path, 'r') as f:
-        warmup_payload = json.load(f)
-    print(f"Loaded warm-up payload from model input_example")
+        raw_example = json.load(f)
+
+    # The serving endpoint expects the payload wrapped in a top-level key.
+    # MLflow input_example artifacts for DataFrames are stored as pandas-split
+    # JSON (with "columns" and "data" keys) but need to be wrapped as
+    # {"dataframe_split": ...} for the /invocations endpoint.
+    if artifact_type == "dataframe" or ("columns" in raw_example and "data" in raw_example):
+        warmup_payload = {"dataframe_split": raw_example}
+    elif isinstance(raw_example, list):
+        warmup_payload = {"inputs": raw_example}
+    else:
+        warmup_payload = {"inputs": [raw_example]}
+
+    print(f"Loaded warm-up payload (type: {artifact_type}, keys: {list(warmup_payload.keys())})")
 else:
     print("No input_example found in model. Skipping warm-up.")
     dbutils.notebook.exit("No input_example for warm-up")

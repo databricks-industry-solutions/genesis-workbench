@@ -59,11 +59,11 @@ profile_page = st.Page(
     icon=":material/account_circle:"
 )
 
-# small_molecules_page = st.Page(
-#     page="views/small_molecules.py",
-#     title="Small Molecules",
-#     icon=":material/vaccines:"
-# )
+small_molecules_page = st.Page(
+    page="views/small_molecules.py",
+    title="Small Molecules",
+    icon=":material/science:"
+)
 
 settings_page = st.Page(
     page="views/settings.py",
@@ -102,6 +102,8 @@ if "single_cell" in deployed_modules:
     workbench_pages.append(single_cell_page)
 if "bionemo" in deployed_modules:
     workbench_pages.append(bionemo_esm_page)
+if "small_molecule" in deployed_modules:
+    workbench_pages.append(small_molecules_page)
 if "parabricks" in deployed_modules:
     workbench_pages.append(parabricks_page)
 

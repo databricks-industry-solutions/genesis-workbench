@@ -157,11 +157,19 @@ for _, row in endpoints_df.iterrows():
                 artifact_uri=f"{model_info.model_uri}/{artifact_path}"
             )
             with open(local_path, 'r') as f:
-                input_example = json.load(f)
+                raw_example = json.load(f)
 
-            endpoint_payloads[ep_name] = input_example
+            # Wrap in the correct serving format
+            if input_example_type == "dataframe" or ("columns" in raw_example and "data" in raw_example):
+                payload = {"dataframe_split": raw_example}
+            elif isinstance(raw_example, list):
+                payload = {"inputs": raw_example}
+            else:
+                payload = {"inputs": [raw_example]}
+
+            endpoint_payloads[ep_name] = payload
             endpoint_names.append(ep_name)
-            print(f"Loaded input_example for endpoint: {ep_name} (model: {model_uc_name}/{model_uc_version})")
+            print(f"Loaded input_example for endpoint: {ep_name} (type: {input_example_type})")
         else:
             print(f"WARNING: No input_example found for {ep_name} (model: {model_uc_name}/{model_uc_version}). Skipping.")
     except Exception as e:

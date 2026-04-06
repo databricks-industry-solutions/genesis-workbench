@@ -10,7 +10,7 @@ resources:
       tasks:
 
         - task_key: download_uniprot_fasta
-          job_cluster_key: a10_gpu_cluster
+          job_cluster_key: multi_a10_gpu_cluster
           notebook_task:
             notebook_path: ../notebooks/01_download_uniprot_fasta.py
             source: WORKSPACE
@@ -18,7 +18,7 @@ resources:
         - task_key: create_tables
           depends_on:
             - task_key: download_uniprot_fasta
-          job_cluster_key: a10_gpu_cluster
+          job_cluster_key: multi_a10_gpu_cluster
           notebook_task:
             notebook_path: ../notebooks/02_create_tables.py
             source: WORKSPACE
@@ -26,7 +26,7 @@ resources:
         - task_key: protein_classification
           depends_on:
             - task_key: create_tables
-          job_cluster_key: a10_gpu_cluster
+          job_cluster_key: multi_a10_gpu_cluster
           notebook_task:
             notebook_path: ../notebooks/03_protein_classification.py
             source: WORKSPACE
@@ -34,7 +34,7 @@ resources:
         - task_key: ai_enrichment
           depends_on:
             - task_key: protein_classification
-          job_cluster_key: a10_gpu_cluster
+          job_cluster_key: multi_a10_gpu_cluster
           notebook_task:
             notebook_path: ../notebooks/04_ai_enrichment.py
             source: WORKSPACE
@@ -46,8 +46,8 @@ resources:
           default: ${var.core_schema_name}
         - name: volume_name
           default: ${resources.volumes.protein_seq_volume.name}
-        - name: external_endpoint_name
-          default: az_openai_gpt4o
+        - name: foundation_model_endpoint
+          default: databricks-claude-sonnet-4-5
         - name: user_email
           default: ${var.current_user}
         - name: sql_warehouse_id
@@ -56,18 +56,18 @@ resources:
           default: ${var.module_registration_experiment_name}
 
       job_clusters:
-        - job_cluster_key: a10_gpu_cluster
+        - job_cluster_key: multi_a10_gpu_cluster
           new_cluster:
             cluster_name: ""
             spark_version: 15.4.x-gpu-ml-scala2.12
             spark_conf:
               spark.master: "local[*, 4]"
               spark.databricks.cluster.profile: singleNode
-            node_type_id: ${var.a10_node_type}
-            driver_node_type_id: ${var.a10_node_type}
+            node_type_id: g5.12xlarge
+            driver_node_type_id: g5.12xlarge
             custom_tags:
               ResourceClass: SingleNode
-              work_type: protein_search
+              work_type: protein_search_classification
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD
