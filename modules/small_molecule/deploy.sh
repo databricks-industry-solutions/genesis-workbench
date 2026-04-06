@@ -28,7 +28,7 @@ echo "⏩️ Starting deploy of Small Molecule module  #"
 
 #for module in chemprop/chemprop_v2 open_babel/open_babel_v3 diffdock/diffdock_v1 proteina_complexa/proteina_complexa_v1
 #for module in diffdock/diffdock_v1 proteina_complexa/proteina_complexa_v1
-for module in diffdock/diffdock_v1 proteina_complexa/proteina_complexa_v1
+for module in diffdock/diffdock_v1
     do
         echo "###########################################"
         echo "Deploying $module"

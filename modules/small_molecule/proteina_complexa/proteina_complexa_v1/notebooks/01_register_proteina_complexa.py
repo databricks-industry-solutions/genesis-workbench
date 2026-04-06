@@ -145,27 +145,27 @@ subprocess.check_call(["pip", "install", "-q", "--no-build-isolation", "--no-dep
 # COMMAND ----------
 
 MODELS = {
-    "complexa": {
+    "proteina_complexa": {
         "ngc_id": "nvidia/clara/proteina_complexa",
         "main_ckpt": "complexa.ckpt",
         "ae_ckpt": "complexa_ae.ckpt",
-        "mlflow_name": "proteina-complexa",
+        "mlflow_name": "proteina_complexa",
         "use_v2_arch": False,
         "description": "Protein-protein binder design",
     },
-    "complexa_ligand": {
+    "proteina_complexa_ligand": {
         "ngc_id": "nvidia/clara/proteina_complexa_ligand",
         "main_ckpt": "complexa_ligand.ckpt",
         "ae_ckpt": "complexa_ligand_ae.ckpt",
-        "mlflow_name": "proteina-complexa-ligand",
+        "mlflow_name": "proteina_complexa_ligand",
         "use_v2_arch": True,
         "description": "Small-molecule ligand binder design",
     },
-    "complexa_ame": {
+    "proteina_complexa_ame": {
         "ngc_id": "nvidia/clara/proteina_complexa_ame",
         "main_ckpt": "complexa_ame.ckpt",
         "ae_ckpt": "complexa_ame_ae.ckpt",
-        "mlflow_name": "proteina-complexa-ame",
+        "mlflow_name": "proteina_complexa_ame",
         "use_v2_arch": True,
         "description": "Motif scaffolding with ligand context (AME)",
     },
@@ -628,9 +628,9 @@ class ProteinaComplexaAMEModel(_ProteinaComplexaBase):
 
 
 VARIANT_CLASSES = {
-    "complexa": ProteinaComplexaBinderModel,
-    "complexa_ligand": ProteinaComplexaLigandModel,
-    "complexa_ame": ProteinaComplexaAMEModel,
+    "proteina_complexa": ProteinaComplexaBinderModel,
+    "proteina_complexa_ligand": ProteinaComplexaLigandModel,
+    "proteina_complexa_ame": ProteinaComplexaAMEModel,
 }
 
 # COMMAND ----------
@@ -744,9 +744,9 @@ ame_input_schema = Schema([
 ])
 
 VARIANT_SIGNATURES = {
-    "complexa": ModelSignature(inputs=binder_input_schema, outputs=output_schema),
-    "complexa_ligand": ModelSignature(inputs=ligand_input_schema, outputs=output_schema),
-    "complexa_ame": ModelSignature(inputs=ame_input_schema, outputs=output_schema),
+    "proteina_complexa": ModelSignature(inputs=binder_input_schema, outputs=output_schema),
+    "proteina_complexa_ligand": ModelSignature(inputs=ligand_input_schema, outputs=output_schema),
+    "proteina_complexa_ame": ModelSignature(inputs=ame_input_schema, outputs=output_schema),
 }
 
 # COMMAND ----------
@@ -862,7 +862,7 @@ _pdb_ligand = _fetch_example("ligand_targets/7v11_ligand_centered.pdb", "7v11_li
 _pdb_ame = _fetch_example("ame_input_structures/M0024_1nzy_v3.pdb", "M0024_1nzy_v3.pdb")
 
 _variant_input_examples = {
-    "complexa": pd.DataFrame([{
+    "proteina_complexa": pd.DataFrame([{
         "target_pdb": _pdb_binder,
         "binder_length_min": np.int32(50),
         "binder_length_max": np.int32(80),
@@ -870,7 +870,7 @@ _variant_input_examples = {
         "hotspot_residues": "",
         "target_chain": "A",
     }]),
-    "complexa_ligand": pd.DataFrame([{
+    "proteina_complexa_ligand": pd.DataFrame([{
         "target_pdb": _pdb_ligand,
         "binder_length_min": np.int32(50),
         "binder_length_max": np.int32(80),
@@ -878,7 +878,7 @@ _variant_input_examples = {
         "hotspot_residues": "",
         "target_chain": "A",
     }]),
-    "complexa_ame": pd.DataFrame([{
+    "proteina_complexa_ame": pd.DataFrame([{
         "target_pdb": _pdb_ame,
         "binder_length_min": np.int32(50),
         "binder_length_max": np.int32(80),
@@ -891,8 +891,12 @@ print("Example inputs ready for all 3 variants")
 
 # COMMAND ----------
 
-from genesis_workbench.workbench import set_mlflow_experiment
-set_mlflow_experiment(experiment_name)
+from genesis_workbench.models import set_mlflow_experiment
+set_mlflow_experiment(experiment_tag=experiment_name, 
+                                   user_email=user_email,
+                                   host=None,
+                                   token=None,
+                                   shared=True)
 
 mlflow.set_registry_uri("databricks-uc")
 mlflow.set_tracking_uri("databricks")
@@ -969,19 +973,19 @@ from genesis_workbench.workbench import wait_for_job_run_completion
 # COMMAND ----------
 
 VARIANT_GWB_META = {
-    "complexa": {
+    "proteina_complexa": {
         "gwb_model_name": "Proteina-Complexa Binder",
         "gwb_display_name": "Proteina-Complexa Protein Binder Design",
         "gwb_deploy_name": "Proteina-Complexa Protein Binder Design",
         "gwb_deploy_desc": "Proteina-Complexa protein-protein binder design — generates novel protein binders for target protein chains using generative flow-matching",
     },
-    "complexa_ligand": {
+    "proteina_complexa_ligand": {
         "gwb_model_name": "Proteina-Complexa Ligand",
         "gwb_display_name": "Proteina-Complexa Small-Molecule Binder Design",
         "gwb_deploy_name": "Proteina-Complexa Small-Molecule Binder Design",
         "gwb_deploy_desc": "Proteina-Complexa ligand binder design — generates protein binders around small-molecule ligands using generative flow-matching",
     },
-    "complexa_ame": {
+    "proteina_complexa_ame": {
         "gwb_model_name": "Proteina-Complexa AME",
         "gwb_display_name": "Proteina-Complexa Motif Scaffolding (AME)",
         "gwb_deploy_name": "Proteina-Complexa Motif Scaffolding (AME)",

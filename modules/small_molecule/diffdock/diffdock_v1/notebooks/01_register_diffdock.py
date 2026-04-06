@@ -445,6 +445,10 @@ class DiffDockModel(mlflow.pyfunc.PythonModel):
 
         self._add_code_paths(self._context)
 
+        # DiffDock's torus.py loads .npy files via relative paths (np.load('.score.npy')).
+        # On serving endpoints the CWD is not the code directory, so we must chdir.
+        os.chdir(self.repo_dir)
+
         from utils.diffusion_utils import t_to_sigma as t_to_sigma_compl
         from utils.utils import get_model
 
@@ -714,7 +718,9 @@ for r in pip_requirements:
 from databricks.sdk import WorkspaceClient
 
 def set_mlflow_experiment(experiment_tag, user_email):
-    w = WorkspaceClient()
+    _token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
+    _host = f"https://{spark.conf.get('spark.databricks.workspaceUrl')}"
+    w = WorkspaceClient(host=_host, token=_token)
     mlflow_experiment_base_path = "Shared/dbx_genesis_workbench_models"
     w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")
     experiment_path = f"/{mlflow_experiment_base_path}/{experiment_tag}"
