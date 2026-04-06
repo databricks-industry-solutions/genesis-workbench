@@ -1,22 +1,29 @@
 # Databricks notebook source
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ### Example 1: Load Pre-trained Chemprop Model for Inference
-# MAGIC
+# MAGIC %md
+# MAGIC %md
 # MAGIC This notebook demonstrates loading an existing pre-trained Chemprop model
+# MAGIC %md
 # MAGIC and using it for molecular property prediction (Blood-Brain Barrier Penetration).
-# MAGIC
+# MAGIC %md
+# MAGIC %md
 # MAGIC The BBBP dataset contains binary labels for over 2,000 compounds on whether
+# MAGIC %md
 # MAGIC they can penetrate the blood-brain barrier — a key challenge in CNS drug development.
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("schema", "genesis_schema", "Schema")
-dbutils.widgets.text("model_name", "chemprop_bbbp", "Model Name")
+dbutils.widgets.text("catalog", "srijit_nair_ci_demo_catalog", "Catalog")
+dbutils.widgets.text("schema", "genesis_workbench", "Schema")
+dbutils.widgets.text("model_name", "chemprop_pretrained", "Model Name")
 dbutils.widgets.text("experiment_name", "dbx_genesis_workbench_modules", "Experiment Name")
-dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id")
-dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
-dbutils.widgets.text("cache_dir", "chemprop", "Cache dir")
+dbutils.widgets.text("sql_warehouse_id", "045df48d4afed522", "SQL Warehouse Id")
+dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Id/Email")
+dbutils.widgets.text("cache_dir", "chemprop_pretrained", "Cache dir")
 dbutils.widgets.text("workload_type", "GPU_SMALL", "Workload Type for endpoints")
 
 catalog = dbutils.widgets.get("catalog")
@@ -30,7 +37,7 @@ schema = dbutils.widgets.get("schema")
 # COMMAND ----------
 
 # MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.2
-# MAGIC %pip install chemprop==2.0.5 rdkit torch>=2.0 lightning scikit-learn>=1.4
+# MAGIC %pip install chemprop>=2.0.0 rdkit torch>=2.0 lightning
 
 # COMMAND ----------
 
@@ -77,9 +84,12 @@ initialize(core_catalog_name=catalog, core_schema_name=schema, sql_warehouse_id=
 
 # MAGIC %md
 # MAGIC ### Train a baseline model on BBBP, then load from checkpoint for inference
-# MAGIC
+# MAGIC %md
+# MAGIC %md
 # MAGIC We first train a quick model on the BBBP dataset (Blood-Brain Barrier Penetration)
+# MAGIC %md
 # MAGIC and save a checkpoint. Then we demonstrate loading the pre-trained checkpoint
+# MAGIC %md
 # MAGIC and running inference — the core pattern for Example 1 from the blog.
 
 # COMMAND ----------
@@ -119,6 +129,7 @@ bbbp_df.head()
 # COMMAND ----------
 
 from sklearn.model_selection import train_test_split
+from rdkit import Chem
 
 smiles_list = bbbp_df["smiles"].tolist()
 targets_list = bbbp_df["p_np"].tolist()
@@ -127,7 +138,7 @@ smiles_train, smiles_test, y_train, y_test = train_test_split(
     smiles_list, targets_list, test_size=0.2, random_state=42, stratify=targets_list
 )
 
-train_datapoints = [MoleculeDatapoint(smi, [y]) for smi, y in zip(smiles_train, y_train)]
+train_datapoints = [MoleculeDatapoint(mol, [y]) for smi, y in zip(smiles_train, y_train) if (mol := Chem.MolFromSmiles(smi)) is not None]
 train_dset = MoleculeDataset(train_datapoints)
 train_loader = build_dataloader(train_dset, shuffle=True)
 
@@ -135,7 +146,7 @@ mp = chemprop_nn.BondMessagePassing()
 agg = chemprop_nn.MeanAggregation()
 ffn = chemprop_nn.BinaryClassificationFFN()
 
-mpnn_model = chemprop_models.MPNN(message_passing=mp, agg=agg, ffn=ffn)
+mpnn_model = chemprop_models.MPNN(message_passing=mp, agg=agg, predictor=ffn)
 
 trainer = L.Trainer(max_epochs=5, accelerator="auto", enable_progress_bar=True, logger=False)
 trainer.fit(mpnn_model, train_loader)
@@ -150,32 +161,46 @@ print(f"Checkpoint saved to: {checkpoint_path}")
 
 # MAGIC %md
 # MAGIC #### Load the pre-trained model from checkpoint and run inference
-# MAGIC
+# MAGIC %md
+# MAGIC %md
 # MAGIC This is the key pattern: load an existing checkpoint and predict on new molecules.
 
 # COMMAND ----------
+
+from rdkit import Chem
 
 loaded_model = chemprop_models.MPNN.load_from_checkpoint(
     checkpoint_path,
     message_passing=chemprop_nn.BondMessagePassing(),
     agg=chemprop_nn.MeanAggregation(),
-    ffn=chemprop_nn.BinaryClassificationFFN(),
+    predictor=chemprop_nn.BinaryClassificationFFN(),
 )
 loaded_model.eval()
+if torch.cuda.is_available():
+    loaded_model = loaded_model.cuda()
 
-test_datapoints = [MoleculeDatapoint(smi) for smi in smiles_test]
+device = next(loaded_model.parameters()).device
+mols = [(smi, Chem.MolFromSmiles(smi)) for smi in smiles_test]
+valid_indices = [i for i, (_, mol) in enumerate(mols) if mol is not None]
+test_datapoints = [MoleculeDatapoint(mols[i][1]) for i in valid_indices]
 test_dset = MoleculeDataset(test_datapoints)
 test_loader = build_dataloader(test_dset, shuffle=False)
 
 preds = []
 with torch.no_grad():
     for batch in test_loader:
-        batch_preds = loaded_model(batch)
+        batch.bmg.to(device)
+        V_d = batch.V_d.to(device) if batch.V_d is not None else None
+        X_d = batch.X_d.to(device) if batch.X_d is not None else None
+        batch_preds = loaded_model(batch.bmg, V_d, X_d)
         preds.append(batch_preds.cpu().numpy())
 
-predictions = np.concatenate(preds, axis=0).flatten().tolist()
+valid_preds = np.concatenate(preds, axis=0).flatten()
+predictions = [None] * len(smiles_test)
+for idx, pred in zip(valid_indices, valid_preds):
+    predictions[idx] = float(pred)
 results_df = pd.DataFrame({"smiles": smiles_test, "bbbp_prediction": predictions})
-print(f"Ran inference on {len(predictions)} molecules from pre-trained checkpoint")
+print(f"Ran inference on {len(valid_indices)} molecules from pre-trained checkpoint")
 results_df.head(10)
 
 # COMMAND ----------
@@ -205,7 +230,7 @@ class ChempropBBBPModel(mlflow.pyfunc.PythonModel):
             checkpoint_path,
             message_passing=mp,
             agg=agg,
-            ffn=ffn,
+            predictor=ffn,
         )
         self.model.eval()
         if torch.cuda.is_available():
@@ -214,6 +239,7 @@ class ChempropBBBPModel(mlflow.pyfunc.PythonModel):
     def predict(self, context, model_input, params=None):
         import torch
         import numpy as np
+        from rdkit import Chem
         from chemprop.data import MoleculeDatapoint, MoleculeDataset, build_dataloader
 
         if hasattr(model_input, "tolist"):
@@ -223,17 +249,26 @@ class ChempropBBBPModel(mlflow.pyfunc.PythonModel):
         else:
             smiles_list = list(model_input)
 
-        datapoints = [MoleculeDatapoint(smi) for smi in smiles_list]
+        mols = [(smi, Chem.MolFromSmiles(smi)) for smi in smiles_list]
+        valid_indices = [i for i, (_, mol) in enumerate(mols) if mol is not None]
+        datapoints = [MoleculeDatapoint(mols[i][1]) for i in valid_indices]
         dset = MoleculeDataset(datapoints)
         loader = build_dataloader(dset, shuffle=False)
 
+        device = next(self.model.parameters()).device
         preds = []
         with torch.no_grad():
             for batch in loader:
-                batch_preds = self.model(batch)
+                batch.bmg.to(device)
+                V_d = batch.V_d.to(device) if batch.V_d is not None else None
+                X_d = batch.X_d.to(device) if batch.X_d is not None else None
+                batch_preds = self.model(batch.bmg, V_d, X_d)
                 preds.append(batch_preds.cpu().numpy())
 
-        predictions = np.concatenate(preds, axis=0).flatten().tolist()
+        valid_preds = np.concatenate(preds, axis=0).flatten() if preds else np.array([])
+        predictions = [None] * len(smiles_list)
+        for idx, pred in zip(valid_indices, valid_preds):
+            predictions[idx] = float(pred)
         return predictions
 
 # COMMAND ----------

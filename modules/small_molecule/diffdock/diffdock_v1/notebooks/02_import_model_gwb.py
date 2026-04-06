@@ -55,6 +55,46 @@ from genesis_workbench.workbench import wait_for_job_run_completion
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC #### Import and deploy ESM Embeddings endpoint
+
+# COMMAND ----------
+
+esm_model_name = "diffdock_esm_embeddings"
+esm_uc_name = f"{catalog}.{schema}.{esm_model_name}"
+esm_version = get_latest_model_version(esm_uc_name)
+
+gwb_esm_model_id = import_model_from_uc(user_email=user_email,
+                    model_category=ModelCategory.SMALL_MOLECULES,
+                    model_uc_name=esm_uc_name,
+                    model_uc_version=esm_version,
+                    model_name="DiffDock ESM Embeddings",
+                    model_display_name="DiffDock ESM2 Protein Embeddings",
+                    model_source_version="v1.0",
+                    model_description_url="https://github.com/facebookresearch/esm")
+
+esm_run_id = deploy_model(user_email=user_email,
+                gwb_model_id=gwb_esm_model_id,
+                deployment_name="DiffDock ESM Embeddings",
+                deployment_description="ESM2 protein embedding endpoint for DiffDock molecular docking pipeline",
+                input_adapter_str="none",
+                output_adapter_str="none",
+                sample_input_data_dict_as_json="none",
+                sample_params_as_json="none",
+                workload_type=workload_type,
+                workload_size="Small")
+
+# COMMAND ----------
+
+esm_result = wait_for_job_run_completion(esm_run_id, timeout=3600)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC #### Import and deploy DiffDock Scoring endpoint
+
+# COMMAND ----------
+
 model_name = "diffdock"
 model_uc_name = f"{catalog}.{schema}.{model_name}"
 model_version = get_latest_model_version(model_uc_name)
@@ -64,16 +104,14 @@ gwb_model_id = import_model_from_uc(user_email=user_email,
                     model_uc_name=model_uc_name,
                     model_uc_version=model_version,
                     model_name="DiffDock",
-                    model_display_name="DiffDock Molecular Docking",
+                    model_display_name="DiffDock Molecular Docking (Scoring)",
                     model_source_version="v1.0 (commit 0f9c419)",
                     model_description_url="https://github.com/gcorso/DiffDock")
 
-# COMMAND ----------
-
 run_id = deploy_model(user_email=user_email,
                 gwb_model_id=gwb_model_id,
-                deployment_name=f"DiffDock Molecular Docking",
-                deployment_description="DiffDock molecular docking — predicts 3D binding poses for protein-ligand complexes using diffusion generative modeling with confidence ranking",
+                deployment_name="DiffDock Scoring",
+                deployment_description="DiffDock scoring endpoint — runs diffusion sampling with pre-computed ESM embeddings",
                 input_adapter_str="none",
                 output_adapter_str="none",
                 sample_input_data_dict_as_json="none",
@@ -130,11 +168,14 @@ artifact_info = model_info.saved_input_example_info
 if artifact_info:
     artifact_path = artifact_info.get("artifact_path")
     artifact_type = artifact_info.get("type")
-    if artifact_path.startswith("dbfs:") or artifact_path.startswith("/") or artifact_path.startswith("s3:"):
-        download_uri = artifact_path
+    run_id = model_info.run_id
+    if run_id:
+        artifact_sub_path = f"{model_info.artifact_path}/{artifact_path}" if model_info.artifact_path else artifact_path
+        local_path = mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path=artifact_sub_path)
+    elif artifact_path.startswith("dbfs:") or artifact_path.startswith("/") or artifact_path.startswith("s3:"):
+        local_path = mlflow.artifacts.download_artifacts(artifact_uri=artifact_path)
     else:
-        download_uri = f"{model_info.model_uri}/{artifact_path}"
-    local_path = mlflow.artifacts.download_artifacts(artifact_uri=download_uri)
+        local_path = mlflow.artifacts.download_artifacts(artifact_uri=f"{model_info.model_uri}/{artifact_path}")
     with open(local_path, 'r') as f:
         raw_example = json.load(f)
 

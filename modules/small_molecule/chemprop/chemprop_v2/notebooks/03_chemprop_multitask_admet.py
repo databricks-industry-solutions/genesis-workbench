@@ -1,27 +1,38 @@
 # Databricks notebook source
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ### Example 4: Multi-task ADMET Regression with Chemprop
-# MAGIC
+# MAGIC %md
+# MAGIC %md
 # MAGIC For a compound to be a good drug candidate it must possess several desirable
+# MAGIC %md
 # MAGIC ADMET (Absorption, Distribution, Metabolism, Excretion, Toxicity) properties.
-# MAGIC
+# MAGIC %md
+# MAGIC %md
 # MAGIC Multi-task training is advantageous because the predicted properties are highly
+# MAGIC %md
 # MAGIC correlated and joint data analysis allows knowledge from one task to improve another.
+# MAGIC %md
 # MAGIC Chemprop automatically handles missing entries by masking them in the loss function,
+# MAGIC %md
 # MAGIC so partial data can be utilized.
-# MAGIC
+# MAGIC %md
+# MAGIC %md
 # MAGIC This notebook trains a multi-task regression D-MPNN model on 10 ADMET properties
+# MAGIC %md
 # MAGIC from the DrugBank/TDC datasets, registers it in Unity Catalog, and deploys it.
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("schema", "genesis_schema", "Schema")
+dbutils.widgets.text("catalog", "srijit_nair_ci_demo_catalog", "Catalog")
+dbutils.widgets.text("schema", "genesis_workbench", "Schema")
 dbutils.widgets.text("model_name", "chemprop_admet", "Model Name")
 dbutils.widgets.text("experiment_name", "dbx_genesis_workbench_modules", "Experiment Name")
-dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id")
-dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
-dbutils.widgets.text("cache_dir", "chemprop", "Cache dir")
+dbutils.widgets.text("sql_warehouse_id", "045df48d4afed522", "SQL Warehouse Id")
+dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Id/Email")
+dbutils.widgets.text("cache_dir", "chemprop_admet", "Cache dir")
 dbutils.widgets.text("workload_type", "GPU_SMALL", "Workload Type for endpoints")
 
 catalog = dbutils.widgets.get("catalog")
@@ -35,7 +46,8 @@ schema = dbutils.widgets.get("schema")
 # COMMAND ----------
 
 # MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.2
-# MAGIC %pip install chemprop==2.0.5 rdkit torch>=2.0 lightning scikit-learn>=1.4 PyTDC
+# MAGIC %pip install 'chemprop>=2.0.0' rdkit 'torch>=2.0' lightning PyTDC 'scikit-learn>=1.3'
+# MAGIC %pip install 'mlflow[databricks]'
 
 # COMMAND ----------
 
@@ -82,8 +94,10 @@ initialize(core_catalog_name=catalog, core_schema_name=schema, sql_warehouse_id=
 
 # MAGIC %md
 # MAGIC ### Load ADMET datasets from the Therapeutics Data Commons (TDC)
-# MAGIC
+# MAGIC %md
+# MAGIC %md
 # MAGIC We load multiple ADMET properties and merge them into a single multi-task DataFrame.
+# MAGIC %md
 # MAGIC Missing values are handled automatically by Chemprop during training.
 
 # COMMAND ----------
@@ -144,6 +158,7 @@ merged_df.head()
 # COMMAND ----------
 
 from sklearn.model_selection import train_test_split
+from rdkit import Chem
 
 smiles_all = merged_df["smiles"].tolist()
 targets_all = merged_df[target_columns].values  # shape: (n_molecules, n_tasks), may contain NaN
@@ -157,10 +172,13 @@ def make_datapoints(idx_list):
     datapoints = []
     for i in idx_list:
         smi = smiles_all[i]
+        mol = Chem.MolFromSmiles(smi)
+        if mol is None:
+            continue
         y = targets_all[i].tolist()
         # Replace NaN with None so Chemprop masks them in the loss
         y = [val if not np.isnan(val) else None for val in y]
-        datapoints.append(MoleculeDatapoint(smi, y))
+        datapoints.append(MoleculeDatapoint(mol, y))
     return datapoints
 
 train_datapoints = make_datapoints(idx_train)
@@ -195,7 +213,7 @@ mp = chemprop_nn.BondMessagePassing()
 agg = chemprop_nn.MeanAggregation()
 ffn = chemprop_nn.RegressionFFN(n_tasks=len(target_columns), output_transform=output_transform)
 
-mpnn_model = chemprop_models.MPNN(message_passing=mp, agg=agg, ffn=ffn)
+mpnn_model = chemprop_models.MPNN(message_passing=mp, agg=agg, predictor=ffn)
 
 print(f"Model parameters: {sum(p.numel() for p in mpnn_model.parameters()):,}")
 
@@ -223,23 +241,6 @@ print(f"Checkpoint saved to: {checkpoint_path}")
 
 # MAGIC %md
 # MAGIC ### Wrap model in MLflow PyFunc for serving
-
-# COMMAND ----------
-
-# Save target column names and scaler for the PyFunc wrapper
-import json
-import pickle
-
-metadata_dir = os.path.join(cache_full_path, "metadata")
-os.makedirs(metadata_dir, exist_ok=True)
-
-target_columns_path = os.path.join(metadata_dir, "admet_target_columns.json")
-with open(target_columns_path, "w") as f:
-    json.dump(target_columns, f)
-
-scaler_path = os.path.join(metadata_dir, "admet_output_scaler.pkl")
-with open(scaler_path, "wb") as f:
-    pickle.dump(output_scaler, f)
 
 # COMMAND ----------
 
@@ -274,7 +275,7 @@ class ChempropADMETModel(mlflow.pyfunc.PythonModel):
             context.artifacts["checkpoint"],
             message_passing=mp,
             agg=agg,
-            ffn=ffn,
+            predictor=ffn,
         )
         self.model.eval()
         if torch.cuda.is_available():
@@ -284,6 +285,7 @@ class ChempropADMETModel(mlflow.pyfunc.PythonModel):
         import torch
         import numpy as np
         import pandas as pd
+        from rdkit import Chem
         from chemprop.data import MoleculeDatapoint, MoleculeDataset, build_dataloader
 
         if hasattr(model_input, "tolist"):
@@ -293,18 +295,108 @@ class ChempropADMETModel(mlflow.pyfunc.PythonModel):
         else:
             smiles_list = list(model_input)
 
-        datapoints = [MoleculeDatapoint(smi) for smi in smiles_list]
+        mols = [(smi, Chem.MolFromSmiles(smi)) for smi in smiles_list]
+        valid_indices = [i for i, (_, mol) in enumerate(mols) if mol is not None]
+        datapoints = [MoleculeDatapoint(mols[i][1]) for i in valid_indices]
         dset = MoleculeDataset(datapoints)
         loader = build_dataloader(dset, shuffle=False)
 
+        device = next(self.model.parameters()).device
         preds = []
         with torch.no_grad():
             for batch in loader:
-                batch_preds = self.model(batch)
+                batch.bmg.to(device)
+                V_d = batch.V_d.to(device) if batch.V_d is not None else None
+                X_d = batch.X_d.to(device) if batch.X_d is not None else None
+                batch_preds = self.model(batch.bmg, V_d, X_d)
                 preds.append(batch_preds.cpu().numpy())
 
-        predictions = np.concatenate(preds, axis=0)
-        return pd.DataFrame(predictions, columns=self.target_columns)
+        valid_preds = np.concatenate(preds, axis=0) if preds else np.empty((0, len(self.target_columns)))
+        result = pd.DataFrame(
+            np.full((len(smiles_list), len(self.target_columns)), np.nan),
+            columns=self.target_columns,
+        )
+        for row_idx, pred_row in zip(valid_indices, valid_preds):
+            result.iloc[row_idx] = pred_row
+        return result
+
+# COMMAND ----------
+
+class ChempropADMETModel(mlflow.pyfunc.PythonModel):
+    """
+    MLflow PyFunc wrapper for a multi-task Chemprop MPNN regression model.
+    Accepts SMILES strings and returns predictions for multiple ADMET properties.
+    """
+
+    def load_context(self, context):
+        import json
+        import pickle
+        import torch
+        from chemprop import nn as chemprop_nn
+        from chemprop import models as chemprop_models
+
+        with open(context.artifacts["target_columns"], "r") as f:
+            self.target_columns = json.load(f)
+
+        with open(context.artifacts["output_scaler"], "rb") as f:
+            output_scaler = pickle.load(f)
+
+        output_transform = chemprop_nn.transforms.UnscaleTransform.from_standard_scaler(output_scaler)
+
+        mp = chemprop_nn.BondMessagePassing()
+        agg = chemprop_nn.MeanAggregation()
+        ffn = chemprop_nn.RegressionFFN(
+            n_tasks=len(self.target_columns),
+            output_transform=output_transform,
+        )
+        self.model = chemprop_models.MPNN.load_from_checkpoint(
+            context.artifacts["checkpoint"],
+            message_passing=mp,
+            agg=agg,
+            predictor=ffn,
+        )
+        self.model.eval()
+        if torch.cuda.is_available():
+            self.model = self.model.cuda()
+
+    def predict(self, context, model_input, params=None):
+        import torch
+        import numpy as np
+        import pandas as pd
+        from rdkit import Chem
+        from chemprop.data import MoleculeDatapoint, MoleculeDataset, build_dataloader
+
+        if hasattr(model_input, "tolist"):
+            smiles_list = model_input.tolist()
+        elif hasattr(model_input, "iloc"):
+            smiles_list = model_input.iloc[:, 0].tolist()
+        else:
+            smiles_list = list(model_input)
+
+        mols = [(smi, Chem.MolFromSmiles(smi)) for smi in smiles_list]
+        valid_indices = [i for i, (_, mol) in enumerate(mols) if mol is not None]
+        datapoints = [MoleculeDatapoint(mols[i][1]) for i in valid_indices]
+        dset = MoleculeDataset(datapoints)
+        loader = build_dataloader(dset, shuffle=False)
+
+        device = next(self.model.parameters()).device
+        preds = []
+        with torch.no_grad():
+            for batch in loader:
+                batch.bmg.to(device)
+                V_d = batch.V_d.to(device) if batch.V_d is not None else None
+                X_d = batch.X_d.to(device) if batch.X_d is not None else None
+                batch_preds = self.model(batch.bmg, V_d, X_d)
+                preds.append(batch_preds.cpu().numpy())
+
+        valid_preds = np.concatenate(preds, axis=0) if preds else np.empty((0, len(self.target_columns)))
+        result = pd.DataFrame(
+            np.full((len(smiles_list), len(self.target_columns)), np.nan),
+            columns=self.target_columns,
+        )
+        for row_idx, pred_row in zip(valid_indices, valid_preds):
+            result.iloc[row_idx] = pred_row
+        return result
 
 # COMMAND ----------
 
@@ -352,6 +444,22 @@ from genesis_workbench.models import (ModelCategory,
 from genesis_workbench.workbench import wait_for_job_run_completion
 
 # COMMAND ----------
+
+import mlflow
+
+# COMMAND ----------
+
+import json
+import pickle
+
+# Save target_columns and output_scaler to disk so they can be logged as MLflow artifacts
+target_columns_path = os.path.join(cache_full_path, "target_columns.json")
+with open(target_columns_path, "w") as f:
+    json.dump(target_columns, f)
+
+scaler_path = os.path.join(cache_full_path, "output_scaler.pkl")
+with open(scaler_path, "wb") as f:
+    pickle.dump(output_scaler, f)
 
 mlflow.set_registry_uri("databricks-uc")
 mlflow.set_tracking_uri("databricks")

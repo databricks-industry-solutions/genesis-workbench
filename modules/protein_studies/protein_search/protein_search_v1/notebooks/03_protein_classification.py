@@ -73,18 +73,17 @@ def make_predict_fn():
     )
     print(f"ProtBERT membrane classifier loaded on {device}")
 
-    def predict(inputs: np.ndarray) -> np.ndarray:
+    def predict(inputs: np.ndarray) -> list:
         """Classify a batch of spaced protein sequences."""
         sequences = [s[:MAX_SEQ_LEN] if len(s) > MAX_SEQ_LEN else s for s in inputs.tolist()]
         with torch.no_grad():
             results = pipe(sequences, truncation=True, max_length=MAX_SEQ_LEN, batch_size=4)
         torch.cuda.empty_cache()
 
-        output = np.empty((len(results), 2), dtype=object)
-        for i, result in enumerate(results):
+        output = []
+        for result in results:
             item = result[0] if isinstance(result, list) else result
-            output[i, 0] = item["label"]
-            output[i, 1] = str(item["score"])
+            output.append({"label": item["label"], "score": float(item["score"])})
         return output
 
     return predict
@@ -93,7 +92,7 @@ classify_udf = predict_batch_udf(
     make_predict_fn,
     return_type=StructType([
         StructField("label", StringType()),
-        StructField("score", StringType()),
+        StructField("score", FloatType()),
     ]),
     batch_size=8,
 )
@@ -104,7 +103,6 @@ classify_udf = predict_batch_udf(
 df_classified = df.withColumn("classification", classify_udf("spaced_sequence"))
 df_classified = df_classified.select("*", "classification.label", "classification.score")
 df_classified = df_classified.drop("classification")
-df_classified = df_classified.withColumn("score", F.col("score").cast(FloatType()))
 
 # COMMAND ----------
 

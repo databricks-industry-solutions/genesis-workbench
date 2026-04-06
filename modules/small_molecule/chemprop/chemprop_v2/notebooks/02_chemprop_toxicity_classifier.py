@@ -1,26 +1,36 @@
 # Databricks notebook source
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ### Example 2: Train a New Chemprop Toxicity Classifier on ClinTox
-# MAGIC
+# MAGIC %md
+# MAGIC %md
 # MAGIC This notebook trains a new Chemprop model (Directed Message Passing Neural Network)
+# MAGIC %md
 # MAGIC for toxicity classification on the ClinTox dataset.
-# MAGIC
+# MAGIC %md
+# MAGIC %md
 # MAGIC Sometimes existing models are inadequate — they may be nonexistent for a particular
+# MAGIC %md
 # MAGIC molecular property or may not be applicable to the chemical space of interest.
+# MAGIC %md
 # MAGIC This example shows how to train a custom binary classification model.
-# MAGIC
+# MAGIC %md
+# MAGIC %md
 # MAGIC ClinTox contains 1,491 drugs labeled for clinical trial toxicity (Wu et al.).
+# MAGIC %md
 # MAGIC We train a binary classification D-MPNN model to predict toxicity from SMILES.
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("schema", "genesis_schema", "Schema")
+dbutils.widgets.text("catalog", "srijit_nair_ci_demo_catalog", "Catalog")
+dbutils.widgets.text("schema", "genesis_workbench", "Schema")
 dbutils.widgets.text("model_name", "chemprop_clintox", "Model Name")
 dbutils.widgets.text("experiment_name", "dbx_genesis_workbench_modules", "Experiment Name")
-dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id")
-dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
-dbutils.widgets.text("cache_dir", "chemprop", "Cache dir")
+dbutils.widgets.text("sql_warehouse_id", "045df48d4afed522", "SQL Warehouse Id")
+dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Id/Email")
+dbutils.widgets.text("cache_dir", "chemprop_clintox", "Cache dir")
 dbutils.widgets.text("workload_type", "GPU_SMALL", "Workload Type for endpoints")
 
 catalog = dbutils.widgets.get("catalog")
@@ -34,7 +44,7 @@ schema = dbutils.widgets.get("schema")
 # COMMAND ----------
 
 # MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.2
-# MAGIC %pip install chemprop==2.0.5 rdkit torch>=2.0 lightning scikit-learn>=1.4
+# MAGIC %pip install chemprop>=2.0.0 rdkit torch>=2.0 lightning
 
 # COMMAND ----------
 
@@ -119,6 +129,7 @@ clintox_df.head()
 # COMMAND ----------
 
 from sklearn.model_selection import train_test_split
+from rdkit import Chem
 
 smiles_list = clintox_df["smiles"].tolist()
 targets_list = clintox_df["CT_TOX"].tolist()
@@ -131,8 +142,8 @@ smiles_val, smiles_test, y_val, y_test = train_test_split(
     smiles_temp, y_temp, test_size=0.5, random_state=42, stratify=y_temp
 )
 
-train_datapoints = [MoleculeDatapoint(smi, [y]) for smi, y in zip(smiles_train, y_train)]
-val_datapoints = [MoleculeDatapoint(smi, [y]) for smi, y in zip(smiles_val, y_val)]
+train_datapoints = [MoleculeDatapoint(mol, [y]) for smi, y in zip(smiles_train, y_train) if (mol := Chem.MolFromSmiles(smi)) is not None]
+val_datapoints = [MoleculeDatapoint(mol, [y]) for smi, y in zip(smiles_val, y_val) if (mol := Chem.MolFromSmiles(smi)) is not None]
 
 train_dset = MoleculeDataset(train_datapoints)
 val_dset = MoleculeDataset(val_datapoints)
@@ -147,7 +158,7 @@ mp = chemprop_nn.BondMessagePassing()
 agg = chemprop_nn.MeanAggregation()
 ffn = chemprop_nn.BinaryClassificationFFN()
 
-mpnn_model = chemprop_models.MPNN(message_passing=mp, agg=agg, ffn=ffn)
+mpnn_model = chemprop_models.MPNN(message_passing=mp, agg=agg, predictor=ffn)
 
 # COMMAND ----------
 
@@ -196,7 +207,7 @@ class ChempropToxicityModel(mlflow.pyfunc.PythonModel):
             checkpoint_path,
             message_passing=mp,
             agg=agg,
-            ffn=ffn,
+            predictor=ffn,
         )
         self.model.eval()
         if torch.cuda.is_available():
@@ -205,6 +216,7 @@ class ChempropToxicityModel(mlflow.pyfunc.PythonModel):
     def predict(self, context, model_input, params=None):
         import torch
         import numpy as np
+        from rdkit import Chem
         from chemprop.data import MoleculeDatapoint, MoleculeDataset, build_dataloader
 
         if hasattr(model_input, "tolist"):
@@ -214,17 +226,26 @@ class ChempropToxicityModel(mlflow.pyfunc.PythonModel):
         else:
             smiles_list = list(model_input)
 
-        datapoints = [MoleculeDatapoint(smi) for smi in smiles_list]
+        mols = [(smi, Chem.MolFromSmiles(smi)) for smi in smiles_list]
+        valid_indices = [i for i, (_, mol) in enumerate(mols) if mol is not None]
+        datapoints = [MoleculeDatapoint(mols[i][1]) for i in valid_indices]
         dset = MoleculeDataset(datapoints)
         loader = build_dataloader(dset, shuffle=False)
 
+        device = next(self.model.parameters()).device
         preds = []
         with torch.no_grad():
             for batch in loader:
-                batch_preds = self.model(batch)
+                batch.bmg.to(device)
+                V_d = batch.V_d.to(device) if batch.V_d is not None else None
+                X_d = batch.X_d.to(device) if batch.X_d is not None else None
+                batch_preds = self.model(batch.bmg, V_d, X_d)
                 preds.append(batch_preds.cpu().numpy())
 
-        predictions = np.concatenate(preds, axis=0).flatten().tolist()
+        valid_preds = np.concatenate(preds, axis=0).flatten() if preds else np.array([])
+        predictions = [None] * len(smiles_list)
+        for idx, pred in zip(valid_indices, valid_preds):
+            predictions[idx] = float(pred)
         return predictions
 
 # COMMAND ----------

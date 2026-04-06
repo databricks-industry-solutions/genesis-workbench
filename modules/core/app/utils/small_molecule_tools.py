@@ -74,13 +74,33 @@ EXAMPLE_SMILES = "COc(cc1)ccc1C#N"
 
 
 def hit_diffdock(protein_pdb: str, ligand_smiles: str, samples_per_complex: int = 10) -> pd.DataFrame:
-    """Call DiffDock model serving endpoint and return ranked docking poses."""
-    endpoint_name = get_endpoint_name("DiffDock")
-    logger.info(f"Sending DiffDock request to endpoint: {endpoint_name}")
-    result = _query_endpoint(endpoint_name, {
+    """Call DiffDock via split endpoints: ESM embeddings first, then scoring."""
+    import json as _json
+
+    # Step 1: Compute ESM embeddings
+    esm_endpoint = get_endpoint_name("DiffDock ESM Embeddings")
+    logger.info(f"Step 1/2: Computing ESM embeddings via {esm_endpoint}")
+    esm_result = _query_endpoint(esm_endpoint, {
         "dataframe_split": {
-            "columns": ["protein_pdb", "ligand_smiles", "samples_per_complex"],
-            "data": [[protein_pdb, ligand_smiles, samples_per_complex]]
+            "columns": ["protein_pdb"],
+            "data": [[protein_pdb]]
+        }
+    })
+    esm_predictions = esm_result.get("predictions", esm_result)
+    if isinstance(esm_predictions, list):
+        embeddings_b64 = esm_predictions[0].get("embeddings_b64", "{}")
+    elif isinstance(esm_predictions, dict):
+        embeddings_b64 = esm_predictions.get("embeddings_b64", "{}")
+    else:
+        embeddings_b64 = "{}"
+
+    # Step 2: Run DiffDock scoring with pre-computed embeddings
+    scoring_endpoint = get_endpoint_name("DiffDock")
+    logger.info(f"Step 2/2: Running DiffDock scoring via {scoring_endpoint}")
+    result = _query_endpoint(scoring_endpoint, {
+        "dataframe_split": {
+            "columns": ["protein_pdb", "ligand_smiles", "samples_per_complex", "esm_embeddings_b64"],
+            "data": [[protein_pdb, ligand_smiles, samples_per_complex, embeddings_b64]]
         }
     })
     predictions = result.get("predictions", result)
