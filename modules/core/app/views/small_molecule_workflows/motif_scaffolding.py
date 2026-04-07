@@ -78,22 +78,24 @@ def render():
                 scaffold_len_max = st.number_input("Max scaffold length:", value=80, min_value=20, max_value=300)
 
             num_samples = st.slider("Number of scaffolds:", min_value=1, max_value=10, value=2)
-            optimize_mpnn = st.checkbox("Optimize with ProteinMPNN", value=False,
+            optimize_mpnn = st.checkbox("Optimize with ProteinMPNN", value=True,
                                         help="Run ProteinMPNN to optimize the scaffold sequence while preserving motif geometry")
             validate_esmfold = st.checkbox("Validate with ESMFold", value=True,
                                            help="Fold the designed sequence with ESMFold to verify structural integrity")
 
             st.markdown("**MLflow Tracking:**")
             mlflow_experiment = st.text_input("MLflow Experiment:", value="gwb_motif_scaffolding", key="motif_mlflow_exp")
-            mlflow_run_name = st.text_input("Run Name:", key="motif_mlflow_run")
+            mlflow_run_name = st.text_input("Run Name:", value="motif_scaffolding_run", key="motif_mlflow_run")
             run_btn = st.form_submit_button("Generate Scaffolds", type="primary")
 
     with viewer_col:
         status_container = st.container()
-        viewer_placeholder = st.empty()
 
         if "scaffold_results" in st.session_state and st.session_state["scaffold_results"] is not None:
             results_df = st.session_state["scaffold_results"]
+
+            for w in st.session_state.get("scaffold_warnings", []):
+                st.warning(w)
 
             selected_idx = st.selectbox(
                 "Select scaffold:",
@@ -106,7 +108,6 @@ def render():
 
             row = results_df.loc[selected_idx]
 
-            # Prefer ESMFold structure > MPNN > raw scaffold
             display_pdb = None
             caption = ""
             if "esmfold_pdb" in results_df.columns and row.get("esmfold_pdb"):
@@ -116,12 +117,11 @@ def render():
                 display_pdb = row["pdb_output"]
                 caption = "Designed scaffold (CA-only backbone)"
 
+            # Viewer inline — below selections, above MLflow button
             if display_pdb:
-                # Overlay with original motif
                 motif_pdb_stored = st.session_state.get("scaffold_motif_pdb", "")
-                with viewer_placeholder:
-                    html = molstar_html_multi_pdb([motif_pdb_stored, display_pdb])
-                    components.html(html, height=540)
+                html = molstar_html_multi_pdb([motif_pdb_stored, display_pdb])
+                components.html(html, height=540)
                 st.caption(f"Showing: original motif + {caption}")
 
             seq = row.get("mpnn_sequence", row["sequence"])
@@ -146,10 +146,12 @@ def render():
         if not motif_pdb.strip():
             st.error("Motif PDB is required.")
             return
+        if not mlflow_run_name or not mlflow_run_name.strip():
+            st.error("MLflow Run Name is required.")
+            return
 
         user_info = get_user_info()
-        experiment = set_mlflow_experiment(experiment_tag=mlflow_experiment, user_email=user_info.user_email,
-                                           host=None, token=None, shared=True)
+        experiment = set_mlflow_experiment(experiment_tag=mlflow_experiment, user_email=user_info.user_email)
 
         total_steps = 1 + (1 if optimize_mpnn else 0) + (1 if validate_esmfold else 0)
         step = 0
@@ -159,6 +161,7 @@ def render():
             spinner = st.empty()
         with spinner, st.spinner("Running.."):
           with mlflow.start_run(run_name=mlflow_run_name, experiment_id=experiment.experiment_id) as run:
+            warnings = []
             mlflow.log_params({"target_chain": target_chain, "scaffold_len_min": scaffold_len_min,
                                "scaffold_len_max": scaffold_len_max, "num_samples": num_samples,
                                "optimize_mpnn": optimize_mpnn, "validate_esmfold": validate_esmfold})
@@ -193,9 +196,14 @@ def render():
                         seqs = _hit_proteinmpnn(row["pdb_output"])
                         mpnn_seqs.append(seqs[0] if isinstance(seqs, list) and seqs else row["sequence"])
                     except Exception:
-                        mpnn_seqs.append(row["sequence"])
+                        mpnn_seqs.append(None)
                 results_df["mpnn_sequence"] = mpnn_seqs
+                mpnn_failed = sum(1 for s in mpnn_seqs if s is None)
+                # Fall back to original sequence for failed ones
+                results_df["mpnn_sequence"] = results_df.apply(lambda r: r["mpnn_sequence"] if r["mpnn_sequence"] else r["sequence"], axis=1)
                 mlflow.log_dict({"mpnn_sequences": mpnn_seqs}, "proteinmpnn_results.json")
+                if mpnn_failed > 0:
+                    warnings.append(f"ProteinMPNN optimization failed for {mpnn_failed}/{total} scaffold(s). Using original sequences as fallback.")
                 step += 1
 
             if validate_esmfold:
@@ -217,10 +225,15 @@ def render():
                         validated.append(False)
                 results_df["esmfold_pdb"] = esmfold_pdbs
                 results_df["esmfold_validated"] = validated
+                esmfold_failed = sum(1 for v in validated if not v)
                 mlflow.log_dict({"esmfold_validated": validated}, "esmfold_validation.json")
+                if esmfold_failed > 0:
+                    warnings.append(f"ESMFold validation failed for {esmfold_failed}/{total} scaffold(s).")
 
             progress.progress(100, text="Complete")
             st.session_state["scaffold_results"] = results_df
             st.session_state["scaffold_motif_pdb"] = motif_pdb
             st.session_state["scaffold_experiment_id"] = experiment.experiment_id
-            st.rerun()
+            st.session_state["scaffold_warnings"] = warnings
+            mlflow.end_run(status="FINISHED")
+        st.rerun()

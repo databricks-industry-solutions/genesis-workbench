@@ -101,7 +101,7 @@ with diffdock_tab:
 
             st.markdown("**MLflow Tracking:**")
             diffdock_mlflow_experiment = st.text_input("MLflow Experiment:", value="gwb_molecular_docking", key="diffdock_mlflow_exp")
-            diffdock_mlflow_run_name = st.text_input("Run Name:", key="diffdock_mlflow_run")
+            diffdock_mlflow_run_name = st.text_input("Run Name:", value="molecular_docking_run", key="diffdock_mlflow_run")
             run_docking = st.form_submit_button("Run Docking", type="primary")
 
     with viewer_col:
@@ -139,10 +139,11 @@ with diffdock_tab:
     if run_docking:
         if not protein_pdb.strip() or not ligand_smiles.strip():
             st.error("Both protein PDB and molecule SMILES are required.")
+        elif not diffdock_mlflow_run_name or not diffdock_mlflow_run_name.strip():
+            st.error("MLflow Run Name is required.")
         else:
             user_info = get_user_info()
-            experiment = set_mlflow_experiment(experiment_tag=diffdock_mlflow_experiment, user_email=user_info.user_email,
-                                               host=None, token=None, shared=True)
+            experiment = set_mlflow_experiment(experiment_tag=diffdock_mlflow_experiment, user_email=user_info.user_email)
 
             with st.spinner("Running DiffDock molecular docking..."):
               with mlflow.start_run(run_name=diffdock_mlflow_run_name, experiment_id=experiment.experiment_id) as run:
@@ -154,6 +155,7 @@ with diffdock_tab:
                         st.session_state["diffdock_results"] = results_df
                         st.session_state["diffdock_protein_pdb"] = protein_pdb
                         st.session_state["diffdock_experiment_id"] = experiment.experiment_id
+                        mlflow.end_run(status="FINISHED")
                         st.rerun()
                     else:
                         st.error("DiffDock returned no results.")

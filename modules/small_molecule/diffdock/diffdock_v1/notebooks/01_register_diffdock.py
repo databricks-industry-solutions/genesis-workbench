@@ -11,7 +11,7 @@
 # MAGIC confidence model to rank predicted poses.
 # MAGIC
 # MAGIC **Cluster requirements:**
-# MAGIC - Runtime: **DBR 14.3 LTS ML GPU**
+# MAGIC - Runtime: **DBR 13.3 LTS ML GPU**
 # MAGIC - Node type: GPU instance (e.g., `g5.2xlarge` / A10G)
 # MAGIC - Single node is sufficient
 
@@ -650,7 +650,7 @@ def get_version(pkg):
 
 torch_version = torch.__version__
 torch_base = torch_version.split("+")[0]
-cuda_tag = torch_version.split("+")[1] if "+" in torch_version else "cu118"
+cuda_tag = torch_version.split("+")[1] if "+" in torch_version else "cu117"
 pyg_whl_url = f"https://data.pyg.org/whl/torch-{torch_base}+{cuda_tag}.html"
 
 # ESM endpoint only needs these
@@ -662,8 +662,9 @@ esm_pip_requirements = [
 ]
 
 # DiffDock scoring endpoint needs PyG + chemistry libs (no fair-esm)
+# torch must be first so torch-scatter/sparse/cluster can build against it
 scoring_pip_requirements = [
-    f"torch=={torch_base}",
+    f"torch=={torch_version}",
     f"torch-geometric=={get_version('torch-geometric')}",
     f"torch-scatter=={get_version('torch-scatter')}",
     f"torch-sparse=={get_version('torch-sparse')}",
@@ -795,7 +796,7 @@ print(f"Trimmed input_example PDB: {len(seen_resseq)} residues")
 esm_model_name = f"{model_name}_esm_embeddings"
 
 with mlflow.start_run(run_name=esm_model_name, experiment_id=experiment.experiment_id):
-    mlflow.log_params({"model": "ESM2 Embeddings for DiffDock", "runtime": "DBR 14.3 LTS ML GPU"})
+    mlflow.log_params({"model": "ESM2 Embeddings for DiffDock", "runtime": "DBR 13.3 LTS ML GPU"})
 
     esm_model_info = mlflow.pyfunc.log_model(
         artifact_path="model",
@@ -822,7 +823,7 @@ with mlflow.start_run(run_name=model_name, experiment_id=experiment.experiment_i
         "version": "v1.1.3 (DiffDock-L)",
         "pytorch_version": torch.__version__,
         "pyg_version": get_version("torch-geometric"),
-        "runtime": "DBR 14.3 LTS ML GPU",
+        "runtime": "DBR 13.3 LTS ML GPU",
     })
 
     scoring_model_info = mlflow.pyfunc.log_model(
@@ -834,7 +835,10 @@ with mlflow.start_run(run_name=model_name, experiment_id=experiment.experiment_i
             "confidence_model_dir": CONFIDENCE_MODEL_DIR,
         },
         code_path=code_items,
-        pip_requirements=[f"--find-links {pyg_whl_url}"] + scoring_pip_requirements,
+        pip_requirements=[
+            f"--find-links {pyg_whl_url}",
+            f"--extra-index-url https://download.pytorch.org/whl/{cuda_tag}",
+        ] + scoring_pip_requirements,
         signature=scoring_signature,
         input_example=pd.DataFrame([{
             "protein_pdb": example_pdb,

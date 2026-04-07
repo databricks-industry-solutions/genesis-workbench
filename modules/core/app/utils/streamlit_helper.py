@@ -15,30 +15,35 @@ from databricks.sdk import WorkspaceClient
 from streamlit.components.v1 import html
 from genesis_workbench.workbench import execute_select_query
 
-_endpoint_cache = {}
+# Mapping from display/lookup name to the UC model name used in endpoint naming
+_MODEL_ENDPOINT_MAP = {
+    # Small Molecules
+    "DiffDock ESM Embeddings": "diffdock_esm_embeddings",
+    "DiffDock": "diffdock",
+    "Proteina-Complexa Binder": "proteina_complexa",
+    "Proteina-Complexa Ligand": "proteina_complexa_ligand",
+    "Proteina-Complexa AME": "proteina_complexa_ame",
+    "Open Babel Converter": "open_babel_converter",
+    # Protein Studies
+    "ESMFold": "esmfold",
+    "ProteinMPNN": "proteinmpnn",
+    "RFDiffusion": "rfdiffusion_inpainting",
+    "Boltz": "boltz",
+    "AlphaFold2": "alphafold2",
+}
 
 def get_endpoint_name(model_name: str) -> str:
-    """Look up the serving endpoint name from model_deployments table by model name."""
-    if model_name in _endpoint_cache:
-        return _endpoint_cache[model_name]
+    """Get the serving endpoint name for a model. Uses hardcoded mapping for now;
+    will be replaced with database lookup later."""
+    dev_user_prefix = os.environ.get("DEV_USER_PREFIX", None)
+    if dev_user_prefix and dev_user_prefix.lower() in ("none", ""):
+        dev_user_prefix = None
 
-    core_catalog = os.environ["CORE_CATALOG_NAME"]
-    core_schema = os.environ["CORE_SCHEMA_NAME"]
+    uc_name = _MODEL_ENDPOINT_MAP.get(model_name)
+    if uc_name is None:
+        raise RuntimeError(f"Unknown model '{model_name}'. Add it to _MODEL_ENDPOINT_MAP in streamlit_helper.py")
 
-    query = f"""
-        SELECT model_endpoint_name
-        FROM {core_catalog}.{core_schema}.model_deployments md
-        JOIN {core_catalog}.{core_schema}.models m ON md.model_id = m.model_id
-        WHERE m.model_name = '{model_name}' AND md.is_active = true
-        ORDER BY md.deployment_id DESC LIMIT 1
-    """
-    result_df = execute_select_query(query)
-    if len(result_df) == 0:
-        raise RuntimeError(f"No active deployment found for model '{model_name}'")
-
-    endpoint_name = result_df.iloc[0]["model_endpoint_name"]
-    _endpoint_cache[model_name] = endpoint_name
-    return endpoint_name
+    return f"gwb_{dev_user_prefix}_{uc_name}_endpoint" if dev_user_prefix else f"gwb_{uc_name}_endpoint"
 
 
 def get_user_info():

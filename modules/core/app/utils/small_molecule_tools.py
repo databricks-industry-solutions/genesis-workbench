@@ -222,6 +222,30 @@ def hit_esmfold(sequence: str) -> str:
     return result.get("predictions", result)[0]
 
 
+def hit_open_babel(input_data: str, input_format: str = "smi", output_format: str = "pdb", gen3d: bool = True) -> str:
+    """Call Open Babel endpoint to convert between molecular formats."""
+    endpoint_name = get_endpoint_name("Open Babel Converter")
+    logger.info(f"Converting {input_format} -> {output_format} via {endpoint_name}")
+    result = _query_endpoint(endpoint_name, {
+        "dataframe_split": {
+            "columns": ["input_data", "input_format", "output_format", "gen3d"],
+            "data": [[input_data, input_format, output_format, "true" if gen3d else "false"]]
+        }
+    })
+    predictions = result.get("predictions", result)
+    return predictions[0] if isinstance(predictions, list) else predictions
+
+
+def smiles_to_pdb(smiles: str) -> str:
+    """Convert a SMILES string to PDB format with 3D coordinates via Open Babel."""
+    return hit_open_babel(smiles, input_format="smi", output_format="pdb", gen3d=True)
+
+
+def sequence_to_pdb(sequence: str) -> str:
+    """Convert a protein sequence to PDB structure via ESMFold."""
+    return hit_esmfold(sequence)
+
+
 def molstar_html_pdb(pdb: str) -> str:
     """Generate Mol* viewer HTML for a single PDB structure."""
     pdb_b64 = base64.b64encode(pdb.encode()).decode()

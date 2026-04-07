@@ -6,7 +6,11 @@ from databricks.sdk import WorkspaceClient
 from genesis_workbench.workbench import get_user_settings, get_deployed_modules
 
 st.set_page_config(layout="wide")
-#delete the top right menu
+st.markdown("""
+<style>
+    .block-container { padding-top: 1rem; }
+</style>
+""", unsafe_allow_html=True)
 deployed_modules = []
 
 with st.spinner("Initializing"):
