@@ -58,7 +58,7 @@ import numpy as np
 from pyspark.sql.types import StructType, StructField, StringType, FloatType
 from pyspark.ml.functions import predict_batch_udf
 
-MAX_SEQ_LEN = 1024
+MAX_SEQ_LEN = 512  # ProtBERT max effective length; longer sequences cause OOM
 
 def make_predict_fn():
     """Factory that loads model once per worker and returns a predict function."""
@@ -74,14 +74,13 @@ def make_predict_fn():
     print(f"ProtBERT membrane classifier loaded on {device}")
 
     def predict(inputs: np.ndarray) -> list:
-        """Classify a batch of spaced protein sequences."""
-        sequences = [s[:MAX_SEQ_LEN] if len(s) > MAX_SEQ_LEN else s for s in inputs.tolist()]
-        with torch.no_grad():
-            results = pipe(sequences, truncation=True, max_length=MAX_SEQ_LEN, batch_size=4)
-        torch.cuda.empty_cache()
-
+        """Classify protein sequences one at a time to avoid OOM."""
         output = []
-        for result in results:
+        for s in inputs.tolist():
+            seq = s[:MAX_SEQ_LEN]
+            with torch.no_grad():
+                result = pipe(seq, truncation=True, max_length=MAX_SEQ_LEN)
+            torch.cuda.empty_cache()
             item = result[0] if isinstance(result, list) else result
             output.append({"label": item["label"], "score": float(item["score"])})
         return output
@@ -94,7 +93,7 @@ classify_udf = predict_batch_udf(
         StructField("label", StringType()),
         StructField("score", FloatType()),
     ]),
-    batch_size=8,
+    batch_size=4,
 )
 
 # COMMAND ----------

@@ -481,28 +481,22 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                 break
 
     def load_context(self, context):
-        import sys, os
+        """Load score + confidence models eagerly. Without ESM2, this fits within 300s."""
+        import sys, os, yaml, torch
+        from argparse import Namespace
+        from functools import partial
+
         self._context = context
         self.repo_dir = context.artifacts["repo_dir"]
         self._add_code_paths(context)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self._models_loaded = False
-        print(f"DiffDock scoring context stored (lazy loading). Device: {self.device}")
 
-    def _ensure_models_loaded(self):
-        if self._models_loaded:
-            return
-        import os, yaml, torch
-        from argparse import Namespace
-        from functools import partial
-
-        self._add_code_paths(self._context)
+        # DiffDock's torus.py loads .npy files via relative paths
         os.chdir(self.repo_dir)
 
         from utils.diffusion_utils import t_to_sigma as t_to_sigma_compl
         from utils.utils import get_model
 
-        context = self._context
         score_dir = context.artifacts.get("score_model_dir")
         conf_dir = context.artifacts.get("confidence_model_dir")
 
@@ -523,7 +517,6 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
         self.confidence_model.load_state_dict(torch.load(os.path.join(conf_dir, conf_ckpt), map_location="cpu"), strict=True)
         self.confidence_model = self.confidence_model.to(self.device).eval()
 
-        self._models_loaded = True
         print(f"DiffDock score + confidence models loaded on {self.device}")
 
     def predict(self, context, model_input: pd.DataFrame) -> pd.DataFrame:
@@ -532,7 +525,6 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
         import torch
 
         self._add_code_paths(context)
-        self._ensure_models_loaded()
 
         from torch_geometric.loader import DataLoader as PyGDataLoader
         from rdkit.Chem import RemoveAllHs
