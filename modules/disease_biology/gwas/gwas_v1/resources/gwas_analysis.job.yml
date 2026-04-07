@@ -1,0 +1,81 @@
+resources:
+  jobs:
+    gwas_analysis:
+      name: gwas_glow_analysis
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: prepare_phenotype
+          job_cluster_key: gwas_spark_cluster
+          notebook_task:
+            notebook_path: ../notebooks/03_prepare_phenotype.py
+            source: WORKSPACE
+
+        - task_key: run_gwas
+          depends_on:
+            - task_key: prepare_phenotype
+          job_cluster_key: gwas_spark_cluster
+          notebook_task:
+            notebook_path: ../notebooks/04_gwas_analysis.py
+            source: WORKSPACE
+
+        - task_key: save_results
+          depends_on:
+            - task_key: run_gwas
+          job_cluster_key: gwas_spark_cluster
+          notebook_task:
+            notebook_path: ../notebooks/05_save_results.py
+            source: WORKSPACE
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: vcf_path
+          default: ""
+        - name: phenotype_path
+          default: ""
+        - name: phenotype_column
+          default: phenotype
+        - name: contigs
+          default: "6"
+        - name: hwe_cutoff
+          default: "0.01"
+        - name: pvalue_threshold
+          default: "0.01"
+        - name: mlflow_run_id
+          default: ""
+        - name: user_email
+          default: ${var.current_user}
+
+      job_clusters:
+        - job_cluster_key: gwas_spark_cluster
+          new_cluster:
+            cluster_name: ""
+            spark_version: 15.4.x-scala2.12
+            spark_conf:
+              spark.master: "local[*, 4]"
+              spark.databricks.cluster.profile: singleNode
+              spark.sql.codegen.wholeStage: "false"
+            node_type_id: ${var.cpu_node_type}
+            driver_node_type_id: ${var.cpu_node_type}
+            custom_tags:
+              ResourceClass: SingleNode
+              work_type: gwas_analysis
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            num_workers: 0
+            aws_attributes:
+              availability: ON_DEMAND
+
+      tags: ${var.common_resource_tags}
+
+      queue:
+        enabled: true

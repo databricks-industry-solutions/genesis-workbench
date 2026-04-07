@@ -1,0 +1,102 @@
+# Databricks notebook source
+
+# COMMAND ----------
+
+dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
+dbutils.widgets.text("schema", "genesis_schema", "Schema")
+dbutils.widgets.text("parabricks_alignment_job_id", "1234", "Parabricks Alignment Job ID")
+dbutils.widgets.text("gwas_analysis_job_id", "1234", "GWAS Analysis Job ID")
+dbutils.widgets.text("user_email", "a@b.com", "Email of the user running the deploy")
+dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
+
+catalog = dbutils.widgets.get("catalog")
+schema = dbutils.widgets.get("schema")
+
+# COMMAND ----------
+
+# MAGIC %pip install databricks-sdk>=0.50.0 databricks-sql-connector>=4.0.2 mlflow>=2.15
+
+# COMMAND ----------
+
+gwb_library_path = None
+libraries = dbutils.fs.ls(f"/Volumes/{catalog}/{schema}/libraries")
+for lib in libraries:
+    if lib.name.startswith("genesis_workbench"):
+        gwb_library_path = lib.path.replace("dbfs:", "")
+
+print(gwb_library_path)
+
+# COMMAND ----------
+
+# MAGIC %pip install {gwb_library_path} --force-reinstall
+# MAGIC dbutils.library.restartPython()
+
+# COMMAND ----------
+
+catalog = dbutils.widgets.get("catalog")
+schema = dbutils.widgets.get("schema")
+parabricks_alignment_job_id = dbutils.widgets.get("parabricks_alignment_job_id")
+gwas_analysis_job_id = dbutils.widgets.get("gwas_analysis_job_id")
+user_email = dbutils.widgets.get("user_email")
+sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
+
+# COMMAND ----------
+
+print(f"Catalog: {catalog}")
+print(f"Schema: {schema}")
+print(f"Parabricks Alignment Job ID: {parabricks_alignment_job_id}")
+print(f"GWAS Analysis Job ID: {gwas_analysis_job_id}")
+
+# COMMAND ----------
+
+from genesis_workbench.workbench import initialize
+databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
+initialize(core_catalog_name=catalog, core_schema_name=schema, sql_warehouse_id=sql_warehouse_id, token=databricks_token)
+
+# COMMAND ----------
+
+spark.sql(f"USE CATALOG {catalog}")
+spark.sql(f"USE SCHEMA {schema}")
+
+# COMMAND ----------
+
+ref_genome_path = f"/Volumes/{catalog}/{schema}/gwas_reference/genomes/GRCh38_full_analysis_set_plus_decoy_hla.fa"
+
+query = f"""
+    INSERT INTO settings VALUES
+    ('parabricks_alignment_job_id', '{parabricks_alignment_job_id}', 'disease_biology'),
+    ('gwas_analysis_job_id', '{gwas_analysis_job_id}', 'disease_biology'),
+    ('gwas_reference_genome_path', '{ref_genome_path}', 'disease_biology')
+"""
+
+spark.sql(query)
+
+# COMMAND ----------
+
+from genesis_workbench.workbench import set_app_permissions_for_job
+
+set_app_permissions_for_job(job_id=parabricks_alignment_job_id, user_email=user_email)
+set_app_permissions_for_job(job_id=gwas_analysis_job_id, user_email=user_email)
+
+# COMMAND ----------
+
+# Copy bundled sample phenotype data to the gwas_data volume
+import os, shutil
+
+sample_data_dir = f"/Volumes/{catalog}/{schema}/gwas_data/sample_phenotype"
+os.makedirs(sample_data_dir, exist_ok=True)
+
+current_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+workspace_root = os.sep.join(current_path.split(os.sep)[:-1])
+source_tsv = f"/Workspace{workspace_root}/../data/example_sample_list.tsv"
+
+if os.path.exists(source_tsv):
+    dest = os.path.join(sample_data_dir, "example_sample_list.tsv")
+    shutil.copy2(source_tsv, dest)
+    print(f"Copied sample phenotype data to {dest}")
+else:
+    print(f"Sample data file not found at {source_tsv}, skipping")
+
+# COMMAND ----------
+
+print("Disease Biology GWAS module initialization complete")

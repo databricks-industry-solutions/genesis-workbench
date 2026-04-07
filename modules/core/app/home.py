@@ -89,6 +89,12 @@ parabricks_page = st.Page(
     icon=":material/genetics:"
 )
 
+disease_biology_page = st.Page(
+    page="views/disease_biology.py",
+    title="Disease Biology",
+    icon=":material/genetics:"
+)
+
 # bionemo_geneformer_page = st.Page(
 #     page="views/bionemo/bionemo_geneformer.py",
 #     title="[NVIDIA BioNeMo©] Geneformer",
@@ -106,6 +112,8 @@ if "small_molecule" in deployed_modules:
     workbench_pages.append(small_molecules_page)
 if "parabricks" in deployed_modules:
     workbench_pages.append(parabricks_page)
+if "disease_biology" in "disease_biology": #deployed_modules:
+    workbench_pages.append(disease_biology_page)
 
 
 menu_pages = {

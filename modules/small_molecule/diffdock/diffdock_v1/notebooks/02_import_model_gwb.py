@@ -105,7 +105,7 @@ gwb_model_id = import_model_from_uc(user_email=user_email,
                     model_uc_version=model_version,
                     model_name="DiffDock",
                     model_display_name="DiffDock Molecular Docking (Scoring)",
-                    model_source_version="v1.0 (commit 0f9c419)",
+                    model_source_version="v1.1.3 (DiffDock-L)",
                     model_description_url="https://github.com/gcorso/DiffDock")
 
 run_id = deploy_model(user_email=user_email,

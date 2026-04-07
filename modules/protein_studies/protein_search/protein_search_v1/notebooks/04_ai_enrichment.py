@@ -54,25 +54,23 @@ print(f"Unique organisms: {organism_count}")
 orginfo_sDF = spark.sql(f"""
     SELECT
         OrganismName,
-        parsed.simple_term AS Organism_SimpleTerm,
-        parsed.meaning AS Organism_Definition
-    FROM (
-        SELECT
-            OrganismName,
-            from_json(
-                ai_query(
-                    'databricks-claude-sonnet-4-5',
-                    CONCAT(
-                        'As a knowledgeable encyclopedia, provide a simple layman term and brief meaning ',
-                        'for this scientific organism name: ', OrganismName,
-                        '. Respond with JSON only: {{"simple_term": "...", "meaning": "..."}}'
-                    ),
-                    responseFormat => 'STRUCT<response: STRING>'
-                ).response,
-                'simple_term STRING, meaning STRING'
-            ) AS parsed
-        FROM {catalog}.{schema}.tinysample_organism_info
-    )
+        COALESCE(
+            ai_query(
+                'databricks-claude-sonnet-4-5',
+                CONCAT('Give a simple layman term for this scientific organism name: ', OrganismName, '. Reply with only the simple term, nothing else.'),
+                failOnError => false
+            ).result,
+            OrganismName
+        ) AS Organism_SimpleTerm,
+        COALESCE(
+            ai_query(
+                'databricks-claude-sonnet-4-5',
+                CONCAT('Give a brief one-sentence meaning/description for this scientific organism name: ', OrganismName, '. Reply with only the description, nothing else.'),
+                failOnError => false
+            ).result,
+            'Description unavailable'
+        ) AS Organism_Definition
+    FROM {catalog}.{schema}.tinysample_organism_info
 """)
 
 orginfo_sDF.write.mode("overwrite").option("mergeSchema", "true").saveAsTable(
@@ -90,18 +88,19 @@ display(spark.table(f"{catalog}.{schema}.tinysample_organism_info_scientificNsim
 # COMMAND ----------
 
 # DBTITLE 1,Validate foundation model endpoint exists
-from databricks.sdk import WorkspaceClient
-
-w = WorkspaceClient()
-
-try:
-    ep = w.serving_endpoints.get(foundation_model_endpoint)
-    print(f"Endpoint '{foundation_model_endpoint}' found (state: {ep.state.ready if ep.state else 'unknown'})")
-except Exception as e:
-    raise RuntimeError(
-        f"Foundation model endpoint '{foundation_model_endpoint}' not found. "
-        f"Ensure the endpoint exists before running this workflow. Error: {e}"
-    )
+if not foundation_model_endpoint.startswith("databricks-"):
+    from databricks.sdk import WorkspaceClient
+    w = WorkspaceClient()
+    try:
+        ep = w.serving_endpoints.get(foundation_model_endpoint)
+        print(f"Endpoint '{foundation_model_endpoint}' found (state: {ep.state.ready if ep.state else 'unknown'})")
+    except Exception as e:
+        raise RuntimeError(
+            f"Foundation model endpoint '{foundation_model_endpoint}' not found. "
+            f"Ensure the endpoint exists before running this workflow. Error: {e}"
+        )
+else:
+    print(f"Using built-in Databricks Foundation Model: {foundation_model_endpoint}")
 
 # COMMAND ----------
 
@@ -147,31 +146,58 @@ print(f"Base dataset row count: {df_base.count()}")
 # COMMAND ----------
 
 # DBTITLE 1,Enrich with protein research info via ai_query
-RESEARCH_JSON_INSTRUCTION = (
-    ' Respond with JSON only: {"information": "...", "recent_research": "...", "under_researched_areas": "..."}'
+RESEARCH_PROMPT_BASE = (
+    "You are a membrane proteins and drug discovery expert. "
+    "Analyze the given protein and be concise. Protein: "
 )
 
 df_enriched = (
     df_base.withColumn(
-        "researchDict",
-        F.from_json(
-            F.expr(f"""
+        "information",
+        F.expr(f"""
+            COALESCE(
                 ai_query(
                     '{foundation_model_endpoint}',
-                    concat('{SYSTEM_PROMPT} Protein: \"', replace(ProteinName, '"', ''), '\"{RESEARCH_JSON_INSTRUCTION}'),
-                    responseFormat => 'STRUCT<response: STRING>'
-                ).response
-            """),
-            "information STRING, recent_research STRING, under_researched_areas STRING",
-        ),
+                    concat('{RESEARCH_PROMPT_BASE}\"', replace(ProteinName, '"', ''), '\". Provide a brief overview of this protein. Reply with only the overview, nothing else.'),
+                    failOnError => false
+                ).result,
+                'Information unavailable'
+            )
+        """),
+    )
+    .withColumn(
+        "recent_research",
+        F.expr(f"""
+            COALESCE(
+                ai_query(
+                    '{foundation_model_endpoint}',
+                    concat('{RESEARCH_PROMPT_BASE}\"', replace(ProteinName, '"', ''), '\". List key recent research findings about this protein. Reply with only the findings, nothing else.'),
+                    failOnError => false
+                ).result,
+                'Research unavailable'
+            )
+        """),
+    )
+    .withColumn(
+        "under_researched_areas",
+        F.expr(f"""
+            COALESCE(
+                ai_query(
+                    '{foundation_model_endpoint}',
+                    concat('{RESEARCH_PROMPT_BASE}\"', replace(ProteinName, '"', ''), '\". List promising under-researched drug discovery opportunities for this protein. Reply with only the opportunities, nothing else.'),
+                    failOnError => false
+                ).result,
+                'Opportunities unavailable'
+            )
+        """),
     )
     .select(
         "OrganismName",
         "Organism_SimpleTerm",
         "ProteinName",
-        F.col("researchDict.information").alias("information"),
-        F.col("researchDict.recent_research").alias("recent_research"),
-        F.col("researchDict.under_researched_areas").alias("under_researched_areas"),
+        "information",
+        "recent_research",
+        "under_researched_areas",
         "ProteinType",
         "ProteinClassificationScore",
     )

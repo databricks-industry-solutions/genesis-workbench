@@ -37,14 +37,14 @@ schema = dbutils.widgets.get("schema")
 # COMMAND ----------
 
 # MAGIC %pip install -q databricks-sdk>=0.50.0 databricks-sql-connector>=4.0.2 mlflow>=2.15
-# MAGIC %pip install -q pyyaml==6.0.1 scipy==1.7.3 networkx==2.6.3 biopython==1.79 rdkit-pypi==2022.03.5 e3nn==0.5.0 spyrmsd==0.5.2 pandas==1.5.3 biopandas==0.4.1 prody==2.6.1 fair-esm==2.0.0
+# MAGIC %pip install -q pyyaml==6.0.1 scipy==1.7.3 networkx==2.6.3 biopython==1.79 rdkit-pypi==2022.03.5 e3nn==0.5.1 spyrmsd==0.5.2 pandas==1.5.3 biopandas==0.4.1 prody==2.6.1 fair-esm==2.0.0
 
 # COMMAND ----------
 
 import torch, subprocess, sys
 
 torch_ver = torch.__version__.split("+")[0]
-cuda_tag = torch.__version__.split("+")[1] if "+" in torch.__version__ else "cu118"
+cuda_tag = torch.__version__.split("+")[1] if "+" in torch.__version__ else "cu117"
 pyg_url = f"https://data.pyg.org/whl/torch-{torch_ver}+{cuda_tag}.html"
 print(f"PyTorch: {torch.__version__}, PyG wheel index: {pyg_url}")
 
@@ -54,7 +54,7 @@ for pkg in ["torch-scatter", "torch-sparse", "torch-cluster"]:
         "-f", pyg_url, "--quiet",
     ])
 subprocess.check_call([
-    sys.executable, "-m", "pip", "install", "torch-geometric==2.3.1", "--quiet",
+    sys.executable, "-m", "pip", "install", "torch-geometric==2.2.0", "--quiet",
 ])
 
 # COMMAND ----------
@@ -116,8 +116,8 @@ if not os.path.exists(DIFFDOCK_DIR):
         ["git", "clone", "https://github.com/gcorso/DiffDock.git", DIFFDOCK_DIR],
         check=True,
     )
-    subprocess.run(["git", "checkout", "0f9c419"], cwd=DIFFDOCK_DIR, check=True)
-    print("Cloned DiffDock at commit 0f9c419")
+    subprocess.run(["git", "checkout", "v1.1.3"], cwd=DIFFDOCK_DIR, check=True)
+    print("Cloned DiffDock at v1.1.3 (DiffDock-L)")
 else:
     print(f"DiffDock already at {DIFFDOCK_DIR}")
 
@@ -241,17 +241,19 @@ from rdkit.Chem import RemoveAllHs
 
 from utils.diffusion_utils import t_to_sigma as t_to_sigma_compl, get_t_schedule
 from utils.sampling import randomize_position, sampling
-from dd_datasets.pdbbind import PDBBind
+from utils.inference_utils import InferenceDataset
 from utils.utils import get_model
 from dd_datasets.process_mols import write_mol_with_coords
 
 SCORE_MODEL_DIR = CONFIDENCE_MODEL_DIR = None
-for d in [os.path.join(DIFFDOCK_DIR, "workdir", "paper_score_model"),
-          os.path.join(DIFFDOCK_DIR, "workdir", "v1.1", "score_model")]:
+for d in [os.path.join(DIFFDOCK_DIR, "workdir", "v1.1", "score_model"),
+          os.path.join(DIFFDOCK_DIR, "workdir", "score_model"),
+          os.path.join(DIFFDOCK_DIR, "workdir", "paper_score_model")]:
     if os.path.exists(os.path.join(d, "model_parameters.yml")):
         SCORE_MODEL_DIR = d; break
-for d in [os.path.join(DIFFDOCK_DIR, "workdir", "paper_confidence_model"),
-          os.path.join(DIFFDOCK_DIR, "workdir", "v1.1", "confidence_model")]:
+for d in [os.path.join(DIFFDOCK_DIR, "workdir", "v1.1", "confidence_model"),
+          os.path.join(DIFFDOCK_DIR, "workdir", "confidence_model"),
+          os.path.join(DIFFDOCK_DIR, "workdir", "paper_confidence_model")]:
     if os.path.exists(os.path.join(d, "model_parameters.yml")):
         CONFIDENCE_MODEL_DIR = d; break
 
@@ -260,8 +262,9 @@ if SCORE_MODEL_DIR is None:
     download_and_extract(
         "https://github.com/gcorso/DiffDock/releases/download/v1.1/diffdock_models.zip",
         os.path.join(DIFFDOCK_DIR, "workdir"))
-    SCORE_MODEL_DIR = os.path.join(DIFFDOCK_DIR, "workdir", "v1.1", "score_model")
-    CONFIDENCE_MODEL_DIR = os.path.join(DIFFDOCK_DIR, "workdir", "v1.1", "confidence_model")
+    # Zip extracts flat: workdir/score_model/, not workdir/v1.1/score_model/
+    SCORE_MODEL_DIR = os.path.join(DIFFDOCK_DIR, "workdir", "score_model")
+    CONFIDENCE_MODEL_DIR = os.path.join(DIFFDOCK_DIR, "workdir", "confidence_model")
 
 print(f"Score model: {SCORE_MODEL_DIR}")
 print(f"Confidence model: {CONFIDENCE_MODEL_DIR}")
@@ -274,65 +277,43 @@ with open(os.path.join(CONFIDENCE_MODEL_DIR, "model_parameters.yml")) as f:
 device = torch.device("cuda")
 t_to_sigma = partial(t_to_sigma_compl, args=score_model_args)
 
-score_model = get_model(score_model_args, device, t_to_sigma=t_to_sigma, no_parallel=True)
+score_model = get_model(score_model_args, device, t_to_sigma=t_to_sigma, no_parallel=True, old=False)
 ckpt = [f for f in os.listdir(SCORE_MODEL_DIR) if f.endswith(".pt")][0]
 score_model.load_state_dict(torch.load(os.path.join(SCORE_MODEL_DIR, ckpt), map_location="cpu"), strict=True)
 score_model = score_model.to(device).eval()
 print(f"Score model loaded: {ckpt}")
 
-confidence_model = get_model(confidence_args, device, t_to_sigma=t_to_sigma, no_parallel=True, confidence_mode=True)
+confidence_model = get_model(confidence_args, device, t_to_sigma=t_to_sigma, no_parallel=True, confidence_mode=True, old=True)
 conf_ckpt = [f for f in os.listdir(CONFIDENCE_MODEL_DIR) if f.endswith(".pt")][0]
 confidence_model.load_state_dict(torch.load(os.path.join(CONFIDENCE_MODEL_DIR, conf_ckpt), map_location="cpu"), strict=True)
 confidence_model = confidence_model.to(device).eval()
 print(f"Confidence model loaded: {conf_ckpt}")
 
-INPUT_CSV = os.path.join(WORK_DIR, "input_protein_ligand.csv")
-with open(INPUT_CSV, "w") as f:
-    f.write("protein_path,ligand\n")
-    f.write(f"{pdb_path},{SMILES}\n")
-
-CACHE_DIR = os.path.join(WORK_DIR, "cache")
-if os.path.exists(CACHE_DIR):
-    shutil.rmtree(CACHE_DIR)
-
 N_SAMPLES = 10
 
-print("Building score dataset...")
-test_dataset = PDBBind(
-    root="", transform=None, protein_path_list=[pdb_path], ligand_descriptions=[SMILES],
-    receptor_radius=score_model_args.receptor_radius, cache_path=CACHE_DIR,
-    remove_hs=score_model_args.remove_hs, max_lig_size=None,
+print("Building inference dataset...")
+test_dataset = InferenceDataset(
+    out_dir=os.path.join(WORK_DIR, "results"),
+    complex_names=[f"{PDB_ID}_{SMILES}"],
+    protein_files=[pdb_path],
+    ligand_descriptions=[SMILES],
+    protein_sequences=None,
+    lm_embeddings=True,
+    precomputed_lm_embeddings=ESM_OUTPUT_DIR,
+    receptor_radius=score_model_args.receptor_radius,
     c_alpha_max_neighbors=score_model_args.c_alpha_max_neighbors,
-    matching=False, keep_original=False,
-    popsize=score_model_args.matching_popsize, maxiter=score_model_args.matching_maxiter,
-    all_atoms=score_model_args.all_atoms, atom_radius=score_model_args.atom_radius,
+    remove_hs=score_model_args.remove_hs,
+    all_atoms=score_model_args.all_atoms,
+    atom_radius=score_model_args.atom_radius,
     atom_max_neighbors=score_model_args.atom_max_neighbors,
-    esm_embeddings_path=ESM_OUTPUT_DIR, require_ligand=True, num_workers=1)
+    knn_only_graph=getattr(score_model_args, 'knn_only_graph', False),
+)
 
-use_orig_cache = getattr(confidence_args, 'use_original_model_cache', False)
-transfer = getattr(confidence_args, 'transfer_weights', False)
-
-if not use_orig_cache and not transfer:
-    print("Building confidence dataset (all_atoms=True)...")
-    confidence_test_dataset = PDBBind(
-        root="", transform=None, protein_path_list=[pdb_path], ligand_descriptions=[SMILES],
-        receptor_radius=confidence_args.receptor_radius, cache_path=CACHE_DIR,
-        remove_hs=confidence_args.remove_hs, max_lig_size=None,
-        c_alpha_max_neighbors=confidence_args.c_alpha_max_neighbors,
-        matching=False, keep_original=False,
-        popsize=confidence_args.matching_popsize, maxiter=confidence_args.matching_maxiter,
-        all_atoms=confidence_args.all_atoms, atom_radius=confidence_args.atom_radius,
-        atom_max_neighbors=confidence_args.atom_max_neighbors,
-        esm_embeddings_path=ESM_OUTPUT_DIR if confidence_args.esm_embeddings_path is not None else None,
-        require_ligand=True, num_workers=1)
-    confidence_complex_dict = {d.name: d for d in confidence_test_dataset}
-else:
-    confidence_complex_dict = None
-
+confidence_complex_dict = None
 print(f"Score dataset: {len(test_dataset)} complexes")
 
 test_loader = PyGDataLoader(dataset=test_dataset, batch_size=1, shuffle=False)
-tr_schedule = get_t_schedule(inference_steps=20)
+tr_schedule = get_t_schedule(inference_steps=20, sigma_schedule='expbeta')
 OUT_DIR = os.path.join(WORK_DIR, "results")
 os.makedirs(OUT_DIR, exist_ok=True)
 
@@ -507,12 +488,12 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
 
         self.t_to_sigma = partial(t_to_sigma_compl, args=self.score_model_args)
 
-        self.score_model = get_model(self.score_model_args, self.device, t_to_sigma=self.t_to_sigma, no_parallel=True)
+        self.score_model = get_model(self.score_model_args, self.device, t_to_sigma=self.t_to_sigma, no_parallel=True, old=False)
         ckpt = [f for f in os.listdir(score_dir) if f.endswith(".pt")][0]
         self.score_model.load_state_dict(torch.load(os.path.join(score_dir, ckpt), map_location="cpu"), strict=True)
         self.score_model = self.score_model.to(self.device).eval()
 
-        self.confidence_model = get_model(self.confidence_args, self.device, t_to_sigma=self.t_to_sigma, no_parallel=True, confidence_mode=True)
+        self.confidence_model = get_model(self.confidence_args, self.device, t_to_sigma=self.t_to_sigma, no_parallel=True, confidence_mode=True, old=True)
         conf_ckpt = [f for f in os.listdir(conf_dir) if f.endswith(".pt")][0]
         self.confidence_model.load_state_dict(torch.load(os.path.join(conf_dir, conf_ckpt), map_location="cpu"), strict=True)
         self.confidence_model = self.confidence_model.to(self.device).eval()
@@ -530,7 +511,7 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
         from rdkit.Chem import RemoveAllHs
         from utils.diffusion_utils import get_t_schedule
         from utils.sampling import randomize_position, sampling
-        from dd_datasets.pdbbind import PDBBind
+        from utils.inference_utils import InferenceDataset
         from dd_datasets.process_mols import write_mol_with_coords
 
         all_results = []
@@ -558,44 +539,27 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                         tensor = torch.from_numpy(tensor_np)
                         torch.save({'representations': {33: tensor}}, os.path.join(esm_out, f"{label}.pt"))
 
-                    dataset = PDBBind(
-                        root="", transform=None,
-                        protein_path_list=[pdb_path], ligand_descriptions=[smiles],
+                    dataset = InferenceDataset(
+                        out_dir=tmpdir,
+                        complex_names=["complex_0"],
+                        protein_files=[pdb_path],
+                        ligand_descriptions=[smiles],
+                        protein_sequences=None,
+                        lm_embeddings=True,
+                        precomputed_lm_embeddings=esm_out,
                         receptor_radius=self.score_model_args.receptor_radius,
-                        cache_path=os.path.join(tmpdir, "cache"),
-                        remove_hs=self.score_model_args.remove_hs, max_lig_size=None,
                         c_alpha_max_neighbors=self.score_model_args.c_alpha_max_neighbors,
-                        matching=False, keep_original=False,
-                        popsize=self.score_model_args.matching_popsize,
-                        maxiter=self.score_model_args.matching_maxiter,
+                        remove_hs=self.score_model_args.remove_hs,
                         all_atoms=self.score_model_args.all_atoms,
                         atom_radius=self.score_model_args.atom_radius,
                         atom_max_neighbors=self.score_model_args.atom_max_neighbors,
-                        esm_embeddings_path=esm_out, require_ligand=True, num_workers=1,
+                        knn_only_graph=getattr(self.score_model_args, 'knn_only_graph', False),
                     )
 
                     confidence_complex_dict = None
-                    if not use_orig and not transfer:
-                        conf_dataset = PDBBind(
-                            root="", transform=None,
-                            protein_path_list=[pdb_path], ligand_descriptions=[smiles],
-                            receptor_radius=self.confidence_args.receptor_radius,
-                            cache_path=os.path.join(tmpdir, "cache_conf"),
-                            remove_hs=self.confidence_args.remove_hs, max_lig_size=None,
-                            c_alpha_max_neighbors=self.confidence_args.c_alpha_max_neighbors,
-                            matching=False, keep_original=False,
-                            popsize=self.confidence_args.matching_popsize,
-                            maxiter=self.confidence_args.matching_maxiter,
-                            all_atoms=self.confidence_args.all_atoms,
-                            atom_radius=self.confidence_args.atom_radius,
-                            atom_max_neighbors=self.confidence_args.atom_max_neighbors,
-                            esm_embeddings_path=esm_out if self.confidence_args.esm_embeddings_path is not None else None,
-                            require_ligand=True, num_workers=1,
-                        )
-                        confidence_complex_dict = {d.name: d for d in conf_dataset}
 
                     loader = PyGDataLoader(dataset=dataset, batch_size=1, shuffle=False)
-                    tr_schedule = get_t_schedule(inference_steps=10)
+                    tr_schedule = get_t_schedule(inference_steps=20, sigma_schedule='expbeta')
 
                     for orig_complex_graph in loader:
                         try:
@@ -609,11 +573,14 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                                 conf_data = None
 
                             data_list, confidence = sampling(
-                                data_list=data_list, model=self.score_model, inference_steps=9,
+                                data_list=data_list, model=self.score_model, inference_steps=19,
                                 tr_schedule=tr_schedule, rot_schedule=tr_schedule, tor_schedule=tr_schedule,
                                 device=self.device, t_to_sigma=self.t_to_sigma, model_args=self.score_model_args,
                                 confidence_model=self.confidence_model, confidence_data_list=conf_data,
                                 confidence_model_args=self.confidence_args, batch_size=10, no_final_step_noise=True,
+                                temp_sampling=[1.17, 2.06, 7.04],
+                                temp_psi=[0.73, 0.90, 0.59],
+                                temp_sigma_data=[0.93, 0.75, 0.69],
                             )
 
                             lig = orig_complex_graph.mol[0]
@@ -706,7 +673,7 @@ scoring_pip_requirements = [
     "networkx==2.6.3",
     "biopython==1.79",
     "rdkit-pypi==2022.03.5",
-    "e3nn==0.5.0",
+    "e3nn==0.5.1",
     "spyrmsd==0.5.2",
     "pandas==1.5.3",
     "biopandas==0.4.1",
@@ -852,7 +819,7 @@ print(f"Registered ESM: {catalog}.{schema}.{esm_model_name}")
 with mlflow.start_run(run_name=model_name, experiment_id=experiment.experiment_id):
     mlflow.log_params({
         "model": "DiffDock Scoring (no ESM)",
-        "version": "v1.0 (commit 0f9c419)",
+        "version": "v1.1.3 (DiffDock-L)",
         "pytorch_version": torch.__version__,
         "pyg_version": get_version("torch-geometric"),
         "runtime": "DBR 14.3 LTS ML GPU",

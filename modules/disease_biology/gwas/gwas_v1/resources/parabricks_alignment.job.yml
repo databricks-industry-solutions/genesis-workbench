@@ -1,0 +1,63 @@
+resources:
+  jobs:
+    parabricks_alignment:
+      name: gwas_parabricks_alignment
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: run_germline
+          job_cluster_key: parabricks_gpu_cluster
+          notebook_task:
+            notebook_path: ../notebooks/02_parabricks_germline.py
+            source: WORKSPACE
+          max_retries: 0
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: fastq_r1
+          default: ""
+        - name: fastq_r2
+          default: ""
+        - name: reference_genome_path
+          default: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/gwas_reference/genomes/GRCh38_full_analysis_set_plus_decoy_hla.fa
+        - name: output_volume_path
+          default: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/gwas_data
+        - name: mlflow_run_id
+          default: ""
+        - name: user_email
+          default: ${var.current_user}
+
+      job_clusters:
+        - job_cluster_key: parabricks_gpu_cluster
+          new_cluster:
+            num_workers: 0
+            node_type_id: ${var.a10_node_type}
+            driver_node_type_id: ${var.a10_node_type}
+            spark_version: 15.4.x-scala2.12
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            docker_image:
+              url: ${var.parabricks_docker_image}
+              basic_auth:
+                username: ${var.parabricks_docker_userid}
+                password: ${var.parabricks_docker_token}
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.databricks.unityCatalog.volumes.enabled: "true"
+              spark.master: "local[*]"
+            custom_tags:
+              ResourceClass: SingleNode
+              work_type: gwas_alignment
+            aws_attributes:
+              availability: ON_DEMAND
+
+      tags: ${var.common_resource_tags}
