@@ -29,9 +29,18 @@ for lib in libraries:
     if lib.name.startswith("genesis_workbench"):
         gwb_library_path = lib.path.replace("dbfs:", "")
 
+glow_whl_path = None
+glow_libs = dbutils.fs.ls(f"/Volumes/{catalog}/{schema}/libraries/glow")
+for lib in glow_libs:
+    if lib.name.endswith(".whl"):
+        glow_whl_path = lib.path.replace("dbfs:", "")
+
+print(f"GWB library: {gwb_library_path}")
+print(f"Glow wheel: {glow_whl_path}")
+
 # COMMAND ----------
 
-# MAGIC %pip install {gwb_library_path} --force-reinstall
+# MAGIC %pip install {gwb_library_path} {glow_whl_path} --force-reinstall
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------

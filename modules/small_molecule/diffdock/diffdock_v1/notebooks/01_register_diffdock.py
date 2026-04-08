@@ -486,18 +486,39 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
         # Copy precomputed SO3/torus cache files from bundled artifact to CWD
         # Without these, the first import recomputes them (~3-5 minutes)
         cache_dir = context.artifacts.get("cache_dir")
-        if cache_dir and os.path.isdir(cache_dir):
-            source_files = [f for f in os.listdir(cache_dir) if f.endswith('.npy')]
-            logger.warning(f"[DIFFDOCK load_context] Found {len(source_files)} .npy files in cache_dir: {cache_dir}")
-            for f in source_files:
-                dst = os.path.join(self.repo_dir, f)
-                if not os.path.exists(dst):
-                    shutil.copy2(os.path.join(cache_dir, f), dst)
-                    logger.warning(f"[DIFFDOCK load_context]   Copied cache: {f}")
-                else:
-                    logger.warning(f"[DIFFDOCK load_context]   Cache already exists: {f}")
-        else:
-            logger.warning(f"[DIFFDOCK load_context] WARNING: cache_dir not found or not a directory: {cache_dir}")
+        logger.warning(f"[DIFFDOCK load_context] cache_dir={cache_dir}, exists={os.path.exists(cache_dir) if cache_dir else 'N/A'}, isdir={os.path.isdir(cache_dir) if cache_dir else 'N/A'}, isfile={os.path.isfile(cache_dir) if cache_dir else 'N/A'}")
+
+        # Try multiple strategies to find cache files
+        cache_sources = []
+        if cache_dir:
+            if os.path.isdir(cache_dir):
+                cache_sources = [os.path.join(cache_dir, f) for f in os.listdir(cache_dir) if f.endswith('.npy')]
+            elif os.path.isdir(os.path.dirname(cache_dir)):
+                # MLflow might put files in parent directory
+                parent = os.path.dirname(cache_dir)
+                cache_sources = [os.path.join(parent, f) for f in os.listdir(parent) if f.endswith('.npy')]
+
+        # Also check repo_dir itself and code dir for .npy files
+        if not cache_sources:
+            for art_path in context.artifacts.values():
+                model_root = os.path.dirname(os.path.dirname(art_path))
+                for search_dir in [art_path, os.path.dirname(art_path), os.path.join(model_root, "code")]:
+                    if os.path.isdir(search_dir):
+                        found = [os.path.join(search_dir, f) for f in os.listdir(search_dir) if f.endswith('.npy')]
+                        if found:
+                            logger.warning(f"[DIFFDOCK load_context] Found {len(found)} .npy files in {search_dir}")
+                            cache_sources = found
+                            break
+                if cache_sources:
+                    break
+
+        logger.warning(f"[DIFFDOCK load_context] Total cache files found: {len(cache_sources)}")
+        for src in cache_sources:
+            fname = os.path.basename(src)
+            dst = os.path.join(self.repo_dir, fname)
+            if not os.path.exists(dst):
+                shutil.copy2(src, dst)
+                logger.warning(f"[DIFFDOCK load_context]   Copied cache: {fname}")
 
         # Verify cache files are in repo_dir (where DiffDock will look for them)
         npy_in_repo = [f for f in os.listdir(self.repo_dir) if f.endswith('.npy')]

@@ -139,6 +139,15 @@ for file in library/genesis_workbench/dist/*.whl; do
   fi
 done
 
+# Copy Glow library files (JAR + wheel) to UC Volume
+for file in library/glow/*; do
+  if [ -f "$file" ]; then
+    filename=$(basename "$file")
+    echo "Copying $filename to dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/glow/$filename"
+    databricks fs cp "$file" dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/glow/$filename --overwrite
+  fi
+done
+
 #unfortunately databricks sync uses gitignore to sync files
 #so we need to manualy delete the wheel files we created so that it does not
 #get checked into git

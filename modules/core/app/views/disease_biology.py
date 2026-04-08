@@ -26,9 +26,12 @@ from utils.disease_biology import (
 from utils.streamlit_helper import get_user_info, open_run_window
 
 
+from datetime import datetime
+
 st.title(":material/coronavirus: Disease Biology")
 
 user_info = get_user_info()
+_ts = datetime.now().strftime("%Y%m%d_%H%M")
 
 alignment_tab, gwas_tab, ingestion_tab, annotation_tab = st.tabs([
     "Variant Calling",
@@ -186,7 +189,7 @@ def _display_gwas_results_dialog(selected_row_index):
 with alignment_tab:
     st.markdown("### Variant Calling with Parabricks")
     st.markdown(
-        "Run [NVIDIA Parabricks](https://www.nvidia.com/en-us/clara/parabricks/) "
+        "Run NVIDIA Parabricks "
         "`germline` pipeline on paired-end FASTQ files to produce aligned BAM and "
         "germline VCF output."
     )
@@ -229,7 +232,7 @@ with alignment_tab:
         with ac1:
             align_experiment = st.text_input("MLflow Experiment:", value="gwas_variant_calling", key="align_exp")
         with ac2:
-            align_run_name = st.text_input("Run Name:", key="align_run")
+            align_run_name = st.text_input("Run Name:", value=f"variant_calling_{_ts}", key="align_run")
 
         align_btn = st.form_submit_button("Start Alignment Job", type="primary")
 
@@ -326,7 +329,7 @@ with alignment_tab:
 with gwas_tab:
     st.markdown("### GWAS Analysis with Glow")
     st.markdown(
-        "Run genome-wide association analysis using [Glow](https://glow.readthedocs.io/). "
+        "Run genome-wide association analysis using Glow. "
         "Provide a VCF file (from Parabricks output or your own) and a phenotype dataset."
     )
 
@@ -408,7 +411,7 @@ with gwas_tab:
         with gc4:
             gwas_experiment = st.text_input("MLflow Experiment:", value="gwas_analysis", key="gwas_exp")
         with gc5:
-            gwas_run_name = st.text_input("Run Name:", key="gwas_run")
+            gwas_run_name = st.text_input("Run Name:", value=f"gwas_analysis_{_ts}", key="gwas_run")
 
         gwas_btn = st.form_submit_button("Start GWAS Analysis", type="primary")
 
@@ -509,7 +512,7 @@ with ingestion_tab:
     st.markdown("### VCF to Delta Ingestion")
     st.markdown(
         "Convert a VCF file into a queryable Delta table using "
-        "[Glow](https://glow.readthedocs.io/). The resulting table can be used "
+        "Glow. The resulting table can be used "
         "for GWAS, variant annotation, or any downstream analysis."
     )
 
@@ -572,7 +575,7 @@ with ingestion_tab:
         with ic1:
             ingest_experiment = st.text_input("MLflow Experiment:", value="vcf_ingestion", key="ingest_exp")
         with ic2:
-            ingest_run_name = st.text_input("Run Name:", key="ingest_run")
+            ingest_run_name = st.text_input("Run Name:", value=f"vcf_ingestion_{_ts}", key="ingest_run")
 
         ingest_btn = st.form_submit_button("Start VCF Ingestion", type="primary")
 
@@ -712,7 +715,7 @@ def _display_annotation_results_dialog(selected_row_index):
 with annotation_tab:
     st.markdown("### Clinical Variant Annotation")
     st.markdown(
-        "Annotate variants with [ClinVar](https://www.ncbi.nlm.nih.gov/clinvar/) "
+        "Annotate variants with ClinVar "
         "clinical significance data. Filter to specific gene regions, identify "
         "pathogenic variants, and enrich with disease associations."
     )
@@ -752,7 +755,7 @@ with annotation_tab:
         with ac1:
             annot_experiment = st.text_input("MLflow Experiment:", value="variant_annotation", key="annot_exp")
         with ac2:
-            annot_run_name = st.text_input("Run Name:", key="annot_run")
+            annot_run_name = st.text_input("Run Name:", value=f"variant_annotation_{_ts}", key="annot_run")
 
         annot_btn = st.form_submit_button("Start Variant Annotation", type="primary")
 

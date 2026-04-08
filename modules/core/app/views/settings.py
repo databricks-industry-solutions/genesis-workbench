@@ -3,7 +3,7 @@ import os
 import base64
 from datetime import datetime, timedelta
 from utils.streamlit_helper import get_user_info
-from genesis_workbench.workbench import execute_workflow
+from genesis_workbench.workbench import execute_workflow, execute_select_query
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.jobs import RunLifeCycleState
 
@@ -22,7 +22,26 @@ with general_tab:
 
         st.text_input("Application Schema Location: ", f"{core_catalog_name}.{core_schema_name}")
 
-        st.write(f"SQL Warehouse Host Name:{sql_warehouse_id}")
+        st.write(f"SQL Warehouse ID: {sql_warehouse_id}")
+
+    st.divider()
+    st.markdown("##### Registered Workflows")
+
+    try:
+        workflows_df = execute_select_query(
+            f"SELECT key, value, module FROM {core_catalog_name}.{core_schema_name}.settings "
+            f"WHERE key LIKE '%_job_id' ORDER BY module, key"
+        )
+        if not workflows_df.empty:
+            workflows_df.columns = ["Workflow", "Job ID", "Module"]
+            # Clean up workflow names for display
+            workflows_df["Workflow"] = workflows_df["Workflow"].str.replace("_job_id", "").str.replace("_", " ").str.title()
+            workflows_df["Module"] = workflows_df["Module"].str.replace("_", " ").str.title()
+            st.dataframe(workflows_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("No workflows registered yet. Deploy modules to register workflows.")
+    except Exception as e:
+        st.warning(f"Could not load registered workflows: {e}")
 
 with endpoint_tab:
     st.subheader("Start All Endpoints")
