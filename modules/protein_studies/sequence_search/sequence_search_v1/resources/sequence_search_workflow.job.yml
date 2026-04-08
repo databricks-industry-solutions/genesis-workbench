@@ -1,0 +1,93 @@
+resources:
+  jobs:
+    sequence_search_workflow:
+      name: sequence_search_workflow
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+
+        - task_key: download_sequences
+          job_cluster_key: cpu_cluster
+          notebook_task:
+            notebook_path: ../notebooks/01_download_sequences.py
+            source: WORKSPACE
+
+        - task_key: create_delta_tables
+          depends_on:
+            - task_key: download_sequences
+          job_cluster_key: cpu_cluster
+          notebook_task:
+            notebook_path: ../notebooks/02_create_delta_tables.py
+            source: WORKSPACE
+
+        - task_key: batch_embed_sequences
+          depends_on:
+            - task_key: create_delta_tables
+          job_cluster_key: multi_gpu_cluster
+          notebook_task:
+            notebook_path: ../notebooks/03_batch_embed_sequences.py
+            source: WORKSPACE
+
+        - task_key: create_vector_index
+          depends_on:
+            - task_key: batch_embed_sequences
+          job_cluster_key: cpu_cluster
+          notebook_task:
+            notebook_path: ../notebooks/04_create_vector_index.py
+            source: WORKSPACE
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: volume_name
+          default: ${resources.volumes.sequence_search_volume.name}
+        - name: user_email
+          default: ${var.current_user}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+
+      job_clusters:
+        - job_cluster_key: cpu_cluster
+          new_cluster:
+            cluster_name: ""
+            spark_version: 15.4.x-scala2.12
+            spark_conf:
+              spark.master: "local[*, 4]"
+              spark.databricks.cluster.profile: singleNode
+            node_type_id: ${var.cpu_node_type}
+            custom_tags:
+              ResourceClass: SingleNode
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            num_workers: 0
+            aws_attributes:
+              availability: ON_DEMAND
+
+        - job_cluster_key: multi_gpu_cluster
+          new_cluster:
+            cluster_name: ""
+            spark_version: 15.4.x-gpu-ml-scala2.12
+            spark_conf:
+              spark.master: "local[*, 4]"
+              spark.databricks.cluster.profile: singleNode
+            node_type_id: ${var.a10_node_type}
+            driver_node_type_id: ${var.a10_node_type}
+            custom_tags:
+              ResourceClass: SingleNode
+              work_type: sequence_embedding
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            num_workers: 0
+            aws_attributes:
+              availability: ON_DEMAND
+
+      tags: ${var.common_resource_tags}
+
+      queue:
+        enabled: true

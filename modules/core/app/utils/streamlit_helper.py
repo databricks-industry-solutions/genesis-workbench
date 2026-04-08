@@ -28,6 +28,7 @@ _MODEL_ENDPOINT_MAP = {
     "Chemprop ClinTox": "chemprop_clintox",
     "Chemprop ADMET": "chemprop_admet",
     # Protein Studies
+    "ESM2 Embeddings": "esm2_embeddings",
     "ESMFold": "esmfold",
     "ProteinMPNN": "proteinmpnn",
     "RFDiffusion": "rfdiffusion_inpainting",

@@ -548,7 +548,7 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
         for _, row in model_input.iterrows():
             pdb_content = row["protein_pdb"]
             smiles = row["ligand_smiles"]
-            n_samples = int(row.get("samples_per_complex", 10))
+            n_samples = int(row.get("samples_per_complex", 5))
             embeddings_b64_json = row.get("esm_embeddings_b64", "{}")
 
             try:
@@ -586,7 +586,7 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                     confidence_complex_dict = None
 
                     loader = PyGDataLoader(dataset=dataset, batch_size=1, shuffle=False)
-                    tr_schedule = get_t_schedule(inference_steps=20, sigma_schedule='expbeta')
+                    tr_schedule = get_t_schedule(inference_steps=11, sigma_schedule='expbeta')
 
                     for orig_complex_graph in loader:
                         try:
@@ -599,16 +599,17 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                             else:
                                 conf_data = None
 
-                            data_list, confidence = sampling(
-                                data_list=data_list, model=self.score_model, inference_steps=19,
-                                tr_schedule=tr_schedule, rot_schedule=tr_schedule, tor_schedule=tr_schedule,
-                                device=self.device, t_to_sigma=self.t_to_sigma, model_args=self.score_model_args,
-                                confidence_model=self.confidence_model, confidence_data_list=conf_data,
-                                confidence_model_args=self.confidence_args, batch_size=10, no_final_step_noise=True,
-                                temp_sampling=[1.17, 2.06, 7.04],
-                                temp_psi=[0.73, 0.90, 0.59],
-                                temp_sigma_data=[0.93, 0.75, 0.69],
-                            )
+                            with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
+                                data_list, confidence = sampling(
+                                    data_list=data_list, model=self.score_model, inference_steps=10,
+                                    tr_schedule=tr_schedule, rot_schedule=tr_schedule, tor_schedule=tr_schedule,
+                                    device=self.device, t_to_sigma=self.t_to_sigma, model_args=self.score_model_args,
+                                    confidence_model=self.confidence_model, confidence_data_list=conf_data,
+                                    confidence_model_args=self.confidence_args, batch_size=5, no_final_step_noise=True,
+                                    temp_sampling=[1.17, 2.06, 7.04],
+                                    temp_psi=[0.73, 0.90, 0.59],
+                                    temp_sigma_data=[0.93, 0.75, 0.69],
+                                )
 
                             lig = orig_complex_graph.mol[0]
                             ligand_pos = np.asarray([
@@ -686,6 +687,7 @@ esm_pip_requirements = [
     "fair-esm==2.0.0",
     "biopython==1.79",
     "pandas==1.5.3",
+    "cloudpickle==2.0.0",
 ]
 
 # DiffDock scoring endpoint needs PyG + chemistry libs
@@ -708,6 +710,7 @@ scoring_pip_requirements = [
     "biopandas==0.4.1",
     "prody==2.6.1",
     "fair-esm==2.0.0",
+    "cloudpickle==2.0.0",
 ]
 
 # COMMAND ----------

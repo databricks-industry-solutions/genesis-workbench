@@ -1,0 +1,40 @@
+resources:
+  jobs:
+    build_transformer_engine_job:
+      name: dbx_gwb_build_transformer_engine
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: build_te_wheel
+          job_cluster_key: gpu_cluster
+          notebook_task:
+            notebook_path: ../../notebooks/build_transformer_engine.py
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+
+      job_clusters:
+        - job_cluster_key: gpu_cluster
+          new_cluster:
+            num_workers: 0
+            node_type_id: ${var.a10_node_type}
+            driver_node_type_id: ${var.a10_node_type}
+            spark_version: '15.4.x-gpu-ml-scala2.12'
+            aws_attributes:
+              availability: ON_DEMAND
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+
+      tags: ${var.common_resource_tags}

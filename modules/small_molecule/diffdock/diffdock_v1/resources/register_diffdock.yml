@@ -13,13 +13,15 @@ resources:
           job_cluster_key: diffdock_gpu_cluster
           notebook_task:
             notebook_path: ../notebooks/01_register_diffdock.py
+          max_retries: 0
 
         #this task needs serverless runtime with python 3.11
         - task_key: import_diffdock_task
-          depends_on: 
+          depends_on:
             - task_key: register_diffdock_task
           notebook_task:
             notebook_path: ../notebooks/02_import_model_gwb.py
+          max_retries: 0
 
       environments:
         - environment_key: default

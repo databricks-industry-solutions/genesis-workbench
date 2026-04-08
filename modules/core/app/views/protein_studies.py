@@ -6,7 +6,7 @@ from genesis_workbench.models import (ModelCategory,
 
 from utils.streamlit_helper import get_user_info
 
-from views.protein_studies_workflows import settings, structure_prediction, protein_design
+from views.protein_studies_workflows import settings, structure_prediction, protein_design, sequence_search
 
 st.title(":material/biotech: Protein Studies")
 
@@ -29,7 +29,7 @@ with st.spinner("Loading data"):
 
 user_info = get_user_info()
 
-settings_tab, protein_structure_prediction_tab, protein_design_tab = st.tabs(["Settings", "Protein Structure Prediction", "Protein Design"])
+settings_tab, protein_structure_prediction_tab, protein_design_tab, sequence_search_tab = st.tabs(["Settings", "Protein Structure Prediction", "Protein Design", "Sequence Search"])
 
 with settings_tab:
     settings.render(available_protein_models_df, deployed_protein_models_df)
@@ -39,3 +39,6 @@ with protein_structure_prediction_tab:
 
 with protein_design_tab:
     protein_design.render()
+
+with sequence_search_tab:
+    sequence_search.render()
