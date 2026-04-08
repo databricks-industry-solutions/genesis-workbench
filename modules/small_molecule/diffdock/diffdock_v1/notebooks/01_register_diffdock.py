@@ -463,44 +463,76 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
 
     def load_context(self, context):
         """Lightweight setup — copies precomputed caches, defers model loading to first predict."""
-        import sys, os, shutil
+        import sys, os, shutil, time, logging
+        logger = logging.getLogger("diffdock")
+        logger.setLevel(logging.INFO)
+
+        t0 = time.time()
+        logger.warning("[DIFFDOCK load_context] START")
 
         self._context = context
         self.repo_dir = context.artifacts["repo_dir"]
         self._add_code_paths(context)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        logger.warning(f"[DIFFDOCK load_context] Device: {self.device} ({time.time()-t0:.1f}s)")
 
         # DiffDock's torus.py and so3.py load .npy cache files from CWD
         os.chdir(self.repo_dir)
+        logger.warning(f"[DIFFDOCK load_context] repo_dir: {self.repo_dir}")
+
+        # List all artifacts to verify they're accessible
+        logger.warning(f"[DIFFDOCK load_context] Available artifacts: {list(context.artifacts.keys())}")
 
         # Copy precomputed SO3/torus cache files from bundled artifact to CWD
         # Without these, the first import recomputes them (~3-5 minutes)
         cache_dir = context.artifacts.get("cache_dir")
         if cache_dir and os.path.isdir(cache_dir):
-            for f in os.listdir(cache_dir):
-                if f.endswith('.npy'):
-                    dst = os.path.join(self.repo_dir, f)
-                    if not os.path.exists(dst):
-                        shutil.copy2(os.path.join(cache_dir, f), dst)
-                        print(f"  Restored cache: {f}")
+            source_files = [f for f in os.listdir(cache_dir) if f.endswith('.npy')]
+            logger.warning(f"[DIFFDOCK load_context] Found {len(source_files)} .npy files in cache_dir: {cache_dir}")
+            for f in source_files:
+                dst = os.path.join(self.repo_dir, f)
+                if not os.path.exists(dst):
+                    shutil.copy2(os.path.join(cache_dir, f), dst)
+                    logger.warning(f"[DIFFDOCK load_context]   Copied cache: {f}")
+                else:
+                    logger.warning(f"[DIFFDOCK load_context]   Cache already exists: {f}")
+        else:
+            logger.warning(f"[DIFFDOCK load_context] WARNING: cache_dir not found or not a directory: {cache_dir}")
+
+        # Verify cache files are in repo_dir (where DiffDock will look for them)
+        npy_in_repo = [f for f in os.listdir(self.repo_dir) if f.endswith('.npy')]
+        logger.warning(f"[DIFFDOCK load_context] .npy files now in repo_dir: {len(npy_in_repo)} -> {npy_in_repo}")
 
         self._models_loaded = False
-        print(f"DiffDock scoring context stored (lazy loading). Device: {self.device}")
+        logger.warning(f"[DIFFDOCK load_context] DONE in {time.time()-t0:.1f}s (lazy loading, models not yet loaded)")
 
     def _ensure_models_loaded(self):
         """Load score + confidence models on first predict call."""
         if self._models_loaded:
             return
 
-        import os, yaml, torch
+        import os, yaml, torch, time, logging
+        logger = logging.getLogger("diffdock")
         from argparse import Namespace
         from functools import partial
+
+        t0 = time.time()
+        logger.warning(f"[DIFFDOCK _ensure_models_loaded] START — first predict call, loading models...")
 
         self._add_code_paths(self._context)
         os.chdir(self.repo_dir)
 
+        # Verify cache files are still present before importing DiffDock code
+        npy_files = [f for f in os.listdir(self.repo_dir) if f.endswith('.npy')]
+        logger.warning(f"[DIFFDOCK _ensure_models_loaded] .npy cache files in CWD: {len(npy_files)} -> {npy_files}")
+        if len(npy_files) == 0:
+            logger.warning(f"[DIFFDOCK _ensure_models_loaded] WARNING: No .npy cache files found! SO3/torus will recompute (~3-5 min)")
+
+        t1 = time.time()
+        logger.warning(f"[DIFFDOCK _ensure_models_loaded] Importing DiffDock utils...")
         from utils.diffusion_utils import t_to_sigma as t_to_sigma_compl
         from utils.utils import get_model
+        logger.warning(f"[DIFFDOCK _ensure_models_loaded] Imports done in {time.time()-t1:.1f}s")
 
         context = self._context
         score_dir = context.artifacts.get("score_model_dir")
@@ -513,33 +545,46 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
 
         self.t_to_sigma = partial(t_to_sigma_compl, args=self.score_model_args)
 
+        t2 = time.time()
+        logger.warning(f"[DIFFDOCK _ensure_models_loaded] Loading score model...")
         self.score_model = get_model(self.score_model_args, self.device, t_to_sigma=self.t_to_sigma, no_parallel=True, old=False)
         ckpt = [f for f in os.listdir(score_dir) if f.endswith(".pt")][0]
         self.score_model.load_state_dict(torch.load(os.path.join(score_dir, ckpt), map_location="cpu"), strict=True)
         self.score_model = self.score_model.to(self.device).eval()
+        logger.warning(f"[DIFFDOCK _ensure_models_loaded] Score model loaded in {time.time()-t2:.1f}s")
 
+        t3 = time.time()
+        logger.warning(f"[DIFFDOCK _ensure_models_loaded] Loading confidence model...")
         self.confidence_model = get_model(self.confidence_args, self.device, t_to_sigma=self.t_to_sigma, no_parallel=True, confidence_mode=True, old=True)
         conf_ckpt = [f for f in os.listdir(conf_dir) if f.endswith(".pt")][0]
         self.confidence_model.load_state_dict(torch.load(os.path.join(conf_dir, conf_ckpt), map_location="cpu"), strict=True)
         self.confidence_model = self.confidence_model.to(self.device).eval()
+        logger.warning(f"[DIFFDOCK _ensure_models_loaded] Confidence model loaded in {time.time()-t3:.1f}s")
 
         self._models_loaded = True
-        print(f"DiffDock score + confidence models loaded on {self.device}")
+        logger.warning(f"[DIFFDOCK _ensure_models_loaded] DONE — all models loaded on {self.device} in {time.time()-t0:.1f}s total")
 
     def predict(self, context, model_input: pd.DataFrame) -> pd.DataFrame:
-        import sys, copy, os, tempfile
+        import sys, copy, os, tempfile, time, logging
+        logger = logging.getLogger("diffdock")
         import numpy as np
         import torch
 
+        predict_t0 = time.time()
+        logger.warning(f"[DIFFDOCK predict] START")
+
         self._add_code_paths(context)
         self._ensure_models_loaded()
+        logger.warning(f"[DIFFDOCK predict] Models ready ({time.time()-predict_t0:.1f}s)")
 
+        t_import = time.time()
         from torch_geometric.loader import DataLoader as PyGDataLoader
         from rdkit.Chem import RemoveAllHs
         from utils.diffusion_utils import get_t_schedule
         from utils.sampling import randomize_position, sampling
         from utils.inference_utils import InferenceDataset
         from dd_datasets.process_mols import write_mol_with_coords
+        logger.warning(f"[DIFFDOCK predict] Imports done ({time.time()-t_import:.1f}s)")
 
         all_results = []
         use_orig = getattr(self.confidence_args, 'use_original_model_cache', False)
@@ -550,6 +595,7 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
             smiles = row["ligand_smiles"]
             n_samples = int(row.get("samples_per_complex", 5))
             embeddings_b64_json = row.get("esm_embeddings_b64", "{}")
+            logger.warning(f"[DIFFDOCK predict] Processing: smiles={smiles[:30]}..., n_samples={n_samples}")
 
             try:
                 with tempfile.TemporaryDirectory() as tmpdir:
@@ -558,6 +604,7 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                         f.write(pdb_content)
 
                     # Decode pre-computed ESM embeddings from base64
+                    t_esm = time.time()
                     esm_out = os.path.join(tmpdir, "esm2_output")
                     os.makedirs(esm_out, exist_ok=True)
                     embeddings_dict = json.loads(embeddings_b64_json)
@@ -565,7 +612,9 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                         tensor_np = pickle.loads(base64.b64decode(b64_data))
                         tensor = torch.from_numpy(tensor_np)
                         torch.save({'representations': {33: tensor}}, os.path.join(esm_out, f"{label}.pt"))
+                    logger.warning(f"[DIFFDOCK predict] ESM embeddings decoded ({time.time()-t_esm:.1f}s, {len(embeddings_dict)} chains)")
 
+                    t_dataset = time.time()
                     dataset = InferenceDataset(
                         out_dir=tmpdir,
                         complex_names=["complex_0"],
@@ -582,6 +631,7 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                         atom_max_neighbors=self.score_model_args.atom_max_neighbors,
                         knn_only_graph=getattr(self.score_model_args, 'knn_only_graph', False),
                     )
+                    logger.warning(f"[DIFFDOCK predict] InferenceDataset built ({time.time()-t_dataset:.1f}s)")
 
                     confidence_complex_dict = None
 
@@ -590,6 +640,7 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
 
                     for orig_complex_graph in loader:
                         try:
+                            t_prep = time.time()
                             data_list = [copy.deepcopy(orig_complex_graph) for _ in range(n_samples)]
                             randomize_position(data_list, self.score_model_args.no_torsion, False, self.score_model_args.tr_sigma_max)
 
@@ -598,7 +649,10 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                                 conf_data = [copy.deepcopy(confidence_complex_dict[name]) for _ in range(n_samples)] if name in confidence_complex_dict else None
                             else:
                                 conf_data = None
+                            logger.warning(f"[DIFFDOCK predict] Pose prep done ({time.time()-t_prep:.1f}s)")
 
+                            t_sample = time.time()
+                            logger.warning(f"[DIFFDOCK predict] Starting sampling: {n_samples} poses, 10 steps, FP16 autocast...")
                             with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
                                 data_list, confidence = sampling(
                                     data_list=data_list, model=self.score_model, inference_steps=10,
@@ -610,7 +664,9 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                                     temp_psi=[0.73, 0.90, 0.59],
                                     temp_sigma_data=[0.93, 0.75, 0.69],
                                 )
+                            logger.warning(f"[DIFFDOCK predict] Sampling DONE ({time.time()-t_sample:.1f}s)")
 
+                            t_post = time.time()
                             lig = orig_complex_graph.mol[0]
                             ligand_pos = np.asarray([
                                 cg["ligand"].pos.cpu().numpy() + orig_complex_graph.original_center.cpu().numpy()
@@ -635,12 +691,16 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                                 write_mol_with_coords(mol_pred, pos, sdf_path)
                                 with open(sdf_path) as fh:
                                     all_results.append({"rank": rank, "confidence": float(score), "ligand_sdf": fh.read()})
+                            logger.warning(f"[DIFFDOCK predict] Post-processing done ({time.time()-t_post:.1f}s)")
                         except Exception as e:
+                            logger.warning(f"[DIFFDOCK predict] ERROR (sampling): {e}")
                             all_results.append({"rank": 1, "confidence": float("nan"), "ligand_sdf": f"ERROR (sampling): {e}"})
 
             except Exception as e:
+                logger.warning(f"[DIFFDOCK predict] ERROR (preprocessing): {e}")
                 all_results.append({"rank": 1, "confidence": float("nan"), "ligand_sdf": f"ERROR (preprocessing): {e}"})
 
+        logger.warning(f"[DIFFDOCK predict] TOTAL predict time: {time.time()-predict_t0:.1f}s, {len(all_results)} results")
         return pd.DataFrame(all_results) if all_results else pd.DataFrame(columns=["rank", "confidence", "ligand_sdf"])
 
 # COMMAND ----------

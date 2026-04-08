@@ -1,0 +1,75 @@
+resources:
+  jobs:
+    variant_annotation:
+      name: variant_annotation_clinical
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: spike_pathogenic
+          job_cluster_key: variant_annotation_cluster
+          notebook_task:
+            notebook_path: ../notebooks/01_spike_pathogenic_variants.py
+            source: WORKSPACE
+
+        - task_key: filter_and_annotate
+          depends_on:
+            - task_key: spike_pathogenic
+          job_cluster_key: variant_annotation_cluster
+          notebook_task:
+            notebook_path: ../notebooks/02_filter_and_annotate.py
+            source: WORKSPACE
+
+        - task_key: save_results
+          depends_on:
+            - task_key: filter_and_annotate
+          job_cluster_key: variant_annotation_cluster
+          notebook_task:
+            notebook_path: ../notebooks/03_save_results.py
+            source: WORKSPACE
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: variants_table
+          default: ""
+        - name: gene_regions
+          default: '[{"name":"BRCA1","contig":"chr17","start":43044292,"end":43170327},{"name":"BRCA2","contig":"chr13","start":32315086,"end":32400268}]'
+        - name: pathogenic_vcf_path
+          default: ""
+        - name: mlflow_run_id
+          default: ""
+        - name: user_email
+          default: ${var.current_user}
+
+      job_clusters:
+        - job_cluster_key: variant_annotation_cluster
+          new_cluster:
+            cluster_name: ""
+            spark_version: 15.4.x-scala2.12
+            spark_conf:
+              spark.master: "local[*, 4]"
+              spark.databricks.cluster.profile: singleNode
+              spark.sql.codegen.wholeStage: "false"
+            node_type_id: ${var.cpu_node_type}
+            driver_node_type_id: ${var.cpu_node_type}
+            custom_tags:
+              ResourceClass: SingleNode
+              work_type: variant_annotation
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            num_workers: 0
+            aws_attributes:
+              availability: ON_DEMAND
+
+      tags: ${var.common_resource_tags}
+
+      queue:
+        enabled: true

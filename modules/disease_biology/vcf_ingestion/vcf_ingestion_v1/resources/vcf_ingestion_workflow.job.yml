@@ -1,0 +1,57 @@
+resources:
+  jobs:
+    vcf_ingestion:
+      name: vcf_ingestion_glow
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: vcf_to_delta
+          job_cluster_key: vcf_ingestion_cluster
+          notebook_task:
+            notebook_path: ../notebooks/01_vcf_to_delta.py
+            source: WORKSPACE
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: vcf_path
+          default: ""
+        - name: output_table_name
+          default: ""
+        - name: mlflow_run_id
+          default: ""
+        - name: user_email
+          default: ${var.current_user}
+
+      job_clusters:
+        - job_cluster_key: vcf_ingestion_cluster
+          new_cluster:
+            cluster_name: ""
+            spark_version: 15.4.x-scala2.12
+            spark_conf:
+              spark.master: "local[*, 4]"
+              spark.databricks.cluster.profile: singleNode
+              spark.sql.codegen.wholeStage: "false"
+            node_type_id: ${var.cpu_node_type}
+            driver_node_type_id: ${var.cpu_node_type}
+            custom_tags:
+              ResourceClass: SingleNode
+              work_type: vcf_ingestion
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            num_workers: 0
+            aws_attributes:
+              availability: ON_DEMAND
+
+      tags: ${var.common_resource_tags}
+
+      queue:
+        enabled: true

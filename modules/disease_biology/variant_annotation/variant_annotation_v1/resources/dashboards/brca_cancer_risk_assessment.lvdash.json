@@ -1,0 +1,841 @@
+{
+  "datasets": [
+    {
+      "name": "ds_total_brca_variants",
+      "displayName": "Total BRCA Variants",
+      "queryLines": [
+        "SELECT COUNT(*) as total_variants FROM serverless_rg_catalog.brca_demo.parabricks_brca_clinical_annotated"
+      ]
+    },
+    {
+      "name": "ds_pathogenic_count",
+      "displayName": "Pathogenic Variants Count",
+      "queryLines": [
+        "SELECT COUNT(*) as pathogenic_count FROM serverless_rg_catalog.brca_demo.parabricks_brca_pathogenic"
+      ]
+    },
+    {
+      "name": "ds_pathogenic_details",
+      "displayName": "Pathogenic Variant Details",
+      "queryLines": [
+        "SELECT\n",
+        "  gene,\n",
+        "  chromosome,\n",
+        "  start as position,\n",
+        "  ref,\n",
+        "  alt,\n",
+        "  zygosity,\n",
+        "  array_join(clinical_significance, ', ') as clinical_significance,\n",
+        "  disease_name,\n",
+        "  array_join(variant_ids, ', ') as variant_ids\n",
+        "FROM\n",
+        "  serverless_rg_catalog.brca_demo.parabricks_brca_pathogenic\n",
+        "ORDER BY\n",
+        "  gene,\n",
+        "  position"
+      ]
+    },
+    {
+      "name": "ds_pathogenicity_dist",
+      "displayName": "Pathogenicity Distribution",
+      "queryLines": [
+        "SELECT\n",
+        "  CASE\n",
+        "    WHEN p.gene IS NOT NULL THEN 'Pathogenic/Likely Pathogenic'\n",
+        "    WHEN\n",
+        "      a.clinical_significance IS NOT NULL\n",
+        "      AND array_join(a.clinical_significance, ', ') LIKE '%Benign%'\n",
+        "    THEN\n",
+        "      'Benign/Likely Benign'\n",
+        "    WHEN\n",
+        "      a.clinical_significance IS NOT NULL\n",
+        "      AND array_join(a.clinical_significance, ', ') LIKE '%Uncertain%'\n",
+        "    THEN\n",
+        "      'Uncertain Significance'\n",
+        "    ELSE 'No ClinVar Data'\n",
+        "  END as pathogenicity_category,\n",
+        "  COUNT(*) as count\n",
+        "FROM\n",
+        "  serverless_rg_catalog.brca_demo.parabricks_brca_clinical_annotated a\n",
+        "    LEFT JOIN serverless_rg_catalog.brca_demo.parabricks_brca_pathogenic p\n",
+        "      ON a.chromosome = p.chromosome\n",
+        "      AND a.start = p.start\n",
+        "      AND a.ref = p.ref\n",
+        "      AND a.alt = p.alt\n",
+        "GROUP BY\n",
+        "  1\n",
+        "ORDER BY\n",
+        "  count DESC"
+      ]
+    },
+    {
+      "name": "ds_gene_distribution",
+      "displayName": "Gene Distribution",
+      "queryLines": [
+        "SELECT gene, COUNT(*) as variant_count FROM serverless_rg_catalog.brca_demo.parabricks_brca_clinical_annotated GROUP BY gene ORDER BY gene"
+      ]
+    },
+    {
+      "name": "ds_all_brca_variants",
+      "displayName": "All BRCA Variants with Annotations",
+      "queryLines": [
+        "SELECT\n",
+        "  gene,\n",
+        "  chromosome,\n",
+        "  start as position,\n",
+        "  ref,\n",
+        "  alt,\n",
+        "  zygosity,\n",
+        "  COALESCE(array_join(clinical_significance, ', '), 'Not in ClinVar') as significance,\n",
+        "  COALESCE(array_join(disease_name, ', '), 'N/A') as disease\n",
+        "FROM\n",
+        "  serverless_rg_catalog.brca_demo.parabricks_brca_clinical_annotated\n",
+        "ORDER BY\n",
+        "  gene,\n",
+        "  position"
+      ]
+    },
+    {
+      "name": "ds_zygosity_dist",
+      "displayName": "Zygosity Distribution",
+      "queryLines": [
+        "SELECT\n",
+        "  gene,\n",
+        "  zygosity,\n",
+        "  COUNT(*) as variant_count\n",
+        "FROM\n",
+        "  serverless_rg_catalog.brca_demo.parabricks_brca_clinical_annotated\n",
+        "GROUP BY\n",
+        "  gene,\n",
+        "  zygosity\n",
+        "ORDER BY\n",
+        "  gene,\n",
+        "  zygosity"
+      ]
+    },
+    {
+      "name": "ds_disease_assoc",
+      "displayName": "Disease Associations",
+      "queryLines": [
+        "SELECT\n",
+        "  disease_name,\n",
+        "  gene,\n",
+        "  COUNT(*) as variant_count\n",
+        "FROM\n",
+        "  serverless_rg_catalog.brca_demo.parabricks_brca_pathogenic\n",
+        "WHERE\n",
+        "  disease_name IS NOT NULL\n",
+        "  AND disease_name != ''\n",
+        "GROUP BY\n",
+        "  disease_name,\n",
+        "  gene\n",
+        "ORDER BY\n",
+        "  variant_count DESC"
+      ]
+    },
+    {
+      "name": "ds_variant_quality",
+      "displayName": "Variant Quality Scores",
+      "queryLines": [
+        "SELECT\n",
+        "  gene,\n",
+        "  qual,\n",
+        "  zygosity\n",
+        "FROM\n",
+        "  serverless_rg_catalog.brca_demo.parabricks_brca_clinical_annotated"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "page_main",
+      "displayName": "BRCA Hereditary Cancer Risk Assessment",
+      "layout": [
+        {
+          "widget": {
+            "name": "w_total_variants",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_total_brca_variants",
+                  "fields": [
+                    {
+                      "name": "total_variants",
+                      "expression": "`total_variants`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "total_variants",
+                  "displayName": "Total BRCA Variants"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Total BRCA Variants Analyzed"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 4,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "w_pathogenic_count",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_pathogenic_count",
+                  "fields": [
+                    {
+                      "name": "pathogenic_count",
+                      "expression": "`pathogenic_count`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "pathogenic_count",
+                  "displayName": "Pathogenic Variants"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "⚠️ Pathogenic Variants Detected"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 0,
+            "width": 4,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "w_gene_dist",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_gene_distribution",
+                  "fields": [
+                    {
+                      "name": "gene",
+                      "expression": "`gene`"
+                    },
+                    {
+                      "name": "variant_count",
+                      "expression": "`variant_count`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "gene",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Gene"
+                },
+                "y": {
+                  "fieldName": "variant_count",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Variant Count"
+                },
+                "label": {
+                  "show": true
+                },
+                "color": {
+                  "fieldName": "gene",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "BRCA1",
+                        "color": "#FF3621"
+                      },
+                      {
+                        "value": "BRCA2",
+                        "color": "#00A972"
+                      }
+                    ]
+                  },
+                  "displayName": "Gene"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "BRCA1 vs BRCA2 Variant Distribution"
+              }
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 0,
+            "width": 4,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "w_pathogenicity_pie",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_pathogenicity_dist",
+                  "fields": [
+                    {
+                      "name": "count",
+                      "expression": "`count`"
+                    },
+                    {
+                      "name": "pathogenicity_category",
+                      "expression": "`pathogenicity_category`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "title": "Clinical Significance Distribution",
+                "showTitle": true
+              },
+              "widgetType": "pie",
+              "encodings": {
+                "angle": {
+                  "fieldName": "count",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Count"
+                },
+                "color": {
+                  "fieldName": "pathogenicity_category",
+                  "displayName": "Category",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "Pathogenic/Likely Pathogenic",
+                        "color": "#FF3621"
+                      },
+                      {
+                        "value": "Benign/Likely Benign",
+                        "color": "#00A972"
+                      },
+                      {
+                        "value": "Uncertain Significance",
+                        "color": "#FFAB00"
+                      },
+                      {
+                        "value": "No ClinVar Data",
+                        "color": "#919191"
+                      }
+                    ]
+                  }
+                },
+                "label": {
+                  "show": true
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 8,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "w_pathogenic_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_pathogenic_details",
+                  "fields": [
+                    {
+                      "name": "gene",
+                      "expression": "`gene`"
+                    },
+                    {
+                      "name": "chromosome",
+                      "expression": "`chromosome`"
+                    },
+                    {
+                      "name": "position",
+                      "expression": "`position`"
+                    },
+                    {
+                      "name": "ref",
+                      "expression": "`ref`"
+                    },
+                    {
+                      "name": "alt",
+                      "expression": "`alt`"
+                    },
+                    {
+                      "name": "zygosity",
+                      "expression": "`zygosity`"
+                    },
+                    {
+                      "name": "clinical_significance",
+                      "expression": "`clinical_significance`"
+                    },
+                    {
+                      "name": "disease_name",
+                      "expression": "`disease_name`"
+                    },
+                    {
+                      "name": "variant_ids",
+                      "expression": "`variant_ids`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "title": "⚠️ Actionable Pathogenic Variant Details",
+                "showTitle": true
+              },
+              "rowsPerPage": 25,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "gene",
+                    "displayName": "Gene"
+                  },
+                  {
+                    "fieldName": "chromosome",
+                    "displayName": "Chromosome"
+                  },
+                  {
+                    "fieldName": "position",
+                    "displayName": "Position"
+                  },
+                  {
+                    "fieldName": "ref",
+                    "displayName": "Ref"
+                  },
+                  {
+                    "fieldName": "alt",
+                    "displayName": "Alt"
+                  },
+                  {
+                    "fieldName": "zygosity",
+                    "displayName": "Zygosity",
+                    "style": {
+                      "type": "basic",
+                      "rules": [
+                        {
+                          "condition": {
+                            "operand": {
+                              "type": "data-value",
+                              "value": "homozygous"
+                            },
+                            "operator": "="
+                          },
+                          "backgroundColor": "#FFE0D6",
+                          "foregroundColor": "#CC2D14"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "fieldName": "clinical_significance",
+                    "displayName": "Clinical Significance"
+                  },
+                  {
+                    "fieldName": "disease_name",
+                    "displayName": "Disease"
+                  },
+                  {
+                    "fieldName": "variant_ids",
+                    "displayName": "ClinVar IDs"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 12,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "w_all_variants_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_all_brca_variants",
+                  "fields": [
+                    {
+                      "name": "gene",
+                      "expression": "`gene`"
+                    },
+                    {
+                      "name": "chromosome",
+                      "expression": "`chromosome`"
+                    },
+                    {
+                      "name": "position",
+                      "expression": "`position`"
+                    },
+                    {
+                      "name": "ref",
+                      "expression": "`ref`"
+                    },
+                    {
+                      "name": "alt",
+                      "expression": "`alt`"
+                    },
+                    {
+                      "name": "zygosity",
+                      "expression": "`zygosity`"
+                    },
+                    {
+                      "name": "significance",
+                      "expression": "`significance`"
+                    },
+                    {
+                      "name": "disease",
+                      "expression": "`disease`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "title": "Complete BRCA Variant Catalog",
+                "showTitle": true
+              },
+              "rowsPerPage": 25,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "gene",
+                    "displayName": "Gene"
+                  },
+                  {
+                    "fieldName": "chromosome",
+                    "displayName": "Chromosome"
+                  },
+                  {
+                    "fieldName": "position",
+                    "displayName": "Position"
+                  },
+                  {
+                    "fieldName": "ref",
+                    "displayName": "Ref"
+                  },
+                  {
+                    "fieldName": "alt",
+                    "displayName": "Alt"
+                  },
+                  {
+                    "fieldName": "zygosity",
+                    "displayName": "Zygosity"
+                  },
+                  {
+                    "fieldName": "significance",
+                    "displayName": "Clinical Significance"
+                  },
+                  {
+                    "fieldName": "disease",
+                    "displayName": "Associated Disease"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 14,
+            "width": 12,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "w_zygosity",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_zygosity_dist",
+                  "fields": [
+                    {
+                      "name": "zygosity",
+                      "expression": "`zygosity`"
+                    },
+                    {
+                      "name": "gene",
+                      "expression": "`gene`"
+                    },
+                    {
+                      "name": "variant_count",
+                      "expression": "`variant_count`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "title": "Zygosity by Gene",
+                "showTitle": true
+              },
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "gene",
+                  "displayName": "Gene",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "variant_count",
+                  "displayName": "Variant Count",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "zygosity",
+                  "displayName": "Zygosity",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "Heterozygous",
+                        "color": "#4A90D9"
+                      },
+                      {
+                        "value": "Homozygous Alt",
+                        "color": "#FF3621"
+                      }
+                    ]
+                  }
+                },
+                "label": {
+                  "show": true
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 3,
+            "width": 4,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "w_disease_assoc",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_disease_assoc",
+                  "fields": [
+                    {
+                      "name": "gene",
+                      "expression": "`gene`"
+                    },
+                    {
+                      "name": "disease_name",
+                      "expression": "`disease_name`"
+                    },
+                    {
+                      "name": "variant_count",
+                      "expression": "`variant_count`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "title": "Disease Associations in Pathogenic Variants",
+                "showTitle": true
+              },
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "disease_name",
+                  "displayName": "Disease",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "variant_count",
+                  "displayName": "Variant Count",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "gene",
+                  "displayName": "Gene",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "BRCA1",
+                        "color": "#FF3621"
+                      },
+                      {
+                        "value": "BRCA2",
+                        "color": "#00A972"
+                      }
+                    ]
+                  }
+                },
+                "label": {
+                  "show": true
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 10,
+            "width": 6,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "w_quality_hist",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_variant_quality",
+                  "fields": [
+                    {
+                      "name": "gene",
+                      "expression": "`gene`"
+                    },
+                    {
+                      "name": "qual",
+                      "expression": "`qual`"
+                    },
+                    {
+                      "name": "count(qual)",
+                      "expression": "COUNT(`qual`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "title": "Variant Quality Score Distribution",
+                "showTitle": true
+              },
+              "widgetType": "histogram",
+              "encodings": {
+                "x": {
+                  "fieldName": "qual",
+                  "displayName": "Quality Score",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "count(qual)",
+                  "displayName": "Count",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "gene",
+                  "displayName": "Gene",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "BRCA1",
+                        "color": "#FF3621"
+                      },
+                      {
+                        "value": "BRCA2",
+                        "color": "#00A972"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 10,
+            "width": 6,
+            "height": 4
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    }
+  ]
+}

@@ -3,7 +3,7 @@
 EXTRA_PARAMS=${@: 1}
 
 echo "===================================================="
-echo "⚙️ Preparing to destroy module protein_search_v1 "
+echo "⚙️ Preparing to destroy module variant_annotation_v1 "
 echo "===================================================="
 
 databricks bundle destroy $EXTRA_PARAMS --auto-approve

@@ -21,7 +21,7 @@ schema = dbutils.widgets.get("schema")
 # COMMAND ----------
 
 # requirements for genesis workbench library
-%pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.2
+%pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.2 transformers==4.41.2 accelerate==0.31.0 hf_transfer
 
 # COMMAND ----------
 
@@ -140,12 +140,9 @@ test_input = [
     "MADVQLQESGGGSVQAGGSLRLSCVASGVTSTRPCIGWFRQAPGKEREGVAVVNFRGDSTYITDSVKGRFTISRDEDSDTVYLQMNSLKPEDTATYYCAADVNRGGFCYIEDWYFSYWGQGTQVTVSSAAAHHHHHH"
 ]
 
-from mlflow.types.schema import ColSpec, Schema, Array
-
-signature = mlflow.models.signature.ModelSignature(
-    inputs=Schema([ColSpec(type="string")]),
-    outputs=Schema([ColSpec(type=Array(inner_type="float"))]),
-    params=None,
+signature = mlflow.models.infer_signature(
+    model_input=test_input,
+    model_output=[[0.0] * 1280],
 )
 
 # COMMAND ----------

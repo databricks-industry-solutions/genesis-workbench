@@ -17,7 +17,7 @@ echo "Extra Params: $EXTRA_PARAMS"
 
 echo "⚙️ Starting destroy of module Disease Biology"
 
-for module in gwas/gwas_v1
+for module in gwas/gwas_v1 vcf_ingestion/vcf_ingestion_v1 variant_annotation/variant_annotation_v1
     do
         cd $module
         echo "Running command destroy.sh --var=\"$EXTRA_PARAMS\" "
