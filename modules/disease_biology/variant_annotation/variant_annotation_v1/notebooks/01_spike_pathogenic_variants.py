@@ -31,7 +31,7 @@ for lib in libraries:
         gwb_library_path = lib.path.replace("dbfs:", "")
 
 glow_whl_path = None
-glow_libs = dbutils.fs.ls(f"/Volumes/{catalog}/{schema}/libraries/glow")
+glow_libs = dbutils.fs.ls(f"/Volumes/{catalog}/{schema}/libraries")
 for lib in glow_libs:
     if lib.name.endswith(".whl"):
         glow_whl_path = lib.path.replace("dbfs:", "")

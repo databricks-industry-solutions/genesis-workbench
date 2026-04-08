@@ -143,8 +143,8 @@ done
 for file in library/glow/*; do
   if [ -f "$file" ]; then
     filename=$(basename "$file")
-    echo "Copying $filename to dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/glow/$filename"
-    databricks fs cp "$file" dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/glow/$filename --overwrite
+    echo "Copying $filename to dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename"
+    databricks fs cp "$file" dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename --overwrite
   fi
 done
 
