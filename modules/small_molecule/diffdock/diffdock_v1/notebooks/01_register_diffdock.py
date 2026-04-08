@@ -932,13 +932,29 @@ if os.path.exists(DIFFDOCK_CACHE_DIR):
     shutil.rmtree(DIFFDOCK_CACHE_DIR)
 os.makedirs(DIFFDOCK_CACHE_DIR, exist_ok=True)
 
+# .npy cache files are created in CWD by torus.py and so3.py during test inference
+# Search multiple locations: DIFFDOCK_DIR, CWD, WORK_DIR
 cache_count = 0
-for f in os.listdir(DIFFDOCK_DIR):
-    if f.endswith('.npy'):
-        shutil.copy2(os.path.join(DIFFDOCK_DIR, f), os.path.join(DIFFDOCK_CACHE_DIR, f))
-        print(f"  Bundled cache: {f}")
-        cache_count += 1
-print(f"Bundled {cache_count} cache files")
+search_dirs = [DIFFDOCK_DIR, os.getcwd(), WORK_DIR]
+print(f"Searching for .npy cache files in: {search_dirs}")
+for search_dir in search_dirs:
+    if not os.path.isdir(search_dir):
+        continue
+    for f in os.listdir(search_dir):
+        if f.endswith('.npy'):
+            src = os.path.join(search_dir, f)
+            dst = os.path.join(DIFFDOCK_CACHE_DIR, f)
+            if not os.path.exists(dst):
+                shutil.copy2(src, dst)
+                print(f"  Bundled cache: {f} (from {search_dir})")
+                cache_count += 1
+print(f"Bundled {cache_count} cache files total")
+if cache_count == 0:
+    raise RuntimeError(
+        f"No .npy cache files found in any of {search_dirs}. "
+        "The SO3/torus precomputation did not run during test inference, or files were written to an unexpected location. "
+        "Cannot proceed — the serving endpoint will timeout without these cache files."
+    )
 
 # COMMAND ----------
 
