@@ -177,7 +177,7 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
         },
         pip_requirements=[
             "--extra-index-url https://download.pytorch.org/whl/cu121",
-            "mlflow==2.15.1",
+            "mlflow==2.22.0",
             "cloudpickle==3.0.0",
             "transformers==4.41.2",
             "torch==2.3.1+cu121",
