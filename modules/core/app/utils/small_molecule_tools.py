@@ -246,6 +246,33 @@ def sequence_to_pdb(sequence: str) -> str:
     return hit_esmfold(sequence)
 
 
+def hit_chemprop_bbbp(smiles_list: list) -> list:
+    """Call Chemprop BBBP endpoint. Returns list of BBB penetration probabilities."""
+    endpoint_name = get_endpoint_name("Chemprop BBBP")
+    logger.info(f"Sending {len(smiles_list)} SMILES to {endpoint_name}")
+    result = _query_endpoint(endpoint_name, {"inputs": smiles_list})
+    return result.get("predictions", result)
+
+
+def hit_chemprop_clintox(smiles_list: list) -> list:
+    """Call Chemprop ClinTox endpoint. Returns list of toxicity probabilities."""
+    endpoint_name = get_endpoint_name("Chemprop ClinTox")
+    logger.info(f"Sending {len(smiles_list)} SMILES to {endpoint_name}")
+    result = _query_endpoint(endpoint_name, {"inputs": smiles_list})
+    return result.get("predictions", result)
+
+
+def hit_chemprop_admet(smiles_list: list) -> pd.DataFrame:
+    """Call Chemprop ADMET endpoint. Returns DataFrame of multi-task ADMET predictions."""
+    endpoint_name = get_endpoint_name("Chemprop ADMET")
+    logger.info(f"Sending {len(smiles_list)} SMILES to {endpoint_name}")
+    result = _query_endpoint(endpoint_name, {"inputs": smiles_list})
+    predictions = result.get("predictions", result)
+    if isinstance(predictions, list) and len(predictions) > 0 and isinstance(predictions[0], dict):
+        return pd.DataFrame(predictions)
+    return pd.DataFrame(predictions)
+
+
 def molstar_html_pdb(pdb: str) -> str:
     """Generate Mol* viewer HTML for a single PDB structure."""
     pdb_b64 = base64.b64encode(pdb.encode()).decode()

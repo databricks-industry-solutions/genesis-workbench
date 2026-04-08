@@ -17,7 +17,7 @@ from utils.disease_biology import (
 from utils.streamlit_helper import get_user_info, open_run_window
 
 
-st.title(":material/genetics: Disease Biology")
+st.title(":material/coronavirus: Disease Biology")
 
 user_info = get_user_info()
 

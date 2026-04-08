@@ -24,6 +24,9 @@ _MODEL_ENDPOINT_MAP = {
     "Proteina-Complexa Ligand": "proteina_complexa_ligand",
     "Proteina-Complexa AME": "proteina_complexa_ame",
     "Open Babel Converter": "open_babel_converter",
+    "Chemprop BBBP": "chemprop_bbbp",
+    "Chemprop ClinTox": "chemprop_clintox",
+    "Chemprop ADMET": "chemprop_admet",
     # Protein Studies
     "ESMFold": "esmfold",
     "ProteinMPNN": "proteinmpnn",

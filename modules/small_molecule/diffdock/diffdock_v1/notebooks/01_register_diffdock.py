@@ -48,7 +48,7 @@ cuda_tag = torch.__version__.split("+")[1] if "+" in torch.__version__ else "cu1
 pyg_url = f"https://data.pyg.org/whl/torch-{torch_ver}+{cuda_tag}.html"
 print(f"PyTorch: {torch.__version__}, PyG wheel index: {pyg_url}")
 
-for pkg in ["torch-scatter", "torch-sparse", "torch-cluster"]:
+for pkg in ["torch-scatter==2.1.1", "torch-sparse==0.6.17", "torch-cluster==1.6.1"]:
     subprocess.check_call([
         sys.executable, "-m", "pip", "install", pkg,
         "-f", pyg_url, "--quiet",
@@ -462,22 +462,47 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                 break
 
     def load_context(self, context):
-        """Load score + confidence models eagerly. Without ESM2, this fits within 300s."""
-        import sys, os, yaml, torch
-        from argparse import Namespace
-        from functools import partial
+        """Lightweight setup — copies precomputed caches, defers model loading to first predict."""
+        import sys, os, shutil
 
         self._context = context
         self.repo_dir = context.artifacts["repo_dir"]
         self._add_code_paths(context)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        # DiffDock's torus.py loads .npy files via relative paths
+        # DiffDock's torus.py and so3.py load .npy cache files from CWD
+        os.chdir(self.repo_dir)
+
+        # Copy precomputed SO3/torus cache files from bundled artifact to CWD
+        # Without these, the first import recomputes them (~3-5 minutes)
+        cache_dir = context.artifacts.get("cache_dir")
+        if cache_dir and os.path.isdir(cache_dir):
+            for f in os.listdir(cache_dir):
+                if f.endswith('.npy'):
+                    dst = os.path.join(self.repo_dir, f)
+                    if not os.path.exists(dst):
+                        shutil.copy2(os.path.join(cache_dir, f), dst)
+                        print(f"  Restored cache: {f}")
+
+        self._models_loaded = False
+        print(f"DiffDock scoring context stored (lazy loading). Device: {self.device}")
+
+    def _ensure_models_loaded(self):
+        """Load score + confidence models on first predict call."""
+        if self._models_loaded:
+            return
+
+        import os, yaml, torch
+        from argparse import Namespace
+        from functools import partial
+
+        self._add_code_paths(self._context)
         os.chdir(self.repo_dir)
 
         from utils.diffusion_utils import t_to_sigma as t_to_sigma_compl
         from utils.utils import get_model
 
+        context = self._context
         score_dir = context.artifacts.get("score_model_dir")
         conf_dir = context.artifacts.get("confidence_model_dir")
 
@@ -498,6 +523,7 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
         self.confidence_model.load_state_dict(torch.load(os.path.join(conf_dir, conf_ckpt), map_location="cpu"), strict=True)
         self.confidence_model = self.confidence_model.to(self.device).eval()
 
+        self._models_loaded = True
         print(f"DiffDock score + confidence models loaded on {self.device}")
 
     def predict(self, context, model_input: pd.DataFrame) -> pd.DataFrame:
@@ -506,6 +532,7 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
         import torch
 
         self._add_code_paths(context)
+        self._ensure_models_loaded()
 
         from torch_geometric.loader import DataLoader as PyGDataLoader
         from rdkit.Chem import RemoveAllHs
@@ -661,14 +688,15 @@ esm_pip_requirements = [
     "pandas==1.5.3",
 ]
 
-# DiffDock scoring endpoint needs PyG + chemistry libs (no fair-esm)
-# torch must be first so torch-scatter/sparse/cluster can build against it
+# DiffDock scoring endpoint needs PyG + chemistry libs
+# fair-esm needed because DiffDock code imports it at module level (aa_model.py)
+# Pin to versions with pre-built wheels on PyG index for pt113cu117
 scoring_pip_requirements = [
     f"torch=={torch_version}",
-    f"torch-geometric=={get_version('torch-geometric')}",
-    f"torch-scatter=={get_version('torch-scatter')}",
-    f"torch-sparse=={get_version('torch-sparse')}",
-    f"torch-cluster=={get_version('torch-cluster')}",
+    "torch-geometric==2.2.0",
+    "torch-scatter==2.1.1",
+    "torch-sparse==0.6.17",
+    "torch-cluster==1.6.1",
     "pyyaml==6.0.1",
     "scipy==1.7.3",
     "networkx==2.6.3",
@@ -679,6 +707,7 @@ scoring_pip_requirements = [
     "pandas==1.5.3",
     "biopandas==0.4.1",
     "prody==2.6.1",
+    "fair-esm==2.0.0",
 ]
 
 # COMMAND ----------
@@ -812,6 +841,23 @@ print(f"Registered ESM: {catalog}.{schema}.{esm_model_name}")
 
 # COMMAND ----------
 
+# Collect precomputed SO3/torus cache files so they can be bundled as artifacts.
+# Without these, the serving container spends ~3-5 minutes recomputing them.
+DIFFDOCK_CACHE_DIR = os.path.join(WORK_DIR, "diffdock_cache")
+if os.path.exists(DIFFDOCK_CACHE_DIR):
+    shutil.rmtree(DIFFDOCK_CACHE_DIR)
+os.makedirs(DIFFDOCK_CACHE_DIR, exist_ok=True)
+
+cache_count = 0
+for f in os.listdir(DIFFDOCK_DIR):
+    if f.endswith('.npy'):
+        shutil.copy2(os.path.join(DIFFDOCK_DIR, f), os.path.join(DIFFDOCK_CACHE_DIR, f))
+        print(f"  Bundled cache: {f}")
+        cache_count += 1
+print(f"Bundled {cache_count} cache files")
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC #### Register Model 2: DiffDock Scoring
 
@@ -833,6 +879,7 @@ with mlflow.start_run(run_name=model_name, experiment_id=experiment.experiment_i
             "repo_dir": DIFFDOCK_DIR,
             "score_model_dir": SCORE_MODEL_DIR,
             "confidence_model_dir": CONFIDENCE_MODEL_DIR,
+            "cache_dir": DIFFDOCK_CACHE_DIR,
         },
         code_path=code_items,
         pip_requirements=[

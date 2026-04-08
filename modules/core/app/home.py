@@ -96,7 +96,7 @@ parabricks_page = st.Page(
 disease_biology_page = st.Page(
     page="views/disease_biology.py",
     title="Disease Biology",
-    icon=":material/genetics:"
+    icon=":material/coronavirus:"
 )
 
 # bionemo_geneformer_page = st.Page(
@@ -106,18 +106,18 @@ disease_biology_page = st.Page(
 # )
 
 workbench_pages = [home_page]
-if "protein_studies" in deployed_modules:
-    workbench_pages.append(protein_page)
 if "single_cell" in deployed_modules:
     workbench_pages.append(single_cell_page)
-if "bionemo" in deployed_modules:
-    workbench_pages.append(bionemo_esm_page)
+if "protein_studies" in deployed_modules:
+    workbench_pages.append(protein_page)
 if "small_molecule" in deployed_modules:
     workbench_pages.append(small_molecules_page)
-if "parabricks" in deployed_modules:
-    workbench_pages.append(parabricks_page)
 if "disease_biology" in "disease_biology": #deployed_modules:
     workbench_pages.append(disease_biology_page)
+if "bionemo" in deployed_modules:
+    workbench_pages.append(bionemo_esm_page)
+if "parabricks" in deployed_modules:
+    workbench_pages.append(parabricks_page)
 
 
 menu_pages = {

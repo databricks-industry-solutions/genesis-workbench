@@ -27,8 +27,7 @@ END
 """
 
 WORKFLOW_DESCRIPTION = (
-    "Design a protein that binds a specific small molecule using "
-    "[Proteina-Complexa-Ligand](https://github.com/NVIDIA-Digital-Bio/Proteina-Complexa). "
+    "Design a protein that binds a specific small molecule using Proteina-Complexa-Ligand. "
     "Validate the designed protein-ligand interaction using DiffDock molecular docking."
 )
 

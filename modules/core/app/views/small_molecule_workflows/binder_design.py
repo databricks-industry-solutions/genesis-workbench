@@ -13,8 +13,7 @@ from utils.small_molecule_tools import (
 )
 
 WORKFLOW_DESCRIPTION = (
-    "Design novel protein binders for a target protein using "
-    "[Proteina-Complexa](https://github.com/NVIDIA-Digital-Bio/Proteina-Complexa). "
+    "Design novel protein binders for a target protein using Proteina-Complexa . "
     "Optionally validate that designed binders fold correctly using ESMFold."
 )
 

@@ -43,8 +43,7 @@ END
 """
 
 WORKFLOW_DESCRIPTION = (
-    "Transplant a functional motif (e.g., an enzyme active site or binding loop) into a new, "
-    "stable protein scaffold using [Proteina-Complexa-AME](https://github.com/NVIDIA-Digital-Bio/Proteina-Complexa). "
+    "Transplant a functional motif (e.g., an enzyme active site or binding loop) into a new, stable protein scaffold using Proteina-Complexa-AME. "
     "Optionally optimize the scaffold sequence with ProteinMPNN and validate folding with ESMFold."
 )
 
