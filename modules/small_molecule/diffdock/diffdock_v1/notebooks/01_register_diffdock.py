@@ -586,7 +586,7 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
         logger.warning(f"[DIFFDOCK _ensure_models_loaded] DONE — all models loaded on {self.device} in {time.time()-t0:.1f}s total")
 
     def predict(self, context, model_input: pd.DataFrame) -> pd.DataFrame:
-        import sys, copy, os, tempfile, time, logging
+        import sys, copy, os, tempfile, time, logging, traceback
         logger = logging.getLogger("diffdock")
         import numpy as np
         import torch
@@ -662,6 +662,14 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                     for orig_complex_graph in loader:
                         try:
                             t_prep = time.time()
+                            # Diagnostic: check ligand node attributes in original graph
+                            lig_store = orig_complex_graph["ligand"]
+                            lig_keys = list(lig_store.keys()) if hasattr(lig_store, 'keys') else dir(lig_store)
+                            has_pos = hasattr(lig_store, 'pos') and lig_store.pos is not None
+                            logger.warning(f"[DIFFDOCK predict] orig graph ligand keys: {lig_keys}, has_pos: {has_pos}")
+                            if has_pos:
+                                logger.warning(f"[DIFFDOCK predict] orig ligand.pos shape: {lig_store.pos.shape}")
+
                             data_list = [copy.deepcopy(orig_complex_graph) for _ in range(n_samples)]
                             randomize_position(data_list, self.score_model_args.no_torsion, False, self.score_model_args.tr_sigma_max)
 
@@ -686,6 +694,13 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                                     temp_sigma_data=[0.93, 0.75, 0.69],
                                 )
                             logger.warning(f"[DIFFDOCK predict] Sampling DONE ({time.time()-t_sample:.1f}s)")
+
+                            # Diagnostic: check ligand attributes after sampling
+                            if data_list:
+                                post_lig = data_list[0]["ligand"]
+                                post_keys = list(post_lig.keys()) if hasattr(post_lig, 'keys') else dir(post_lig)
+                                post_has_pos = hasattr(post_lig, 'pos') and post_lig.pos is not None
+                                logger.warning(f"[DIFFDOCK predict] post-sampling ligand keys: {post_keys}, has_pos: {post_has_pos}")
 
                             t_post = time.time()
                             lig = orig_complex_graph.mol[0]
@@ -714,11 +729,11 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                                     all_results.append({"rank": rank, "confidence": float(score), "ligand_sdf": fh.read()})
                             logger.warning(f"[DIFFDOCK predict] Post-processing done ({time.time()-t_post:.1f}s)")
                         except Exception as e:
-                            logger.warning(f"[DIFFDOCK predict] ERROR (sampling): {e}")
+                            logger.warning(f"[DIFFDOCK predict] ERROR (sampling): {e}\n{traceback.format_exc()}")
                             all_results.append({"rank": 1, "confidence": float("nan"), "ligand_sdf": f"ERROR (sampling): {e}"})
 
             except Exception as e:
-                logger.warning(f"[DIFFDOCK predict] ERROR (preprocessing): {e}")
+                logger.warning(f"[DIFFDOCK predict] ERROR (preprocessing): {e}\n{traceback.format_exc()}")
                 all_results.append({"rank": 1, "confidence": float("nan"), "ligand_sdf": f"ERROR (preprocessing): {e}"})
 
         logger.warning(f"[DIFFDOCK predict] TOTAL predict time: {time.time()-predict_t0:.1f}s, {len(all_results)} results")

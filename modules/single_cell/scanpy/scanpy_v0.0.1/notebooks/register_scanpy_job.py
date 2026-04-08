@@ -51,16 +51,12 @@ spark.sql(f"USE SCHEMA {schema}")
 
 # COMMAND ----------
 
-# Delete existing entry if it exists
 spark.sql(f"""
-DELETE FROM settings 
-WHERE key = 'run_scanpy_job_id' AND module = 'single_cell'
-""")
-
-# Insert the job ID
-spark.sql(f"""
-INSERT INTO settings VALUES
-('run_scanpy_job_id', '{run_scanpy_job_id}', 'single_cell')
+MERGE INTO settings AS target
+USING (SELECT 'run_scanpy_job_id' AS key, '{run_scanpy_job_id}' AS value, 'single_cell' AS module) AS source
+ON target.key = source.key AND target.module = source.module
+WHEN MATCHED THEN UPDATE SET target.value = source.value
+WHEN NOT MATCHED THEN INSERT (key, value, module) VALUES (source.key, source.value, source.module)
 """)
 
 # COMMAND ----------

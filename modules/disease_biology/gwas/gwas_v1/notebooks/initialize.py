@@ -63,10 +63,17 @@ spark.sql(f"USE SCHEMA {schema}")
 ref_genome_path = f"/Volumes/{catalog}/{schema}/gwas_reference/genomes/GRCh38_full_analysis_set_plus_decoy_hla.fa"
 
 query = f"""
-    INSERT INTO settings VALUES
-    ('parabricks_alignment_job_id', '{parabricks_alignment_job_id}', 'disease_biology'),
-    ('gwas_analysis_job_id', '{gwas_analysis_job_id}', 'disease_biology'),
-    ('gwas_reference_genome_path', '{ref_genome_path}', 'disease_biology')
+    MERGE INTO settings AS target
+    USING (
+        SELECT * FROM VALUES
+            ('parabricks_alignment_job_id', '{parabricks_alignment_job_id}', 'disease_biology'),
+            ('gwas_analysis_job_id', '{gwas_analysis_job_id}', 'disease_biology'),
+            ('gwas_reference_genome_path', '{ref_genome_path}', 'disease_biology')
+        AS src(key, value, module)
+    ) AS source
+    ON target.key = source.key AND target.module = source.module
+    WHEN MATCHED THEN UPDATE SET target.value = source.value
+    WHEN NOT MATCHED THEN INSERT (key, value, module) VALUES (source.key, source.value, source.module)
 """
 
 spark.sql(query)

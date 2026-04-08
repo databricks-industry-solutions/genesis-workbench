@@ -26,13 +26,17 @@ for lib in libraries:
         gwb_library_path = lib.path.replace("dbfs:", "")
 
 glow_whl_path = None
+glow_jar_path = None
 glow_libs = dbutils.fs.ls(f"/Volumes/{catalog}/{schema}/libraries")
 for lib in glow_libs:
-    if lib.name.endswith(".whl"):
+    if lib.name.startswith("glow") and lib.name.endswith(".whl"):
         glow_whl_path = lib.path.replace("dbfs:", "")
+    if lib.name.startswith("glow") and lib.name.endswith(".jar"):
+        glow_jar_path = lib.path.replace("dbfs:", "")
 
 print(f"GWB library: {gwb_library_path}")
 print(f"Glow wheel: {glow_whl_path}")
+print(f"Glow JAR: {glow_jar_path}")
 
 # COMMAND ----------
 

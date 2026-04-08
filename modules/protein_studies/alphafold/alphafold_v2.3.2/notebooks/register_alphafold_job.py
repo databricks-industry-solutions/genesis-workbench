@@ -52,8 +52,11 @@ spark.sql(f"USE SCHEMA {schema}")
 # COMMAND ----------
 
 spark.sql(f"""
-INSERT INTO settings VALUES
-('run_alphafold_job_id', '{run_alphafold_job_id}', 'protein_studies')
+MERGE INTO settings AS target
+USING (SELECT 'run_alphafold_job_id' AS key, '{run_alphafold_job_id}' AS value, 'protein_studies' AS module) AS source
+ON target.key = source.key AND target.module = source.module
+WHEN MATCHED THEN UPDATE SET target.value = source.value
+WHEN NOT MATCHED THEN INSERT (key, value, module) VALUES (source.key, source.value, source.module)
 """)
 
 # COMMAND ----------

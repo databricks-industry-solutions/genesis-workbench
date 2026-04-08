@@ -10,6 +10,8 @@ resources:
       tasks:
         - task_key: spike_pathogenic
           job_cluster_key: variant_annotation_cluster
+          libraries:
+            - jar: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/libraries/glow-spark3-assembly-2.0.4-SNAPSHOT.jar
           notebook_task:
             notebook_path: ../notebooks/01_spike_pathogenic_variants.py
             source: WORKSPACE
@@ -18,6 +20,8 @@ resources:
           depends_on:
             - task_key: spike_pathogenic
           job_cluster_key: variant_annotation_cluster
+          libraries:
+            - jar: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/libraries/glow-spark3-assembly-2.0.4-SNAPSHOT.jar
           notebook_task:
             notebook_path: ../notebooks/02_filter_and_annotate.py
             source: WORKSPACE

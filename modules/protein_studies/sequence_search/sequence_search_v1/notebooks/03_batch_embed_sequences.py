@@ -3,19 +3,18 @@
 # MAGIC # Batch Embed Protein Sequences with ESM-2
 # MAGIC
 # MAGIC Generates 1280-dimensional mean-pooled embeddings for all sequences in
-# MAGIC the `sequence_db` table using `facebook/esm2_t33_650M_UR50D`.
+# MAGIC the `sequence_db` table using the ESM-2 model registered in Unity Catalog.
 # MAGIC
 # MAGIC Uses `predict_batch_udf` for GPU-efficient batch inference — the model is
 # MAGIC loaded once per worker and reused across all batches.
 # MAGIC
-# MAGIC **Important**: The embedding logic here (model tag + mean-pooling) must match
-# MAGIC the ESM2 Embeddings serving endpoint exactly to ensure vector space consistency
-# MAGIC between the indexed embeddings and query-time embeddings.
+# MAGIC The UC-registered model is the same artifact deployed to the serving endpoint,
+# MAGIC ensuring exact vector space consistency between indexed and query-time embeddings.
 
 # COMMAND ----------
 
 # DBTITLE 1,Install dependencies
-# MAGIC %pip install -q torch==2.3.1 transformers==4.41.2
+# MAGIC %pip install -q torch==2.3.1 transformers==4.41.2 mlflow>=2.15
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
@@ -31,42 +30,36 @@ schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
+# DBTITLE 1,Load UC model URI
+import mlflow
+from genesis_workbench.models import get_latest_model_version
+
+model_uc_name = f"{catalog}.{schema}.esm2_embeddings"
+model_version = get_latest_model_version(model_uc_name)
+model_uri = f"models:/{model_uc_name}/{model_version}"
+print(f"Using UC model: {model_uri}")
+
+# COMMAND ----------
+
 # DBTITLE 1,Define batch embedding UDF
 import numpy as np
 from pyspark.sql.types import ArrayType, FloatType
 from pyspark.ml.functions import predict_batch_udf
 
-# Must match the model used in the ESM2 Embeddings serving endpoint
-MODEL_TAG = "facebook/esm2_t33_650M_UR50D"
-MAX_SEQ_LEN = 1022  # ESM-2 max tokens (1024 minus BOS/EOS)
+# Capture for use inside the UDF closure
+_model_uri = model_uri
 
 
 def make_embed_fn():
-    """Factory that loads ESM-2 once per worker and returns an embed function."""
-    import torch
-    from transformers import AutoTokenizer, AutoModel
+    """Factory that loads the UC-registered ESM-2 model once per worker."""
+    import mlflow
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_TAG)
-    model = AutoModel.from_pretrained(MODEL_TAG).to(device).eval()
-    print(f"ESM-2 ({MODEL_TAG}) loaded on {device}")
+    model = mlflow.pyfunc.load_model(_model_uri)
+    print(f"Loaded ESM-2 from UC: {_model_uri}")
 
     def embed(sequences: np.ndarray) -> list:
-        """Embed protein sequences, returning 1280d mean-pooled vectors."""
-        results = []
-        for seq in sequences.tolist():
-            # Truncate to max length
-            seq = seq[:MAX_SEQ_LEN]
-            tokens = tokenizer(
-                seq, return_tensors="pt", truncation=True, max_length=1024
-            ).to(device)
-            with torch.no_grad():
-                output = model(**tokens)
-            # Mean pool over sequence positions, excluding BOS/EOS tokens
-            embedding = output.last_hidden_state[0, 1:-1].mean(dim=0).cpu().tolist()
-            results.append(embedding)
-            torch.cuda.empty_cache()
-        return results
+        """Embed protein sequences using the UC model's predict method."""
+        return model.predict(sequences.tolist())
 
     return embed
 
@@ -86,7 +79,7 @@ target_table = f"{catalog}.{schema}.sequence_embeddings"
 df = spark.table(source_table)
 
 print(f"Source table: {source_table} ({df.count()} rows)")
-print(f"Generating embeddings with {MODEL_TAG}...")
+print(f"Generating embeddings with UC model: {model_uri}")
 
 embeddings_df = df.select("seq_id", embed_udf("sequence").alias("embedding"))
 

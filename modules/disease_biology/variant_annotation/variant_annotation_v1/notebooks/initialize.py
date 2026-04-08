@@ -61,9 +61,16 @@ spark.sql(f"USE SCHEMA {schema}")
 # COMMAND ----------
 
 query = f"""
-    INSERT INTO settings VALUES
-    ('variant_annotation_job_id', '{variant_annotation_job_id}', 'disease_biology'),
-    ('variant_annotation_dashboard_id', '{variant_annotation_dashboard_id}', 'disease_biology')
+    MERGE INTO settings AS target
+    USING (
+        SELECT * FROM VALUES
+            ('variant_annotation_job_id', '{variant_annotation_job_id}', 'disease_biology'),
+            ('variant_annotation_dashboard_id', '{variant_annotation_dashboard_id}', 'disease_biology')
+        AS src(key, value, module)
+    ) AS source
+    ON target.key = source.key AND target.module = source.module
+    WHEN MATCHED THEN UPDATE SET target.value = source.value
+    WHEN NOT MATCHED THEN INSERT (key, value, module) VALUES (source.key, source.value, source.module)
 """
 
 spark.sql(query)

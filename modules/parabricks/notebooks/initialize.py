@@ -59,8 +59,11 @@ spark.sql(f"USE SCHEMA {schema}")
 # COMMAND ----------
 
 query= f"""
-    INSERT INTO settings VALUES
-    ('parabricks_cluster_name', '{parabricks_cluster_name}', 'parabricks')
+    MERGE INTO settings AS target
+    USING (SELECT 'parabricks_cluster_name' AS key, '{parabricks_cluster_name}' AS value, 'parabricks' AS module) AS source
+    ON target.key = source.key AND target.module = source.module
+    WHEN MATCHED THEN UPDATE SET target.value = source.value
+    WHEN NOT MATCHED THEN INSERT (key, value, module) VALUES (source.key, source.value, source.module)
 """
 
 spark.sql(query)

@@ -81,9 +81,16 @@ CREATE TABLE  bionemo_weights (
 # COMMAND ----------
 
 query= f"""
-    INSERT INTO settings VALUES
-    ('bionemo_esm_finetune_job_id', '{bionemo_esm_finetune_job_id}', 'bionemo'),
-    ('bionemo_esm_inference_job_id', '{bionemo_esm_inference_job_id}' , 'bionemo')
+    MERGE INTO settings AS target
+    USING (
+        SELECT * FROM VALUES
+            ('bionemo_esm_finetune_job_id', '{bionemo_esm_finetune_job_id}', 'bionemo'),
+            ('bionemo_esm_inference_job_id', '{bionemo_esm_inference_job_id}', 'bionemo')
+        AS src(key, value, module)
+    ) AS source
+    ON target.key = source.key AND target.module = source.module
+    WHEN MATCHED THEN UPDATE SET target.value = source.value
+    WHEN NOT MATCHED THEN INSERT (key, value, module) VALUES (source.key, source.value, source.module)
 """
 
 spark.sql(query)

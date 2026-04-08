@@ -10,6 +10,8 @@ resources:
       tasks:
         - task_key: download_clinvar
           job_cluster_key: variant_annotation_setup_cluster
+          libraries:
+            - jar: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/libraries/glow-spark3-assembly-2.0.4-SNAPSHOT.jar
           notebook_task:
             notebook_path: ../notebooks/00_download_clinvar.py
             source: WORKSPACE
