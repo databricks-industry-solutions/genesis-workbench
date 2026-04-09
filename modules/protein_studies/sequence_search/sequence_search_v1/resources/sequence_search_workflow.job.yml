@@ -72,18 +72,14 @@ resources:
           new_cluster:
             cluster_name: ""
             spark_version: 15.4.x-gpu-ml-scala2.12
-            spark_conf:
-              spark.master: "local[*, 4]"
-              spark.databricks.cluster.profile: singleNode
             node_type_id: ${var.a10_node_type}
             driver_node_type_id: ${var.a10_node_type}
             custom_tags:
-              ResourceClass: SingleNode
               work_type: sequence_embedding
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD
-            num_workers: 0
+            num_workers: 4
             aws_attributes:
               availability: ON_DEMAND
 

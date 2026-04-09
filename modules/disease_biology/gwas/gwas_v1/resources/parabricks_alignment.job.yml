@@ -15,6 +15,30 @@ resources:
             source: WORKSPACE
           max_retries: 0
 
+        - task_key: mark_success
+          depends_on:
+            - task_key: run_germline
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: ../notebooks/update_mlflow_status.py
+            source: WORKSPACE
+            base_parameters:
+              mlflow_run_id: "{{job.parameters.mlflow_run_id}}"
+              job_status: "alignment_complete"
+          environment_key: default
+
+        - task_key: mark_failure
+          depends_on:
+            - task_key: run_germline
+          run_if: AT_LEAST_ONE_FAILED
+          notebook_task:
+            notebook_path: ../notebooks/update_mlflow_status.py
+            source: WORKSPACE
+            base_parameters:
+              mlflow_run_id: "{{job.parameters.mlflow_run_id}}"
+              job_status: "failed"
+          environment_key: default
+
       parameters:
         - name: catalog
           default: ${var.core_catalog_name}
@@ -59,5 +83,10 @@ resources:
               work_type: gwas_alignment
             aws_attributes:
               availability: ON_DEMAND
+
+      environments:
+        - environment_key: default
+          spec:
+            client: '4'
 
       tags: ${var.common_resource_tags}

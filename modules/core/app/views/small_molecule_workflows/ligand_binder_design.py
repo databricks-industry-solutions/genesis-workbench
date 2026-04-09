@@ -8,7 +8,7 @@ from genesis_workbench.models import set_mlflow_experiment
 from utils.streamlit_helper import get_user_info, open_mlflow_experiment_window
 from utils.small_molecule_tools import (
     hit_proteina_complexa_ligand, hit_diffdock, hit_esmfold, smiles_to_pdb,
-    molstar_html_pdb, molstar_html_multi_pdb, molstar_html_protein_and_sdf,
+    molstar_html_pdb, molstar_html_multi_pdb, _sdf_to_hetatm,
     EXAMPLE_SMILES,
 )
 
@@ -95,23 +95,32 @@ def render():
             dock_conf = row.get("dock_confidence") if "dock_confidence" in results_df.columns else None
 
             # Structure view selector
+            has_valid_sdf = best_sdf and not best_sdf.startswith("ERROR")
             view_options = ["CA Backbone"]
             if esmfold_pdb:
                 view_options.append("Full Protein (ESMFold)")
-            if best_sdf and pdb_out:
+            if has_valid_sdf and pdb_out:
                 view_options.append("Protein + Docked Ligand")
-            if esmfold_pdb and best_sdf:
+            if esmfold_pdb and has_valid_sdf:
                 view_options.append("Full Protein + Docked Ligand")
+            if best_sdf and not has_valid_sdf:
+                st.warning(f"DiffDock docking failed: {best_sdf[:100]}")
 
             view_choice = st.radio("View:", view_options, horizontal=True, key="ligand_binder_view_choice")
 
             # Viewer inline
-            if view_choice == "Full Protein + Docked Ligand" and esmfold_pdb and best_sdf:
-                html = molstar_html_protein_and_sdf(esmfold_pdb, best_sdf)
+            if view_choice == "Full Protein + Docked Ligand" and esmfold_pdb and has_valid_sdf:
+                lig_hetatm = _sdf_to_hetatm(best_sdf)
+                lig_pdb = lig_hetatm + "\nEND\n" if lig_hetatm else ""
+                pdbs = [esmfold_pdb] + ([lig_pdb] if lig_pdb else [])
+                html = molstar_html_multi_pdb(pdbs)
                 components.html(html, height=540)
                 st.caption(f"Showing: ESMFold structure + DiffDock pose (confidence: {dock_conf:.4f})" if dock_conf else "Showing: ESMFold structure + DiffDock pose")
-            elif view_choice == "Protein + Docked Ligand" and best_sdf and pdb_out:
-                html = molstar_html_protein_and_sdf(pdb_out, best_sdf)
+            elif view_choice == "Protein + Docked Ligand" and has_valid_sdf and pdb_out:
+                lig_hetatm = _sdf_to_hetatm(best_sdf)
+                lig_pdb = lig_hetatm + "\nEND\n" if lig_hetatm else ""
+                pdbs = [pdb_out] + ([lig_pdb] if lig_pdb else [])
+                html = molstar_html_multi_pdb(pdbs)
                 components.html(html, height=540)
                 st.caption(f"Showing: CA backbone + DiffDock pose (confidence: {dock_conf:.4f})" if dock_conf else "Showing: CA backbone + DiffDock pose")
             elif view_choice == "Full Protein (ESMFold)" and esmfold_pdb:

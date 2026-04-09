@@ -8,15 +8,7 @@ resources:
           - ${var.current_user}
 
       tasks:
-        - task_key: install_glow
-          job_cluster_key: gwas_setup_cluster
-          notebook_task:
-            notebook_path: ../notebooks/00_install_glow.py
-            source: WORKSPACE
-
         - task_key: download_reference_genome
-          depends_on:
-            - task_key: install_glow
           job_cluster_key: gwas_setup_cluster
           notebook_task:
             notebook_path: ../notebooks/01_download_reference_genome.py

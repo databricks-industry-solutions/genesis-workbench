@@ -53,13 +53,36 @@ os.environ['SCHEMA'] = schema
 
 # MAGIC %sh
 # MAGIC if [ ! -f "$GENOME_PATH/GRCh38_full_analysis_set_plus_decoy_hla.fa.fai" ]; then
-# MAGIC   echo "Downloading GRCh38 index..."
+# MAGIC   echo "Downloading GRCh38 FASTA index..."
 # MAGIC   wget -q https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/GRCh38_reference_genome/GRCh38_full_analysis_set_plus_decoy_hla.fa.fai -P /local_disk0/tmp_ref/
 # MAGIC   cp /local_disk0/tmp_ref/GRCh38_full_analysis_set_plus_decoy_hla.fa.fai $GENOME_PATH/
-# MAGIC   echo "Downloaded GRCh38 index"
+# MAGIC   echo "Downloaded GRCh38 FASTA index"
 # MAGIC else
-# MAGIC   echo "GRCh38 index already exists, skipping"
+# MAGIC   echo "GRCh38 FASTA index already exists, skipping"
 # MAGIC fi
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Download BWA index files (required by Parabricks fq2bam)
+
+# COMMAND ----------
+
+# MAGIC %sh
+# MAGIC BASE_URL="https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/GRCh38_reference_genome"
+# MAGIC REF_BASE="GRCh38_full_analysis_set_plus_decoy_hla.fa"
+# MAGIC
+# MAGIC for ext in bwt sa ann amb pac; do
+# MAGIC   if [ ! -f "$GENOME_PATH/${REF_BASE}.${ext}" ]; then
+# MAGIC     echo "Downloading BWA index: ${REF_BASE}.${ext}..."
+# MAGIC     wget -q "${BASE_URL}/${REF_BASE}.${ext}" -P /local_disk0/tmp_ref/
+# MAGIC     cp "/local_disk0/tmp_ref/${REF_BASE}.${ext}" "$GENOME_PATH/"
+# MAGIC     echo "Downloaded ${REF_BASE}.${ext}"
+# MAGIC   else
+# MAGIC     echo "BWA index ${REF_BASE}.${ext} already exists, skipping"
+# MAGIC   fi
+# MAGIC done
+# MAGIC echo "BWA index files complete"
 
 # COMMAND ----------
 
@@ -88,10 +111,16 @@ os.environ['SCHEMA'] = schema
 # COMMAND ----------
 
 # MAGIC %sh
-# MAGIC mkdir -p /dbfs/genesis_workbench/gwas/reference/grch38
-# MAGIC cp $GENOME_PATH/GRCh38_full_analysis_set_plus_decoy_hla.fa /dbfs/genesis_workbench/gwas/reference/grch38/
-# MAGIC cp $GENOME_PATH/GRCh38_full_analysis_set_plus_decoy_hla.fa.fai /dbfs/genesis_workbench/gwas/reference/grch38/
-# MAGIC echo "Reference genome copied to DBFS for Glow"
+# MAGIC DBFS_REF="/dbfs/genesis_workbench/gwas/reference/grch38"
+# MAGIC mkdir -p $DBFS_REF
+# MAGIC
+# MAGIC if [ ! -f "$DBFS_REF/GRCh38_full_analysis_set_plus_decoy_hla.fa" ]; then
+# MAGIC   cp $GENOME_PATH/GRCh38_full_analysis_set_plus_decoy_hla.fa $DBFS_REF/
+# MAGIC   cp $GENOME_PATH/GRCh38_full_analysis_set_plus_decoy_hla.fa.fai $DBFS_REF/
+# MAGIC   echo "Reference genome copied to DBFS for Glow"
+# MAGIC else
+# MAGIC   echo "Reference genome already exists in DBFS, skipping"
+# MAGIC fi
 
 # COMMAND ----------
 

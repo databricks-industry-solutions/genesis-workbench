@@ -6,6 +6,19 @@ from genesis_workbench.workbench import UserInfo, execute_workflow, execute_sele
 from genesis_workbench.models import set_mlflow_experiment
 
 
+def _derive_status(row):
+    """Derive display status from job_status tag.
+
+    The mark_success/mark_failure tasks in each job workflow update the
+    job_status tag to the final value (e.g. 'alignment_complete', 'failed').
+    'started' means the job is still running or the completion task hasn't run yet.
+    """
+    job_status = row.get("tags.job_status", "")
+    if job_status:
+        return job_status
+    return "unknown"
+
+
 def start_parabricks_alignment(user_info: UserInfo,
                                 fastq_r1: str,
                                 fastq_r2: str,

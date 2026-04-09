@@ -18,6 +18,8 @@ resources:
           depends_on:
             - task_key: prepare_phenotype
           job_cluster_key: gwas_spark_cluster
+          libraries:
+            - jar: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/libraries/glow-spark3-assembly-2.0.4-SNAPSHOT.jar
           notebook_task:
             notebook_path: ../notebooks/04_gwas_analysis.py
             source: WORKSPACE
@@ -29,6 +31,30 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/05_save_results.py
             source: WORKSPACE
+
+        - task_key: mark_success
+          depends_on:
+            - task_key: save_results
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: ../notebooks/update_mlflow_status.py
+            source: WORKSPACE
+            base_parameters:
+              mlflow_run_id: "{{job.parameters.mlflow_run_id}}"
+              job_status: "gwas_complete"
+          environment_key: default
+
+        - task_key: mark_failure
+          depends_on:
+            - task_key: save_results
+          run_if: AT_LEAST_ONE_FAILED
+          notebook_task:
+            notebook_path: ../notebooks/update_mlflow_status.py
+            source: WORKSPACE
+            base_parameters:
+              mlflow_run_id: "{{job.parameters.mlflow_run_id}}"
+              job_status: "failed"
+          environment_key: default
 
       parameters:
         - name: catalog
@@ -74,6 +100,11 @@ resources:
             num_workers: 0
             aws_attributes:
               availability: ON_DEMAND
+
+      environments:
+        - environment_key: default
+          spec:
+            client: '4'
 
       tags: ${var.common_resource_tags}
 

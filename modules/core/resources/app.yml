@@ -34,6 +34,6 @@ resources:
         - name: "start_all_endpoints_job"
           job:
             id: ${resources.jobs.start_all_endpoints_job.id}
-            permission: "CAN_MANAGE_RUN"
+            permission: "CAN_MANAGE"
 
 

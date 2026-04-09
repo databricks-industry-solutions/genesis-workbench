@@ -24,7 +24,7 @@ echo "##############################################"
 echo "⏩️ Starting deploy of Disease Biology module  #"
 
 #for module in gwas/gwas_v1 vcf_ingestion/vcf_ingestion_v1 variant_annotation/variant_annotation_v1
-for module in vcf_ingestion/vcf_ingestion_v1 variant_annotation/variant_annotation_v1
+for module in gwas/gwas_v1 vcf_ingestion/vcf_ingestion_v1 variant_annotation/variant_annotation_v1
 
     do
         echo "###########################################"

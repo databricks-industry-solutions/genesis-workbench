@@ -272,7 +272,7 @@ with alignment_tab:
                                   selection_mode="single", default="Experiment Name",
                                   key="vc_search_mode")
     with vc_sc2:
-        vc_search_text = st.text_input(f"{vc_search_mode} contains:", "", key="vc_search_text")
+        vc_search_text = st.text_input(f"{vc_search_mode} contains:", "gwas", key="vc_search_text")
     with vc_sc3:
         vc_search_btn = st.button("Search", key="vc_search_btn")
 
@@ -454,7 +454,7 @@ with gwas_tab:
                                     selection_mode="single", default="Experiment Name",
                                     key="gwas_search_mode")
     with gwas_sc2:
-        gwas_search_text = st.text_input(f"{gwas_search_mode} contains:", "", key="gwas_search_text")
+        gwas_search_text = st.text_input(f"{gwas_search_mode} contains:", "gwas", key="gwas_search_text")
     with gwas_sc3:
         gwas_search_btn = st.button("Search", key="gwas_search_btn")
 
@@ -614,7 +614,7 @@ with ingestion_tab:
                                        selection_mode="single", default="Experiment Name",
                                        key="ingest_search_mode")
     with ingest_sc2:
-        ingest_search_text = st.text_input(f"{ingest_search_mode} contains:", "", key="ingest_search_text")
+        ingest_search_text = st.text_input(f"{ingest_search_mode} contains:", "gwas", key="ingest_search_text")
     with ingest_sc3:
         ingest_search_btn = st.button("Search", key="ingest_search_btn")
 
@@ -792,7 +792,7 @@ with annotation_tab:
                                       selection_mode="single", default="Experiment Name",
                                       key="annot_search_mode")
     with annot_sc2:
-        annot_search_text = st.text_input(f"{annot_search_mode} contains:", "", key="annot_search_text")
+        annot_search_text = st.text_input(f"{annot_search_mode} contains:", "gwas", key="annot_search_text")
     with annot_sc3:
         annot_search_btn = st.button("Search", key="annot_search_btn")
 
