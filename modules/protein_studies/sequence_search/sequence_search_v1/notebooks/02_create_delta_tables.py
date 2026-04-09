@@ -34,47 +34,59 @@ from Bio import SeqIO
 fasta_path = f"/Volumes/{catalog}/{schema}/{volume_name}/uniref90.fasta"
 table_name = f"{catalog}.{schema}.sequence_db"
 
-schema_def = StructType([
-    StructField("seq_id", StringType(), False),
-    StructField("sequence", StringType(), False),
-    StructField("description", StringType(), True),
-    StructField("seq_length", IntegerType(), False),
-])
+# Check if table already exists with data
+skip_creation = False
+if spark.catalog.tableExists(table_name):
+    table_row_count = spark.table(table_name).count()
+    print(f"Table {table_name} already exists with {table_row_count} rows")
+    if table_row_count > 100:
+        print(f"Table has sufficient data, skipping table creation.")
+        skip_creation = True
+    else:
+        print(f"Table has too few rows ({table_row_count}), recreating table.")
 
-BATCH_SIZE = 500_000
-batch = []
-total_count = 0
-batch_num = 0
+if not skip_creation:
+    schema_def = StructType([
+        StructField("seq_id", StringType(), False),
+        StructField("sequence", StringType(), False),
+        StructField("description", StringType(), True),
+        StructField("seq_length", IntegerType(), False),
+    ])
 
-# Drop existing table for clean initial load
-spark.sql(f"DROP TABLE IF EXISTS {table_name}")
+    BATCH_SIZE = 500_000
+    batch = []
+    total_count = 0
+    batch_num = 0
 
-with open(fasta_path, "r") as f:
-    for record in SeqIO.parse(f, "fasta"):
-        seq_str = str(record.seq)
-        batch.append(Row(
-            seq_id=record.id,
-            sequence=seq_str,
-            description=record.description,
-            seq_length=len(seq_str),
-        ))
-        total_count += 1
+    # Drop existing table for clean initial load
+    spark.sql(f"DROP TABLE IF EXISTS {table_name}")
 
-        if len(batch) >= BATCH_SIZE:
-            batch_num += 1
-            df = spark.createDataFrame(batch, schema=schema_def)
-            df.write.format("delta").mode("append").saveAsTable(table_name)
-            print(f"Batch {batch_num}: wrote {len(batch)} records (total: {total_count})")
-            batch = []
+    with open(fasta_path, "r") as f:
+        for record in SeqIO.parse(f, "fasta"):
+            seq_str = str(record.seq)
+            batch.append(Row(
+                seq_id=record.id,
+                sequence=seq_str,
+                description=record.description,
+                seq_length=len(seq_str),
+            ))
+            total_count += 1
 
-# Write any remaining records
-if batch:
-    batch_num += 1
-    df = spark.createDataFrame(batch, schema=schema_def)
-    df.write.format("delta").mode("append").saveAsTable(table_name)
-    print(f"Batch {batch_num}: wrote {len(batch)} records (total: {total_count})")
+            if len(batch) >= BATCH_SIZE:
+                batch_num += 1
+                df = spark.createDataFrame(batch, schema=schema_def)
+                df.write.format("delta").mode("append").saveAsTable(table_name)
+                print(f"Batch {batch_num}: wrote {len(batch)} records (total: {total_count})")
+                batch = []
 
-print(f"sequence_db table created with {total_count} total records")
+    # Write any remaining records
+    if batch:
+        batch_num += 1
+        df = spark.createDataFrame(batch, schema=schema_def)
+        df.write.format("delta").mode("append").saveAsTable(table_name)
+        print(f"Batch {batch_num}: wrote {len(batch)} records (total: {total_count})")
+
+    print(f"sequence_db table created with {total_count} total records")
 
 # COMMAND ----------
 

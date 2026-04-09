@@ -59,7 +59,7 @@ subprocess.check_call([
 
 # COMMAND ----------
 
-import os, sys, subprocess, shutil, copy, json, tempfile
+import os, sys, subprocess, shutil, copy, json, tempfile, base64, pickle
 import torch
 import numpy as np
 import pandas as pd
@@ -292,6 +292,16 @@ print(f"Confidence model loaded: {conf_ckpt}")
 N_SAMPLES = 10
 
 print("Building inference dataset...")
+# InferenceDataset expects precomputed_lm_embeddings as [[chain0_emb, chain1_emb, ...]]
+# Load saved .pt files into this format
+test_lm_chains = []
+for chain_id in sorted(sequences.keys()):
+    pt_path = os.path.join(ESM_OUTPUT_DIR, f"{pdb_basename}_{chain_id}.pt")
+    saved = torch.load(pt_path, map_location="cpu")
+    test_lm_chains.append(saved["representations"][33])
+    print(f"  Loaded LM embedding for chain {chain_id}: {test_lm_chains[-1].shape}")
+test_precomputed_lm = [test_lm_chains]
+
 test_dataset = InferenceDataset(
     out_dir=os.path.join(WORK_DIR, "results"),
     complex_names=[f"{PDB_ID}_{SMILES}"],
@@ -299,7 +309,7 @@ test_dataset = InferenceDataset(
     ligand_descriptions=[SMILES],
     protein_sequences=None,
     lm_embeddings=True,
-    precomputed_lm_embeddings=ESM_OUTPUT_DIR,
+    precomputed_lm_embeddings=test_precomputed_lm,
     receptor_radius=score_model_args.receptor_radius,
     c_alpha_max_neighbors=score_model_args.c_alpha_max_neighbors,
     remove_hs=score_model_args.remove_hs,
@@ -310,6 +320,24 @@ test_dataset = InferenceDataset(
 )
 
 confidence_complex_dict = None
+if not getattr(confidence_args, 'use_original_model_cache', False) and not getattr(confidence_args, 'transfer_weights', False):
+    confidence_test_dataset = InferenceDataset(
+        out_dir=os.path.join(WORK_DIR, "results"),
+        complex_names=[f"{PDB_ID}_{SMILES}"],
+        protein_files=[pdb_path],
+        ligand_descriptions=[SMILES],
+        protein_sequences=None,
+        lm_embeddings=True,
+        precomputed_lm_embeddings=test_precomputed_lm,
+        receptor_radius=confidence_args.receptor_radius,
+        c_alpha_max_neighbors=confidence_args.c_alpha_max_neighbors,
+        remove_hs=confidence_args.remove_hs,
+        all_atoms=confidence_args.all_atoms,
+        atom_radius=confidence_args.atom_radius,
+        atom_max_neighbors=confidence_args.atom_max_neighbors,
+        knn_only_graph=getattr(confidence_args, 'knn_only_graph', False),
+    )
+    confidence_complex_dict = {d.name: d for d in confidence_test_dataset}
 print(f"Score dataset: {len(test_dataset)} complexes")
 
 test_loader = PyGDataLoader(dataset=test_dataset, batch_size=1, shuffle=False)
@@ -625,15 +653,23 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                         f.write(pdb_content)
 
                     # Decode pre-computed ESM embeddings from base64
+                    # InferenceDataset expects precomputed_lm_embeddings as a list of lists
+                    # of tensors: [[chain0_emb, chain1_emb, ...]] — one inner list per complex.
+                    # NOT a directory path string.
                     t_esm = time.time()
-                    esm_out = os.path.join(tmpdir, "esm2_output")
-                    os.makedirs(esm_out, exist_ok=True)
                     embeddings_dict = json.loads(embeddings_b64_json)
-                    for label, b64_data in embeddings_dict.items():
-                        tensor_np = pickle.loads(base64.b64decode(b64_data))
-                        tensor = torch.from_numpy(tensor_np)
-                        torch.save({'representations': {33: tensor}}, os.path.join(esm_out, f"{label}.pt"))
-                    logger.warning(f"[DIFFDOCK predict] ESM embeddings decoded ({time.time()-t_esm:.1f}s, {len(embeddings_dict)} chains)")
+                    if not embeddings_dict:
+                        raise ValueError(
+                            "No ESM embeddings provided. The DiffDock scoring endpoint requires "
+                            "pre-computed ESM2 embeddings from the ESM embeddings endpoint. "
+                            "Pass non-empty esm_embeddings_b64 JSON."
+                        )
+                    lm_embedding_chains = []
+                    for label in sorted(embeddings_dict.keys()):
+                        tensor_np = pickle.loads(base64.b64decode(embeddings_dict[label]))
+                        lm_embedding_chains.append(torch.from_numpy(tensor_np))
+                    precomputed_lm = [lm_embedding_chains]  # outer list: one entry per complex
+                    logger.warning(f"[DIFFDOCK predict] ESM embeddings decoded ({time.time()-t_esm:.1f}s, {len(lm_embedding_chains)} chains, shapes: {[t.shape for t in lm_embedding_chains]})")
 
                     t_dataset = time.time()
                     dataset = InferenceDataset(
@@ -643,7 +679,7 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                         ligand_descriptions=[smiles],
                         protein_sequences=None,
                         lm_embeddings=True,
-                        precomputed_lm_embeddings=esm_out,
+                        precomputed_lm_embeddings=precomputed_lm,
                         receptor_radius=self.score_model_args.receptor_radius,
                         c_alpha_max_neighbors=self.score_model_args.c_alpha_max_neighbors,
                         remove_hs=self.score_model_args.remove_hs,
@@ -655,6 +691,25 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                     logger.warning(f"[DIFFDOCK predict] InferenceDataset built ({time.time()-t_dataset:.1f}s)")
 
                     confidence_complex_dict = None
+                    if not use_orig and not transfer:
+                        conf_dataset = InferenceDataset(
+                            out_dir=tmpdir,
+                            complex_names=["complex_0"],
+                            protein_files=[pdb_path],
+                            ligand_descriptions=[smiles],
+                            protein_sequences=None,
+                            lm_embeddings=True,
+                            precomputed_lm_embeddings=precomputed_lm,
+                            receptor_radius=self.confidence_args.receptor_radius,
+                            c_alpha_max_neighbors=self.confidence_args.c_alpha_max_neighbors,
+                            remove_hs=self.confidence_args.remove_hs,
+                            all_atoms=self.confidence_args.all_atoms,
+                            atom_radius=self.confidence_args.atom_radius,
+                            atom_max_neighbors=self.confidence_args.atom_max_neighbors,
+                            knn_only_graph=getattr(self.confidence_args, 'knn_only_graph', False),
+                        )
+                        confidence_complex_dict = {d.name: d for d in conf_dataset}
+                        logger.warning(f"[DIFFDOCK predict] Confidence dataset built ({len(confidence_complex_dict)} complexes)")
 
                     loader = PyGDataLoader(dataset=dataset, batch_size=1, shuffle=False)
                     tr_schedule = get_t_schedule(inference_steps=11, sigma_schedule='expbeta')
@@ -662,13 +717,16 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                     for orig_complex_graph in loader:
                         try:
                             t_prep = time.time()
-                            # Diagnostic: check ligand node attributes in original graph
-                            lig_store = orig_complex_graph["ligand"]
-                            lig_keys = list(lig_store.keys()) if hasattr(lig_store, 'keys') else dir(lig_store)
-                            has_pos = hasattr(lig_store, 'pos') and lig_store.pos is not None
-                            logger.warning(f"[DIFFDOCK predict] orig graph ligand keys: {lig_keys}, has_pos: {has_pos}")
-                            if has_pos:
-                                logger.warning(f"[DIFFDOCK predict] orig ligand.pos shape: {lig_store.pos.shape}")
+                            # Diagnostic: check node attributes in original graph
+                            node_types = orig_complex_graph.node_types if hasattr(orig_complex_graph, 'node_types') else []
+                            logger.warning(f"[DIFFDOCK predict] orig graph node_types: {node_types}")
+                            for ntype in node_types:
+                                store = orig_complex_graph[ntype]
+                                nkeys = list(store.keys()) if hasattr(store, 'keys') else []
+                                nhas_pos = hasattr(store, 'pos') and store.pos is not None
+                                logger.warning(f"[DIFFDOCK predict] orig {ntype} keys: {nkeys}, has_pos: {nhas_pos}")
+                                if nhas_pos:
+                                    logger.warning(f"[DIFFDOCK predict] orig {ntype}.pos shape: {store.pos.shape}")
 
                             data_list = [copy.deepcopy(orig_complex_graph) for _ in range(n_samples)]
                             randomize_position(data_list, self.score_model_args.no_torsion, False, self.score_model_args.tr_sigma_max)
@@ -681,18 +739,17 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
                             logger.warning(f"[DIFFDOCK predict] Pose prep done ({time.time()-t_prep:.1f}s)")
 
                             t_sample = time.time()
-                            logger.warning(f"[DIFFDOCK predict] Starting sampling: {n_samples} poses, 10 steps, FP16 autocast...")
-                            with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
-                                data_list, confidence = sampling(
-                                    data_list=data_list, model=self.score_model, inference_steps=10,
-                                    tr_schedule=tr_schedule, rot_schedule=tr_schedule, tor_schedule=tr_schedule,
-                                    device=self.device, t_to_sigma=self.t_to_sigma, model_args=self.score_model_args,
-                                    confidence_model=self.confidence_model, confidence_data_list=conf_data,
-                                    confidence_model_args=self.confidence_args, batch_size=5, no_final_step_noise=True,
-                                    temp_sampling=[1.17, 2.06, 7.04],
-                                    temp_psi=[0.73, 0.90, 0.59],
-                                    temp_sigma_data=[0.93, 0.75, 0.69],
-                                )
+                            logger.warning(f"[DIFFDOCK predict] Starting sampling: {n_samples} poses, 10 steps...")
+                            data_list, confidence = sampling(
+                                data_list=data_list, model=self.score_model, inference_steps=10,
+                                tr_schedule=tr_schedule, rot_schedule=tr_schedule, tor_schedule=tr_schedule,
+                                device=self.device, t_to_sigma=self.t_to_sigma, model_args=self.score_model_args,
+                                confidence_model=self.confidence_model, confidence_data_list=conf_data,
+                                confidence_model_args=self.confidence_args, batch_size=5, no_final_step_noise=True,
+                                temp_sampling=[1.17, 2.06, 7.04],
+                                temp_psi=[0.73, 0.90, 0.59],
+                                temp_sigma_data=[0.93, 0.75, 0.69],
+                            )
                             logger.warning(f"[DIFFDOCK predict] Sampling DONE ({time.time()-t_sample:.1f}s)")
 
                             # Diagnostic: check ligand attributes after sampling
@@ -914,6 +971,23 @@ trimmed_lines.append("END\n")
 example_pdb = "".join(trimmed_lines)
 print(f"Trimmed input_example PDB: {len(seen_resseq)} residues")
 
+# Build base64-encoded ESM embeddings for the trimmed input_example PDB.
+# The trimmed PDB has MAX_RESIDUES residues of TARGET_CHAIN, so we need
+# matching ESM embeddings (truncated to the same length).
+example_esm_embeddings = {}
+pt_path = os.path.join(ESM_OUTPUT_DIR, f"{pdb_basename}_{TARGET_CHAIN}.pt")
+if os.path.exists(pt_path):
+    saved = torch.load(pt_path, map_location="cpu")
+    full_emb = saved["representations"][33]  # shape: [full_seq_len, 1280]
+    truncated_emb = full_emb[:MAX_RESIDUES]  # match the trimmed PDB residue count
+    label = f"protein.pdb_{TARGET_CHAIN}"
+    example_esm_embeddings[label] = base64.b64encode(pickle.dumps(truncated_emb.numpy())).decode()
+    print(f"Built example ESM embeddings: chain {TARGET_CHAIN}, truncated {full_emb.shape[0]} -> {truncated_emb.shape[0]} residues")
+else:
+    print(f"WARNING: No ESM embedding found for chain {TARGET_CHAIN}, input_example will have empty embeddings")
+example_esm_b64_json = json.dumps(example_esm_embeddings)
+print(f"Example ESM payload: {len(example_esm_embeddings)} chains, {len(example_esm_b64_json)} bytes")
+
 # COMMAND ----------
 
 # MAGIC %md
@@ -1006,7 +1080,7 @@ with mlflow.start_run(run_name=model_name, experiment_id=experiment.experiment_i
             "protein_pdb": example_pdb,
             "ligand_smiles": SMILES,
             "samples_per_complex": 5,
-            "esm_embeddings_b64": "{}",
+            "esm_embeddings_b64": example_esm_b64_json,
         }]),
         registered_model_name=f"{catalog}.{schema}.{model_name}",
     )

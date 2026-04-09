@@ -14,7 +14,7 @@
 # COMMAND ----------
 
 # DBTITLE 1,Install dependencies
-# MAGIC %pip install -q torch==2.3.1 transformers==4.41.2 mlflow>=2.15
+# MAGIC %pip install -q torch==2.3.1 transformers==4.41.2 mlflow>=2.15 databricks-sdk==0.50.0 databricks-sql-connector==4.0.3
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
@@ -25,6 +25,28 @@
 # COMMAND ----------
 
 # DBTITLE 1,Read widget values
+catalog = dbutils.widgets.get("catalog")
+schema = dbutils.widgets.get("schema")
+
+# COMMAND ----------
+
+# DBTITLE 1,Install genesis_workbench library
+gwb_library_path = None
+libraries = dbutils.fs.ls(f"/Volumes/{catalog}/{schema}/libraries")
+for lib in libraries:
+    if lib.name.startswith("genesis_workbench"):
+        gwb_library_path = lib.path.replace("dbfs:","")
+
+print(f"GWB library: {gwb_library_path}")
+
+# COMMAND ----------
+
+# MAGIC %pip install {gwb_library_path} --force-reinstall
+# MAGIC dbutils.library.restartPython()
+
+# COMMAND ----------
+
+# DBTITLE 1,Re-read widget values after restart
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 
