@@ -28,10 +28,11 @@ with general_tab:
     st.markdown("##### Registered Workflows")
 
     try:
-        workflows_df = execute_select_query(
-            f"SELECT key, value, module FROM {core_catalog_name}.{core_schema_name}.settings "
-            f"WHERE key LIKE '%_job_id' ORDER BY module, key"
-        )
+        with st.spinner("Loading registered workflows..."):
+            workflows_df = execute_select_query(
+                f"SELECT key, value, module FROM {core_catalog_name}.{core_schema_name}.settings "
+                f"WHERE key LIKE '%_job_id' ORDER BY module, key"
+            )
         if not workflows_df.empty:
             workflows_df.columns = ["Workflow", "Job ID", "Module"]
             # Clean up workflow names for display
