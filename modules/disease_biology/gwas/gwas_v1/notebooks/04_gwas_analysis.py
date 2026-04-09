@@ -33,6 +33,30 @@ pvalue_threshold = float(dbutils.widgets.get("pvalue_threshold"))
 
 # COMMAND ----------
 
+glow_whl_path = None
+for lib in dbutils.fs.ls(f"/Volumes/{catalog}/{schema}/libraries"):
+    if lib.name.startswith("glow") and lib.name.endswith(".whl"):
+        glow_whl_path = lib.path.replace("dbfs:", "")
+
+print(f"Glow wheel: {glow_whl_path}")
+
+# COMMAND ----------
+
+# MAGIC %pip install {glow_whl_path} --force-reinstall
+# MAGIC dbutils.library.restartPython()
+
+# COMMAND ----------
+
+catalog = dbutils.widgets.get("catalog")
+schema = dbutils.widgets.get("schema")
+vcf_path = dbutils.widgets.get("vcf_path")
+mlflow_run_id = dbutils.widgets.get("mlflow_run_id")
+contigs = dbutils.widgets.get("contigs")
+hwe_cutoff = float(dbutils.widgets.get("hwe_cutoff"))
+pvalue_threshold = float(dbutils.widgets.get("pvalue_threshold"))
+
+# COMMAND ----------
+
 import glow
 spark = glow.register(spark)
 spark.conf.set("spark.sql.codegen.wholeStage", False)
