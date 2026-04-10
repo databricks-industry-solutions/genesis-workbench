@@ -129,20 +129,16 @@ with endpoint_tab:
     st.markdown("##### Deployed Endpoints")
 
     try:
-        # Cache endpoint statuses in session state to avoid re-fetching on every rerun
-        if "endpoint_statuses_df" not in st.session_state:
-            with st.spinner("Loading endpoint statuses..."):
-                st.session_state["endpoint_statuses_df"] = _fetch_endpoint_statuses(core_catalog_name, core_schema_name)
+        # Always re-fetch endpoint statuses (no caching — tab may be stale)
+        with st.spinner("Loading endpoint statuses..."):
+            endpoints_display = _fetch_endpoint_statuses(core_catalog_name, core_schema_name)
+            st.session_state["endpoint_statuses_df"] = endpoints_display
 
-        endpoints_display = st.session_state["endpoint_statuses_df"]
         if not endpoints_display.empty:
             st.dataframe(endpoints_display, use_container_width=True, hide_index=True)
         else:
             st.info("No active endpoints deployed yet.")
 
-        if st.button("Refresh Statuses", key="refresh_endpoint_statuses"):
-            st.session_state.pop("endpoint_statuses_df", None)
-            st.rerun()
     except Exception as e:
         st.warning(f"Could not load endpoints: {e}")
 
@@ -191,11 +187,23 @@ with endpoint_tab:
         if start_time and num_hours_param:
             estimated_end = start_time + timedelta(hours=int(num_hours_param))
 
-        st.info(
-            f"A keep-alive job is already running (Run ID: {active_run.get('run_id')}).\n\n"
-            f"**Started:** {start_time.strftime('%Y-%m-%d %H:%M') if start_time else 'Unknown'}\n\n"
-            f"**Duration:** {num_hours_param} hour(s)\n\n"
-            f"**Estimated end:** {estimated_end.strftime('%Y-%m-%d %H:%M') if estimated_end else 'Unknown'}"
+        st.markdown("""
+        <style>
+            @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+            .blinking-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+                            background-color: #FF8C00; animation: blink 1.2s infinite; margin-right: 8px; vertical-align: middle; }
+        </style>
+        """, unsafe_allow_html=True)
+
+        st.markdown(
+            f'<div style="padding: 1rem; border-radius: 0.5rem; border: 1px solid #FF8C00; background-color: rgba(255,140,0,0.05);">'
+            f'<span class="blinking-dot"></span>'
+            f'<strong>Keep-alive job is running</strong> (Run ID: {active_run.get("run_id")})<br><br>'
+            f'<strong>Started:</strong> {start_time.strftime("%Y-%m-%d %H:%M") if start_time else "Unknown"}<br>'
+            f'<strong>Duration:</strong> {num_hours_param} hour(s)<br>'
+            f'<strong>Estimated end:</strong> {estimated_end.strftime("%Y-%m-%d %H:%M") if estimated_end else "Unknown"}'
+            f'</div>',
+            unsafe_allow_html=True
         )
     else:
         col1, col2 = st.columns([1, 2])

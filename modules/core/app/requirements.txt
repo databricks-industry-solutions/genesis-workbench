@@ -5,6 +5,7 @@ mlflow==2.22.0
 mlflow[databricks]
 py3Dmol==2.4.0
 biopython
+parasail
 plotly
 openai
 

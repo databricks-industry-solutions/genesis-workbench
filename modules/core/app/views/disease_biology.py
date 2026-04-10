@@ -4,6 +4,9 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 import os
+import math
+import matplotlib
+import matplotlib.pyplot as plt
 
 from utils.disease_biology import (
     start_parabricks_alignment,
@@ -150,9 +153,6 @@ def _display_gwas_results_dialog(selected_row_index):
             st.divider()
 
             st.markdown("**Manhattan Plot**")
-            import matplotlib.pyplot as plt
-            import matplotlib
-            import math
             matplotlib.use('Agg')
 
             fig, ax = plt.subplots(figsize=(12, 4))

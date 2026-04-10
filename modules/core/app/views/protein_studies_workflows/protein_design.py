@@ -4,6 +4,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import traceback
 import logging
+from datetime import datetime
 
 from utils.molstar_tools import molstar_html_multibody
 from utils.protein_design import make_designs, align_designed_pdbs
@@ -66,7 +67,8 @@ def render():
 
     with c2:
         protein_design_mlflow_experiment = st.text_input("MLflow Experiment:", value="gwb_protein_design")
-        protein_design_mlflow_run = st.text_input("Run Name:")
+        _ts = datetime.now().strftime("%Y%m%d_%H%M")
+        protein_design_mlflow_run = st.text_input("Run Name:", value=f"protein_design_{_ts}")
 
         c11, c12, c13 = st.columns([1, 1, 1])
         with c11:

@@ -68,10 +68,20 @@ app = w.apps.get(name=databricks_app_name)
 app_sp_id = app.service_principal_client_id
 
 print(f"App: {databricks_app_name}, SP: {app_sp_id}")
-print(f"Granting CAN_QUERY on all serving endpoints...")
 
-for ep in w.serving_endpoints.list():
+spark.sql(f"USE CATALOG {catalog}")
+spark.sql(f"USE SCHEMA {schema}")
+
+endpoint_names_df = spark.sql(
+    "SELECT DISTINCT model_endpoint_name FROM model_deployments WHERE is_active = true AND model_endpoint_name IS NOT NULL"
+).collect()
+
+print(f"Found {len(endpoint_names_df)} deployed endpoints in model_deployments")
+
+for row in endpoint_names_df:
+    ep_name = row["model_endpoint_name"]
     try:
+        ep = w.serving_endpoints.get(ep_name)
         perms = w.serving_endpoints.get_permissions(serving_endpoint_id=ep.id)
         already_granted = any(
             acl.user_name == app_sp_id
@@ -89,11 +99,11 @@ for ep in w.serving_endpoints.list():
                     )
                 ],
             )
-            print(f"  Granted CAN_QUERY on {ep.name}")
+            print(f"  Granted CAN_QUERY on {ep_name}")
         else:
-            print(f"  Already has CAN_QUERY on {ep.name}, skipping")
+            print(f"  Already has CAN_QUERY on {ep_name}, skipping")
     except Exception as e:
-        print(f"  Warning: Could not set permissions on {ep.name}: {e}")
+        print(f"  Warning: Could not set permissions on {ep_name}: {e}")
 
 # COMMAND ----------
 
@@ -102,10 +112,7 @@ for ep in w.serving_endpoints.list():
 
 # COMMAND ----------
 
-from databricks.sdk.service.iam import JobAccessControlRequest, JobPermissionLevel
-
-spark.sql(f"USE CATALOG {catalog}")
-spark.sql(f"USE SCHEMA {schema}")
+from databricks.sdk.service.jobs import JobAccessControlRequest, JobPermissionLevel
 
 job_ids_df = spark.sql("SELECT value FROM settings WHERE key LIKE '%_job_id'").collect()
 

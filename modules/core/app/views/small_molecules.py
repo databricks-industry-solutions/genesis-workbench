@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import os
+import json
 import pandas as pd
 
 from genesis_workbench.models import (ModelCategory,
@@ -13,11 +14,13 @@ from genesis_workbench.models import set_mlflow_experiment
 from utils.streamlit_helper import (get_user_info,
                                     display_deploy_model_dialog,
                                     open_mlflow_experiment_window,
-                                    display_import_model_uc_dialog)
+                                    display_import_model_uc_dialog,
+                                    get_endpoint_name)
 
 from utils.small_molecule_tools import (hit_diffdock,
                                         molstar_html_multi_pdb,
                                         _sdf_to_hetatm,
+                                        _query_endpoint,
                                         _get_example_pdb,
                                         EXAMPLE_SMILES)
 
@@ -176,9 +179,6 @@ with diffdock_tab:
             with mlflow.start_run(run_name=diffdock_mlflow_run_name, experiment_id=experiment.experiment_id) as run:
                 mlflow.log_params({"ligand_smiles": ligand_smiles, "num_samples": num_samples})
                 try:
-                    from utils.small_molecule_tools import _query_endpoint, get_endpoint_name
-                    import json as _json
-
                     # Step 1: ESM embeddings
                     progress.progress(10, text="Step 1/3: Computing ESM embeddings...")
                     esm_endpoint = get_endpoint_name("DiffDock ESM Embeddings")
