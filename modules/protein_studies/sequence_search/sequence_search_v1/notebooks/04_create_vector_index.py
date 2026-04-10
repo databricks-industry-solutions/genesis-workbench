@@ -59,7 +59,7 @@ else:
 # DBTITLE 1,Enable Change Data Feed and create index
 
 # Delta Sync index requires Change Data Feed on the source table
-spark.sql(f"ALTER TABLE {catalog}.{schema}.sequence_embeddings_aiq SET TBLPROPERTIES (delta.enableChangeDataFeed = true)")
+spark.sql(f"ALTER TABLE {catalog}.{schema}.sequence_embeddings SET TBLPROPERTIES (delta.enableChangeDataFeed = true)")
 print("Change Data Feed enabled on sequence_embeddings table")
 
 from databricks.sdk.service.vectorsearch import (
@@ -69,8 +69,8 @@ from databricks.sdk.service.vectorsearch import (
     PipelineType,
 )
 
-source_table = f"{catalog}.{schema}.sequence_embeddings_aiq"
-index_name = f"{catalog}.{schema}.sequence_embedding_index_aiq"
+source_table = f"{catalog}.{schema}.sequence_embeddings"
+index_name = f"{catalog}.{schema}.sequence_embedding_index"
 
 # Check if index already exists
 try:

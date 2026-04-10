@@ -1,15 +1,69 @@
 """Protein Studies — Sequence Search tab: Hybrid funnel BLAST-like search."""
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import logging
 
 from utils.sequence_search_tools import run_sequence_search
 from utils.streamlit_helper import get_user_info
+from utils.small_molecule_tools import hit_esmfold
+from utils.molstar_tools import molstar_html_multibody
 
 logger = logging.getLogger(__name__)
 
 EXAMPLE_SEQUENCE = "MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTFSYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITHGMDELYK"
+
+
+@st.dialog("Sequence Match Details", width="large")
+def _display_hit_dialog(selected_idx):
+    """Dialog showing alignment details (left) and ESMFold structure (right)."""
+    results_sorted = st.session_state.get("seq_search_results_sorted", [])
+    if selected_idx >= len(results_sorted):
+        st.error("Invalid selection.")
+        return
+
+    hit = results_sorted[selected_idx]
+
+    left_col, right_col = st.columns([1, 1])
+
+    with left_col:
+        st.markdown(f"##### {hit.seq_id}")
+        st.caption(hit.description)
+
+        mc1, mc2 = st.columns(2)
+        with mc1:
+            st.metric("Identity", f"{hit.identity_pct}%")
+            st.metric("SW Score", hit.sw_score)
+        with mc2:
+            st.metric("Alignment Length", hit.alignment_length)
+            st.metric("Seq Length", hit.seq_length)
+
+        st.divider()
+        st.markdown("**Sequence Alignment**")
+        chunk_size = 60
+        alignment_lines = []
+        for i in range(0, len(hit.aligned_query), chunk_size):
+            q_chunk = hit.aligned_query[i:i + chunk_size]
+            c_chunk = hit.aligned_comp[i:i + chunk_size]
+            t_chunk = hit.aligned_target[i:i + chunk_size]
+            alignment_lines.append(f"Query:  {q_chunk}")
+            alignment_lines.append(f"        {c_chunk}")
+            alignment_lines.append(f"Target: {t_chunk}")
+            alignment_lines.append("")
+        st.code("\n".join(alignment_lines), language=None)
+
+    with right_col:
+        st.markdown("**Predicted Structure**")
+        target_seq = hit.aligned_target.replace("-", "")
+        with st.spinner("Predicting structure with ESMFold..."):
+            try:
+                pdb_str = hit_esmfold(target_seq)
+                html = molstar_html_multibody(pdb_str)
+                components.html(html, height=600)
+                st.caption(f"ESMFold prediction for {hit.seq_id}")
+            except Exception as e:
+                st.warning(f"Structure prediction unavailable: {e}")
 
 
 def _get_progress_callback(progress_widget):
@@ -39,11 +93,10 @@ This search finds similar protein sequences across **~150M UniRef90 entries** in
 def render():
     user_info = get_user_info()
     st.markdown("###### Sequence Similarity Search")
-    cap_c1, cap_c2, _ = st.columns([10, 2,8])
+    cap_c1, cap_c2, _ = st.columns([8, 2,10])
     with cap_c1:
         st.caption("BLAST-like search using ESM-2 embeddings + Vector Search + Smith-Waterman alignment")
-    with cap_c2:
-        if st.button(":material/info:", key="seq_search_info_btn", help="How does this search work?"):
+        if st.button(":material/info: More Info", key="seq_search_info_btn", help="How does this search work?"):
             _show_search_info()
 
     # Input section
@@ -117,8 +170,12 @@ def render():
 
         st.divider()
         st.markdown(f"###### Results ({len(results)} hits)")
+        st.caption("Sorted by best match (highest sequence identity first)")
 
-        # Build results dataframe
+        # Build results dataframe, sorted by identity descending
+        results_sorted = sorted(results, key=lambda r: r.identity_pct, reverse=True)
+        st.session_state["seq_search_results_sorted"] = results_sorted
+
         results_data = [{
             "Seq ID": r.seq_id,
             "Description": r.description[:80] if r.description else "",
@@ -127,55 +184,30 @@ def render():
             "Alignment Length": r.alignment_length,
             "Seq Length": r.seq_length,
             "Vector Distance": round(r.vector_distance, 4),
-        } for r in results]
+        } for r in results_sorted]
 
         results_df = pd.DataFrame(results_data)
+        st.session_state["seq_search_results_df"] = results_df
 
-        # Selectable dataframe
-        selection = st.dataframe(
+        # View Results button + selectable dataframe
+        def _set_selected_seq_row():
+            sel = st.session_state["seq_search_results_table"].selection
+            if len(sel["rows"]) > 0:
+                st.session_state["seq_search_selected_idx"] = sel["rows"][0]
+            else:
+                st.session_state.pop("seq_search_selected_idx", None)
+
+        view_btn = st.button("View Results", key="seq_search_view_btn",
+                             disabled="seq_search_selected_idx" not in st.session_state)
+
+        st.dataframe(
             results_df,
             use_container_width=True,
             hide_index=True,
             selection_mode="single-row",
-            on_select="rerun",
+            on_select=_set_selected_seq_row,
             key="seq_search_results_table",
         )
 
-        # Alignment viewer for selected row
-        selected_rows = selection.selection.rows if selection.selection else []
-        if selected_rows:
-            selected_idx = selected_rows[0]
-            hit = results[selected_idx]
-
-            st.divider()
-            st.markdown(f"###### Alignment: {hit.seq_id}")
-            st.caption(hit.description)
-
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Identity", f"{hit.identity_pct}%")
-            with col2:
-                st.metric("SW Score", hit.sw_score)
-            with col3:
-                st.metric("Alignment Length", hit.alignment_length)
-
-            # Show alignment
-            # Display in chunks of 60 characters for readability
-            chunk_size = 60
-            alignment_lines = []
-            for i in range(0, len(hit.aligned_query), chunk_size):
-                q_chunk = hit.aligned_query[i:i + chunk_size]
-                c_chunk = hit.aligned_comp[i:i + chunk_size]
-                t_chunk = hit.aligned_target[i:i + chunk_size]
-                alignment_lines.append(f"Query:  {q_chunk}")
-                alignment_lines.append(f"        {c_chunk}")
-                alignment_lines.append(f"Target: {t_chunk}")
-                alignment_lines.append("")
-
-            st.code("\n".join(alignment_lines), language=None)
-
-            # Link to structure prediction
-            if st.button("Predict structure for this hit (ESMFold)",
-                         key="seq_search_predict_structure"):
-                st.session_state["view_esmfold_input_sequence"] = hit.aligned_target.replace("-", "")
-                st.info("Sequence copied. Switch to the 'Protein Structure Prediction' tab to run ESMFold.")
+        if view_btn and "seq_search_selected_idx" in st.session_state:
+            _display_hit_dialog(st.session_state["seq_search_selected_idx"])
