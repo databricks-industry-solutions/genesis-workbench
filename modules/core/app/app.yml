@@ -13,6 +13,8 @@ env:
     valueFrom: "core_catalog_name"
   - name: CORE_SCHEMA_NAME
     valueFrom: "core_schema_name"
+  - name: LLM_ENDPOINT_NAME
+    valueFrom: "llm_endpoint"
 
     
 

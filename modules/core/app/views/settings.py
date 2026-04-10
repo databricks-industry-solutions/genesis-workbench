@@ -63,46 +63,79 @@ with general_tab:
     except Exception as e:
         st.warning(f"Could not load registered workflows: {e}")
 
+def _fetch_endpoint_statuses(catalog, schema):
+    """Fetch endpoint statuses — called once and cached in session state."""
+    endpoints_df = execute_select_query(
+        f"SELECT deployment_name, model_endpoint_name, deploy_model_uc_name "
+        f"FROM {catalog}.{schema}.model_deployments "
+        f"WHERE is_active = true ORDER BY deployment_name"
+    )
+    if endpoints_df.empty:
+        return endpoints_df
+
+    w_ep = WorkspaceClient()
+    statuses = []
+    for _, row in endpoints_df.iterrows():
+        ep_name = row["model_endpoint_name"]
+        try:
+            resp = w_ep.api_client.do("GET", f"/api/2.0/serving-endpoints/{ep_name}")
+            state = resp.get("state", {})
+            ready = state.get("ready", "UNKNOWN")
+            config_update = state.get("config_update", "NOT_UPDATING")
+
+            entity_state = ""
+            entity_msg = ""
+            config = resp.get("config", {})
+            entities = config.get("served_entities", config.get("served_models", []))
+            if entities:
+                e_state = entities[0].get("state", {})
+                entity_state = e_state.get("deployment", "")
+                entity_msg = e_state.get("deployment_state_message", "")
+
+            if ready == "NOT_READY" and config_update == "IN_PROGRESS":
+                status = "🟡 Updating"
+            elif ready == "NOT_READY" and config_update == "UPDATE_FAILED":
+                status = "🔴 Update failed"
+            elif ready == "NOT_READY":
+                status = "⚪ Stopped"
+            elif entity_state == "DEPLOYMENT_ABORTED":
+                status = "🔴 Failed"
+            elif entity_msg == "Scaled to zero":
+                status = "⚪ Scaled to zero"
+            elif "Scaling from zero" in entity_msg:
+                status = "🟡 Starting"
+            elif ready == "READY" and entity_msg == "":
+                status = "🟢 Ready"
+            elif ready == "READY":
+                status = "🟢 Ready"
+            else:
+                status = f"⚪ {entity_msg or ready}"
+        except Exception:
+            status = "⚪ Not Found"
+        statuses.append(status)
+    endpoints_df["Status"] = statuses
+    endpoints_df.columns = ["Deployment", "Endpoint", "Model", "Status"]
+    return endpoints_df
+
+
 with endpoint_tab:
     st.markdown("##### Deployed Endpoints")
 
     try:
-        with st.spinner("Loading endpoint statuses..."):
-            endpoints_df = execute_select_query(
-                f"SELECT deployment_name, model_endpoint_name, deploy_model_uc_name "
-                f"FROM {core_catalog_name}.{core_schema_name}.model_deployments "
-                f"WHERE is_active = true ORDER BY deployment_name"
-            )
-        if not endpoints_df.empty:
-            w_ep = WorkspaceClient()
-            statuses = []
-            for _, row in endpoints_df.iterrows():
-                ep_name = row["model_endpoint_name"]
-                try:
-                    resp = w_ep.api_client.do("GET", f"/api/2.0/serving-endpoints/{ep_name}")
-                    state = resp.get("state", {})
-                    ready = state.get("ready", "UNKNOWN")
-                    config_update = state.get("config_update", "NOT_UPDATING")
-                    if ready == "READY" and config_update == "UPDATE_FAILED":
-                        status = "🟡 Ready (Update failed)"
-                    elif ready == "READY":
-                        status = "🟢 Ready"
-                    elif ready == "NOT_READY" and config_update == "IN_PROGRESS":
-                        status = "🟡 Not ready (Updating)"
-                    elif ready == "NOT_READY" and config_update == "UPDATE_FAILED":
-                        status = "🔴 Not ready (Update failed)"
-                    elif ready == "NOT_READY":
-                        status = "⚪ Not ready (Stopped)"
-                    else:
-                        status = f"⚪ {ready}"
-                except Exception:
-                    status = "⚪ Not Found"
-                statuses.append(status)
-            endpoints_df["Status"] = statuses
-            endpoints_df.columns = ["Deployment", "Endpoint", "Model", "Status"]
-            st.dataframe(endpoints_df, use_container_width=True, hide_index=True)
+        # Cache endpoint statuses in session state to avoid re-fetching on every rerun
+        if "endpoint_statuses_df" not in st.session_state:
+            with st.spinner("Loading endpoint statuses..."):
+                st.session_state["endpoint_statuses_df"] = _fetch_endpoint_statuses(core_catalog_name, core_schema_name)
+
+        endpoints_display = st.session_state["endpoint_statuses_df"]
+        if not endpoints_display.empty:
+            st.dataframe(endpoints_display, use_container_width=True, hide_index=True)
         else:
             st.info("No active endpoints deployed yet.")
+
+        if st.button("Refresh Statuses", key="refresh_endpoint_statuses"):
+            st.session_state.pop("endpoint_statuses_df", None)
+            st.rerun()
     except Exception as e:
         st.warning(f"Could not load endpoints: {e}")
 

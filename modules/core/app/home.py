@@ -1,7 +1,8 @@
 import streamlit as st
 import os
+import glob
 from genesis_workbench.workbench import initialize
-from utils.streamlit_helper import get_user_info  
+from utils.streamlit_helper import get_user_info
 from databricks.sdk import WorkspaceClient
 from genesis_workbench.workbench import get_user_settings, get_deployed_modules
 
@@ -24,7 +25,23 @@ with st.spinner("Initializing"):
         deployed_modules = get_deployed_modules()
        
         st.session_state["deployed_modules"] = deployed_modules
-        
+
+        # Build documentation index
+        doc_index = []
+        doc_dir = os.path.join(os.path.dirname(__file__), "documentation")
+        for md_path in sorted(glob.glob(os.path.join(doc_dir, "*.md"))):
+            if os.path.basename(md_path) == "index.md":
+                continue
+            with open(md_path, "r") as f:
+                content = f.read()
+            title = os.path.basename(md_path).replace(".md", "").replace("_", " ").title()
+            for line in content.splitlines():
+                if line.startswith("# "):
+                    title = line.lstrip("# ").strip()
+                    break
+            doc_index.append({"title": title, "content": content, "file": os.path.basename(md_path)})
+        st.session_state["doc_index"] = doc_index
+
     deployed_modules = st.session_state["deployed_modules"]
     
     user_info = get_user_info()

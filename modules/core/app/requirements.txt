@@ -5,6 +5,7 @@ mlflow==2.22.0
 mlflow[databricks]
 py3Dmol==2.4.0
 biopython
-plotly 
+plotly
+openai
 
 lib/genesis_workbench-0.1.0-py3-none-any.whl

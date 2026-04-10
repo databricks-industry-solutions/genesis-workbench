@@ -86,18 +86,15 @@ resources:
             cluster_name: ""
             spark_version: 15.4.x-scala2.12
             spark_conf:
-              spark.master: "local[*, 4]"
-              spark.databricks.cluster.profile: singleNode
               spark.sql.codegen.wholeStage: "false"
             node_type_id: ${var.cpu_node_type}
             driver_node_type_id: ${var.cpu_node_type}
             custom_tags:
-              ResourceClass: SingleNode
               work_type: gwas_analysis
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD
-            num_workers: 0
+            num_workers: 4
             aws_attributes:
               availability: ON_DEMAND
 

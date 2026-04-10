@@ -29,16 +29,16 @@ with st.spinner("Loading data"):
 
 user_info = get_user_info()
 
-settings_tab, protein_structure_prediction_tab, protein_design_tab, sequence_search_tab = st.tabs(["Settings", "Protein Structure Prediction", "Protein Design", "Sequence Search"])
+settings_tab, sequence_search_tab, protein_structure_prediction_tab, protein_design_tab = st.tabs(["Settings", "Sequence Search", "Protein Structure Prediction", "Protein Design"])
 
 with settings_tab:
     settings.render(available_protein_models_df, deployed_protein_models_df)
+
+with sequence_search_tab:
+    sequence_search.render()
 
 with protein_structure_prediction_tab:
     structure_prediction.render()
 
 with protein_design_tab:
     protein_design.render()
-
-with sequence_search_tab:
-    sequence_search.render()

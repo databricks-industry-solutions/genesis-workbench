@@ -26,6 +26,7 @@ schema = dbutils.widgets.get("schema")
 
 # DBTITLE 1,Create Vector Search endpoint
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.vectorsearch import EndpointType
 import time
 
 w = WorkspaceClient()
@@ -38,7 +39,8 @@ try:
     print(f"Vector Search endpoint '{VS_ENDPOINT_NAME}' already exists (status: {endpoint.status})")
 except Exception:
     print(f"Creating Vector Search endpoint '{VS_ENDPOINT_NAME}'...")
-    w.vector_search_endpoints.create_endpoint(name=VS_ENDPOINT_NAME)
+    
+    w.vector_search_endpoints.create_endpoint(name=VS_ENDPOINT_NAME, endpoint_type=EndpointType.STANDARD)
     print("Endpoint creation initiated. Waiting for it to become ready...")
 
 # Wait for endpoint to be ready

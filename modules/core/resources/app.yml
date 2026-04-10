@@ -36,4 +36,9 @@ resources:
             id: ${resources.jobs.start_all_endpoints_job.id}
             permission: "CAN_MANAGE"
 
+        - name: "llm_endpoint"
+          serving_endpoint:
+            name: ${var.llm_endpoint_name}
+            permission: "CAN_QUERY"
+
 
