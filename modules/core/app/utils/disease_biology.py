@@ -19,6 +19,42 @@ def _derive_status(row):
     return "unknown"
 
 
+# Progress visualization for search results
+_PROGRESS_MAP = {
+    # Variant Calling (1 main task)
+    "started":              "🟩⬜",
+    "alignment_complete":   "🟩🟩",
+    # GWAS Analysis (3 main tasks)
+    "phenotype_prepared":   "🟩⬜⬜",
+    "gwas_complete":        "🟩🟩🟩",
+    # VCF Ingestion (1 main task)
+    "ingestion_complete":   "🟩🟩",
+    # Variant Annotation (3 main tasks)
+    "annotation_complete":  "🟩🟩🟩",
+    # Terminal states
+    "failed":               "🟥",
+    "unknown":              "⬜",
+}
+
+
+def add_progress_column(df, total_steps=2):
+    """Add a visual progress column to a search results DataFrame."""
+    if df.empty or "status" not in df.columns:
+        return df
+    df = df.copy()
+    df["progress"] = df["status"].map(
+        lambda s: _PROGRESS_MAP.get(s, f"🟩{'⬜' * (total_steps - 1)}" if s == "started" else "⬜" * total_steps)
+    )
+    # Reorder so progress is right after status
+    cols = list(df.columns)
+    if "progress" in cols and "status" in cols:
+        cols.remove("progress")
+        idx = cols.index("status") + 1
+        cols.insert(idx, "progress")
+        df = df[cols]
+    return df
+
+
 def start_parabricks_alignment(user_info: UserInfo,
                                 fastq_r1: str,
                                 fastq_r2: str,
@@ -312,13 +348,31 @@ def pull_gwas_results(run_id: str) -> pd.DataFrame:
     catalog = os.environ["CORE_CATALOG_NAME"]
     schema = os.environ["CORE_SCHEMA_NAME"]
     table = f"gwas_results_{run_id.replace('-', '_')}"
+    fq_table = f"{catalog}.{schema}.{table}"
+
+    # First check what columns exist
+    try:
+        cols_df = execute_select_query(f"DESCRIBE {fq_table}")
+        available_cols = cols_df["col_name"].tolist() if "col_name" in cols_df.columns else []
+        print(f"[pull_gwas_results] Table {fq_table} columns: {available_cols}")
+    except Exception as e:
+        print(f"[pull_gwas_results] Table {fq_table} not found: {e}")
+        return pd.DataFrame()
+
+    # Check row counts
+    try:
+        count_df = execute_select_query(f"SELECT count(*) as total, count(pvalue) as non_null_pvalue FROM {fq_table}")
+        print(f"[pull_gwas_results] Rows: total={count_df['total'].iloc[0]}, non_null_pvalue={count_df['non_null_pvalue'].iloc[0]}")
+    except Exception as e:
+        print(f"[pull_gwas_results] Count query failed: {e}")
 
     query = f"""
-        SELECT contigName, start, pvalue, referenceAllele, alternateAlleles,
-               -log(10, pvalue) as neg_log_pval
-        FROM {catalog}.{schema}.{table}
+        SELECT contigName, start, pvalue, referenceAllele, alternateAlleles, effect, phenotype,
+               CASE WHEN pvalue IS NOT NULL AND pvalue > 0 THEN -log(10, pvalue) ELSE NULL END as neg_log_pval
+        FROM {fq_table}
         WHERE pvalue IS NOT NULL
         ORDER BY pvalue ASC
+        LIMIT 10000
     """
     return execute_select_query(query)
 
@@ -359,11 +413,14 @@ def start_vcf_ingestion(user_info: UserInfo,
                 "user_email": user_info.user_email
             }
         )
+        catalog = os.environ["CORE_CATALOG_NAME"]
+        schema = os.environ["CORE_SCHEMA_NAME"]
         mlflow.set_tag("origin", "genesis_workbench")
         mlflow.set_tag("feature", "vcf_ingestion")
         mlflow.set_tag("created_by", user_info.user_email)
         mlflow.set_tag("job_run_id", job_run_id)
         mlflow.set_tag("job_status", "started")
+        mlflow.set_tag("output_table", f"{catalog}.{schema}.{output_table_name}")
 
     return job_run_id
 

@@ -91,17 +91,31 @@ os.environ['SCHEMA'] = schema
 
 # COMMAND ----------
 
-# MAGIC %sh
-# MAGIC SAMPLE_VCF_DIR="/Volumes/$CATALOG/$SCHEMA/gwas_data/sample_vcf"
-# MAGIC mkdir -p $SAMPLE_VCF_DIR
-# MAGIC
-# MAGIC if [ ! -f "$SAMPLE_VCF_DIR/ALL.chr6.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz" ]; then
-# MAGIC   echo "Downloading sample VCF (chr6) from 1000 Genomes..."
-# MAGIC   wget -q ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000_genomes_project/release/20190312_biallelic_SNV_and_INDEL/ALL.chr6.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz -P $SAMPLE_VCF_DIR/
-# MAGIC   echo "Downloaded sample VCF"
-# MAGIC else
-# MAGIC   echo "Sample VCF already exists, skipping"
-# MAGIC fi
+import os, subprocess
+
+sample_vcf_dir = f"/Volumes/{catalog}/{schema}/gwas_data/sample_vcf"
+os.makedirs(sample_vcf_dir, exist_ok=True)
+
+vcf_filename = "ALL.chr6.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz"
+vcf_dest = os.path.join(sample_vcf_dir, vcf_filename)
+
+if not os.path.exists(vcf_dest):
+    vcf_url = f"https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000_genomes_project/release/20190312_biallelic_SNV_and_INDEL/{vcf_filename}"
+    print(f"Downloading sample VCF to {vcf_dest}...")
+    # Download to local disk first, then copy to Volume (avoids FUSE write issues)
+    local_tmp = f"/local_disk0/tmp_ref/{vcf_filename}"
+    os.makedirs("/local_disk0/tmp_ref", exist_ok=True)
+    result = subprocess.run(["wget", "-q", "-O", local_tmp, vcf_url], capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"ERROR: wget failed: {result.stderr}")
+    elif os.path.exists(local_tmp) and os.path.getsize(local_tmp) > 1000:
+        import shutil
+        shutil.copy2(local_tmp, vcf_dest)
+        print(f"Downloaded sample VCF: {os.path.getsize(vcf_dest) / (1024*1024):.0f} MB")
+    else:
+        print(f"ERROR: Downloaded file is missing or too small")
+else:
+    print(f"Sample VCF already exists at {vcf_dest}, skipping")
 
 # COMMAND ----------
 

@@ -68,7 +68,9 @@ query = f"""
         SELECT * FROM VALUES
             ('parabricks_alignment_job_id', '{parabricks_alignment_job_id}', 'disease_biology'),
             ('gwas_analysis_job_id', '{gwas_analysis_job_id}', 'disease_biology'),
-            ('gwas_reference_genome_path', '{ref_genome_path}', 'disease_biology')
+            ('gwas_reference_genome_path', '{ref_genome_path}', 'disease_biology'),
+            ('gwas_sample_vcf_path', '/Volumes/{catalog}/{schema}/gwas_data/sample_vcf/ALL.chr6.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz', 'disease_biology'),
+            ('gwas_sample_phenotype_path', '/Volumes/{catalog}/{schema}/gwas_data/sample_phenotype/breast_cancer_phenotype.tsv', 'disease_biology')
         AS src(key, value, module)
     ) AS source
     ON target.key = source.key AND target.module = source.module
@@ -103,6 +105,14 @@ if os.path.exists(source_tsv):
     print(f"Copied sample phenotype data to {dest}")
 else:
     print(f"Sample data file not found at {source_tsv}, skipping")
+
+source_phenotype = f"/Workspace{workspace_root}/../data/breast_cancer_phenotype.tsv"
+if os.path.exists(source_phenotype):
+    dest = os.path.join(sample_data_dir, "breast_cancer_phenotype.tsv")
+    shutil.copy2(source_phenotype, dest)
+    print(f"Copied breast cancer phenotype data to {dest}")
+else:
+    print(f"Phenotype file not found at {source_phenotype}, skipping")
 
 # COMMAND ----------
 

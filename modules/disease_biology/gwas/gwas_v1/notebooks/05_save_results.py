@@ -44,7 +44,7 @@ if significant_hits == 0:
 suggestive_hits = results_df.filter(F.col("pvalue") < 1e-5).count()
 
 min_pvalue_row = results_df.orderBy("pvalue").first()
-min_pvalue = float(min_pvalue_row["pvalue"]) if min_pvalue_row else None
+min_pvalue = float(min_pvalue_row["pvalue"]) if min_pvalue_row and min_pvalue_row["pvalue"] is not None else None
 
 print(f"Total variants tested: {total_variants}")
 print(f"Significant hits (p < {sig_threshold}): {significant_hits}")

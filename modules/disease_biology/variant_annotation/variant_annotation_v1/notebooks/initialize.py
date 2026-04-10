@@ -65,7 +65,9 @@ query = f"""
     USING (
         SELECT * FROM VALUES
             ('variant_annotation_job_id', '{variant_annotation_job_id}', 'disease_biology'),
-            ('variant_annotation_dashboard_id', '{variant_annotation_dashboard_id}', 'disease_biology')
+            ('variant_annotation_dashboard_id', '{variant_annotation_dashboard_id}', 'disease_biology'),
+            ('sample_fastq_r1', '/Volumes/{catalog}/{schema}/gwas_data/sample_fastq/sample_1.fq.gz', 'disease_biology'),
+            ('sample_fastq_r2', '/Volumes/{catalog}/{schema}/gwas_data/sample_fastq/sample_2.fq.gz', 'disease_biology')
         AS src(key, value, module)
     ) AS source
     ON target.key = source.key AND target.module = source.module
@@ -95,20 +97,21 @@ from databricks.sdk import WorkspaceClient
 
 w = WorkspaceClient()
 
+from databricks.sdk.service.dashboards import Dashboard
+
 try:
     dashboard = w.lakeview.get(dashboard_id=variant_annotation_dashboard_id)
     if dashboard.serialized_dashboard:
-        dashboard_json = json.loads(dashboard.serialized_dashboard)
-
-        serialized = json.dumps(dashboard_json)
+        serialized = dashboard.serialized_dashboard
         updated = serialized.replace("serverless_rg_catalog.brca_demo", f"{catalog}.{schema}")
-        dashboard_json = json.loads(updated)
 
         w.lakeview.update(
             dashboard_id=variant_annotation_dashboard_id,
-            display_name=dashboard.display_name,
-            serialized_dashboard=json.dumps(dashboard_json),
-            warehouse_id=dashboard.warehouse_id
+            dashboard=Dashboard(
+                display_name=dashboard.display_name,
+                serialized_dashboard=updated,
+                warehouse_id=dashboard.warehouse_id
+            )
         )
         print(f"Dashboard updated: table references now point to {catalog}.{schema}")
     else:
@@ -117,24 +120,30 @@ except Exception as e:
     print(f"Warning: Could not update dashboard references: {e}")
     print("You may need to manually update the dashboard table references.")
 
+
 # COMMAND ----------
 
-# Copy bundled demo data to the variant_annotation_data volume
-import os, shutil
+# Download sample FASTQ files from 1000 Genomes for Variant Calling demo
+import subprocess
+import os
 
-demo_data_dir = f"/Volumes/{catalog}/{schema}/variant_annotation_data/demo"
-os.makedirs(demo_data_dir, exist_ok=True)
+sample_fastq_dir = f"/Volumes/{catalog}/{schema}/gwas_data/sample_fastq"
+os.makedirs(sample_fastq_dir, exist_ok=True)
 
-current_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
-workspace_root = os.sep.join(current_path.split(os.sep)[:-1])
-source_vcf = f"/Workspace{workspace_root}/../data/brca_pathogenic_corrected.vcf"
+fastq_base_url = "ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/data/HG00096/sequence_read"
+fastq_files = {
+    "sample_1.fq.gz": f"{fastq_base_url}/SRR062634_1.filt.fastq.gz",
+    "sample_2.fq.gz": f"{fastq_base_url}/SRR062634_2.filt.fastq.gz",
+}
 
-if os.path.exists(source_vcf):
-    dest = os.path.join(demo_data_dir, "brca_pathogenic_corrected.vcf")
-    shutil.copy2(source_vcf, dest)
-    print(f"Copied demo pathogenic VCF to {dest}")
-else:
-    print(f"Demo VCF not found at {source_vcf}, skipping")
+for dest_name, url in fastq_files.items():
+    dest_path = os.path.join(sample_fastq_dir, dest_name)
+    if not os.path.exists(dest_path):
+        print(f"Downloading {dest_name}...")
+        subprocess.run(["wget", "-q", "-O", dest_path, url], check=True)
+        print(f"Downloaded {dest_name}")
+    else:
+        print(f"{dest_name} already exists, skipping")
 
 # COMMAND ----------
 

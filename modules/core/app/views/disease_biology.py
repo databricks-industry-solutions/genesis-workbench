@@ -22,6 +22,7 @@ from utils.disease_biology import (
     search_variant_annotation_runs_by_run_name,
     search_variant_annotation_runs_by_experiment_name,
     pull_annotation_results,
+    add_progress_column,
 )
 from utils.streamlit_helper import get_user_info, open_run_window
 
@@ -131,7 +132,9 @@ def _display_gwas_results_dialog(selected_row_index):
             results_df = pull_gwas_results(run_id)
 
             if results_df.empty:
-                st.warning("No results found for this run.")
+                st.warning("No significant results found for this run. "
+                           "All p-values may be NULL — this can happen when the sample size is too small "
+                           "or the phenotype has insufficient variation for the statistical test.")
                 return
 
             mc1, mc2, mc3 = st.columns(3)
@@ -199,12 +202,14 @@ with alignment_tab:
         with c1:
             fastq_r1 = st.text_input(
                 "FASTQ Read 1 (UC Volume path):",
+                value=os.getenv("SAMPLE_FASTQ_R1", ""),
                 placeholder="/Volumes/catalog/schema/volume/sample_R1.fq.gz",
                 help="Path to paired-end read 1 FASTQ file in a UC Volume"
             )
         with c2:
             fastq_r2 = st.text_input(
                 "FASTQ Read 2 (UC Volume path):",
+                value=os.getenv("SAMPLE_FASTQ_R2", ""),
                 placeholder="/Volumes/catalog/schema/volume/sample_R2.fq.gz",
                 help="Path to paired-end read 2 FASTQ file in a UC Volume"
             )
@@ -290,7 +295,7 @@ with alignment_tab:
                         user_email=user_info.user_email, run_name=vc_search_text)
 
                 if not vc_result_df.empty:
-                    st.session_state["vc_run_search_result_df"] = vc_result_df
+                    st.session_state["vc_run_search_result_df"] = add_progress_column(vc_result_df, total_steps=2)
                 else:
                     st.error("No results found")
             else:
@@ -376,6 +381,7 @@ with gwas_tab:
         if vcf_source == "Enter Path":
             vcf_path_input = st.text_input(
                 "VCF file path (UC Volume):",
+                value=os.getenv("GWAS_SAMPLE_VCF_PATH", ""),
                 placeholder="/Volumes/catalog/schema/gwas_data/alignment/<run_id>/germline.vcf",
                 help="Path to VCF file — either from Parabricks output or user-supplied"
             )
@@ -389,6 +395,7 @@ with gwas_tab:
 
         phenotype_path = st.text_input(
             "Phenotype file path (UC Volume, CSV/TSV):",
+            value=os.getenv("GWAS_SAMPLE_PHENOTYPE_PATH", ""),
             placeholder="/Volumes/catalog/schema/gwas_data/sample_phenotype/my_phenotypes.csv",
             help="CSV or TSV file with sample IDs and phenotype labels"
         )
@@ -472,7 +479,7 @@ with gwas_tab:
                         user_email=user_info.user_email, run_name=gwas_search_text)
 
                 if not result_df.empty:
-                    st.session_state["gwas_run_search_result_df"] = result_df
+                    st.session_state["gwas_run_search_result_df"] = add_progress_column(result_df, total_steps=3)
                 else:
                     st.error("No results found")
             else:
@@ -566,7 +573,7 @@ with ingestion_tab:
 
         ingest_table_name = st.text_input(
             "Output table name:",
-            placeholder="my_variants",
+            value=f"vcf_ingested_{_ts}",
             help="Name for the Delta table (will be created in the project catalog/schema)"
         )
 
@@ -631,7 +638,7 @@ with ingestion_tab:
                         user_email=user_info.user_email, run_name=ingest_search_text)
 
                 if not ingest_result_df.empty:
-                    st.session_state["ingest_run_search_result_df"] = ingest_result_df
+                    st.session_state["ingest_run_search_result_df"] = add_progress_column(ingest_result_df, total_steps=2)
                 else:
                     st.error("No results found")
             else:
@@ -720,12 +727,59 @@ with annotation_tab:
         "pathogenic variants, and enrich with disease associations."
     )
 
+    # ── Variants table source selector ──
+    annot_source = st.pills("Variants Source:", ["Enter Table Name", "From VCF Ingestion"],
+                            selection_mode="single", default="Enter Table Name",
+                            key="annot_source_mode")
+
+    annot_table_resolved = ""
+
+    if annot_source == "From VCF Ingestion":
+        if "successful_ingestion_runs_df" not in st.session_state:
+            with st.spinner("Loading successful VCF ingestion runs..."):
+                from utils.disease_biology import list_successful_vcf_ingestion_runs
+                ingestion_runs_df = list_successful_vcf_ingestion_runs(
+                    user_email=user_info.user_email)
+                st.session_state["successful_ingestion_runs_df"] = ingestion_runs_df
+
+        ingestion_runs_df = st.session_state["successful_ingestion_runs_df"]
+
+        if ingestion_runs_df.empty:
+            st.warning("No completed VCF ingestion runs found. Use 'Enter Table Name' instead.")
+        else:
+            st.markdown("Select a completed VCF ingestion run:")
+            ingestion_picker = st.dataframe(
+                ingestion_runs_df,
+                column_config={"run_id": None},
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                key="annot_ingestion_picker_df"
+            )
+            picker_rows = ingestion_picker.selection.rows
+            if len(picker_rows) > 0:
+                annot_table_resolved = ingestion_runs_df.iloc[picker_rows[0]]["output_table"]
+                st.caption(f"Selected table: `{annot_table_resolved}`")
+
+        refresh_ingestion = st.button("Refresh Runs", key="refresh_ingestion_runs")
+        if refresh_ingestion:
+            st.session_state.pop("successful_ingestion_runs_df", None)
+            st.rerun()
+
     with st.form("annotation_form", enter_to_submit=False):
-        annot_variants_table = st.text_input(
-            "Variants Delta table:",
-            placeholder="catalog.schema.my_variants",
-            help="Full table name of the Delta table containing variants (from VCF Ingestion or direct)"
-        )
+        if annot_source == "Enter Table Name":
+            annot_variants_table = st.text_input(
+                "Variants Delta table:",
+                placeholder="catalog.schema.my_variants",
+                help="Full table name of the Delta table containing variants"
+            )
+        else:
+            annot_variants_table = st.text_input(
+                "Variants Delta table (from selected ingestion run):",
+                value=annot_table_resolved,
+                help="Table from the selected VCF Ingestion run"
+            )
 
         st.markdown("**Gene Regions:**")
         gene_preset = st.selectbox(
@@ -810,7 +864,7 @@ with annotation_tab:
                         user_email=user_info.user_email, run_name=annot_search_text)
 
                 if not annot_result_df.empty:
-                    st.session_state["annot_run_search_result_df"] = annot_result_df
+                    st.session_state["annot_run_search_result_df"] = add_progress_column(annot_result_df, total_steps=3)
                 else:
                     st.error("No results found")
             else:
