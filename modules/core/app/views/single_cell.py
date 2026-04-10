@@ -22,17 +22,25 @@ with st.spinner("Loading data"):
     available_single_cell_models_df = st.session_state["available_single_cell_models_df"]
 
     if "deployed_single_cell_models_df" not in st.session_state:
-        deployed_single_cell_models_df = get_deployed_models(ModelCategory.SINGLE_CELL)
-        deployed_single_cell_models_df.columns = ["Model Id", "Deploy Id", "Name", "Description", "Model Name", "Source Version", "UC Name/Version", "Endpoint Name"]
-        deployed_single_cell_models_df["Type"] = "Real-time"
+        rt_df = get_deployed_models(ModelCategory.SINGLE_CELL)
+        rt_df.columns = ["Model Id", "Deploy Id", "Name", "Description", "Model Name", "Source Version", "UC Name/Version", "Endpoint Name"]
+        rt_df["Type"] = "Real-time"
+        rt_df["Cluster"] = ""
+        rows = [rt_df]
         try:
             batch_df = get_batch_models("single_cell")
             if not batch_df.empty:
-                batch_df.columns = ["Model Name", "Description", "Job Name", "Cluster"]
+                batch_df.columns = ["Name", "Description", "Endpoint Name", "Cluster"]
                 batch_df["Type"] = "Batch"
-                deployed_single_cell_models_df = pd.concat([deployed_single_cell_models_df, batch_df], ignore_index=True)
+                batch_df["Model Id"] = ""
+                batch_df["Deploy Id"] = ""
+                batch_df["Model Name"] = ""
+                batch_df["Source Version"] = ""
+                batch_df["UC Name/Version"] = ""
+                rows.append(batch_df)
         except Exception:
             pass
+        deployed_single_cell_models_df = pd.concat(rows, ignore_index=True)
         st.session_state["deployed_single_cell_models_df"] = deployed_single_cell_models_df
     deployed_single_cell_models_df = st.session_state["deployed_single_cell_models_df"]
 

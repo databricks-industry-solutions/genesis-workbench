@@ -283,7 +283,7 @@ def display_deploy_model_dialog(selected_model_name, success_callback = None, er
 
 
 @st.dialog("Import model from Unity Catalog")
-def display_import_model_uc_dialog(model_category: ModelCategory, success_callback = None, error_callback = None):    
+def display_import_model_uc_dialog(success_callback = None, error_callback = None):
     """Dialog to import a model from UC"""
     model_info = None
     model_info_error = False
@@ -292,13 +292,21 @@ def display_import_model_uc_dialog(model_category: ModelCategory, success_callba
     uc_import_model_clicked = False
     user_info = get_user_info()
 
+    _MODULE_OPTIONS = {
+        "Protein Studies": ModelCategory.PROTEIN_STUDIES,
+        "Small Molecules": ModelCategory.SMALL_MOLECULES,
+        "Single Cell": ModelCategory.SINGLE_CELL,
+        "Disease Biology": ModelCategory.DISEASE_BIOLOGY,
+    }
+
     if "import_uc_model_info" in st.session_state:
         model_info = st.session_state["import_uc_model_info"]
 
     with st.form("import_model_uc_form_fetch", enter_to_submit=False ):
+        selected_module = st.selectbox("Module:", list(_MODULE_OPTIONS.keys()))
         c1,c2,c3 = st.columns([3,1,1], vertical_alignment="bottom")
         with c1:
-            uc_model_name = st.text_input("Unity Catalog Name (catalog.schema.model_name):", value="genesis_workbench.dev_srijit_nair_dbx_genesis_workbench_core.gene_embedder")
+            uc_model_name = st.text_input("Unity Catalog Name (catalog.schema.model_name):", value="")
         with c2:
             uc_model_version = st.number_input("Version:", min_value=1, step=1, max_value=999)
         with c3:
@@ -310,13 +318,15 @@ def display_import_model_uc_dialog(model_category: ModelCategory, success_callba
                 model_info = None
                 model_info = get_uc_model_info(uc_model_name, uc_model_version)
                 st.session_state["import_uc_model_info"] = model_info
-            except Exception as e:                    
+            except Exception as e:
+                print(f"[Import] Error fetching model details: {e}")
                 model_info_error = True
+                st.session_state["_import_error_msg"] = str(e)
                 if "import_uc_model_info" in st.session_state:
                     del st.session_state["import_uc_model_info"]
-    
+
     if(model_info_error):
-        st.error("Error fetching model details.")        
+        st.error(f"Error fetching model details: {st.session_state.get('_import_error_msg', 'Unknown error')}")        
         if error_callback:
             error_callback()
             
@@ -334,7 +344,7 @@ def display_import_model_uc_dialog(model_category: ModelCategory, success_callba
         with st.spinner("Importing model"):
             try:
                 import_model_from_uc(user_email = user_info.user_email,
-                    model_category = model_category,
+                    model_category = _MODULE_OPTIONS[selected_module],
                     model_uc_name = uc_model_name,
                     model_uc_version =  uc_model_version, 
                     model_name = model_name,
@@ -345,11 +355,13 @@ def display_import_model_uc_dialog(model_category: ModelCategory, success_callba
                 model_info = None
                 del st.session_state["import_uc_model_info"]
             except Exception as e:
+                print(f"[Import] Error importing model: {e}")
                 model_import_error = True
+                st.session_state["_import_error_msg"] = str(e)
 
     if uc_import_model_clicked:
         if model_import_error:
-            st.error("Error importing model") 
+            st.error(f"Error importing model: {st.session_state.get('_import_error_msg', 'Unknown error')}") 
             if error_callback:
                 error_callback()
         else:

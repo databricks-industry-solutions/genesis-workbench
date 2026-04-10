@@ -81,6 +81,12 @@ echo ""
 databricks bundle run genesis_workbench_app --var="$EXTRA_PARAMS"
 
 echo ""
+echo "▶️ Granting app permissions for endpoints and jobs"
+echo ""
+
+databricks bundle run grant_app_permissions_job --var="$EXTRA_PARAMS" --no-wait
+
+echo ""
 echo "▶️ Copying libraries to UC Volume"
 echo ""
 

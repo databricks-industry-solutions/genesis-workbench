@@ -2,14 +2,14 @@ import streamlit as st
 import os
 import base64
 from datetime import datetime, timedelta
-from utils.streamlit_helper import get_user_info
+from utils.streamlit_helper import get_user_info, display_import_model_uc_dialog
 from genesis_workbench.workbench import execute_workflow, execute_select_query
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.jobs import RunLifeCycleState
 
 st.title(":material/settings: Settings")
 
-general_tab, endpoint_tab, batch_tab, access_tab = st.tabs(["General", "Endpoint Management", "Batch Models", "Access Management"])
+general_tab, model_mgmt_tab, endpoint_tab, batch_tab, access_tab = st.tabs(["General", "Model Management", "Endpoint Management", "Batch Models", "Access Management"])
 
 with general_tab:
     col1, col2, col3 = st.columns([1,1,1])
@@ -62,6 +62,13 @@ with general_tab:
             st.info("No workflows registered yet. Deploy modules to register workflows.")
     except Exception as e:
         st.warning(f"Could not load registered workflows: {e}")
+
+
+with model_mgmt_tab:
+    st.markdown("##### Import Model from Unity Catalog")
+
+    if st.button("Import from Unity Catalog"):
+        display_import_model_uc_dialog()
 
 def _fetch_endpoint_statuses(catalog, schema):
     """Fetch endpoint statuses — called once and cached in session state."""

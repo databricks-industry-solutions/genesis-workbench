@@ -18,18 +18,6 @@ def render(available_models_df, deployed_models_df):
     p1, p2 = st.columns([2, 1])
 
     with p1:
-        st.markdown("###### Import Models:")
-        with st.form("import_model_form"):
-            col1, col2 = st.columns([1, 1], vertical_alignment="bottom")
-            with col1:
-                import_model_source = st.selectbox("Source:", ["Unity Catalog", "Hugging Face", "PyPi"], label_visibility="visible")
-            with col2:
-                import_button = st.form_submit_button('Import')
-
-        if import_button:
-            if import_model_source == "Unity Catalog":
-                display_import_model_uc_dialog(ModelCategory.SINGLE_CELL, success_callback=_reset_available_models)
-
         st.markdown("###### Available Models:")
         with st.form("deploy_model_form"):
             col1, col2 = st.columns([1, 1])

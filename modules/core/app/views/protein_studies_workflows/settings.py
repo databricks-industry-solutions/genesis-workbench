@@ -31,7 +31,9 @@ def render(available_models_df, deployed_models_df):
                          column_config={
                              "Model Id": None,
                              "Deploy Id": None,
-                             "Endpoint Name": None
+                             "Endpoint Name": None,
+                             "Model Name": None,
+                             "Source Version": None,
                          })
     else:
         st.write("There are no deployed models")

@@ -56,7 +56,19 @@ else:
 
 # COMMAND ----------
 
-# DBTITLE 1,Create Delta Sync Vector Search Index
+# DBTITLE 1,Enable Change Data Feed and create index
+
+# Delta Sync index requires Change Data Feed on the source table
+spark.sql(f"ALTER TABLE {catalog}.{schema}.sequence_embeddings SET TBLPROPERTIES (delta.enableChangeDataFeed = true)")
+print("Change Data Feed enabled on sequence_embeddings table")
+
+from databricks.sdk.service.vectorsearch import (
+    DeltaSyncVectorIndexSpecRequest,
+    EmbeddingVectorColumn,
+    VectorIndexType,
+    PipelineType,
+)
+
 source_table = f"{catalog}.{schema}.sequence_embeddings"
 index_name = f"{catalog}.{schema}.sequence_embedding_index"
 
@@ -74,16 +86,15 @@ except Exception:
         name=index_name,
         endpoint_name=VS_ENDPOINT_NAME,
         primary_key="seq_id",
-        index_type="DELTA_SYNC",
-        delta_sync_index_spec={
-            "source_table": source_table,
-            "embedding_source_columns": [{
-                "name": "embedding",
-                "model_endpoint_name": None,  # pre-computed embeddings
-            }],
-            "pipeline_type": "TRIGGERED",
-            "columns_to_sync": ["seq_id"],
-        },
+        index_type=VectorIndexType.DELTA_SYNC,
+        delta_sync_index_spec=DeltaSyncVectorIndexSpecRequest(
+            source_table=source_table,
+            embedding_vector_columns=[
+                EmbeddingVectorColumn(name="embedding", embedding_dimension=1280),
+            ],
+            pipeline_type=PipelineType.TRIGGERED,
+            columns_to_sync=["seq_id"],
+        ),
     )
     print(f"Index '{index_name}' created. Initial sync will begin automatically.")
 
