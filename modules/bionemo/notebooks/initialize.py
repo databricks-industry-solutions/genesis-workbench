@@ -105,6 +105,22 @@ set_app_permissions_for_job(job_id=bionemo_esm_inference_job_id, user_email=user
 
 # COMMAND ----------
 
+from genesis_workbench.models import register_batch_model
+
+register_batch_model(
+    model_name="esm2",
+    model_display_name="NVIDIA BioNeMo ESM2",
+    model_description="Protein language model fine-tuning and inference using NVIDIA BioNeMo ESM-2",
+    model_category="bionemo",
+    module="bionemo",
+    job_id=bionemo_esm_finetune_job_id,
+    job_name="bionemo_esm_finetune",
+    cluster_type="GPU",
+    added_by=user_email,
+)
+
+# COMMAND ----------
+
 # Download sample ESM2 fine-tuning data (BLAT_ECOLX beta-lactamase fitness landscape)
 # Source: https://github.com/ziul-bio/SWAT (MIT License)
 # Original data: Jacquier et al., PNAS 2013 — "Capturing the mutational landscape of TEM-1 beta-lactamase"

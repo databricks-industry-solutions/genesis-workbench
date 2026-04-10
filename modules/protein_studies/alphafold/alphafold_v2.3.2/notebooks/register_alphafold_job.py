@@ -65,3 +65,19 @@ WHEN NOT MATCHED THEN INSERT (key, value, module) VALUES (source.key, source.val
 from genesis_workbench.workbench import set_app_permissions_for_job
 
 set_app_permissions_for_job(job_id=run_alphafold_job_id, user_email=user_email)
+
+# COMMAND ----------
+
+from genesis_workbench.models import register_batch_model
+
+register_batch_model(
+    model_name="alphafold2",
+    model_display_name="AlphaFold2",
+    model_description="High-accuracy protein structure prediction with MSA and template search",
+    model_category="protein_studies",
+    module="protein_studies",
+    job_id=run_alphafold_job_id,
+    job_name="run_alphafold",
+    cluster_type="GPU",
+    added_by=user_email,
+)

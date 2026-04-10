@@ -5,7 +5,8 @@ import pandas as pd
 
 from genesis_workbench.models import (ModelCategory,
                                       get_available_models,
-                                      get_deployed_models)
+                                      get_deployed_models,
+                                      get_batch_models)
 
 import mlflow
 from genesis_workbench.models import set_mlflow_experiment
@@ -38,13 +39,22 @@ with st.spinner("Loading data"):
     if "deployed_small_molecule_models_df" not in st.session_state:
         deployed_small_molecule_models_df = get_deployed_models(ModelCategory.SMALL_MOLECULES)
         deployed_small_molecule_models_df.columns = ["Model Id", "Deploy Id", "Name", "Description", "Model Name", "Source Version", "UC Name/Version", "Endpoint Name"]
+        deployed_small_molecule_models_df["Type"] = "Real-time"
+        try:
+            batch_df = get_batch_models("small_molecules")
+            if not batch_df.empty:
+                batch_df.columns = ["Model Name", "Description", "Job Name", "Cluster"]
+                batch_df["Type"] = "Batch"
+                deployed_small_molecule_models_df = pd.concat([deployed_small_molecule_models_df, batch_df], ignore_index=True)
+        except Exception:
+            pass
         st.session_state["deployed_small_molecule_models_df"] = deployed_small_molecule_models_df
     deployed_small_molecule_models_df = st.session_state["deployed_small_molecule_models_df"]
 
 user_info = get_user_info()
 
 settings_tab, diffdock_tab, binder_tab, ligand_binder_tab, motif_tab, admet_tab = st.tabs([
-    "Settings",
+    "Deployed Models",
     "Molecular Docking",
     "Protein Binder Design",
     "Ligand Binder Design",

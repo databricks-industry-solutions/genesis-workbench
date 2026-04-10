@@ -98,6 +98,28 @@ CREATE TABLE model_deployments (
 
 # COMMAND ----------
 
+spark.sql("DROP TABLE IF EXISTS batch_models")
+
+spark.sql(f"""
+CREATE TABLE batch_models (
+    batch_model_id BIGINT,
+    model_name STRING,
+    model_display_name STRING,
+    model_description STRING,
+    model_category STRING,
+    module STRING,
+    job_id STRING,
+    job_name STRING,
+    cluster_type STRING,
+    model_added_by STRING,
+    model_added_date TIMESTAMP,
+    is_active BOOLEAN,
+    deactivated_timestamp TIMESTAMP
+)
+""")
+
+# COMMAND ----------
+
 spark.sql("DROP TABLE IF EXISTS settings")
 
 spark.sql(f"""

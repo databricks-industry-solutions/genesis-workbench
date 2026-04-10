@@ -181,6 +181,17 @@ def get_deployed_models(model_category : ModelCategory)-> pd.DataFrame:
     result_df = execute_select_query(query)
     return result_df
 
+def get_batch_models(model_category: str) -> pd.DataFrame:
+    """Gets all active batch models for a given category."""
+    query = (
+        f"SELECT model_display_name, model_description, job_name, cluster_type "
+        f"FROM {os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.batch_models "
+        f"WHERE model_category = '{model_category}' AND is_active = true "
+        f"ORDER BY model_display_name"
+    )
+    return execute_select_query(query)
+
+
 def insert_model_info(model_info : GWBModelInfo):
     """Register the model in GWB"""
     columns = []
@@ -200,6 +211,42 @@ def insert_model_info(model_info : GWBModelInfo):
         values ({",".join(params)})
         """
     execute_parameterized_inserts(insert_sql, [ values ])
+
+
+def register_batch_model(model_name: str, model_display_name: str, model_description: str,
+                         model_category: str, module: str, job_id: str, job_name: str,
+                         cluster_type: str, added_by: str):
+    """Register or update a batch (non-realtime) model in the batch_models table."""
+    catalog = os.environ['CORE_CATALOG_NAME']
+    schema = os.environ['CORE_SCHEMA_NAME']
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    batch_model_id = time.time_ns()
+
+    query = f"""
+        MERGE INTO {catalog}.{schema}.batch_models AS target
+        USING (SELECT '{model_name}' AS model_name, '{module}' AS module) AS source
+        ON target.model_name = source.model_name AND target.module = source.module
+        WHEN MATCHED THEN UPDATE SET
+            target.model_display_name = '{model_display_name}',
+            target.model_description = '{model_description}',
+            target.model_category = '{model_category}',
+            target.job_id = '{job_id}',
+            target.job_name = '{job_name}',
+            target.cluster_type = '{cluster_type}',
+            target.model_added_by = '{added_by}',
+            target.model_added_date = '{now}',
+            target.is_active = true
+        WHEN NOT MATCHED THEN INSERT
+            (batch_model_id, model_name, model_display_name, model_description,
+             model_category, module, job_id, job_name, cluster_type,
+             model_added_by, model_added_date, is_active)
+        VALUES
+            ({batch_model_id}, '{model_name}', '{model_display_name}', '{model_description}',
+             '{model_category}', '{module}', '{job_id}', '{job_name}', '{cluster_type}',
+             '{added_by}', '{now}', true)
+    """
+    execute_non_select_query(query)
+
 
 def get_uc_model_info(model_uc_name_fq : str, model_uc_version:int) -> ModelInfo:
     mlflow.set_registry_uri("databricks-uc")

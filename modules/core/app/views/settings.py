@@ -9,7 +9,7 @@ from databricks.sdk.service.jobs import RunLifeCycleState
 
 st.title(":material/settings: Settings")
 
-general_tab, endpoint_tab, access_tab = st.tabs(["General", "Endpoint Management", "Access Management"])
+general_tab, endpoint_tab, batch_tab, access_tab = st.tabs(["General", "Endpoint Management", "Batch Models", "Access Management"])
 
 with general_tab:
     col1, col2, col3 = st.columns([1,1,1])
@@ -216,3 +216,27 @@ with endpoint_tab:
                                    "You can monitor the job in the Monitoring tab.")
                     except Exception as e:
                         st.error(f"Failed to start endpoints: {str(e)}")
+
+with batch_tab:
+    st.markdown("##### Batch Models")
+    st.caption("Models that run as Databricks Jobs (not real-time serving endpoints).")
+
+    try:
+        with st.spinner("Loading batch models..."):
+            batch_df = execute_select_query(
+                f"SELECT model_display_name, model_category, module, cluster_type, "
+                f"job_name, job_id, model_added_by, model_added_date, is_active "
+                f"FROM {core_catalog_name}.{core_schema_name}.batch_models "
+                f"WHERE is_active = true ORDER BY module, model_display_name"
+            )
+        if not batch_df.empty:
+            batch_df.columns = ["Model", "Category", "Module", "Cluster", "Job Name",
+                                "Job ID", "Added By", "Added Date", "Active"]
+            batch_df["Category"] = batch_df["Category"].str.replace("_", " ").str.title()
+            batch_df["Module"] = batch_df["Module"].str.replace("_", " ").str.title()
+            st.dataframe(batch_df[["Model", "Category", "Module", "Cluster", "Job Name", "Job ID"]],
+                         use_container_width=True, hide_index=True)
+        else:
+            st.info("No batch models registered yet. Deploy Parabricks, AlphaFold2, or BioNeMo to register batch models.")
+    except Exception as e:
+        st.warning(f"Could not load batch models: {e}")

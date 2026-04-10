@@ -36,7 +36,7 @@ VS_ENDPOINT_NAME = "gwb_sequence_search_vs_endpoint"
 # Create endpoint if it doesn't exist
 try:
     endpoint = w.vector_search_endpoints.get_endpoint(VS_ENDPOINT_NAME)
-    print(f"Vector Search endpoint '{VS_ENDPOINT_NAME}' already exists (status: {endpoint.status})")
+    print(f"Vector Search endpoint '{VS_ENDPOINT_NAME}' already exists (status: {endpoint.endpoint_status})")
 except Exception:
     print(f"Creating Vector Search endpoint '{VS_ENDPOINT_NAME}'...")
     
@@ -46,10 +46,10 @@ except Exception:
 # Wait for endpoint to be ready
 for _ in range(60):
     endpoint = w.vector_search_endpoints.get_endpoint(VS_ENDPOINT_NAME)
-    if endpoint.status and endpoint.status.state and endpoint.status.state.value == "ONLINE":
+    if endpoint.endpoint_status and endpoint.endpoint_status.state and endpoint.endpoint_status.state.value == "ONLINE":
         print(f"Endpoint '{VS_ENDPOINT_NAME}' is ONLINE")
         break
-    print(f"  Status: {endpoint.status}. Waiting...")
+    print(f"  Status: {endpoint.endpoint_status}. Waiting...")
     time.sleep(30)
 else:
     print("WARNING: Endpoint did not come online within 30 minutes. Index creation may still succeed.")

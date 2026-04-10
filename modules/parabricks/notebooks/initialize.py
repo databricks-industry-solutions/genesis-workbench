@@ -68,3 +68,18 @@ query= f"""
 
 spark.sql(query)
 
+# COMMAND ----------
+
+from genesis_workbench.models import register_batch_model
+
+register_batch_model(
+    model_name="parabricks",
+    model_display_name="NVIDIA Parabricks",
+    model_description="GPU-accelerated germline variant calling from paired-end FASTQ files",
+    model_category="disease_biology",
+    module="parabricks",
+    job_id=parabricks_cluster_name,
+    job_name="parabricks_germline",
+    cluster_type="GPU",
+    added_by=user_email,
+)

@@ -2,8 +2,10 @@ import streamlit as st
 
 from genesis_workbench.models import (ModelCategory,
                                       get_available_models,
-                                      get_deployed_models)
+                                      get_deployed_models,
+                                      get_batch_models)
 
+import pandas as pd
 from utils.streamlit_helper import get_user_info
 
 from views.protein_studies_workflows import settings, structure_prediction, protein_design, sequence_search
@@ -24,12 +26,21 @@ with st.spinner("Loading data"):
     if "deployed_protein_models_df" not in st.session_state:
         deployed_protein_models_df = get_deployed_models(ModelCategory.PROTEIN_STUDIES)
         deployed_protein_models_df.columns = ["Model Id", "Deploy Id", "Name", "Description", "Model Name", "Source Version", "UC Name/Version", "Endpoint Name"]
+        deployed_protein_models_df["Type"] = "Real-time"
+        try:
+            batch_df = get_batch_models("protein_studies")
+            if not batch_df.empty:
+                batch_df.columns = ["Model Name", "Description", "Job Name", "Cluster"]
+                batch_df["Type"] = "Batch"
+                deployed_protein_models_df = pd.concat([deployed_protein_models_df, batch_df], ignore_index=True)
+        except Exception:
+            pass
         st.session_state["deployed_protein_models_df"] = deployed_protein_models_df
     deployed_protein_models_df = st.session_state["deployed_protein_models_df"]
 
 user_info = get_user_info()
 
-settings_tab, sequence_search_tab, protein_structure_prediction_tab, protein_design_tab = st.tabs(["Settings", "Sequence Search", "Protein Structure Prediction", "Protein Design"])
+settings_tab, sequence_search_tab, protein_structure_prediction_tab, protein_design_tab = st.tabs(["Deployed Models", "Sequence Search", "Protein Structure Prediction", "Protein Design"])
 
 with settings_tab:
     settings.render(available_protein_models_df, deployed_protein_models_df)
