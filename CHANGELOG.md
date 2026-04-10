@@ -1,5 +1,67 @@
 # Genesis Workbench — Changelog
 
+## add_small_molecule_studies (2026-04-09/10)
+
+### Home page overhaul
+- **AI Assistant tab** ("What do you want to do?"): Natural language interface powered by Claude Sonnet via Databricks Foundation Model endpoint. Users describe what they want to accomplish and get guided to the right workflow with step-by-step instructions.
+- **Documentation Search tab**: Full-text search across all workflow documentation (markdown files indexed at app startup)
+- **Example pills**: Pre-built example questions for quick discovery (e.g., "How do I predict protein structure?", "Run a GWAS analysis")
+- **Documentation**: Added markdown docs for all workflows — molecular docking, protein design, GWAS analysis, variant annotation, sequence search, single cell analysis, etc.
+- **Bigger/bolder tabs**: Global CSS for larger tab labels (`1.1rem`, `font-weight: 600`)
+- **User settings caching**: Cached in session state to avoid re-fetching on every rerun
+- **LLM endpoint**: Configurable via `LLM_ENDPOINT_NAME` env var, added to `app.yml` resources with `CAN_QUERY` permission
+
+### DiffDock — Confidence model fix
+- Fixed `'HeteroDataBatch' has no attribute 'complex_t'` error by building a separate confidence dataset using `InferenceDataset` with confidence model parameters — matches the pattern in `01_register_diffdock_wo_esm.py`
+- Updated example PDB in UI from 3-residue stub to 50-residue excerpt from PDB 6agt (fetched at runtime)
+- Added step-by-step progress bar (ESM embeddings → DiffDock scoring → results) replacing single spinner
+
+### Disease Biology — New module
+- **GWAS Pipeline**: Parabricks `fq2bam` + `haplotypecaller` (split from single `pbrun germline`), `--low-memory` flag, real-time log streaming, input file validation, BWA index download
+- **VCF Ingestion**: VCF-to-Delta via Glow, auto-generated output table names (`vcf_ingested_{timestamp}`), output table logged as MLflow tag for downstream lookup
+- **Variant Annotation**: ClinVar annotation with BRCA gene filtering, Lakeview dashboard with auto-updated catalog/schema references (fixed `lakeview.update` SDK API to use `Dashboard` object)
+- **Parabricks**: Fixed Python 3.12 pip incompatibility (`python -m ensurepip`), separate `%sh`/`%pip` cells, reference genome download switched from FTP to HTTPS, downloads to local disk then copies to Volume
+- **GWAS Analysis cluster**: Changed from single-node to 4-worker multi-node for parallel processing
+- All disease biology init workflows use MERGE INTO for idempotent settings inserts
+- Sample VCF download fixed: FTP→HTTPS, Python-based download with validation instead of `%sh wget`
+- GWAS results: Graceful handling of all-NULL pvalues with clear user message
+
+### MLflow job status tracking
+- Created `modules/core/notebooks/update_mlflow_status.py` — lightweight serverless notebook for setting `job_status` tag
+- Added `mark_success` / `mark_failure` tasks (using `depends_on` with `outcome: SUCCEEDED/FAILED`) to all 5 job workflows: parabricks_alignment, gwas_analysis, vcf_ingestion, variant_annotation, alphafold
+- Search results now derive status from `job_status` tag which is reliably set by completion tasks
+- Added visual progress column to search results with blinking orange dots for in-progress, green for complete, red for failed
+
+### Sequence Search — New workflow
+- **Download**: UniRef90 FASTA download with skip-if-exists
+- **Delta tables**: Batch FASTA parsing (500K records/batch), skip if table has >100 rows
+- **Batch embedding**: Switched from GPU `pandas_udf` to `ai_query()` via deployed ESM2 serving endpoint — eliminates GPU cluster dependency. GPU notebook preserved as `03_batch_embed_sequences_gpu.py` backup. Limited to 1M sequences.
+- **Vector index**: Fixed SDK API (`EndpointType.STANDARD`, `EmbeddingVectorColumn`, `endpoint_status`), enabled Change Data Feed on source table
+- UI: Moved Sequence Search to second tab position (after Settings)
+- Added `parasail` to app requirements for Smith-Waterman alignment
+
+### Settings page improvements
+- **Deployed Endpoints section**: Shows real-time status using served entity deployment state (🟢 Ready, 🟡 Starting, ⚪ Scaled to zero, 🔴 Failed). Cached in session state with manual refresh button.
+- **Deployed Modules section**: Shows all non-job settings from settings table
+- **Start All Endpoints**: Added `CAN_MANAGE` permission in `app.yml`, REST API for run status check
+- **Registered Workflows**: Spinner during loading
+
+### UI / UX improvements
+- Mol* viewer: Fixed SDF loading by converting to HETATM PDB records, switched to `loadStructureFromData` API with correct 3-parameter signature
+- Ligand Binder Design: Docked ligand view options only shown when valid SDF exists
+- Disease Biology search: Default search text initialized to "gwas"
+- VCF Ingestion → Variant Annotation auto-populate: "From VCF Ingestion" pill selector
+- Protein Design: Auto-generated run name with timestamp
+- All inline imports moved to page top
+
+### Infrastructure fixes
+- `databricks-sdk==0.50.0` and `databricks-sql-connector==4.0.3` pinned in sequence search notebooks
+- `cloudpickle==3.0.0` pinned to match ESM2 model registration environment
+- `app.yml`: Added `start_all_endpoints_job` with `CAN_MANAGE` permission, LLM endpoint with `CAN_QUERY`
+- Removed `ServingModelWorkloadType` dependency (class removed in newer SDK)
+
+---
+
 ## add_small_molecule_studies (2026-04-05)
 
 ### Start All Endpoints feature

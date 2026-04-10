@@ -27,20 +27,30 @@ schema = dbutils.widgets.get("schema")
 MAX_SEQUENCES = 1_000_000
 
 source_table = f"{catalog}.{schema}.sequence_db"
-target_table = f"{catalog}.{schema}.sequence_embeddings"
+target_table = f"{catalog}.{schema}.sequence_embeddings_aiq"
 
 # Resolve endpoint name from model_deployments table
-endpoint_name = spark.sql(f"""
+endpoint_rows = spark.sql(f"""
     SELECT model_endpoint_name FROM {catalog}.{schema}.model_deployments
-    WHERE deployment_name LIKE '%esm2_embeddings%' AND is_active = true
+    WHERE (deploy_model_uc_name LIKE '%esm2_embeddings%' OR model_endpoint_name LIKE '%esm2_embeddings%')
+      AND is_active = true
     LIMIT 1
 """).collect()
 
-if endpoint_name:
-    ESM2_ENDPOINT = endpoint_name[0]["model_endpoint_name"]
+if endpoint_rows:
+    ESM2_ENDPOINT = endpoint_rows[0]["model_endpoint_name"]
 else:
-    # Fallback to convention-based name
-    ESM2_ENDPOINT = "gwb_esm2_embeddings_endpoint"
+    # Fallback: list all active endpoints and find the one with esm2
+    all_endpoints = spark.sql(f"""
+        SELECT model_endpoint_name FROM {catalog}.{schema}.model_deployments
+        WHERE is_active = true
+    """).collect()
+    print(f"Available endpoints: {[r['model_endpoint_name'] for r in all_endpoints]}")
+    esm2_matches = [r["model_endpoint_name"] for r in all_endpoints if "esm2" in r["model_endpoint_name"].lower()]
+    if esm2_matches:
+        ESM2_ENDPOINT = esm2_matches[0]
+    else:
+        raise RuntimeError(f"No ESM2 embeddings endpoint found in model_deployments table. Available: {[r['model_endpoint_name'] for r in all_endpoints]}")
 
 print(f"ESM2 endpoint: {ESM2_ENDPOINT}")
 print(f"Source: {source_table}")

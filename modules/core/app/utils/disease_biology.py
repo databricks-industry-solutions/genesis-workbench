@@ -55,6 +55,71 @@ def add_progress_column(df, total_steps=2):
     return df
 
 
+_BLINKING_DOT_CSS = """
+<style>
+@keyframes blink-orange { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+.dot-in-progress { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+                   background-color: #FF8C00; animation: blink-orange 1.2s infinite;
+                   margin-right: 6px; vertical-align: middle; }
+.dot-complete { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+                background-color: #22C55E; margin-right: 6px; vertical-align: middle; }
+.dot-failed { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+              background-color: #EF4444; margin-right: 6px; vertical-align: middle; }
+.dot-unknown { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+               background-color: #9CA3AF; margin-right: 6px; vertical-align: middle; }
+.run-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.run-table th { text-align: left; padding: 8px 12px; border-bottom: 2px solid #444;
+                font-weight: 600; color: #999; }
+.run-table td { padding: 8px 12px; border-bottom: 1px solid #333; }
+.run-table tr:hover { background-color: rgba(255,255,255,0.03); }
+</style>
+"""
+
+_IN_PROGRESS_STATUSES = {"started", "phenotype_prepared"}
+_COMPLETE_STATUSES = {"alignment_complete", "gwas_complete", "ingestion_complete", "annotation_complete"}
+_FAILED_STATUSES = {"failed"}
+
+
+def _status_dot(status):
+    if status in _IN_PROGRESS_STATUSES:
+        return '<span class="dot-in-progress"></span>'
+    elif status in _COMPLETE_STATUSES:
+        return '<span class="dot-complete"></span>'
+    elif status in _FAILED_STATUSES:
+        return '<span class="dot-failed"></span>'
+    return '<span class="dot-unknown"></span>'
+
+
+def render_runs_html_table(df, hidden_columns=None):
+    """Render a search results DataFrame as an HTML table with status dots."""
+    if df.empty:
+        return ""
+    hidden_columns = hidden_columns or []
+    display_cols = [c for c in df.columns if c not in hidden_columns]
+
+    rows_html = []
+    for _, row in df.iterrows():
+        cells = []
+        for col in display_cols:
+            val = row.get(col, "")
+            if col == "status":
+                dot = _status_dot(str(val))
+                label = str(val).replace("_", " ").title()
+                cells.append(f"<td>{dot}{label}</td>")
+            else:
+                cells.append(f"<td>{val}</td>")
+        rows_html.append(f"<tr>{''.join(cells)}</tr>")
+
+    header_labels = [c.replace("_", " ").title() for c in display_cols]
+    header = "".join(f"<th>{h}</th>" for h in header_labels)
+
+    return (
+        _BLINKING_DOT_CSS
+        + f'<table class="run-table"><thead><tr>{header}</tr></thead>'
+        + f'<tbody>{"".join(rows_html)}</tbody></table>'
+    )
+
+
 def start_parabricks_alignment(user_info: UserInfo,
                                 fastq_r1: str,
                                 fastq_r2: str,

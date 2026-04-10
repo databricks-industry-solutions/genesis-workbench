@@ -81,6 +81,18 @@ _EXAMPLE_QUESTIONS = [
 
 # ── Tabs ──────────────────────────────────────────────────────────────────
 
+st.markdown("""
+<style>
+    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+    .stTabs [data-baseweb="tab-list"] button {
+        padding: 0.6rem 1.2rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 assistant_tab, search_tab = st.tabs([
     ":material/assistant: What do you want to do?",
     ":material/search: Search Documentation",
@@ -89,7 +101,9 @@ assistant_tab, search_tab = st.tabs([
 # ── What do you want to do? ───────────────────────────────────────────────
 
 with assistant_tab:
-
+    st.markdown("")  # spacer between tabs and content
+    st.markdown("")  # spacer between tabs and content
+    st.markdown("I can guide you. Ask me how to do anything in this application!")
     @st.fragment
     def _assistant_fragment():
         user_query = st.text_input(
@@ -133,6 +147,9 @@ with assistant_tab:
 # ── Search Documentation ──────────────────────────────────────────────────
 
 with search_tab:
+    st.markdown("")  # spacer between tabs and content
+    st.markdown("")  # spacer between tabs and content
+
     doc_query = st.text_input(
         "doc_search",
         value="",

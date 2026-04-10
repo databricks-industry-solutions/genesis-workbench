@@ -26,6 +26,7 @@ from utils.disease_biology import (
     search_variant_annotation_runs_by_experiment_name,
     pull_annotation_results,
     add_progress_column,
+    render_runs_html_table,
 )
 from utils.streamlit_helper import get_user_info, open_run_window
 
@@ -33,6 +34,31 @@ from utils.streamlit_helper import get_user_info, open_run_window
 from datetime import datetime
 
 st.title(":material/coronavirus: Disease Biology")
+
+# Blinking dot CSS for in-progress runs
+st.markdown("""
+<style>
+@keyframes blink-orange { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+.run-dot-in-progress { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+                       background-color: #FF8C00; animation: blink-orange 1.2s infinite;
+                       margin-right: 8px; vertical-align: middle; }
+</style>
+""", unsafe_allow_html=True)
+
+
+def _show_in_progress_banner(df):
+    """Show a blinking orange dot banner if any runs are in progress."""
+    if df.empty or "status" not in df.columns:
+        return
+    in_progress = df[df["status"].isin(["started", "phenotype_prepared"])]
+    if not in_progress.empty:
+        count = len(in_progress)
+        st.markdown(
+            f'<span class="run-dot-in-progress"></span> '
+            f'<strong>{count} run{"s" if count > 1 else ""} in progress</strong>',
+            unsafe_allow_html=True,
+        )
+
 
 user_info = get_user_info()
 _ts = datetime.now().strftime("%Y%m%d_%H%M")
@@ -303,6 +329,7 @@ with alignment_tab:
 
     if "vc_run_search_result_df" in st.session_state:
         st.divider()
+        _show_in_progress_banner(st.session_state["vc_run_search_result_df"])
         vc_view_enabled = (
             "selected_vc_run_status" in st.session_state
             and st.session_state["selected_vc_run_status"] == "alignment_complete"
@@ -487,6 +514,7 @@ with gwas_tab:
 
     if "gwas_run_search_result_df" in st.session_state:
         st.divider()
+        _show_in_progress_banner(st.session_state["gwas_run_search_result_df"])
         gwas_view_enabled = (
             "selected_gwas_run_status" in st.session_state
             and st.session_state["selected_gwas_run_status"] == "gwas_complete"
@@ -621,7 +649,7 @@ with ingestion_tab:
                                        selection_mode="single", default="Experiment Name",
                                        key="ingest_search_mode")
     with ingest_sc2:
-        ingest_search_text = st.text_input(f"{ingest_search_mode} contains:", "gwas", key="ingest_search_text")
+        ingest_search_text = st.text_input(f"{ingest_search_mode} contains:", "vcf", key="ingest_search_text")
     with ingest_sc3:
         ingest_search_btn = st.button("Search", key="ingest_search_btn")
 
@@ -646,6 +674,7 @@ with ingestion_tab:
 
     if "ingest_run_search_result_df" in st.session_state:
         st.divider()
+        _show_in_progress_banner(st.session_state["ingest_run_search_result_df"])
         st.dataframe(
             st.session_state["ingest_run_search_result_df"],
             column_config={"run_id": None},
@@ -846,7 +875,7 @@ with annotation_tab:
                                       selection_mode="single", default="Experiment Name",
                                       key="annot_search_mode")
     with annot_sc2:
-        annot_search_text = st.text_input(f"{annot_search_mode} contains:", "gwas", key="annot_search_text")
+        annot_search_text = st.text_input(f"{annot_search_mode} contains:", "variant", key="annot_search_text")
     with annot_sc3:
         annot_search_btn = st.button("Search", key="annot_search_btn")
 
@@ -872,6 +901,7 @@ with annotation_tab:
 
     if "annot_run_search_result_df" in st.session_state:
         st.divider()
+        _show_in_progress_banner(st.session_state["annot_run_search_result_df"])
         annot_view_enabled = (
             "selected_annot_run_status" in st.session_state
             and st.session_state["selected_annot_run_status"] == "annotation_complete"

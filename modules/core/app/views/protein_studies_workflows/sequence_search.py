@@ -19,10 +19,32 @@ def _get_progress_callback(progress_widget):
     return report_progress
 
 
+@st.dialog("How Sequence Search Works", width="large")
+def _show_search_info():
+    st.markdown("""
+This search finds similar protein sequences across **~150M UniRef90 entries** in under 5 seconds using a 5-stage hybrid funnel:
+
+| Stage | What happens | Time |
+|-------|-------------|------|
+| **1. Embed** | Your query is converted to a 1280-dimensional vector using ESM-2 | ~200ms |
+| **2. ANN Search** | Vector Search finds the top 500 nearest neighbors by embedding similarity | ~500ms |
+| **3. Fetch** | Full sequences are retrieved from the Delta table for each candidate | ~1s |
+| **4. Align** | Smith-Waterman alignment scores each candidate against your query | ~2s |
+| **5. Rank** | Results are sorted by alignment score and returned | instant |
+
+**Key difference from BLAST:** Stage 1-2 use *semantic* similarity (ESM-2 captures evolutionary and functional relationships), while Stage 4 provides *exact* alignment scores. This combination catches functionally similar sequences that BLAST might miss, while still providing familiar identity % and alignment views.
+""")
+
+
 def render():
     user_info = get_user_info()
     st.markdown("###### Sequence Similarity Search")
-    st.caption("BLAST-like search using ESM-2 embeddings + Vector Search + Smith-Waterman alignment")
+    cap_c1, cap_c2 = st.columns([10, 1])
+    with cap_c1:
+        st.caption("BLAST-like search using ESM-2 embeddings + Vector Search + Smith-Waterman alignment")
+    with cap_c2:
+        if st.button(":material/info:", key="seq_search_info_btn", help="How does this search work?"):
+            _show_search_info()
 
     # Input section
     c1, c2 = st.columns([3, 1], vertical_alignment="bottom")
