@@ -1,16 +1,42 @@
 """Protein Studies — Sequence Search tab: Hybrid funnel BLAST-like search."""
 
+import os
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 import logging
 
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.serving import ChatMessage, ChatMessageRole
 from utils.sequence_search_tools import run_sequence_search
 from utils.streamlit_helper import get_user_info
 from utils.small_molecule_tools import hit_esmfold
 from utils.molstar_tools import molstar_html_multibody
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_organism(description: str) -> str:
+    """Use Claude Sonnet to extract organism name from a UniRef sequence description."""
+    endpoint = os.environ.get("LLM_ENDPOINT_NAME", "databricks-claude-sonnet-4-6")
+    try:
+        w = WorkspaceClient()
+        response = w.serving_endpoints.query(
+            name=endpoint,
+            messages=[
+                ChatMessage(
+                    role=ChatMessageRole.SYSTEM,
+                    content="Extract the organism name from the protein sequence description. "
+                            "Return ONLY the organism name (e.g. 'Homo sapiens', 'Escherichia coli'). "
+                            "If you cannot determine the organism, return 'Unknown'."
+                ),
+                ChatMessage(role=ChatMessageRole.USER, content=description),
+            ],
+            max_tokens=50,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception:
+        return "Unknown"
 
 EXAMPLE_SEQUENCE = "MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTFSYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITHGMDELYK"
 
@@ -25,22 +51,25 @@ def _display_hit_dialog(selected_idx):
 
     hit = results_sorted[selected_idx]
 
-    left_col, right_col = st.columns([1, 1])
+    st.markdown(f"##### {hit.seq_id}")
+    st.caption(hit.description)
 
-    with left_col:
-        st.markdown(f"##### {hit.seq_id}")
-        st.caption(hit.description)
+    # Extract organism name using LLM
+    with st.spinner("Identifying organism..."):
+        organism = _extract_organism(hit.description) if hit.description else "Unknown"
+    st.markdown(f"**Suggested Organism:** {organism}")
 
-        mc1, mc2 = st.columns(2)
-        with mc1:
-            st.metric("Identity", f"{hit.identity_pct}%")
-            st.metric("SW Score", hit.sw_score)
-        with mc2:
-            st.metric("Alignment Length", hit.alignment_length)
-            st.metric("Seq Length", hit.seq_length)
+    mc1, mc2, mc3, mc4 = st.columns(4)
+    with mc1:
+        st.metric("Identity", f"{hit.identity_pct}%")
+    with mc2:
+        st.metric("SW Score", hit.sw_score)
+    with mc3:
+        st.metric("Alignment Length", hit.alignment_length)
+    with mc4:
+        st.metric("Seq Length", hit.seq_length)
 
-        st.divider()
-        st.markdown("**Sequence Alignment**")
+    with st.expander("Sequence Alignment", expanded=True):
         chunk_size = 60
         alignment_lines = []
         for i in range(0, len(hit.aligned_query), chunk_size):
@@ -53,17 +82,15 @@ def _display_hit_dialog(selected_idx):
             alignment_lines.append("")
         st.code("\n".join(alignment_lines), language=None)
 
-    with right_col:
-        st.markdown("**Predicted Structure**")
-        target_seq = hit.aligned_target.replace("-", "")
-        with st.spinner("Predicting structure with ESMFold..."):
-            try:
-                pdb_str = hit_esmfold(target_seq)
-                html = molstar_html_multibody(pdb_str)
-                components.html(html, height=600)
-                st.caption(f"ESMFold prediction for {hit.seq_id}")
-            except Exception as e:
-                st.warning(f"Structure prediction unavailable: {e}")
+    st.markdown("**Predicted Structure**")
+    target_seq = hit.aligned_target.replace("-", "")
+    with st.spinner("Predicting structure with ESMFold..."):
+        try:
+            pdb_str = hit_esmfold(target_seq)
+            html = molstar_html_multibody(pdb_str)
+            components.html(html, height=700)
+        except Exception as e:
+            st.warning(f"Structure prediction unavailable: {e}")
 
 
 def _get_progress_callback(progress_widget):
