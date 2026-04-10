@@ -146,7 +146,7 @@ annotated = gene_variants.alias("gv").join(
     F.col("gv.qual"),
     F.col("cv.INFO_CLNSIG").alias("clinical_significance"),
     F.col("cv.INFO_CLNDN").alias("disease_name"),
-    F.col("cv.INFO_CLNVARID").alias("variant_ids"),
+    F.col("cv.INFO_CLNVI").alias("variant_ids"),
     F.col("gv.genotypes"),
 )
 

@@ -39,7 +39,7 @@ This search finds similar protein sequences across **~150M UniRef90 entries** in
 def render():
     user_info = get_user_info()
     st.markdown("###### Sequence Similarity Search")
-    cap_c1, cap_c2 = st.columns([10, 1])
+    cap_c1, cap_c2, _ = st.columns([10, 2,8])
     with cap_c1:
         st.caption("BLAST-like search using ESM-2 embeddings + Vector Search + Smith-Waterman alignment")
     with cap_c2:
