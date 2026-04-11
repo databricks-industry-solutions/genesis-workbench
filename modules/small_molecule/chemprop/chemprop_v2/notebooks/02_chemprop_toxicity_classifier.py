@@ -333,7 +333,7 @@ model_uc_name = f"{catalog}.{schema}.{model_name}"
 model_version = get_latest_model_version(model_uc_name)
 
 gwb_model_id = import_model_from_uc(user_email=user_email,
-                    model_category=ModelCategory.SMALL_MOLECULES,
+                    model_category=ModelCategory.SMALL_MOLECULE,
                     model_uc_name=model_uc_name,
                     model_uc_version=model_version,
                     model_name="Chemprop ClinTox",

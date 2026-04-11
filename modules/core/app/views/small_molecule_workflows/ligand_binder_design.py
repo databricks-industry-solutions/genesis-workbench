@@ -171,12 +171,12 @@ def render():
           with mlflow.start_run(run_name=mlflow_run_name, experiment_id=experiment.experiment_id) as run:
             # Resolve SMILES to PDB if needed
             if input_mode == "SMILES":
-                progress.progress(0, text="Converting SMILES to PDB via Open Babel...")
+                progress.progress(0, text="Converting SMILES to 3D coordinates...")
                 try:
                     ligand_pdb = smiles_to_pdb(ligand_smiles.strip())
                     mlflow.log_param("input_smiles", ligand_smiles.strip())
                 except Exception as e:
-                    st.error(f"Open Babel conversion failed: {e}")
+                    st.error(f"SMILES to PDB conversion failed: {e}")
                     return
                 progress.progress(10, text="SMILES converted. Designing ligand binders with Proteina-Complexa-Ligand...")
 

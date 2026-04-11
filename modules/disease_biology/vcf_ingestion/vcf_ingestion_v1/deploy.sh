@@ -22,4 +22,3 @@ echo ""
 user_email=$(databricks current-user me | jq '.emails[0].value' | tr -d '"')
 databricks bundle run --params "user_email=$user_email" vcf_ingestion_initial_setup_job $EXTRA_PARAMS --no-wait
 
-date +"%Y-%m-%d %H:%M:%S" > .deployed

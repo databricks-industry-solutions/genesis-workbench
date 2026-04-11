@@ -241,23 +241,17 @@ def hit_esmfold(sequence: str) -> str:
     return result.get("predictions", result)[0]
 
 
-def hit_open_babel(input_data: str, input_format: str = "smi", output_format: str = "pdb", gen3d: bool = True) -> str:
-    """Call Open Babel endpoint to convert between molecular formats."""
-    endpoint_name = get_endpoint_name("Open Babel Converter")
-    logger.info(f"Converting {input_format} -> {output_format} via {endpoint_name}")
-    result = _query_endpoint(endpoint_name, {
-        "dataframe_split": {
-            "columns": ["input_data", "input_format", "output_format", "gen3d"],
-            "data": [[input_data, input_format, output_format, "true" if gen3d else "false"]]
-        }
-    })
-    predictions = result.get("predictions", result)
-    return predictions[0] if isinstance(predictions, list) else predictions
-
-
 def smiles_to_pdb(smiles: str) -> str:
-    """Convert a SMILES string to PDB format with 3D coordinates via Open Babel."""
-    return hit_open_babel(smiles, input_format="smi", output_format="pdb", gen3d=True)
+    """Convert a SMILES string to PDB format with 3D coordinates via rdkit."""
+    from rdkit import Chem
+    from rdkit.Chem import AllChem
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        raise ValueError(f"Invalid SMILES: {smiles}")
+    mol = Chem.AddHs(mol)
+    AllChem.EmbedMolecule(mol, AllChem.ETKDGv3())
+    AllChem.MMFFOptimizeMolecule(mol)
+    return Chem.MolToPDBBlock(mol)
 
 
 def sequence_to_pdb(sequence: str) -> str:

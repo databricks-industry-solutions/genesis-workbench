@@ -8,5 +8,6 @@ biopython
 parasail
 plotly
 openai
+rdkit
 
 lib/genesis_workbench-0.1.0-py3-none-any.whl

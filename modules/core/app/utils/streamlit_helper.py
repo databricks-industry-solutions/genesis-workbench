@@ -23,7 +23,6 @@ _MODEL_ENDPOINT_MAP = {
     "Proteina-Complexa Binder": "proteina_complexa",
     "Proteina-Complexa Ligand": "proteina_complexa_ligand",
     "Proteina-Complexa AME": "proteina_complexa_ame",
-    "Open Babel Converter": "open_babel_converter",
     "Chemprop BBBP": "chemprop_bbbp",
     "Chemprop ClinTox": "chemprop_clintox",
     "Chemprop ADMET": "chemprop_admet",
@@ -294,7 +293,7 @@ def display_import_model_uc_dialog(success_callback = None, error_callback = Non
 
     _MODULE_OPTIONS = {
         "Protein Studies": ModelCategory.PROTEIN_STUDIES,
-        "Small Molecules": ModelCategory.SMALL_MOLECULES,
+        "Small Molecules": ModelCategory.SMALL_MOLECULE,
         "Single Cell": ModelCategory.SINGLE_CELL,
         "Disease Biology": ModelCategory.DISEASE_BIOLOGY,
     }

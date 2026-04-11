@@ -128,6 +128,9 @@ def _fetch_endpoint_statuses(catalog, schema):
 with endpoint_tab:
     st.markdown("##### Deployed Endpoints")
 
+    if st.button("Refresh", key="refresh_endpoints", icon=":material/refresh:"):
+        st.rerun()
+
     try:
         # Always re-fetch endpoint statuses (no caching — tab may be stale)
         with st.spinner("Loading endpoint statuses..."):

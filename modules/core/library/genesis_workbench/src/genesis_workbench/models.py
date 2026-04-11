@@ -44,7 +44,7 @@ class ModelSource(StrEnum):
 class ModelCategory(StrEnum):
     SINGLE_CELL = auto()
     PROTEIN_STUDIES = auto()
-    SMALL_MOLECULES = auto()
+    SMALL_MOLECULE = auto()
     DISEASE_BIOLOGY = auto()
 
 class ModelDeployPlatform(StrEnum):
@@ -464,10 +464,20 @@ def delete_endpoint(core_catalog:str, core_schema:str, deployment_id:str):
 
     inf_table_name = f"{endpoint_name}_serving_payload"
     print(f"⏩️ Archiving the inference table {inf_table_name}")
-    execute_non_select_query(f"""
-        ALTER TABLE {core_catalog}.{core_schema}.{inf_table_name} 
-        RENAME TO {core_catalog}.{core_schema}.{inf_table_name}_bkup_{datetime.now().strftime('%Y%m%d%H%M%S')}
-    """)
+    try:
+        table_exists = execute_select_query(
+            f"SELECT 1 FROM {core_catalog}.information_schema.tables "
+            f"WHERE table_schema = '{core_schema}' AND table_name = '{inf_table_name}'"
+        )
+        if not table_exists.empty:
+            execute_non_select_query(f"""
+                ALTER TABLE {core_catalog}.{core_schema}.{inf_table_name}
+                RENAME TO {core_catalog}.{core_schema}.{inf_table_name}_bkup_{datetime.now().strftime('%Y%m%d%H%M%S')}
+            """)
+        else:
+            print(f"  Inference table {inf_table_name} does not exist, skipping archive")
+    except Exception as e:
+        print(f"  Error archiving inference table {inf_table_name}: {e}. Skipping")
  
     print(" ")
 
