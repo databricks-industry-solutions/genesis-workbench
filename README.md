@@ -41,9 +41,12 @@ Despite their expertise in biology, many highly talented life science scientists
 
 - Scripts to deploy Genesis Workbench core module in your workspace
 - Scripts to deploy below modules:
-	- Single Cell module that deploys and uses scGPT and SCimilarity
-	- Protein Studies module that deploys and uses ESMFold, Aphafold2, ProteinMPNN, rfdiffusion and Boltz
+	- Single Cell module that deploys and uses scGPT, SCimilarity, Scanpy and Rapids-SingleCell
+	- Protein Studies module that deploys and uses ESMFold, ESM2 Embeddings, Alphafold2, ProteinMPNN, RFDiffusion and Boltz
+	- Small Molecule module that deploys and uses Chemprop, DiffDock and Proteina-Complexa
+	- Disease Biology module for VCF ingestion, variant annotation and GWAS analysis
 	- BioNeMo container definitions and workflows
+	- Parabricks container definitions and workflows
 	- Access Management, Monitoring and Dashboards
 
 ## $${\color{orange}Installation}$$
@@ -72,6 +75,13 @@ core | databricks-sql-connector | Apache2.0 | https://github.com/databricks/data
 core | py3Dmol==2.4.0 | MIT | TOBEREMOVED (https://pypi.org/project/py3Dmol/)
 core | biopython |	[BioPython License Agreement](https://github.com/biopython/biopython/blob/master/LICENSE.rst) | https://github.com/biopython/biopython
 core | Mlflow	| Apache2.0 | https://github.com/mlflow/mlflow
+core | plotly | MIT | https://github.com/plotly/plotly.py
+core | openai | MIT | https://github.com/openai/openai-python
+core | parasail | BSD | https://github.com/jeffdaily/parasail-python
+core | requests | Apache2.0 | https://github.com/psf/requests
+core | pandas | BSD-3 | https://github.com/pandas-dev/pandas
+core | numpy | BSD-3 | https://github.com/numpy/numpy
+core | rdkit | BSD-3 | https://github.com/rdkit/rdkit
 scGPT | numpy==1.26.4 | BSD-3-Clause | https://github.com/numpy/numpy
 scGPT | gdown==5.2.0 | MIT | https://github.com/wkentaro/gdown
 scGPT | wget==3.2 | MIT / Public Domain | https://pypi.org/project/wget/
@@ -92,6 +102,7 @@ SCimilarity | typing_extensions	| PSF | https://github.com/python/typing_extensi
 SCimilarity | numpy  |	BSD | https://github.com/numpy/numpy 
 SCimilarity | pandas | BSD 3-Clause | https://github.com/pandas-dev/pandas
 SCimilarity | uv | Apache2.0 | https://github.com/astral-sh/uv
+SCimilarity | cloudpickle==2.0.0 | BSD-3 | https://github.com/cloudpipe/cloudpickle
 RFDiffusion | RFDiffusion |	BSD-3 | https://github.com/RosettaCommons/RFdiffusion
 RFDiffusion | Hydra	| MIT | https://github.com/facebookresearch/hydra
 RFDiffusion | OmegaConf |	BSD-3 | https://github.com/omry/omegaconf
@@ -108,6 +119,7 @@ RFDiffusion | torchaudio==0.11.0 |	BSD-2 | https://github.com/pytorch/audio
 RFDiffusion | cloudpickle==2.2.1	| BSD-3 | https://github.com/cloudpipe/cloudpickle
 RFDiffusion | dllogger 	| Apache2.0 | https://github.com/NVIDIA/dllogger
 RFDiffusion | SE3Transformer |	MIT | https://github.com/RosettaCommons/RFdiffusion/tree/main/env/SE3Transformer
+RFDiffusion | mlflow==2.15.1 | Apache2.0 | https://github.com/mlflow/mlflow
 RFDiffusion | MODEL WEIGHTS |	BSD | https://github.com/RosettaCommons/RFdiffusion
 ProteinMPNN | ProteinMPNN 	| MIT | https://github.com/dauparas/ProteinMPNN
 ProteinMPNN | Numpy |	BSD-3 | https://github.com/numpy/numpy
@@ -125,6 +137,7 @@ ESMfold | ESMFold |	MIT | https://github.com/facebookresearch/esm
 ESMfold | torch | BSD-3 | https://github.com/pytorch/pytorch
 ESMfold | transformers | Apache2.0 | https://github.com/huggingface/transformers
 ESMfold | accelerate | Apache2.0 | https://github.com/huggingface/transformers
+ESMfold | hf_transfer==0.1.9 | Apache2.0 | https://github.com/huggingface/hf_transfer
 ESMfold | MODEL WEIGHTS | MIT
 Boltz-1 | Boltz-1 |	MIT | https://github.com/jwohlwend/boltz
 Boltz-1 | packaging |Apache2.0 | https://github.com/pypa/packaging
@@ -141,6 +154,7 @@ Boltz-1 | transformers>=4.41 | 	Apache2.0 | https://github.com/huggingface/trans
 Boltz-1 | sentence-transformers>=2.7 |	Apache2.0 | https://github.com/UKPLab/sentence-transformers/
 Boltz-1 | pyspark |	Apache2.0 | https://github.com/apache/spark
 Boltz-1 | pandas |	BSD-3 | https://github.com/pandas-dev/pandas
+Boltz-1 | flash_attn==1.0.9 (optional GPU) | Apache2.0 | https://github.com/Dao-AILab/flash-attention
 Boltz-1 | MODEL WEIGHTS |	MIT | https://github.com/jwohlwend/boltz
 Scanpy | scanpy==1.11.4 | BSD-3 | https://github.com/scverse/scanpy
 Scanpy | anndata | BSD-3 | https://github.com/scverse/anndata
@@ -161,7 +175,62 @@ Rapids-SingleCell | pylibraft-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
 Rapids-SingleCell | raft-dask-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
 Rapids-SingleCell | cuvs-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
 Rapids-SingleCell | cupy-cuda12x | MIT | https://github.com/cupy/cupy/
+Rapids-SingleCell | scikit-learn==1.5.* | BSD-3 | https://github.com/scikit-learn/scikit-learn
 Rapids-SingleCell | rmm (RAPIDS Memory Manager) | Apache-2.0 | https://github.com/rapidsai/rmm
-
+Chemprop | chemprop>=2.0.0 | MIT | https://github.com/chemprop/chemprop
+Chemprop | lightning | Apache2.0 | https://github.com/Lightning-AI/pytorch-lightning
+Chemprop | scikit-learn>=1.3 | BSD-3 | https://github.com/scikit-learn/scikit-learn
+Chemprop | PyTDC | MIT | https://github.com/mims-harvard/TDC
+Chemprop | torch>=2.0 | BSD-3 | https://github.com/pytorch/pytorch
+Chemprop | rdkit | BSD-3 | https://github.com/rdkit/rdkit
+Chemprop | mlflow>=2.15 | Apache2.0 | https://github.com/mlflow/mlflow
+Chemprop | cloudpickle | BSD-3 | https://github.com/cloudpipe/cloudpickle
+DiffDock | DiffDock | MIT | https://github.com/gcorso/DiffDock
+DiffDock | pyyaml==6.0.1 | MIT | https://github.com/yaml/pyyaml
+DiffDock | scipy==1.7.3 | BSD-3 | https://github.com/scipy/scipy
+DiffDock | networkx==2.6.3 | BSD-3 | https://github.com/networkx/networkx
+DiffDock | biopython==1.79 | [BioPython License Agreement](https://github.com/biopython/biopython/blob/master/LICENSE.rst) | https://github.com/biopython/biopython
+DiffDock | rdkit-pypi==2022.03.5 | BSD-3 | https://github.com/rdkit/rdkit
+DiffDock | e3nn==0.5.1 | MIT | https://github.com/e3nn/e3nn
+DiffDock | spyrmsd==0.5.2 | MIT | https://github.com/RMeli/spyrmsd
+DiffDock | biopandas==0.4.1 | BSD-3 | https://github.com/BioPandas/biopandas
+DiffDock | prody==2.6.1 | MIT | https://github.com/prody/ProDy
+DiffDock | fair-esm==2.0.0 | MIT | https://github.com/facebookresearch/esm
+DiffDock | torch-geometric==2.2.0 | MIT | https://github.com/pyg-team/pytorch_geometric
+DiffDock | torch-scatter==2.1.1 | MIT | https://github.com/rusty1s/pytorch_scatter
+DiffDock | torch-sparse==0.6.17 | MIT | https://github.com/rusty1s/pytorch_sparse
+DiffDock | torch-cluster==1.6.1 | MIT | https://github.com/rusty1s/pytorch_cluster
+DiffDock | pandas==1.5.3 | BSD-3 | https://github.com/pandas-dev/pandas
+Proteina-Complexa | Proteina-Complexa | MIT | https://github.com/NVIDIA-Digital-Bio/Proteina-Complexa
+Proteina-Complexa | torch==2.7.1 | BSD-3 | https://github.com/pytorch/pytorch
+Proteina-Complexa | lightning==2.6.1 | Apache2.0 | https://github.com/Lightning-AI/pytorch-lightning
+Proteina-Complexa | hydra-core==1.3.1 | MIT | https://github.com/facebookresearch/hydra
+Proteina-Complexa | omegaconf==2.3.0 | BSD-3 | https://github.com/omry/omegaconf
+Proteina-Complexa | torch_geometric==2.7.0 | MIT | https://github.com/pyg-team/pytorch_geometric
+Proteina-Complexa | torch_scatter==2.1.2 | MIT | https://github.com/rusty1s/pytorch_scatter
+Proteina-Complexa | torch_sparse==0.6.18 | MIT | https://github.com/rusty1s/pytorch_sparse
+Proteina-Complexa | torch_cluster==1.6.3 | MIT | https://github.com/rusty1s/pytorch_cluster
+Proteina-Complexa | biotite==1.6.0 | BSD-3 | https://github.com/biotite-dev/biotite
+Proteina-Complexa | loralib==0.1.2 | MIT | https://github.com/microsoft/LoRA
+Proteina-Complexa | einops==0.8.2 | MIT | https://github.com/arogozhnikov/einops
+Proteina-Complexa | transformers==5.5.0 | Apache2.0 | https://github.com/huggingface/transformers
+Proteina-Complexa | jaxtyping | MIT | https://github.com/patrick-kidger/jaxtyping
+Disease Biology | glow | Apache2.0 | https://github.com/projectglow/glow
+Disease Biology | pyspark | Apache2.0 | https://github.com/apache/spark
+BioNeMo | six==1.16.0 | MIT | https://github.com/benjaminp/six
+BioNeMo | numpy==1.26.4 | BSD-3 | https://github.com/numpy/numpy
+BioNeMo | pandas==2.2.3 | BSD-3 | https://github.com/pandas-dev/pandas
+BioNeMo | pyarrow>=14.0.0 | Apache2.0 | https://github.com/apache/arrow
+BioNeMo | matplotlib>=3.8.0 | PSF/BSD | https://github.com/matplotlib/matplotlib
+BioNeMo | Jinja2>=3.1.2 | BSD-3 | https://github.com/pallets/jinja
+BioNeMo | protobuf>=4.23.3 | BSD-3 | https://github.com/protocolbuffers/protobuf
+BioNeMo | grpcio>=1.59.0 | Apache2.0 | https://github.com/grpc/grpc
+BioNeMo | grpcio-status>=1.59.0 | Apache2.0 | https://github.com/grpc/grpc
+BioNeMo | databricks-sdk>=0.1.6 | Apache2.0 | https://pypi.org/project/databricks-sdk/
+BioNeMo | psutil | BSD-2 | https://github.com/giampaolo/psutil
+BioNeMo | pynvml | BSD-3 | https://github.com/gpuopenanalytics/pynvml
+Parabricks | see BioNeMo (same docker base dependencies) | |
+ESM2 Embeddings | torch==2.3.1 | BSD-3 | https://github.com/pytorch/pytorch
+ESM2 Embeddings | transformers==4.41.2 | Apache2.0 | https://github.com/huggingface/transformers
 
 
