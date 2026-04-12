@@ -5,6 +5,7 @@ from genesis_workbench.workbench import initialize
 from utils.streamlit_helper import get_user_info
 from databricks.sdk import WorkspaceClient
 from genesis_workbench.workbench import get_user_settings, get_deployed_modules
+from databricks.sql.exc import ServerOperationError
 
 st.set_page_config(layout="wide")
 st.markdown("""
@@ -14,42 +15,61 @@ st.markdown("""
 """, unsafe_allow_html=True)
 deployed_modules = []
 
-with st.spinner("Initializing"):
-    if "system_settings_initialized" not in st.session_state:
-        initialize(
-            core_catalog_name = os.environ["CORE_CATALOG_NAME"],
-            core_schema_name = os.environ["CORE_SCHEMA_NAME"],
-            sql_warehouse_id = os.environ["SQL_WAREHOUSE"]
+try:
+    with st.spinner("Initializing"):
+        if "system_settings_initialized" not in st.session_state:
+            initialize(
+                core_catalog_name = os.environ["CORE_CATALOG_NAME"],
+                core_schema_name = os.environ["CORE_SCHEMA_NAME"],
+                sql_warehouse_id = os.environ["SQL_WAREHOUSE"]
+            )
+            st.session_state["system_settings_initialized"] = "true"
+            deployed_modules = get_deployed_modules()
+
+            st.session_state["deployed_modules"] = deployed_modules
+
+            # Build documentation index
+            doc_index = []
+            doc_dir = os.path.join(os.path.dirname(__file__), "documentation")
+            for md_path in sorted(glob.glob(os.path.join(doc_dir, "*.md"))):
+                if os.path.basename(md_path) == "index.md":
+                    continue
+                with open(md_path, "r") as f:
+                    content = f.read()
+                title = os.path.basename(md_path).replace(".md", "").replace("_", " ").title()
+                for line in content.splitlines():
+                    if line.startswith("# "):
+                        title = line.lstrip("# ").strip()
+                        break
+                doc_index.append({"title": title, "content": content, "file": os.path.basename(md_path)})
+            st.session_state["doc_index"] = doc_index
+
+        deployed_modules = st.session_state["deployed_modules"]
+
+        user_info = get_user_info()
+        if "user_settings" not in st.session_state:
+            user_settings = get_user_settings(user_email=user_info.user_email)
+            st.session_state["user_settings"] = user_settings
+
+        user_settings = st.session_state["user_settings"]
+except ServerOperationError as e:
+    error_msg = str(e)
+    if "INSUFFICIENT_PERMISSIONS" in error_msg:
+        catalog_name = os.environ.get("CORE_CATALOG_NAME", "unknown")
+        schema_name = os.environ.get("CORE_SCHEMA_NAME", "genesis_workbench")
+        st.error(
+            f"**Initialization Failed: Insufficient Catalog Permissions**\n\n"
+            f"The application's service principal does not have access to the catalog `{catalog_name}`.\n\n"
+            f"To fix this, a catalog owner or admin needs to run:\n"
+            f"```\nGRANT USE CATALOG ON CATALOG {catalog_name} TO `<app_service_principal>`;\n"
+            f"GRANT USE SCHEMA ON SCHEMA {catalog_name}.{schema_name} TO `<app_service_principal>`;\n"
+            f"GRANT SELECT ON SCHEMA {catalog_name}.{schema_name} TO `<app_service_principal>`;\n"
+            f"GRANT MODIFY ON SCHEMA {catalog_name}.{schema_name} TO `<app_service_principal>`;\n```\n\n"
+            f"Alternatively, redeploy using `update.sh` which grants these permissions automatically."
         )
-        st.session_state["system_settings_initialized"] = "true"
-        deployed_modules = get_deployed_modules()
-       
-        st.session_state["deployed_modules"] = deployed_modules
-
-        # Build documentation index
-        doc_index = []
-        doc_dir = os.path.join(os.path.dirname(__file__), "documentation")
-        for md_path in sorted(glob.glob(os.path.join(doc_dir, "*.md"))):
-            if os.path.basename(md_path) == "index.md":
-                continue
-            with open(md_path, "r") as f:
-                content = f.read()
-            title = os.path.basename(md_path).replace(".md", "").replace("_", " ").title()
-            for line in content.splitlines():
-                if line.startswith("# "):
-                    title = line.lstrip("# ").strip()
-                    break
-            doc_index.append({"title": title, "content": content, "file": os.path.basename(md_path)})
-        st.session_state["doc_index"] = doc_index
-
-    deployed_modules = st.session_state["deployed_modules"]
-    
-    user_info = get_user_info()
-    if "user_settings" not in st.session_state:        
-        user_settings = get_user_settings(user_email=user_info.user_email)
-        st.session_state["user_settings"] = user_settings
-    
-    user_settings = st.session_state["user_settings"]
+    else:
+        st.error(f"**Initialization Failed**\n\n{error_msg}")
+    st.stop()
 
 
 st.logo("images/blank.png", size="large", icon_image="images/dbx_logo_1.png")
