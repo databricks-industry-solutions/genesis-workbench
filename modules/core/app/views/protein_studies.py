@@ -1,415 +1,63 @@
 import streamlit as st
-import traceback
-import os
 
-from typing import Tuple, Optional
+from genesis_workbench.models import (ModelCategory,
+                                      get_available_models,
+                                      get_deployed_models,
+                                      get_batch_models)
 
-from genesis_workbench.models import (ModelCategory, 
-                                      get_available_models, 
-                                      get_deployed_models, 
-                                      MLflowExperimentAccessException)
+import pandas as pd
+from utils.streamlit_helper import get_user_info
 
-from utils.streamlit_helper import (get_user_info, 
-                                    open_run_window,
-                                    display_deploy_model_dialog,
-                                    open_mlflow_experiment_window)
-
-from utils.molstar_tools import (
-                    html_as_iframe,
-                    molstar_html_singlebody,
-                    molstar_html_multibody)
-
-from utils.protein_structure import (start_run_alphafold_job,
-                                     search_alphafold_runs_by_run_name,
-                                     search_alphafold_runs_by_experiment_name,
-                                     af_collect_and_align )
-
-from utils.protein_design import (make_designs, 
-                                  hit_esmfold,
-                                  align_designed_pdbs)
-
-import streamlit.components.v1 as components
-
-import logging
+from views.protein_studies_workflows import settings, structure_prediction, protein_design, sequence_search
 
 st.title(":material/biotech: Protein Studies")
 
-def get_progress_callback(status_generation
-        #status_parsing,status_esm_init,status_rfdiffusion,status_proteinmpnn,status_esm_preds
-        ) :
-    def report_progress (progress_report: dict):
-        # status_parsing.progress(progress_report["status_parsing"], text="Parsing Sequence")
-        # status_esm_init.progress(progress_report["status_esm_init"], text="Generating structure using ESMFold")
-        # status_rfdiffusion.progress(progress_report["status_rfdiffusion"], text="Generating protein using RFdiffusion")
-        # status_proteinmpnn.progress(progress_report["status_proteinmpnn"], text="Predicting sequences using ProteinMPNN")
-        # status_esm_preds.progress(progress_report["status_esm_preds"],text="Generating structure for new protein using ESMFold")
-        status_text = ""
-        if progress_report["status_parsing"] < 100:
-            status_text = "Parsing Sequence"
-            progress = 20
-        elif progress_report["status_esm_init"] < 100:
-            status_text = "Generating original structure using ESMFold"
-            progress = 40
-        elif progress_report["status_rfdiffusion"] < 100:
-            status_text = "Generating protein backbone for the new region using RFdiffusion"
-            progress = 60
-        elif progress_report["status_proteinmpnn"] < 100:
-            status_text = "Infering sequences of backbones using ProteinMPNN"
-            progress = 80
-        elif progress_report["status_esm_preds"] < 100:
-            status_text = "Generating new protein using ESMFold and aligning to original"
-            progress = 90
-        else:
-            status_text = "Generation complete"
-            progress = 100
-        status_generation.progress(progress, status_text)
-
-    return report_progress
-
-def esmfold_btn_fn(protein : str) -> str:
-    pdb = hit_esmfold(protein)
-    html =  molstar_html_multibody(pdb)
-    return html
-
-
-def view_structure_from_alphafold_run(run_id:str, run_name : str, pdb_code : Optional[str] = None, include_pdb : bool = False) -> str: 
-    logging.info('running alphafold viewer')
-    pdb_run, true_structure_str, af_structure_str = af_collect_and_align(
-        run_id = run_id, 
-        run_name=run_name, 
-        pdb_code=pdb_code,
-        include_pdb=include_pdb
-    )
-    if include_pdb:
-        logging.info('sending two pdb str to html')
-        html = molstar_html_multibody([af_structure_str, true_structure_str])
-    else:
-        html = molstar_html_multibody(af_structure_str)
-    return html
-
-def design_tab_fn(sequence: str, mlflow_experiment:str, mlflow_run_name:str, progress_callback=None) -> str:
-    user_info = get_user_info()    
-    n_rf_diffusion: int = 1
-    logging.info("design: make designs")
-    output = make_designs(sequence=sequence, 
-                                 mlflow_experiment_name=mlflow_experiment,
-                                 mlflow_run_name=mlflow_run_name,
-                                 user_info=user_info,
-                                 n_rfdiffusion_hits=n_rf_diffusion,
-                                 progress_callback=progress_callback)
-    
-    designed_pdbs = {"initial" : output["initial"],
-                     "designed" : output["designed"] }
-    
-    logging.info("design: align")    
-    # logging.info([k for k in designed_pdbs.keys()])
-    # logging.info([v[:10] for v in designed_pdbs.values()])
-    aligned_structures = align_designed_pdbs(designed_pdbs)
-    logging.info("design: get html for designs")           
-    html =  molstar_html_multibody(aligned_structures)
-    return html , output['experiment_id'],  output['run_id']
-
-
-def display_protein_studies_settings(available_models_df,deployed_models_df):
-
-    st.markdown("###### Available Models:")
-    with st.form("deploy_model_form"):
-        col1, col2, = st.columns([1,1])    
-        with col1:
-            selected_model_for_deploy = st.selectbox("Model:",available_models_df["model_labels"],label_visibility="collapsed",)
-
-        with col2:
-            deploy_button = st.form_submit_button('Deploy')
-    if deploy_button:
-        display_deploy_model_dialog(selected_model_for_deploy)
-
-
-    if len(deployed_models_df) > 0:
-        with st.form("modify_deployed_model_form"):
-            col1,col2 = st.columns([2,1])
-            with col1:
-                st.markdown("###### Deployed Models")
-            with col2:
-                st.form_submit_button("Manage")
-            
-            st.dataframe(deployed_models_df, 
-                            use_container_width=True,
-                            hide_index=True,
-                            on_select="rerun",
-                            selection_mode="single-row",
-                            column_config={
-                                "Model Id": None,
-                                "Deploy Id" : None,
-                                "Endpoint Name" : None
-                            })
-    else:
-        st.write("There are no deployed models")
-
-def set_selected_row_status():
-    selection = st.session_state["alphafold_run_search_result_display_df"].selection
-    if len(selection["rows"]) > 0:
-        selected_index = selection["rows"][0]
-        selected_alphafold_run_status = st.session_state["alphafold_run_search_result_df"].iloc[selected_index]["status"]
-        st.session_state["selected_alphafold_run_status"]=selected_alphafold_run_status
-    else:
-        del st.session_state["selected_alphafold_run_status"]
-
-
-@st.dialog("View Structure", width="large")
-def display_view_alphafold_result_dialog():
-    
-    run_id = st.session_state["alphafold_run_search_result_df"].iloc[selected_row_for_view]["run_id"].iloc[0]
-    run_name = st.session_state["alphafold_run_search_result_df"].iloc[selected_row_for_view]["run_name"].iloc[0]    
-    st.markdown(f"##### Run Name: {run_name}")
-    include_pdb = False
-    pdb_to_compare = None
-
-    pdb_compare_c1, pdb_compare_c2 = st.columns([2,1], vertical_alignment="bottom")
-    with pdb_compare_c1:
-        af_run_compare_pbm_id = st.text_input("PDB Code: ")
-    with pdb_compare_c2:
-        compare_pdb_btn = st.button("Compare") 
-        
-    if len(af_run_compare_pbm_id.strip()) > 0:
-        include_pdb = True
-        pdb_to_compare = af_run_compare_pbm_id.strip()
-
-    with st.spinner("Fetching result"):
-        try:
-            html_to_display = view_structure_from_alphafold_run(run_id=run_id, run_name=run_name,pdb_code=pdb_to_compare, include_pdb=include_pdb)
-            components.html(html_to_display, height=700)
-        except Exception as e:
-            st.error(f"An error occured: {e}")
-    
-
-
-
-#load data for page
 with st.spinner("Loading data"):
     if "available_protein_models_df" not in st.session_state:
-            available_protein_models_df = get_available_models(ModelCategory.PROTEIN_STUDIES)
-            available_protein_models_df["model_labels"] = (available_protein_models_df["model_id"].astype(str) + " - " 
-                                                + available_protein_models_df["model_display_name"].astype(str) + " [ " 
-                                                + available_protein_models_df["model_uc_name"].astype(str) + " v"
-                                                + available_protein_models_df["model_uc_version"].astype(str) + " ]"
-                                                )
-            st.session_state["available_protein_models_df"] = available_protein_models_df
+        available_protein_models_df = get_available_models(ModelCategory.PROTEIN_STUDIES)
+        available_protein_models_df["model_labels"] = (available_protein_models_df["model_id"].astype(str) + " - "
+                                            + available_protein_models_df["model_display_name"].astype(str) + " [ "
+                                            + available_protein_models_df["model_uc_name"].astype(str) + " v"
+                                            + available_protein_models_df["model_uc_version"].astype(str) + " ]"
+                                            )
+        st.session_state["available_protein_models_df"] = available_protein_models_df
     available_protein_models_df = st.session_state["available_protein_models_df"]
 
     if "deployed_protein_models_df" not in st.session_state:
-        deployed_protein_models_df = get_deployed_models(ModelCategory.PROTEIN_STUDIES)
-        deployed_protein_models_df.columns = ["Model Id","Deploy Id", "Name", "Description", "Model Name", "Source Version", "UC Name/Version", "Endpoint Name"]
-
+        rt_df = get_deployed_models(ModelCategory.PROTEIN_STUDIES)
+        rt_df.columns = ["Model Id", "Deploy Id", "Name", "Description", "Model Name", "Source Version", "UC Name/Version", "Endpoint Name"]
+        rt_df["Type"] = "Real-time"
+        rt_df["Cluster"] = ""
+        rows = [rt_df]
+        try:
+            batch_df = get_batch_models("protein_studies")
+            if not batch_df.empty:
+                batch_df.columns = ["Name", "Description", "Endpoint Name", "Cluster"]
+                batch_df["Type"] = "Batch"
+                batch_df["Model Id"] = ""
+                batch_df["Deploy Id"] = ""
+                batch_df["Model Name"] = ""
+                batch_df["Source Version"] = ""
+                batch_df["UC Name/Version"] = ""
+                rows.append(batch_df)
+        except Exception:
+            pass
+        deployed_protein_models_df = pd.concat(rows, ignore_index=True)
         st.session_state["deployed_protein_models_df"] = deployed_protein_models_df
     deployed_protein_models_df = st.session_state["deployed_protein_models_df"]
 
 user_info = get_user_info()
 
-settings_tab, protein_structure_prediction_tab, protein_design_tab = st.tabs(["Settings", "Protein Structure Prediction", "Protein Design"])
+settings_tab, sequence_search_tab, protein_structure_prediction_tab, protein_design_tab = st.tabs(["Deployed Models", "Sequence Search", "Protein Structure Prediction", "Protein Design"])
 
 with settings_tab:
-    display_protein_studies_settings(available_protein_models_df, deployed_protein_models_df)
+    settings.render(available_protein_models_df, deployed_protein_models_df)
 
+with sequence_search_tab:
+    sequence_search.render()
 
 with protein_structure_prediction_tab:
-    st.markdown("###### Predict Protein Structure")
-
-    view_model_choice =  st.pills("Model:",["ESMFold","AlphaFold2"], 
-                                selection_mode="single",
-                                default="ESMFold") 
-
-    if view_model_choice=="ESMFold":
-        c1,c2,c3 = st.columns([3,1,1], vertical_alignment="bottom")
-        with c1:
-            view_esmfold_input_sequence = st.text_area("Provide an input sequence to infer the structure:"
-                                        ,"MTYKLILNGKTLKGETTTEAVDAATAEKVFKQYANDNGVDGEWTYDAATKTFTVTE", key="view_esmfold_input_sequence")
-        with c2:
-            view_structure_esmfold_btn = st.button("View", key="view_structure_esmfold_btn")
-            clear_view_esmfold_btn = st.button("Clear", key="clear_view_esmfold_btn")
-
-        prot_viewer = st.container()
-        if view_structure_esmfold_btn:
-            with st.spinner("Generating structure.."):
-                with prot_viewer:
-                    html =  esmfold_btn_fn(view_esmfold_input_sequence)
-                    components.html(html, height=700)
-                            
-        if clear_view_esmfold_btn:
-            prot_viewer.empty()
-             
-
-    if view_model_choice=="AlphaFold2":
-        st.write("Runs a workflow to do MSA and template search and then perform structure prediction")
-        c1,c2 = st.columns([3,1], vertical_alignment="bottom")
-        with c1:
-            view_alphafold_input_sequence = st.text_area("Provide an input sequence to infer the structure:"
-                                        ,"QVQLVESGGGLVQAGGSLRLACIASGRTFHSYVMAWFRQAPGKEREFVAAISWSSTPTYYGESVKGRFTISRDNAKNTVYLQMNRLKPEDTAVYFCAADRGESYYYTRPTEYEFWGQGTQVTVSS", key="view_alphafold_input_sequence")
-        
-        c1,c2,c3 = st.columns([1,1,1], vertical_alignment="bottom")
-        with c1:
-            view_alphafold_run_experiment = st.text_input("MLflow Experiment:","",placeholder="structure_prediction_alphafold")            
-        with c2:
-            view_alphafold_run_label = st.text_input("Run Name:","",placeholder="my_run_123")
-        with c3:
-            view_structure_alphafold_btn = st.button("Start Job", key="view_structure_alphafold_btn")
-
-        if view_structure_alphafold_btn:
-            is_valid = True
-            if view_alphafold_input_sequence.strip() == "" :
-                is_valid = False
-                st.error("Enter a valid sequence with the region to be replaced marked by square braces")
-
-            if (view_alphafold_run_experiment.strip() == ""  or 
-                view_alphafold_run_label.strip() == ""):
-                is_valid = False
-                st.error("Enter an mlflow experiment and run name")
-
-            if is_valid:    
-                user_info = get_user_info()  
-                try:
-                    with st.spinner("Starting job"):
-                        alphafold_job_run_id = start_run_alphafold_job(protein_sequence=view_alphafold_input_sequence,
-                                    mlflow_experiment_name=view_alphafold_run_experiment,
-                                    mlflow_run_name=view_alphafold_run_label,
-                                    user_info=user_info)
-                        
-                        st.success(f"Job started with run id: {alphafold_job_run_id}.")                
-                        run_alphafold_job_id = os.getenv("RUN_ALPHAFOLD_JOB_ID")
-                        view_deploy_run_btn = st.button("View Run", on_click=lambda: open_run_window(run_alphafold_job_id,alphafold_job_run_id))
-
-                except Exception as e:
-                    st.error("An error occured while running the workflow")
-                    print(e)
-                
-
-
-        st.divider()
-        st.markdown("###### Search Past Runs:")
-        c1,c2,c3 = st.columns([1,1,1], vertical_alignment="bottom")
-
-        with c1:
-            search_alphafold_run_mode = st.pills("Search By:", ["Experiment Name", "Run Name"], selection_mode="single",
-                                default="Experiment Name")           
-        with c2:
-            search_alphafold_text = st.text_input(f"{search_alphafold_run_mode} contains:","", key="search_alphafold_text")
-        with c3:
-            search_alphafold_run_button= st.button("Search", key="search_alphafold_run_button")
-
-    
-        if search_alphafold_run_button:
-            with st.spinner("Searching"):
-                if "alphafold_run_search_result_df" in st.session_state :
-                    if "alphafold_run_search_result_df" in st.session_state:
-                        del st.session_state["alphafold_run_search_result_df"]
-                        
-                    if "selected_alphafold_run_status" in st.session_state:
-                        del st.session_state["selected_alphafold_run_status"]
-
-                if search_alphafold_text.strip() != "":
-                    if search_alphafold_run_mode == "Experiment Name":
-                        alphafold_run_search_result_df = search_alphafold_runs_by_experiment_name(user_email = user_info.user_email,
-                                                                                                experiment_name = search_alphafold_text)                        
-
-                    else:
-                        alphafold_run_search_result_df = search_alphafold_runs_by_run_name(user_email = user_info.user_email,
-                                                                                                run_name = search_alphafold_text)
-                    
-                    if not alphafold_run_search_result_df.empty:
-                        st.session_state["alphafold_run_search_result_df"]=alphafold_run_search_result_df                        
-                    else:
-                        st.error("No results found")
-
-                else:
-                    st.error("Provide a search text")
-
-        if "alphafold_run_search_result_df" in st.session_state:
-            st.divider()
-            view_af_result_enabled = True if "selected_alphafold_run_status" in st.session_state and st.session_state["selected_alphafold_run_status"]=="fold_complete" else False
-
-            view_c1,view_c2,view_c3 = st.columns([1,1,1], vertical_alignment="bottom")
-            with view_c1:
-                alphafold_result_view_btn = st.button("View", disabled= not view_af_result_enabled)
-
-            alphafold_results_selected_row = st.dataframe(st.session_state["alphafold_run_search_result_df"], 
-                    column_config={
-                        "run_id": None
-                    },
-                    use_container_width=True,
-                    hide_index=True,
-                    on_select=set_selected_row_status,
-                    selection_mode="single-row",
-                    key="alphafold_run_search_result_display_df")
-            
-            selected_row_for_view = alphafold_results_selected_row.selection.rows
-            selected_alphafold_run_id = 0
-            if len(selected_row_for_view) > 0:
-                if alphafold_result_view_btn :
-                    display_view_alphafold_result_dialog()
-
-
+    structure_prediction.render()
 
 with protein_design_tab:
-    st.markdown("###### Protein Structure Design with ESMfold, RFDiffusion and ProteinMPNN")
-    c1,c2,c3 = st.columns([2,1,1], vertical_alignment="bottom")
-    with c1:
-        gen_input_sequence = st.text_area("Provide an input sequence where the region between square braces is to be replaced/in-painted by new designs:"
-                                      ,"MAQVKLQESGGGLVQPGGSLRLSCASSVPIFAITVMGWYRQAPGKQRELVAGIKRSGD[TNYADS]VKGRFTISRDDAKNTVFLQMNSLTTEDTAVYYCNAQILSWMGGTDYWGQGTQVTVSSGQAGQ"
-                                      , height=180, help="Example: `CASRRSG[FTYPGF]FFEQYF`")
-    
-    with c2:
-        protein_design_mlflow_experiment = st.text_input("MLflow Experiment:", value="gwb_protein_design")
-        protein_design_mlflow_run = st.text_input("Run Name:")
-
-        c11,c12, c13 = st.columns([1,1,1])
-        with c11:
-            generate_btn = st.button("Generate")
-
-        with c12:
-            clear_btn = st.button("Clear", key="clear_gen_btn")
-
-    mol_viewer = st.container()
-    if generate_btn:
-        is_valid = True
-        if (gen_input_sequence.strip() == "" or 
-            "[" not in gen_input_sequence or
-            "]" not in gen_input_sequence):
-            is_valid = False
-            st.error("Enter a valid sequence with the region to be replaced marked by square braces")
-
-        if (protein_design_mlflow_experiment.strip() == ""  or 
-            protein_design_mlflow_run.strip() == ""):
-            is_valid = False
-            st.error("Enter an mlflow experiment and run name")
-
-        if is_valid:
-
-            with st.spinner("Generating.."):
-                with mol_viewer:
-                    # status_parsing = st.progress(0, text="Parsing Sequence")
-                    # status_esm_init = st.progress(0, text="Generating structure using ESMFold")
-                    # status_rfdiffusion = st.progress(0, text="Generating protein using RFdiffusion")
-                    # status_proteinmpnn = st.progress(0, text="Predicting sequences using ProteinMPNN")
-                    # status_esm_preds = st.progress(0, text="Generating structure for new protein using ESMFold")
-                    status_generation = st.progress(0, text="Generating Sequence")
-
-                    try:
-                        html, experiment_id, run_id = design_tab_fn(sequence=gen_input_sequence, 
-                                            mlflow_experiment=protein_design_mlflow_experiment,
-                                            mlflow_run_name=protein_design_mlflow_run,
-                                            progress_callback=get_progress_callback(status_generation))
-                    
-                        view_mlflow_experiment_btn = st.button("View MLflow Experiment", on_click=lambda: open_mlflow_experiment_window(experiment_id))
-                        components.html(html, height=700)
-                    except MLflowExperimentAccessException as mle:
-                        st.error("Cannot access MLflow folder. Please complete MLflow Setup in the profile page")
-                    except Exception as e:
-                        st.error(f"An error occured while generating the sequence: {e}")
-                        traceback.print_exc()
-
-
-            
-    if clear_btn:
-        mol_viewer.empty()
-    
-        
-
+    protein_design.render()

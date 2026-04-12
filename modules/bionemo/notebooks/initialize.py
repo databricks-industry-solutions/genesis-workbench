@@ -81,9 +81,16 @@ CREATE TABLE  bionemo_weights (
 # COMMAND ----------
 
 query= f"""
-    INSERT INTO settings VALUES
-    ('bionemo_esm_finetune_job_id', '{bionemo_esm_finetune_job_id}', 'bionemo'),
-    ('bionemo_esm_inference_job_id', '{bionemo_esm_inference_job_id}' , 'bionemo')
+    MERGE INTO settings AS target
+    USING (
+        SELECT * FROM VALUES
+            ('bionemo_esm_finetune_job_id', '{bionemo_esm_finetune_job_id}', 'bionemo'),
+            ('bionemo_esm_inference_job_id', '{bionemo_esm_inference_job_id}', 'bionemo')
+        AS src(key, value, module)
+    ) AS source
+    ON target.key = source.key AND target.module = source.module
+    WHEN MATCHED THEN UPDATE SET target.value = source.value
+    WHEN NOT MATCHED THEN INSERT (key, value, module) VALUES (source.key, source.value, source.module)
 """
 
 spark.sql(query)
@@ -95,6 +102,22 @@ from genesis_workbench.workbench import set_app_permissions_for_job
 
 set_app_permissions_for_job(job_id=bionemo_esm_finetune_job_id, user_email=user_email)
 set_app_permissions_for_job(job_id=bionemo_esm_inference_job_id, user_email=user_email)
+
+# COMMAND ----------
+
+from genesis_workbench.models import register_batch_model
+
+register_batch_model(
+    model_name="esm2",
+    model_display_name="NVIDIA BioNeMo ESM2",
+    model_description="Protein language model fine-tuning and inference using NVIDIA BioNeMo ESM-2",
+    model_category="bionemo",
+    module="bionemo",
+    job_id=bionemo_esm_finetune_job_id,
+    job_name="bionemo_esm_finetune",
+    cluster_type="GPU",
+    added_by=user_email,
+)
 
 # COMMAND ----------
 

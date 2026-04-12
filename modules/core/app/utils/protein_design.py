@@ -16,46 +16,38 @@ from genesis_workbench.models import set_mlflow_experiment
 from genesis_workbench.workbench import UserInfo
 
 from .structure_utils import select_and_align
+from .streamlit_helper import get_endpoint_name
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 workspace_client = WorkspaceClient()
 
-def hit_model_endpoint(model_name, inputs) -> str:
-    """
-    Query endpoint with input
-    """
-    dev_user_prefix = os.environ["DEV_USER_PREFIX"] if ("DEV_USER_PREFIX" in os.environ 
-                                                        and os.environ["DEV_USER_PREFIX"].lower()!="none" 
-                                                        and os.environ["DEV_USER_PREFIX"].lower()!="") else None
-
-    endpoint_name = f"gwb_{dev_user_prefix}_{model_name}_endpoint" if dev_user_prefix else f"gwb_{model_name}_endpoint"
-    #endpoint_name = model_name
-
+def hit_model_endpoint(display_name, inputs) -> str:
+    """Query a model serving endpoint by display name."""
+    endpoint_name = get_endpoint_name(display_name)
     try:
         logger.info(f"Sending request to model endpoint: {endpoint_name}")
         response = workspace_client.serving_endpoints.query(
             name=endpoint_name,
             inputs=inputs
         )
-
         logger.info("Received response from model endpoint")
         return response.predictions
     except Exception as e:
         logger.error(f"Error querying model: {str(e)}", exc_info=True)
         return f"Error: {str(e)}"
-    
+
 @mlflow.trace(span_type="LLM")
 def hit_esmfold(sequence):
-    return hit_model_endpoint('esmfold', [sequence])[0]
+    return hit_model_endpoint('ESMFold', [sequence])[0]
 
 @mlflow.trace(span_type="TOOL")
 def hit_rfdiffusion(input_dict):
-    return hit_model_endpoint('rfdiffusion_inpainting', [input_dict])[0]
+    return hit_model_endpoint('RFDiffusion', [input_dict])[0]
 
 @mlflow.trace(span_type="TOOL")
 def hit_proteinmpnn(pdb_str):
-    return hit_model_endpoint('proteinmpnn', [pdb_str])
+    return hit_model_endpoint('ProteinMPNN', [pdb_str])
 
 @mlflow.trace(span_type="TOOL")
 def extract_chain_reindex(structure, chain_id='A'):

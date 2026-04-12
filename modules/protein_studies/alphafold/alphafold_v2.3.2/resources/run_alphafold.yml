@@ -69,6 +69,30 @@ resources:
             no_alert_for_canceled_runs: true
             alert_on_last_attempt: true
 
+        - task_key: mark_success
+          depends_on:
+            - task_key: fold
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: ../notebooks/update_mlflow_status.py
+            source: WORKSPACE
+            base_parameters:
+              mlflow_run_id: "{{job.parameters.run_id}}"
+              job_status: "fold_complete"
+          environment_key: default
+
+        - task_key: mark_failure
+          depends_on:
+            - task_key: fold
+          run_if: AT_LEAST_ONE_FAILED
+          notebook_task:
+            notebook_path: ../notebooks/update_mlflow_status.py
+            source: WORKSPACE
+            base_parameters:
+              mlflow_run_id: "{{job.parameters.run_id}}"
+              job_status: "failed"
+          environment_key: default
+
       parameters:
         - name: catalog
           default: ${var.core_catalog_name}
@@ -123,6 +147,11 @@ resources:
             # On-demand avoids spot preemption during long-running protein folding jobs
             aws_attributes:
               availability: ON_DEMAND
+      environments:
+        - environment_key: default
+          spec:
+            client: '4'
+
       tags: ${var.common_resource_tags}
 
       queue:

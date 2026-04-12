@@ -1,0 +1,34 @@
+resources:
+  jobs:
+    vcf_ingestion_initial_setup_job:
+      name: dbx_vcf_ingestion_initial_setup
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: initialize
+          notebook_task:
+            notebook_path: ../notebooks/initialize.py
+          max_retries: 0
+          timeout_seconds: 600
+
+      environments:
+        - environment_key: default
+          spec:
+            client: '4'
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: vcf_ingestion_job_id
+          default: ${resources.jobs.vcf_ingestion.id}
+        - name: user_email
+          default: ${var.current_user}
+
+      tags: ${var.common_resource_tags}

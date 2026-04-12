@@ -1,0 +1,9 @@
+resources:
+  dashboards:
+    brca_cancer_risk:
+      display_name: "BRCA Hereditary Cancer Risk Assessment"
+      warehouse_id: ${var.sql_warehouse_id}
+      file_path: brca_cancer_risk_assessment.lvdash.json
+      permissions:
+        - user_name: ${var.current_user}
+          level: CAN_MANAGE

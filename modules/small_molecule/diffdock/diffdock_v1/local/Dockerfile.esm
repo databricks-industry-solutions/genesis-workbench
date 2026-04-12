@@ -1,0 +1,29 @@
+# DiffDock ESM Embeddings Endpoint - Local Test Container
+#
+# Build:  docker build -f Dockerfile.esm -t diffdock-esm-test .
+# Run:    docker run --gpus all -p 8081:8080 diffdock-esm-test
+
+FROM python:3.10-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir \
+    torch==1.13.1 \
+    --extra-index-url https://download.pytorch.org/whl/cu117
+
+RUN pip install --no-cache-dir \
+    mlflow==2.5.0 \
+    fair-esm==2.0.0 \
+    biopython==1.79 \
+    pandas==1.5.3
+
+RUN python -c "\
+import torch; print(f'PyTorch: {torch.__version__}'); \
+import esm; print(f'fair-esm: OK'); \
+import Bio; print(f'biopython: OK'); \
+print('All ESM imports successful!') \
+"
+
+CMD ["python", "-c", "print('ESM container build successful!')"]

@@ -1,0 +1,45 @@
+resources:
+  jobs:
+    register_esm2_embeddings:
+      name: register_esm2_embeddings
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      max_concurrent_runs: 1
+
+      tasks:
+        - task_key: register_esm2_embeddings_task
+          environment_key: gpu_env
+          notebook_task:
+            notebook_path: ../notebooks/01_register_esm2_embeddings.py
+          max_retries: 0
+          retry_on_timeout: false
+          compute:
+            hardware_accelerator: GPU_1xA10
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: model_name
+          default: esm2_embeddings
+        - name: cache_dir
+          default: ${resources.volumes.esm2_embeddings_cache_dir.name}
+        - name: experiment_name
+          default: ${var.module_registration_experiment_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: user_email
+          default: ${var.current_user}
+        - name: workload_type
+          default: ${var.gpu_small_setting}
+
+      environments:
+        - environment_key: gpu_env
+          spec:
+            client: "4"
+
+      tags: ${var.common_resource_tags}

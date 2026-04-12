@@ -1,6 +1,6 @@
 bundle:
   name: genesis_workbench_scimilarity
-  databricks_cli_version: ">=0.236.*"
+  databricks_cli_version: ">=0.295.*"
 
 include:
   - variables.yml

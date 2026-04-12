@@ -81,6 +81,24 @@ echo ""
 databricks bundle run genesis_workbench_app --var="$EXTRA_PARAMS"
 
 echo ""
+echo "▶️ Granting app service principal access to catalog"
+echo ""
+
+app_sp_id=$(databricks apps get $app_name --output json | jq -r '.service_principal_client_id')
+echo "App service principal: $app_sp_id"
+
+databricks grants update catalog $core_catalog_name --json "{\"changes\": [{\"principal\": \"$app_sp_id\", \"add\": [\"USE_CATALOG\"]}]}"
+databricks grants update schema $core_catalog_name.$core_schema_name --json "{\"changes\": [{\"principal\": \"$app_sp_id\", \"add\": [\"USE_SCHEMA\", \"SELECT\", \"MODIFY\"]}]}"
+
+echo "Catalog and schema permissions granted."
+
+echo ""
+echo "▶️ Granting app permissions for endpoints and jobs"
+echo ""
+
+databricks bundle run grant_app_permissions_job --var="$EXTRA_PARAMS" 
+
+echo ""
 echo "▶️ Copying libraries to UC Volume"
 echo ""
 
@@ -93,6 +111,15 @@ for file in library/genesis_workbench/dist/*.whl; do
     filename=$(basename "$file")
     echo "Copying $filename to dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename"
     databricks fs cp library/genesis_workbench/dist/$filename dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename --overwrite
+  fi
+done
+
+# Copy Glow library files (JAR + wheel) to UC Volume
+for file in library/glow/*; do
+  if [ -f "$file" ]; then
+    filename=$(basename "$file")
+    echo "Copying $filename to dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename"
+    databricks fs cp "$file" dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename --overwrite
   fi
 done
 

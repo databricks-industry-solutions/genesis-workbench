@@ -1,0 +1,68 @@
+resources:
+  jobs:
+    register_diffdock:
+      name: register_diffdock_gwb
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        #this task needs 14.3 LTS ML GPU runtime
+        - task_key: register_diffdock_task
+          job_cluster_key: diffdock_gpu_cluster
+          notebook_task:
+            notebook_path: ../notebooks/01_register_diffdock.py
+          max_retries: 0
+
+        #this task needs serverless runtime with python 3.11
+        - task_key: import_diffdock_task
+          depends_on:
+            - task_key: register_diffdock_task
+          notebook_task:
+            notebook_path: ../notebooks/02_import_model_gwb.py
+          max_retries: 0
+
+      environments:
+        - environment_key: default
+          spec:
+            client: '4'
+            
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: model_name
+          default: diffdock
+        - name: cache_dir
+          default: ${resources.volumes.diffdock_cache_dir.name}
+        - name: experiment_name
+          default: ${var.module_registration_experiment_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: user_email
+          default: ${var.current_user}
+        - name: workload_type
+          default: ${var.gpu_medium_setting}
+          
+      job_clusters:
+        - job_cluster_key: diffdock_gpu_cluster
+          new_cluster:
+            num_workers: 0
+            node_type_id: ${var.a10_node_type}
+            driver_node_type_id: ${var.a10_node_type}
+            spark_version: '13.3.x-gpu-ml-scala2.12'
+            aws_attributes:
+              availability: ON_DEMAND
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+
+
+      tags: ${var.common_resource_tags}

@@ -57,6 +57,10 @@ variables:
   app_name:
     description: Name of the databricks app for UI
 
+  llm_endpoint_name:
+    description: Name of the LLM serving endpoint (Claude Sonnet) used by the home page assistant
+    default: databricks-claude-sonnet-4-6
+
   module_registration_experiment_name:
     description: >
       Experiment tag passed to registration notebooks. At runtime, notebooks call

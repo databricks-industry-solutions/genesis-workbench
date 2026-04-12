@@ -1,0 +1,25 @@
+resources:
+  volumes:
+    gwas_reference_volume:
+      catalog_name: ${var.core_catalog_name}
+      schema_name: ${var.core_schema_name}
+      name: gwas_reference
+      volume_type: MANAGED
+
+    gwas_data_volume:
+      catalog_name: ${var.core_catalog_name}
+      schema_name: ${var.core_schema_name}
+      name: gwas_data
+      volume_type: MANAGED
+
+    gwas_results_volume:
+      catalog_name: ${var.core_catalog_name}
+      schema_name: ${var.core_schema_name}
+      name: gwas_results
+      volume_type: MANAGED
+
+    gwas_libraries_volume:
+      catalog_name: ${var.core_catalog_name}
+      schema_name: ${var.core_schema_name}
+      name: gwas_libraries
+      volume_type: MANAGED

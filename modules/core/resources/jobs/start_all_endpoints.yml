@@ -1,0 +1,33 @@
+resources:
+  jobs:
+    start_all_endpoints_job:
+      name: dbx_gwb_start_all_endpoints
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: start_all_endpoints_task
+          notebook_task:
+            notebook_path: ../../notebooks/start_all_endpoints.py
+          max_retries: 0
+
+      environments:
+        - environment_key: default
+          spec:
+            client: '4'
+
+      max_concurrent_runs: 1
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: num_hours
+          default: '4'
+
+      tags: ${var.common_resource_tags}

@@ -1,0 +1,108 @@
+resources:
+  jobs:
+    variant_annotation:
+      name: variant_annotation_clinical
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: spike_pathogenic
+          job_cluster_key: variant_annotation_cluster
+          libraries:
+            - jar: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/libraries/glow-spark3-assembly-2.0.4-SNAPSHOT.jar
+          notebook_task:
+            notebook_path: ../notebooks/01_spike_pathogenic_variants.py
+            source: WORKSPACE
+
+        - task_key: filter_and_annotate
+          depends_on:
+            - task_key: spike_pathogenic
+          job_cluster_key: variant_annotation_cluster
+          libraries:
+            - jar: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/libraries/glow-spark3-assembly-2.0.4-SNAPSHOT.jar
+          notebook_task:
+            notebook_path: ../notebooks/02_filter_and_annotate.py
+            source: WORKSPACE
+
+        - task_key: save_results
+          depends_on:
+            - task_key: filter_and_annotate
+          job_cluster_key: variant_annotation_cluster
+          notebook_task:
+            notebook_path: ../notebooks/03_save_results.py
+            source: WORKSPACE
+
+        - task_key: mark_success
+          depends_on:
+            - task_key: save_results
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: ../notebooks/update_mlflow_status.py
+            source: WORKSPACE
+            base_parameters:
+              mlflow_run_id: "{{job.parameters.mlflow_run_id}}"
+              job_status: "annotation_complete"
+          environment_key: default
+
+        - task_key: mark_failure
+          depends_on:
+            - task_key: save_results
+          run_if: AT_LEAST_ONE_FAILED
+          notebook_task:
+            notebook_path: ../notebooks/update_mlflow_status.py
+            source: WORKSPACE
+            base_parameters:
+              mlflow_run_id: "{{job.parameters.mlflow_run_id}}"
+              job_status: "failed"
+          environment_key: default
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: variants_table
+          default: ""
+        - name: gene_regions
+          default: '[{"name":"BRCA1","contig":"chr17","start":43044292,"end":43170327},{"name":"BRCA2","contig":"chr13","start":32315086,"end":32400268}]'
+        - name: pathogenic_vcf_path
+          default: ""
+        - name: mlflow_run_id
+          default: ""
+        - name: user_email
+          default: ${var.current_user}
+
+      job_clusters:
+        - job_cluster_key: variant_annotation_cluster
+          new_cluster:
+            cluster_name: ""
+            spark_version: 15.4.x-scala2.12
+            spark_conf:
+              spark.master: "local[*, 4]"
+              spark.databricks.cluster.profile: singleNode
+              spark.sql.codegen.wholeStage: "false"
+            node_type_id: ${var.cpu_node_type}
+            driver_node_type_id: ${var.cpu_node_type}
+            custom_tags:
+              ResourceClass: SingleNode
+              work_type: variant_annotation
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            num_workers: 0
+            aws_attributes:
+              availability: ON_DEMAND
+
+      environments:
+        - environment_key: default
+          spec:
+            client: '4'
+
+      tags: ${var.common_resource_tags}
+
+      queue:
+        enabled: true
