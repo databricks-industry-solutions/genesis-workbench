@@ -1,0 +1,82 @@
+resources:
+  jobs:
+    register_chemprop:
+      name: register_chemprop
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: pretrained_bbbp_inference
+          environment_key: chemprop_env
+          compute:
+            hardware_accelerator: "GPU_1xA10"
+          notebook_task:
+            notebook_path: ../notebooks/01_chemprop_pretrained_inference.py
+            base_parameters:
+              model_name: chemprop_bbbp
+              cache_dir: chemprop_bbbp_cache
+
+        - task_key: toxicity_classifier
+          environment_key: chemprop_env
+          compute:
+            hardware_accelerator: "GPU_1xA10"
+          notebook_task:
+            notebook_path: ../notebooks/02_chemprop_toxicity_classifier.py
+            base_parameters:
+              model_name: chemprop_clintox
+              cache_dir: chemprop_clintox_cache
+
+        - task_key: multitask_admet_regressor
+          environment_key: chemprop_admet_env
+          compute:
+            hardware_accelerator: "GPU_1xA10"
+          notebook_task:
+            notebook_path: ../notebooks/03_chemprop_multitask_admet.py
+            base_parameters:
+              model_name: chemprop_admet
+              cache_dir: chemprop_admet_cache
+
+      environments:
+        - environment_key: chemprop_env
+          spec:
+            environment_version: "4"
+            dependencies:
+              - chemprop>=2.0.0
+              - rdkit
+              - torch>=2.0
+              - lightning
+              - mlflow>=2.15
+              - databricks-sdk>=0.50.0
+              - databricks-sql-connector>=4.0.2
+
+        - environment_key: chemprop_admet_env
+          spec:
+            environment_version: "4"
+            dependencies:
+              - chemprop>=2.0.0
+              - rdkit
+              - torch>=2.0
+              - lightning
+              - mlflow>=2.15
+              - databricks-sdk>=0.50.0
+              - databricks-sql-connector>=4.0.2
+              - PyTDC
+              - scikit-learn>=1.3
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: experiment_name
+          default: ${var.module_registration_experiment_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: user_email
+          default: ${var.current_user}
+        - name: workload_type
+          default: ${var.gpu_small_setting}
+
+      tags: ${var.common_resource_tags}

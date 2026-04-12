@@ -13,6 +13,40 @@ from genesis_workbench.models import (ModelCategory,
 
 from databricks.sdk import WorkspaceClient
 from streamlit.components.v1 import html
+from genesis_workbench.workbench import execute_select_query
+
+# Mapping from display/lookup name to the UC model name used in endpoint naming
+_MODEL_ENDPOINT_MAP = {
+    # Small Molecules
+    "DiffDock ESM Embeddings": "diffdock_esm_embeddings",
+    "DiffDock": "diffdock",
+    "Proteina-Complexa Binder": "proteina_complexa",
+    "Proteina-Complexa Ligand": "proteina_complexa_ligand",
+    "Proteina-Complexa AME": "proteina_complexa_ame",
+    "Chemprop BBBP": "chemprop_bbbp",
+    "Chemprop ClinTox": "chemprop_clintox",
+    "Chemprop ADMET": "chemprop_admet",
+    # Protein Studies
+    "ESM2 Embeddings": "esm2_embeddings",
+    "ESMFold": "esmfold",
+    "ProteinMPNN": "proteinmpnn",
+    "RFDiffusion": "rfdiffusion_inpainting",
+    "Boltz": "boltz",
+    "AlphaFold2": "alphafold2",
+}
+
+def get_endpoint_name(model_name: str) -> str:
+    """Get the serving endpoint name for a model. Uses hardcoded mapping for now;
+    will be replaced with database lookup later."""
+    dev_user_prefix = os.environ.get("DEV_USER_PREFIX", None)
+    if dev_user_prefix and dev_user_prefix.lower() in ("none", ""):
+        dev_user_prefix = None
+
+    uc_name = _MODEL_ENDPOINT_MAP.get(model_name)
+    if uc_name is None:
+        raise RuntimeError(f"Unknown model '{model_name}'. Add it to _MODEL_ENDPOINT_MAP in streamlit_helper.py")
+
+    return f"gwb_{dev_user_prefix}_{uc_name}_endpoint" if dev_user_prefix else f"gwb_{uc_name}_endpoint"
 
 
 def get_user_info():
@@ -248,7 +282,7 @@ def display_deploy_model_dialog(selected_model_name, success_callback = None, er
 
 
 @st.dialog("Import model from Unity Catalog")
-def display_import_model_uc_dialog(model_category: ModelCategory, success_callback = None, error_callback = None):    
+def display_import_model_uc_dialog(success_callback = None, error_callback = None):
     """Dialog to import a model from UC"""
     model_info = None
     model_info_error = False
@@ -257,13 +291,21 @@ def display_import_model_uc_dialog(model_category: ModelCategory, success_callba
     uc_import_model_clicked = False
     user_info = get_user_info()
 
+    _MODULE_OPTIONS = {
+        "Protein Studies": ModelCategory.PROTEIN_STUDIES,
+        "Small Molecules": ModelCategory.SMALL_MOLECULE,
+        "Single Cell": ModelCategory.SINGLE_CELL,
+        "Disease Biology": ModelCategory.DISEASE_BIOLOGY,
+    }
+
     if "import_uc_model_info" in st.session_state:
         model_info = st.session_state["import_uc_model_info"]
 
     with st.form("import_model_uc_form_fetch", enter_to_submit=False ):
+        selected_module = st.selectbox("Module:", list(_MODULE_OPTIONS.keys()))
         c1,c2,c3 = st.columns([3,1,1], vertical_alignment="bottom")
         with c1:
-            uc_model_name = st.text_input("Unity Catalog Name (catalog.schema.model_name):", value="genesis_workbench.dev_srijit_nair_dbx_genesis_workbench_core.gene_embedder")
+            uc_model_name = st.text_input("Unity Catalog Name (catalog.schema.model_name):", value="")
         with c2:
             uc_model_version = st.number_input("Version:", min_value=1, step=1, max_value=999)
         with c3:
@@ -275,13 +317,15 @@ def display_import_model_uc_dialog(model_category: ModelCategory, success_callba
                 model_info = None
                 model_info = get_uc_model_info(uc_model_name, uc_model_version)
                 st.session_state["import_uc_model_info"] = model_info
-            except Exception as e:                    
+            except Exception as e:
+                print(f"[Import] Error fetching model details: {e}")
                 model_info_error = True
+                st.session_state["_import_error_msg"] = str(e)
                 if "import_uc_model_info" in st.session_state:
                     del st.session_state["import_uc_model_info"]
-    
+
     if(model_info_error):
-        st.error("Error fetching model details.")        
+        st.error(f"Error fetching model details: {st.session_state.get('_import_error_msg', 'Unknown error')}")        
         if error_callback:
             error_callback()
             
@@ -299,7 +343,7 @@ def display_import_model_uc_dialog(model_category: ModelCategory, success_callba
         with st.spinner("Importing model"):
             try:
                 import_model_from_uc(user_email = user_info.user_email,
-                    model_category = model_category,
+                    model_category = _MODULE_OPTIONS[selected_module],
                     model_uc_name = uc_model_name,
                     model_uc_version =  uc_model_version, 
                     model_name = model_name,
@@ -310,11 +354,13 @@ def display_import_model_uc_dialog(model_category: ModelCategory, success_callba
                 model_info = None
                 del st.session_state["import_uc_model_info"]
             except Exception as e:
+                print(f"[Import] Error importing model: {e}")
                 model_import_error = True
+                st.session_state["_import_error_msg"] = str(e)
 
     if uc_import_model_clicked:
         if model_import_error:
-            st.error("Error importing model") 
+            st.error(f"Error importing model: {st.session_state.get('_import_error_msg', 'Unknown error')}") 
             if error_callback:
                 error_callback()
         else:

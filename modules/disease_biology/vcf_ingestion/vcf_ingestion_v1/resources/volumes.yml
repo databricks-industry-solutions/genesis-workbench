@@ -1,0 +1,7 @@
+resources:
+  volumes:
+    vcf_ingestion_data_volume:
+      catalog_name: ${var.core_catalog_name}
+      schema_name: ${var.core_schema_name}
+      name: vcf_ingestion_data
+      volume_type: MANAGED

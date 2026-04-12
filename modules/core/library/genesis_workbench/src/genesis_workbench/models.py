@@ -44,7 +44,8 @@ class ModelSource(StrEnum):
 class ModelCategory(StrEnum):
     SINGLE_CELL = auto()
     PROTEIN_STUDIES = auto()
-    SMALL_MOLECULES = auto()
+    SMALL_MOLECULE = auto()
+    DISEASE_BIOLOGY = auto()
 
 class ModelDeployPlatform(StrEnum):
     MODEL_SERVING = auto()
@@ -98,7 +99,7 @@ class ModelDeploymentInfo:
     model_deploy_platform : ModelDeployPlatform
     model_endpoint_name: str    
     model_invoke_url : str
-    is_active: bool 
+    is_active: bool
     deactivated_timestamp : datetime
 
 def set_mlflow_experiment(experiment_tag, user_email, host=None, token=None, shared=False):
@@ -181,6 +182,17 @@ def get_deployed_models(model_category : ModelCategory)-> pd.DataFrame:
     result_df = execute_select_query(query)
     return result_df
 
+def get_batch_models(model_category: str) -> pd.DataFrame:
+    """Gets all active batch models for a given category."""
+    query = (
+        f"SELECT model_display_name, model_description, job_name, cluster_type "
+        f"FROM {os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.batch_models "
+        f"WHERE model_category = '{model_category}' AND is_active = true "
+        f"ORDER BY model_display_name"
+    )
+    return execute_select_query(query)
+
+
 def insert_model_info(model_info : GWBModelInfo):
     """Register the model in GWB"""
     columns = []
@@ -200,6 +212,42 @@ def insert_model_info(model_info : GWBModelInfo):
         values ({",".join(params)})
         """
     execute_parameterized_inserts(insert_sql, [ values ])
+
+
+def register_batch_model(model_name: str, model_display_name: str, model_description: str,
+                         model_category: str, module: str, job_id: str, job_name: str,
+                         cluster_type: str, added_by: str):
+    """Register or update a batch (non-realtime) model in the batch_models table."""
+    catalog = os.environ['CORE_CATALOG_NAME']
+    schema = os.environ['CORE_SCHEMA_NAME']
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    batch_model_id = time.time_ns()
+
+    query = f"""
+        MERGE INTO {catalog}.{schema}.batch_models AS target
+        USING (SELECT '{model_name}' AS model_name, '{module}' AS module) AS source
+        ON target.model_name = source.model_name AND target.module = source.module
+        WHEN MATCHED THEN UPDATE SET
+            target.model_display_name = '{model_display_name}',
+            target.model_description = '{model_description}',
+            target.model_category = '{model_category}',
+            target.job_id = '{job_id}',
+            target.job_name = '{job_name}',
+            target.cluster_type = '{cluster_type}',
+            target.model_added_by = '{added_by}',
+            target.model_added_date = '{now}',
+            target.is_active = true
+        WHEN NOT MATCHED THEN INSERT
+            (batch_model_id, model_name, model_display_name, model_description,
+             model_category, module, job_id, job_name, cluster_type,
+             model_added_by, model_added_date, is_active)
+        VALUES
+            ({batch_model_id}, '{model_name}', '{model_display_name}', '{model_description}',
+             '{model_category}', '{module}', '{job_id}', '{job_name}', '{cluster_type}',
+             '{added_by}', '{now}', true)
+    """
+    execute_non_select_query(query)
+
 
 def get_uc_model_info(model_uc_name_fq : str, model_uc_version:int) -> ModelInfo:
     mlflow.set_registry_uri("databricks-uc")
@@ -416,10 +464,20 @@ def delete_endpoint(core_catalog:str, core_schema:str, deployment_id:str):
 
     inf_table_name = f"{endpoint_name}_serving_payload"
     print(f"⏩️ Archiving the inference table {inf_table_name}")
-    execute_non_select_query(f"""
-        ALTER TABLE {core_catalog}.{core_schema}.{inf_table_name} 
-        RENAME TO {core_catalog}.{core_schema}.{inf_table_name}_bkup_{datetime.now().strftime('%Y%m%d%H%M%S')}
-    """)
+    try:
+        table_exists = execute_select_query(
+            f"SELECT 1 FROM {core_catalog}.information_schema.tables "
+            f"WHERE table_schema = '{core_schema}' AND table_name = '{inf_table_name}'"
+        )
+        if not table_exists.empty:
+            execute_non_select_query(f"""
+                ALTER TABLE {core_catalog}.{core_schema}.{inf_table_name}
+                RENAME TO {core_catalog}.{core_schema}.{inf_table_name}_bkup_{datetime.now().strftime('%Y%m%d%H%M%S')}
+            """)
+        else:
+            print(f"  Inference table {inf_table_name} does not exist, skipping archive")
+    except Exception as e:
+        print(f"  Error archiving inference table {inf_table_name}: {e}. Skipping")
  
     print(" ")
 

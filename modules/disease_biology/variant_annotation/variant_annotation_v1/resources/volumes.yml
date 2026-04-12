@@ -1,0 +1,13 @@
+resources:
+  volumes:
+    variant_annotation_reference_volume:
+      catalog_name: ${var.core_catalog_name}
+      schema_name: ${var.core_schema_name}
+      name: variant_annotation_reference
+      volume_type: MANAGED
+
+    variant_annotation_data_volume:
+      catalog_name: ${var.core_catalog_name}
+      schema_name: ${var.core_schema_name}
+      name: variant_annotation_data
+      volume_type: MANAGED

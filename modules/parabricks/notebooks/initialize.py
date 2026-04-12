@@ -59,9 +59,27 @@ spark.sql(f"USE SCHEMA {schema}")
 # COMMAND ----------
 
 query= f"""
-    INSERT INTO settings VALUES
-    ('parabricks_cluster_name', '{parabricks_cluster_name}', 'parabricks')
+    MERGE INTO settings AS target
+    USING (SELECT 'parabricks_cluster_name' AS key, '{parabricks_cluster_name}' AS value, 'parabricks' AS module) AS source
+    ON target.key = source.key AND target.module = source.module
+    WHEN MATCHED THEN UPDATE SET target.value = source.value
+    WHEN NOT MATCHED THEN INSERT (key, value, module) VALUES (source.key, source.value, source.module)
 """
 
 spark.sql(query)
 
+# COMMAND ----------
+
+from genesis_workbench.models import register_batch_model
+
+register_batch_model(
+    model_name="parabricks",
+    model_display_name="NVIDIA Parabricks",
+    model_description="GPU-accelerated germline variant calling from paired-end FASTQ files",
+    model_category="disease_biology",
+    module="parabricks",
+    job_id=parabricks_cluster_name,
+    job_name="parabricks_germline",
+    cluster_type="GPU",
+    added_by=user_email,
+)

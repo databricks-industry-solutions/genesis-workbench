@@ -52,8 +52,11 @@ spark.sql(f"USE SCHEMA {schema}")
 # COMMAND ----------
 
 spark.sql(f"""
-INSERT INTO settings VALUES
-('run_alphafold_job_id', '{run_alphafold_job_id}', 'protein_studies')
+MERGE INTO settings AS target
+USING (SELECT 'run_alphafold_job_id' AS key, '{run_alphafold_job_id}' AS value, 'protein_studies' AS module) AS source
+ON target.key = source.key AND target.module = source.module
+WHEN MATCHED THEN UPDATE SET target.value = source.value
+WHEN NOT MATCHED THEN INSERT (key, value, module) VALUES (source.key, source.value, source.module)
 """)
 
 # COMMAND ----------
@@ -62,3 +65,19 @@ INSERT INTO settings VALUES
 from genesis_workbench.workbench import set_app_permissions_for_job
 
 set_app_permissions_for_job(job_id=run_alphafold_job_id, user_email=user_email)
+
+# COMMAND ----------
+
+from genesis_workbench.models import register_batch_model
+
+register_batch_model(
+    model_name="alphafold2",
+    model_display_name="AlphaFold2",
+    model_description="High-accuracy protein structure prediction with MSA and template search",
+    model_category="protein_studies",
+    module="protein_studies",
+    job_id=run_alphafold_job_id,
+    job_name="run_alphafold",
+    cluster_type="GPU",
+    added_by=user_email,
+)

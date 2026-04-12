@@ -1,0 +1,64 @@
+# DiffDock Scoring Endpoint - Local Test Container
+# Replicates the Databricks Model Serving environment
+#
+# Build:  docker build --platform linux/amd64 -f local/Dockerfile.scoring -t diffdock-scoring-test .
+# Run:    docker run --rm diffdock-scoring-test
+#
+# This validates that the pip install succeeds and all imports work.
+# If this works, the model serving endpoint will too.
+
+FROM --platform=linux/amd64 python:3.10-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip to avoid metadata parsing bugs with proxy
+RUN pip install --upgrade pip -i https://pypi-proxy.dev.databricks.com/simple
+
+# Install torch first (must be available before torch-scatter/sparse/cluster)
+RUN pip install --no-cache-dir \
+    -i https://pypi-proxy.dev.databricks.com/simple \
+    --extra-index-url https://pypi-pytorch-proxy.dev.databricks.com/whl/cu117 \
+    torch==1.13.1+cu117
+
+# Install PyG packages from pre-built wheels
+RUN pip install --no-cache-dir \
+    -i https://pypi-proxy.dev.databricks.com/simple \
+    --find-links https://data.pyg.org/whl/torch-1.13.1+cu117.html \
+    torch-scatter==2.1.1 \
+    torch-sparse==0.6.17 \
+    torch-cluster==1.6.1 \
+    torch-geometric==2.2.0
+
+# Install remaining DiffDock dependencies
+RUN pip install --no-cache-dir \
+    -i https://pypi-proxy.dev.databricks.com/simple \
+    mlflow==2.5.0 \
+    pyyaml==6.0.1 \
+    scipy==1.7.3 \
+    networkx==2.6.3 \
+    biopython==1.79 \
+    rdkit-pypi==2022.03.5 \
+    e3nn==0.5.1 \
+    spyrmsd==0.5.2 \
+    pandas==1.5.3 \
+    biopandas==0.4.1 \
+    prody==2.6.1 \
+    fair-esm==2.0.0
+
+# Verify imports
+RUN python -c "\
+import torch; print(f'PyTorch: {torch.__version__}'); \
+import torch_geometric; print(f'PyG: {torch_geometric.__version__}'); \
+import torch_scatter; print(f'torch-scatter: OK'); \
+import torch_sparse; print(f'torch-sparse: OK'); \
+import torch_cluster; print(f'torch-cluster: OK'); \
+import e3nn; print(f'e3nn: {e3nn.__version__}'); \
+import rdkit; print(f'rdkit: OK'); \
+print('All imports successful!') \
+"
+
+CMD ["python", "-c", "print('Container build successful! All DiffDock scoring dependencies installed correctly.')"]

@@ -8,6 +8,7 @@
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("deploy_model_job_id", "1234", "Deploy Model Job ID")
+dbutils.widgets.text("start_all_endpoints_job_id", "1234", "Start All Endpoints Job ID")
 dbutils.widgets.text("admin_usage_dashboard_id", "1234", "ID of usage dashboard")
 dbutils.widgets.text("application_secret_scope", "dbx_genesis_workbench", "Secret Scope used by application")
 dbutils.widgets.text("databricks_app_name", "dev-scn-genesis-workbench", "UI Application name")
@@ -17,6 +18,7 @@ dbutils.widgets.text("dev_user_prefix", "abc", "Prefix for resources")
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 deploy_model_job_id = dbutils.widgets.get("deploy_model_job_id")
+start_all_endpoints_job_id = dbutils.widgets.get("start_all_endpoints_job_id")
 admin_usage_dashboard_id = dbutils.widgets.get("admin_usage_dashboard_id")
 secret_scope = dbutils.widgets.get("application_secret_scope")
 databricks_app_name = dbutils.widgets.get("databricks_app_name")
@@ -96,6 +98,28 @@ CREATE TABLE model_deployments (
 
 # COMMAND ----------
 
+spark.sql("DROP TABLE IF EXISTS batch_models")
+
+spark.sql(f"""
+CREATE TABLE batch_models (
+    batch_model_id BIGINT,
+    model_name STRING,
+    model_display_name STRING,
+    model_description STRING,
+    model_category STRING,
+    module STRING,
+    job_id STRING,
+    job_name STRING,
+    cluster_type STRING,
+    model_added_by STRING,
+    model_added_date TIMESTAMP,
+    is_active BOOLEAN,
+    deactivated_timestamp TIMESTAMP
+)
+""")
+
+# COMMAND ----------
+
 spark.sql("DROP TABLE IF EXISTS settings")
 
 spark.sql(f"""
@@ -113,6 +137,7 @@ query= f"""
     ('admin_usage_dashboard_id', '{admin_usage_dashboard_id}', 'core'),
     ('databricks_app_name', '{databricks_app_name}','core'),    
     ('deploy_model_job_id', '{deploy_model_job_id}', 'core'),
+    ('start_all_endpoints_job_id', '{start_all_endpoints_job_id}', 'core'),
     ('secret_scope', '{secret_scope}', 'core')
 """
 

@@ -70,7 +70,7 @@ def molstar_html_singlebody(pdb : str, name:Optional[str]=None, with_iframe:Opti
                         console.log("Initializing viewer...");
                         (async function() {{
                             // Create plugin instance
-                            const viewer = new rcsbMolstar.Viewer("protein-viewer");
+                            const viewer = new rcsbMolstar.Viewer("protein-viewer", {{layoutShowLog: false, backgroundColor: 0x1e1e1e}});
 
                             // PDB data in base64
                             const pdbData = "{pdb_base64}";
@@ -145,7 +145,7 @@ def molstar_html_multibody(pdbs : Union[str, List[str]], names: Optional[Union[s
                         console.log("Initializing viewer...");
                         (async function() {{
                             // Create plugin instance
-                            const viewer = new rcsbMolstar.Viewer("protein-viewer");"""
+                            const viewer = new rcsbMolstar.Viewer("protein-viewer", {{layoutShowLog: false, backgroundColor: 0x1e1e1e}});"""
     for i, pdb in enumerate(pdbs):
         pdb_base64 = base64.b64encode(pdb.encode()).decode()
         html_str += f"""

@@ -20,18 +20,12 @@ print(f"Schema: {schema}")
 
 # COMMAND ----------
 
-#remove any existing entry
 query= f"""
-    DELETE FROM {catalog}.{schema}.settings WHERE
-    module = '{module}' AND
-    key = '{module}_deployed'
-"""
-spark.sql(query)
-
-#re enter
-query= f"""
-    INSERT INTO {catalog}.{schema}.settings VALUES
-    ('{module}_deployed', 'true', '{module}')
+    MERGE INTO {catalog}.{schema}.settings AS target
+    USING (SELECT '{module}_deployed' AS key, 'true' AS value, '{module}' AS module) AS source
+    ON target.key = source.key AND target.module = source.module
+    WHEN MATCHED THEN UPDATE SET target.value = source.value
+    WHEN NOT MATCHED THEN INSERT (key, value, module) VALUES (source.key, source.value, source.module)
 """
 
 spark.sql(query)

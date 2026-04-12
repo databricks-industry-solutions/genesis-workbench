@@ -1,0 +1,199 @@
+Sample name	Sex	Biosample ID	Population code	Population name	Superpopulation code	Superpopulation name	Population elastic ID	Data collections
+HG01862	female	SAME123199	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01867	male	SAME123194	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01874	female	SAME123396	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01988	male	SAME1840175	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01879	male	SAME1839037	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01990	male	SAME1840235	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01886	female	SAME122847	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02013	male	SAME1840396	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02024	female	SAME125182	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01596	male	SAME125227	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,Human Genome Structural Variation Consortium, Phase 2,Human Genome Structural Variation Consortium, Phase 3,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02029	male	SAME124021	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02031	female	SAME1839964	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02048	female	SAME123772	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02050	male	SAME1839555	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02020	male	SAME125168	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02067	male	SAME1839388	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02025	female	SAME125335	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02032	male	SAME1839959	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02079	male	SAME123098	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02049	female	SAME123773	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02051	male	SAME1839549	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02070	male	SAME124908	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02075	female	SAME123106	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02082	male	SAME124950	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02087	female	SAME124678	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01956	female	SAME123978	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02107	male	SAME1840206	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02121	female	SAME123479	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02133	female	SAME1839882	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01595	female	SAME123569	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02138	male	SAME123659	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02140	female	SAME124612	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01844	male	SAME123556	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01849	male	SAME125110	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01851	female	SAME123753	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02012	female	SAME1840403	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02017	male	SAME123445	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01863	female	SAME123198	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01868	female	SAME123193	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01870	female	SAME123397	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01882	male	SAME122849	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01843	female	SAME123553	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01894	female	SAME1840357	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01848	female	SAME123548	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01914	male	SAME1839768	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01850	female	SAME123752	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01855	female	SAME123749	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02501	male	SAME1839281	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02442	male	SAME1840352	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02513	female	SAME1839138	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02525	female	SAME1840313	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38
+HG02537	female	SAME1840165	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02549	female	SAME1839917	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02485	female	SAME1839564	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02497	female	SAME1839682	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02505	female	SAME1839351	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02512	male	SAME1839146	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02429	male	SAME1839021	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02524	male	SAME1840317	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA
+HG02536	male	SAME1840172	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02450	female	SAME1840144	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02555	female	SAME1840070	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02455	male	SAME1840198	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02479	female	SAME1839798	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02481	male	SAME1839870	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02081	female	SAME124826	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02086	female	SAME124675	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02113	female	SAME124044	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02137	male	SAME1839862	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02144	female	SAME1839624	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02284	male	SAME1840168	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02309	female	SAME1839525	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02323	male	SAME1839440	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02330	male	SAME1839237	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02308	female	SAME1839529	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02315	female	SAME1839666	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02322	female	SAME1839444	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02334	male	SAME1839307	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02339	female	SAME1839288	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02283	male	SAME1840173	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01986	male	SAME1840091	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01958	female	SAME1839349	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02009	male	SAME123622	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02016	female	SAME123446	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01864	male	SAME123197	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02023	male	SAME125307	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01869	female	SAME123192	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02028	female	SAME124020	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01871	female	SAME123398	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01883	female	SAME122848	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02035	male	SAME1840035	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02047	male	SAME1839772	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01890	male	SAME123028	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,Human Genome Structural Variation Consortium, Phase 3,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02054	female	SAME1839538	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01915	female	SAME1839757	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02061	male	SAME1839676	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02073	male	SAME123104	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02078	female	SAME123099	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01861	male	SAME123200	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01866	male	SAME123195	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01840	male	SAME123552	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01873	male	SAME123400	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01845	female	SAME123555	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01878	female	SAME123394	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01852	male	SAME123750	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01880	female	SAME1839109	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01857	female	SAME123748	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01885	male	SAME122844	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01912	male	SAME1839779	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01597	female	SAME125226	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01600	female	SAME123456	KHV	Kinh,Kinh Vietnamese	EAS	East Asia (SGDP),East Asian Ancestry	KinhSGDP,KHV	1000 Genomes on GRCh38,Simons Genome Diversity Project,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01842	male	SAME123554	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01847	female	SAME123557	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01859	female	SAME123535	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02085	male	SAME124979	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02131	male	SAME1839896	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02136	female	SAME1839865	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02143	male	SAME1839628	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01599	female	SAME125238	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02420	male	SAME1839320	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02449	male	SAME1840404	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02470	male	SAME1839744	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02088	male	SAME124820	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02095	female	SAME1839064	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02108	female	SAME1840201	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02511	female	SAME1839150	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02122	male	SAME123478	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02127	female	SAME123476	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02134	male	SAME1839875	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02554	male	SAME1840075	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,Human Genome Structural Variation Consortium, Phase 3,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02139	female	SAME123660	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02141	male	SAME124611	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02580	female	SAME1839366	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01989	female	SAME1840166	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02014	male	SAME123448	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02019	female	SAME123450	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02026	male	SAME125315	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02040	male	SAME1839803	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02052	female	SAME1839545	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02427	female	SAME1839036	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02057	female	SAME124146	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02439	male	SAME1840297	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02064	male	SAME1839658	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02069	female	SAME123375	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02477	female	SAME1839710	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02484	male	SAME1839858	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02076	male	SAME124913	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02489	male	SAME1839546	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02496	male	SAME1839688	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02307	male	SAME1839535	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02314	male	SAME1839674	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02256	female	SAME1839332	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02317	male	SAME1839656	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02343	male	SAME1839091	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02282	female	SAME1840177	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,Human Genome Structural Variation Consortium, Phase 3,1000 Genomes phase 3 release
+HG02502	female	SAME1839272	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02521	male	SAME1840327	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02545	male	SAME1839939	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02557	male	SAME1840061	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01985	female	SAME1840099	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02010	female	SAME123444	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01841	female	SAME123551	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01846	male	SAME123558	KHV	Kinh,Kinh Vietnamese	EAS	East Asia (SGDP),East Asian Ancestry	KinhSGDP,KHV	1000 Genomes on GRCh38,Simons Genome Diversity Project,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01853	female	SAME123751	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01858	female	SAME123754	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01598	female	SAME125239	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01860	male	SAME123201	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01865	male	SAME123196	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01872	male	SAME123995	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG01889	female	SAME122851	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG01896	female	SAME1840348	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02419	female	SAME1839244	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02433	male	SAME1839175	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02445	male	SAME1840341	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02471	female	SAME1839741	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02476	female	SAME1839717	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02084	female	SAME124973	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02111	female	SAME1839922	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02116	male	SAME1839990	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02128	male	SAME123475	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02130	female	SAME1839904	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02142	female	SAME124614	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02318	female	SAME1839391	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02325	female	SAME1839521	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02332	male	SAME1839315	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02337	female	SAME1839296	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02508	female	SAME1839334	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02522	female	SAME1840326	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02541	male	SAME1840214	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02546	female	SAME1839932	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02558	female	SAME1840057	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02577	female	SAME1839642	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02053	male	SAME1839543	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02058	male	SAME125319	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02060	female	SAME1839679	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02072	female	SAME123105	KHV	Kinh Vietnamese	EAS	East Asian Ancestry	KHV	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1KG_ONT_VIENNA,1000 Genomes phase 3 release
+HG02255	male	SAME1839337	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+HG02281	male	SAME1840094	ACB	African Caribbean	AFR	African Ancestry	ACB	1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release

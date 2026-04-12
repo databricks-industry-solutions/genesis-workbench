@@ -1,0 +1,47 @@
+resources:
+  jobs:
+    register_open_babel:
+      name: register_open_babel_gwb
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: register_open_babel_format_converter
+          environment_key: open_babel_env
+          notebook_task:
+            notebook_path: ../notebooks/01_register_open_babel.py
+
+      environments:
+        - environment_key: open_babel_env
+          spec:
+            client: "4"
+            dependencies:
+              - openbabel-wheel>=3.1.1
+              - rdkit
+              - mlflow>=2.15
+              - databricks-sdk>=0.50.0
+              - databricks-sql-connector>=4.0.2
+              - numpy
+              - pandas
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: model_name
+          default: open_babel_converter
+        - name: cache_dir
+          default: ${resources.volumes.open_babel_cache_dir.name}
+        - name: experiment_name
+          default: ${var.module_registration_experiment_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: user_email
+          default: ${var.current_user}
+        - name: workload_type
+          default: CPU
+
+      tags: ${var.common_resource_tags}

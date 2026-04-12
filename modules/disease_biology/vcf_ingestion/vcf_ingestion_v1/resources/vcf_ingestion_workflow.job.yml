@@ -1,0 +1,88 @@
+resources:
+  jobs:
+    vcf_ingestion:
+      name: vcf_ingestion_glow
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: vcf_to_delta
+          job_cluster_key: vcf_ingestion_cluster
+          libraries:
+            - jar: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/libraries/glow-spark3-assembly-2.0.4-SNAPSHOT.jar
+          notebook_task:
+            notebook_path: ../notebooks/01_vcf_to_delta.py
+            source: WORKSPACE
+
+        - task_key: mark_success
+          depends_on:
+            - task_key: vcf_to_delta
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: ../notebooks/update_mlflow_status.py
+            source: WORKSPACE
+            base_parameters:
+              mlflow_run_id: "{{job.parameters.mlflow_run_id}}"
+              job_status: "ingestion_complete"
+          environment_key: default
+
+        - task_key: mark_failure
+          depends_on:
+            - task_key: vcf_to_delta
+          run_if: AT_LEAST_ONE_FAILED
+          notebook_task:
+            notebook_path: ../notebooks/update_mlflow_status.py
+            source: WORKSPACE
+            base_parameters:
+              mlflow_run_id: "{{job.parameters.mlflow_run_id}}"
+              job_status: "failed"
+          environment_key: default
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: vcf_path
+          default: ""
+        - name: output_table_name
+          default: ""
+        - name: mlflow_run_id
+          default: ""
+        - name: user_email
+          default: ${var.current_user}
+
+      job_clusters:
+        - job_cluster_key: vcf_ingestion_cluster
+          new_cluster:
+            cluster_name: ""
+            spark_version: 15.4.x-scala2.12
+            spark_conf:
+              spark.master: "local[*, 4]"
+              spark.databricks.cluster.profile: singleNode
+              spark.sql.codegen.wholeStage: "false"
+            node_type_id: ${var.cpu_node_type}
+            driver_node_type_id: ${var.cpu_node_type}
+            custom_tags:
+              ResourceClass: SingleNode
+              work_type: vcf_ingestion
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            num_workers: 0
+            aws_attributes:
+              availability: ON_DEMAND
+
+      environments:
+        - environment_key: default
+          spec:
+            client: '4'
+
+      tags: ${var.common_resource_tags}
+
+      queue:
+        enabled: true

@@ -16,7 +16,7 @@ resources:
       environments:
         - environment_key: default
           spec:
-            client: '2'
+            client: '4'
 
       max_concurrent_runs: 5
 

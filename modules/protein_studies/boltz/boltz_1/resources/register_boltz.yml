@@ -39,9 +39,6 @@ resources:
             node_type_id: ${var.t4_node_type}
             driver_node_type_id: ${var.t4_node_type}
             spark_version: '15.4.x-gpu-ml-scala2.12'
-            # Use on-demand to avoid spot preemption during long-running model
-            # registration/download jobs. Spot instances can be reclaimed mid-run,
-            # wasting hours of progress.
             aws_attributes:
               availability: ON_DEMAND
             enable_elastic_disk: true

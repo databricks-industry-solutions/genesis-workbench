@@ -15,7 +15,7 @@ resources:
       environments:
         - environment_key: default
           spec:
-            client: '2'
+            client: '4'
       
       parameters:
         - name: core_catalog

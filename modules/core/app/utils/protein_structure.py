@@ -8,6 +8,18 @@ from typing import Tuple, Optional
 import tempfile
 from Bio.PDB import PDBParser
 from .structure_utils import _cif_to_pdb_str, select_and_align
+
+
+def _derive_status(row):
+    """Derive display status from job_status tag.
+
+    The mark_success/mark_failure tasks in each job workflow update the
+    job_status tag to the final value (e.g. 'fold_complete', 'failed').
+    """
+    job_status = row.get("tags.job_status", "")
+    if job_status:
+        return job_status
+    return "unknown"
 from databricks.sdk import WorkspaceClient
 from genesis_workbench.models import set_mlflow_experiment
 from genesis_workbench.workbench import UserInfo, execute_workflow
