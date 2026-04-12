@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import mlflow
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.serving import ChatMessage, ChatMessageRole
 from utils.streamlit_helper import get_user_info
@@ -7,9 +8,10 @@ from genesis_workbench.workbench import get_user_settings
 
 st.title(":material/home: Home")
 
+user_info = get_user_info()
+
 if "home_user_settings" not in st.session_state:
     with st.spinner("Getting user information"):
-        user_info = get_user_info()
         st.session_state["home_user_settings"] = get_user_settings(user_email=user_info.user_email)
 
 user_settings = st.session_state["home_user_settings"]
@@ -18,6 +20,31 @@ doc_index = st.session_state.get("doc_index", [])
 
 if "setup_done" not in user_settings or user_settings["setup_done"] != "Y":
     st.warning("#### :warning: Your profile setup is incomplete. Finish your setup using the **Profile** tab.")
+elif "mlflow_access_verified" not in st.session_state:
+    mlflow_folder = user_settings.get("mlflow_experiment_folder", "")
+    if mlflow_folder:
+        try:
+            w = WorkspaceClient()
+            mlflow_base_path = f"Users/{user_info.user_email}/{mlflow_folder}"
+            w.workspace.mkdirs(f"/Workspace/{mlflow_base_path}")
+            experiment_path = f"/{mlflow_base_path}/__test__"
+            mlflow.set_registry_uri("databricks-uc")
+            mlflow.set_tracking_uri("databricks")
+            experiment = mlflow.set_experiment(experiment_path)
+            mlflow.delete_experiment(experiment_id=experiment.experiment_id)
+            st.session_state["mlflow_access_verified"] = True
+        except Exception:
+            st.session_state["mlflow_access_verified"] = False
+    else:
+        st.session_state["mlflow_access_verified"] = False
+
+if st.session_state.get("mlflow_access_verified") is False:
+    st.error(
+        "**MLflow Experiment Access Error**\n\n"
+        "The application cannot access your MLflow experiment folder. "
+        "This may be because the folder was deleted or the application's service principal lost permissions.\n\n"
+        "Please go to the **Profile** tab to reconfigure your MLflow experiment folder."
+    )
 
 
 def _build_doc_context(docs):
