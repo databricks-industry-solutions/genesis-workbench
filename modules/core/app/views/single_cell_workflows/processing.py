@@ -31,7 +31,6 @@ def _display_run_analysis():
     default_run_name = "rapidssinglecell_analysis" if mode == "rapids-singlecell" else "scanpy_analysis"
 
     with st.form("scanpy_analysis_form", enter_to_submit=False):
-        st.divider()
         col1, col2 = st.columns([1, 1])
 
         with col1:
@@ -119,6 +118,77 @@ def _get_cluster_column(df):
     elif 'leiden' in df.columns: return 'leiden'
     elif 'louvain' in df.columns: return 'louvain'
     return None
+
+
+def _load_gmt(path):
+    """Parse a GMT file from a Unity Catalog Volume into {term_name: set of genes}.
+
+    Uses the Databricks SDK files API since Databricks Apps do not have
+    direct FUSE access to /Volumes paths.
+    """
+    from databricks.sdk import WorkspaceClient
+    ws = WorkspaceClient()
+    response = ws.files.download(path)
+    content = response.contents.read().decode("utf-8")
+
+    gene_sets = {}
+    for line in content.splitlines():
+        parts = line.strip().split("\t")
+        if len(parts) < 3:
+            continue
+        term = parts[0]
+        genes = {g for g in parts[2:] if g}
+        if genes:
+            gene_sets[term] = genes
+    return gene_sets
+
+
+def _run_local_enrichment(gene_list, gmt_dict, background_genes, gene_set_name=""):
+    """Run Over-Representation Analysis locally using Fisher's exact test.
+
+    Returns a DataFrame with columns matching the previous gseapy output:
+    Term, Overlap, P-value, Adjusted P-value, Genes, Gene_set
+    """
+    from scipy.stats import fisher_exact
+
+    query = set(gene_list)
+    bg_size = len(background_genes)
+    query_in_bg = query & background_genes
+    n_query = len(query_in_bg)
+
+    if n_query == 0:
+        return pd.DataFrame()
+
+    rows = []
+    for term, term_genes in gmt_dict.items():
+        term_in_bg = term_genes & background_genes
+        if not term_in_bg:
+            continue
+        overlap = query_in_bg & term_in_bg
+        if not overlap:
+            continue
+        a = len(overlap)
+        b = len(query_in_bg) - a
+        c = len(term_in_bg) - a
+        d = bg_size - a - b - c
+        _, pval = fisher_exact([[a, b], [c, d]], alternative="greater")
+        rows.append({
+            "Term": term,
+            "Overlap": f"{a}/{len(term_in_bg)}",
+            "P-value": pval,
+            "Genes": ";".join(sorted(overlap)),
+            "Gene_set": gene_set_name,
+        })
+
+    if not rows:
+        return pd.DataFrame()
+
+    result = pd.DataFrame(rows).sort_values("P-value")
+    n_tests = len(result)
+    result["rank"] = range(1, n_tests + 1)
+    result["Adjusted P-value"] = (result["P-value"] * n_tests / result["rank"]).clip(upper=1.0)
+    result = result.drop(columns=["rank"])
+    return result
 
 
 def _display_results_viewer():
@@ -245,70 +315,11 @@ def _display_results_viewer():
     mlflow_url = st.session_state.get('singlecell_mlflow_url', '')
 
     st.markdown("---")
-    st.markdown("##### Interactive UMAP Visualization")
-    st.info("This viewer displays a subsampled dataset (max 10,000 cells) with marker genes only for faster, interactive plotting. "
-            "The complete output AnnData object with all genes is available in the MLflow run.")
 
     expr_cols = [c for c in df.columns if c.startswith('expr_')]
     obs_categorical = df.select_dtypes(include=['object', 'category']).columns.tolist()
     obs_numerical = [c for c in df.select_dtypes(include=['number']).columns.tolist() if not c.startswith(('UMAP_', 'PC_'))]
 
-    col1, col2, col3 = st.columns([2, 2, 1])
-    with col1:
-        color_type = st.selectbox("Color by:", ["Cluster", "Marker Gene", "QC Metric"])
-
-    with col2:
-        if color_type == "Cluster":
-            cluster_options = [c for c in obs_categorical if c in ['leiden', 'louvain', 'cluster']]
-            if not cluster_options: cluster_options = obs_categorical
-            color_col = st.selectbox("Select cluster column:", cluster_options if cluster_options else ['leiden'])
-        elif color_type == "Marker Gene":
-            cluster_col = _get_cluster_column(df)
-            if not cluster_col:
-                selected_gene = st.selectbox("Select gene:", sorted([c.replace('expr_', '') for c in expr_cols]))
-                color_col = f"expr_{selected_gene}"
-            else:
-                mean_expr_by_cluster = df.groupby(cluster_col)[expr_cols].mean()
-                gene_to_cluster = {col.replace('expr_', ''): mean_expr_by_cluster[col].idxmax() for col in expr_cols}
-                gene_options_annotated = [f"{gene} (Cluster {gene_to_cluster[gene]})" for gene in sorted(gene_to_cluster.keys())]
-                annotated_to_gene = {f"{gene} (Cluster {gene_to_cluster[gene]})": gene for gene in gene_to_cluster.keys()}
-                selected_gene_annotated = st.selectbox("Select gene:", gene_options_annotated)
-                selected_gene = annotated_to_gene[selected_gene_annotated]
-                color_col = f"expr_{selected_gene}"
-        else:
-            metric_options = [c for c in obs_numerical if c in ['n_genes', 'n_counts', 'pct_counts_mt', 'n_genes_by_counts']]
-            if not metric_options: metric_options = obs_numerical[:5] if obs_numerical else ['n_genes']
-            color_col = st.selectbox("Select metric:", metric_options)
-
-    with col3:
-        point_size = st.slider("Point size:", 1, 10, 3)
-
-    with st.expander("Advanced Options"):
-        col_a, col_b = st.columns(2)
-        with col_a: opacity = st.slider("Opacity:", 0.1, 1.0, 0.8)
-        with col_b: color_scale = st.selectbox("Color scale:", ["Viridis", "Plasma", "Blues", "Reds", "RdBu", "Portland", "Turbo"])
-
-    if 'UMAP_0' not in df.columns or 'UMAP_1' not in df.columns:
-        st.warning("UMAP coordinates not found in data."); return
-
-    is_categorical = color_col in obs_categorical or color_type == "Cluster"
-    hover_data_dict = {'UMAP_0': ':.2f', 'UMAP_1': ':.2f'}
-    for gene_col in expr_cols[:3]: hover_data_dict[gene_col] = ':.2f'
-
-    if is_categorical:
-        fig = px.scatter(df, x='UMAP_0', y='UMAP_1', color=color_col, hover_data=hover_data_dict,
-                         title=f"UMAP colored by {color_col}", width=900, height=650, template="plotly_dark")
-    else:
-        fig = px.scatter(df, x='UMAP_0', y='UMAP_1', color=color_col, color_continuous_scale=color_scale.lower(),
-                         hover_data=hover_data_dict, title=f"UMAP colored by {color_col}", width=900, height=650, template="plotly_dark")
-
-    fig.update_traces(marker=dict(size=point_size, opacity=opacity, line=dict(width=0)))
-    fig.update_layout(xaxis=dict(title='UMAP 1'),
-                      yaxis=dict(title='UMAP 2'), font=dict(size=12))
-    st.plotly_chart(fig, use_container_width=True)
-
-    # Dataset Summary
-    st.markdown("---")
     st.markdown("##### Dataset Summary")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -330,9 +341,81 @@ def _display_results_viewer():
     with col4:
         if 'UMAP_0' in df.columns: st.metric("Embeddings", "UMAP")
 
-    # Dot plot
-    st.markdown("---")
-    with st.expander("Marker Gene Expression by Cluster", expanded=False):
+    btn_col1, btn_col2, btn_col3 = st.columns([2, 1, 1])
+    with btn_col2:
+        csv_data = df.to_csv(index=False).encode('utf-8')
+        st.download_button(label="Download CSV", data=csv_data, file_name=f"singlecell_results_{st.session_state['singlecell_run_id'][:8]}.csv", mime="text/csv")
+    with btn_col3:
+        st.link_button("MLflow Run", mlflow_url, type="secondary")
+
+    tab_umap, tab_dotplot, tab_de, tab_enrich, tab_traj, tab_qc, tab_raw = st.tabs([
+        "UMAP", "Marker Genes", "Differential Expression",
+        "Pathway Enrichment", "Trajectory", "QC & Outputs", "Raw Data",
+    ])
+
+    # --- UMAP tab ---
+    with tab_umap:
+        st.markdown("##### Interactive UMAP Visualization")
+        st.info("This viewer displays a subsampled dataset (max 10,000 cells) with marker genes only for faster, interactive plotting. "
+                "The complete output AnnData object with all genes is available in the MLflow run.")
+
+        col1, col2, col3 = st.columns([2, 2, 1])
+        with col1:
+            color_type = st.selectbox("Color by:", ["Cluster", "Marker Gene", "QC Metric"])
+
+        with col2:
+            if color_type == "Cluster":
+                cluster_options = [c for c in obs_categorical if c in ['leiden', 'louvain', 'cluster']]
+                if not cluster_options: cluster_options = obs_categorical
+                color_col = st.selectbox("Select cluster column:", cluster_options if cluster_options else ['leiden'])
+            elif color_type == "Marker Gene":
+                cluster_col = _get_cluster_column(df)
+                if not cluster_col:
+                    selected_gene = st.selectbox("Select gene:", sorted([c.replace('expr_', '') for c in expr_cols]))
+                    color_col = f"expr_{selected_gene}"
+                else:
+                    mean_expr_by_cluster = df.groupby(cluster_col)[expr_cols].mean()
+                    gene_to_cluster = {col.replace('expr_', ''): mean_expr_by_cluster[col].idxmax() for col in expr_cols}
+                    gene_options_annotated = [f"{gene} (Cluster {gene_to_cluster[gene]})" for gene in sorted(gene_to_cluster.keys())]
+                    annotated_to_gene = {f"{gene} (Cluster {gene_to_cluster[gene]})": gene for gene in gene_to_cluster.keys()}
+                    selected_gene_annotated = st.selectbox("Select gene:", gene_options_annotated)
+                    selected_gene = annotated_to_gene[selected_gene_annotated]
+                    color_col = f"expr_{selected_gene}"
+            else:
+                metric_options = [c for c in obs_numerical if c in ['n_genes', 'n_counts', 'pct_counts_mt', 'n_genes_by_counts']]
+                if not metric_options: metric_options = obs_numerical[:5] if obs_numerical else ['n_genes']
+                color_col = st.selectbox("Select metric:", metric_options)
+
+        with col3:
+            point_size = st.slider("Point size:", 1, 10, 3)
+
+        with st.expander("Advanced Options"):
+            col_a, col_b = st.columns(2)
+            with col_a: opacity = st.slider("Opacity:", 0.1, 1.0, 0.8)
+            with col_b: color_scale = st.selectbox("Color scale:", ["Viridis", "Plasma", "Blues", "Reds", "RdBu", "Portland", "Turbo"])
+
+        if 'UMAP_0' not in df.columns or 'UMAP_1' not in df.columns:
+            st.warning("UMAP coordinates not found in data.")
+        else:
+            is_categorical = color_col in obs_categorical or color_type == "Cluster"
+            hover_data_dict = {'UMAP_0': ':.2f', 'UMAP_1': ':.2f'}
+            for gene_col in expr_cols[:3]: hover_data_dict[gene_col] = ':.2f'
+
+            if is_categorical:
+                fig = px.scatter(df, x='UMAP_0', y='UMAP_1', color=color_col, hover_data=hover_data_dict,
+                                 title=f"UMAP colored by {color_col}", width=900, height=650, template="plotly_dark")
+            else:
+                fig = px.scatter(df, x='UMAP_0', y='UMAP_1', color=color_col, color_continuous_scale=color_scale.lower(),
+                                 hover_data=hover_data_dict, title=f"UMAP colored by {color_col}", width=900, height=650, template="plotly_dark")
+
+            fig.update_traces(marker=dict(size=point_size, opacity=opacity, line=dict(width=0)))
+            fig.update_layout(xaxis=dict(title='UMAP 1'),
+                              yaxis=dict(title='UMAP 2'), font=dict(size=12))
+            st.plotly_chart(fig, use_container_width=True)
+
+    # --- Marker Genes dot plot tab ---
+    with tab_dotplot:
+        st.markdown("##### Marker Gene Expression by Cluster")
         cluster_col = _get_cluster_column(df)
         if cluster_col and expr_cols:
             try: marker_mapping = download_cluster_markers_mapping(run_id)
@@ -388,130 +471,156 @@ def _display_results_viewer():
         else:
             st.warning("Clustering information or marker genes not available")
 
-    # Differential Expression section
-    st.markdown("---")
-    with st.expander("Differential Expression", expanded=False):
-        cluster_col_de = _get_cluster_column(df)
-        if cluster_col_de and expr_cols:
-            de_clusters = sorted(df[cluster_col_de].unique(), key=lambda x: int(x) if str(x).isdigit() else x)
-            de_col1, de_col2, de_col3 = st.columns([2, 2, 1], vertical_alignment="bottom")
-            with de_col1:
-                de_cluster_a = st.selectbox("Cluster A:", de_clusters, key="de_cluster_a")
-            with de_col2:
-                de_cluster_b = st.selectbox("Cluster B:", [c for c in de_clusters if c != de_cluster_a], key="de_cluster_b")
-            with de_col3:
-                de_compute = st.button("Compute DE", use_container_width=True, key="de_compute_btn")
+    # --- Differential Expression tab ---
+    with tab_de:
+        @st.fragment
+        def _de_fragment():
+            st.markdown("##### Differential Expression")
+            st.markdown("Compare gene expression between two clusters using the Mann-Whitney U test to identify significantly up- or down-regulated genes.")
+            cluster_col_de = _get_cluster_column(df)
+            if cluster_col_de and expr_cols:
+                de_clusters = sorted(df[cluster_col_de].unique(), key=lambda x: int(x) if str(x).isdigit() else x)
+                de_col1, de_col2, de_col3 = st.columns([2, 2, 1], vertical_alignment="bottom")
+                with de_col1:
+                    de_cluster_a = st.selectbox("Cluster A:", de_clusters, key="de_cluster_a")
+                with de_col2:
+                    de_cluster_b = st.selectbox("Cluster B:", [c for c in de_clusters if c != de_cluster_a], key="de_cluster_b")
+                with de_col3:
+                    de_compute = st.button("Compute DE", use_container_width=True, key="de_compute_btn")
 
-            de_cache_key = f"de_results_{de_cluster_a}_{de_cluster_b}"
-            if de_compute:
-                with st.spinner("Computing differential expression..."):
-                    from scipy.stats import mannwhitneyu
-                    cells_a = df[df[cluster_col_de] == de_cluster_a]
-                    cells_b = df[df[cluster_col_de] == de_cluster_b]
-                    de_results = []
-                    for col in expr_cols:
-                        gene = col.replace("expr_", "")
-                        vals_a, vals_b = cells_a[col].values, cells_b[col].values
-                        mean_a, mean_b = vals_a.mean(), vals_b.mean()
-                        log2fc = np.log2((mean_a + 1e-9) / (mean_b + 1e-9))
+                de_cache_key = f"de_results_{de_cluster_a}_{de_cluster_b}"
+                if de_compute:
+                    with st.spinner("Computing differential expression..."):
+                        from scipy.stats import mannwhitneyu
+                        cells_a = df[df[cluster_col_de] == de_cluster_a]
+                        cells_b = df[df[cluster_col_de] == de_cluster_b]
+                        de_results = []
+                        for col in expr_cols:
+                            gene = col.replace("expr_", "")
+                            vals_a, vals_b = cells_a[col].values, cells_b[col].values
+                            mean_a, mean_b = vals_a.mean(), vals_b.mean()
+                            log2fc = np.log2((mean_a + 1e-9) / (mean_b + 1e-9))
+                            try:
+                                _, pval = mannwhitneyu(vals_a, vals_b, alternative="two-sided")
+                            except ValueError:
+                                pval = 1.0
+                            de_results.append({"Gene": gene, "log2FC": log2fc, "p_value": pval, "Mean A": mean_a, "Mean B": mean_b})
+                        de_df = pd.DataFrame(de_results).sort_values("p_value")
+                        n_tests = len(de_df)
+                        de_df["rank"] = range(1, n_tests + 1)
+                        de_df["p_adj"] = (de_df["p_value"] * n_tests / de_df["rank"]).clip(upper=1.0)
+                        de_df["-log10(p_adj)"] = -np.log10(de_df["p_adj"].clip(lower=1e-300))
+                        de_df = de_df.drop(columns=["rank"])
+                        st.session_state[de_cache_key] = de_df
+
+                if de_cache_key in st.session_state:
+                    de_df = st.session_state[de_cache_key]
+                    de_df["significant"] = (de_df["p_adj"] < 0.05) & (de_df["log2FC"].abs() > 1)
+                    fig_volcano = px.scatter(
+                        de_df, x="log2FC", y="-log10(p_adj)", color="significant",
+                        color_discrete_map={True: "#E74C3C", False: "#95A5A6"},
+                        hover_data=["Gene", "Mean A", "Mean B"],
+                        title=f"Volcano Plot: Cluster {de_cluster_a} vs {de_cluster_b}",
+                        labels={"log2FC": "log2 Fold Change", "-log10(p_adj)": "-log10(Adjusted P-value)"}, height=450,
+                        template="plotly_dark")
+                    fig_volcano.add_vline(x=1, line_dash="dash", line_color="gray")
+                    fig_volcano.add_vline(x=-1, line_dash="dash", line_color="gray")
+                    fig_volcano.add_hline(y=-np.log10(0.05), line_dash="dash", line_color="gray")
+                    top_sig = de_df[de_df["significant"]].nlargest(10, "-log10(p_adj)")
+                    for _, row in top_sig.iterrows():
+                        fig_volcano.add_annotation(x=row["log2FC"], y=row["-log10(p_adj)"], text=row["Gene"], showarrow=False, font=dict(size=10), yshift=8)
+                    fig_volcano.update_layout(showlegend=False)
+                    st.plotly_chart(fig_volcano, use_container_width=True)
+                    sig_df = de_df[de_df["significant"]].sort_values("log2FC", key=abs, ascending=False)
+                    if not sig_df.empty:
+                        st.markdown(f"**{len(sig_df)} significant genes** (|log2FC| > 1, adjusted p < 0.05)")
+                        st.dataframe(sig_df[["Gene", "log2FC", "p_adj", "Mean A", "Mean B"]].reset_index(drop=True), use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No genes meet significance threshold (|log2FC| > 1, adjusted p < 0.05)")
+            else:
+                st.warning("Clustering or marker gene data not available for DE analysis")
+        _de_fragment()
+
+    # --- Pathway Enrichment tab ---
+    with tab_enrich:
+        @st.fragment
+        def _enrich_fragment():
+            st.markdown("##### Pathway Enrichment")
+            st.markdown("Identify biological pathways overrepresented in a cluster's marker genes using Fisher's exact test against curated gene set databases (GO, KEGG, Reactome).")
+            cluster_col_enrich = _get_cluster_column(df)
+            if cluster_col_enrich and expr_cols:
+                catalog = os.environ.get("CORE_CATALOG_NAME", "")
+                schema_name = os.environ.get("CORE_SCHEMA_NAME", "")
+                gmt_dir = f"/Volumes/{catalog}/{schema_name}/scanpy_reference/genesets"
+
+                enrich_clusters = sorted(df[cluster_col_enrich].unique(), key=lambda x: int(x) if str(x).isdigit() else x)
+                available_dbs = ["GO_Biological_Process_2023", "KEGG_2021_Human", "Reactome_2022",
+                                 "GO_Molecular_Function_2023", "GO_Cellular_Component_2023"]
+
+                enr_col1, enr_col2, enr_col3 = st.columns([2, 2, 1], vertical_alignment="bottom")
+                with enr_col1:
+                    enrich_cluster = st.selectbox("Select Cluster:", enrich_clusters, key="enrich_cluster")
+                with enr_col2:
+                    enrich_dbs = st.multiselect("Enrichment Databases:", available_dbs,
+                        default=["GO_Biological_Process_2023"], key="enrich_dbs")
+                with enr_col3:
+                    enrich_run = st.button("Run Enrichment", use_container_width=True, key="enrich_run_btn")
+
+                enrich_cache_key = f"enrich_{enrich_cluster}_{'_'.join(enrich_dbs)}"
+                if enrich_run and enrich_dbs:
+                    with st.spinner("Running pathway enrichment..."):
                         try:
-                            _, pval = mannwhitneyu(vals_a, vals_b, alternative="two-sided")
-                        except ValueError:
-                            pval = 1.0
-                        de_results.append({"Gene": gene, "log2FC": log2fc, "p_value": pval, "Mean A": mean_a, "Mean B": mean_b})
-                    de_df = pd.DataFrame(de_results).sort_values("p_value")
-                    n_tests = len(de_df)
-                    de_df["rank"] = range(1, n_tests + 1)
-                    de_df["p_adj"] = (de_df["p_value"] * n_tests / de_df["rank"]).clip(upper=1.0)
-                    de_df["-log10(p_adj)"] = -np.log10(de_df["p_adj"].clip(lower=1e-300))
-                    de_df = de_df.drop(columns=["rank"])
-                    st.session_state[de_cache_key] = de_df
+                            # Get marker genes for the cluster
+                            try:
+                                marker_mapping_e = download_cluster_markers_mapping(run_id)
+                                gene_list = marker_mapping_e[str(enrich_cluster)].dropna().tolist() if str(enrich_cluster) in marker_mapping_e.columns else marker_mapping_e.iloc[:, 0].dropna().tolist()
+                            except Exception:
+                                cl_mean = df[df[cluster_col_enrich] == enrich_cluster][expr_cols].mean()
+                                gene_list = [c.replace("expr_", "") for c in cl_mean.nlargest(50).index]
 
-            if de_cache_key in st.session_state:
-                de_df = st.session_state[de_cache_key]
-                de_df["significant"] = (de_df["p_adj"] < 0.05) & (de_df["log2FC"].abs() > 1)
-                fig_volcano = px.scatter(
-                    de_df, x="log2FC", y="-log10(p_adj)", color="significant",
-                    color_discrete_map={True: "#E74C3C", False: "#95A5A6"},
-                    hover_data=["Gene", "Mean A", "Mean B"],
-                    title=f"Volcano Plot: Cluster {de_cluster_a} vs {de_cluster_b}",
-                    labels={"log2FC": "log2 Fold Change", "-log10(p_adj)": "-log10(Adjusted P-value)"}, height=450,
-                    template="plotly_dark")
-                fig_volcano.add_vline(x=1, line_dash="dash", line_color="gray")
-                fig_volcano.add_vline(x=-1, line_dash="dash", line_color="gray")
-                fig_volcano.add_hline(y=-np.log10(0.05), line_dash="dash", line_color="gray")
-                top_sig = de_df[de_df["significant"]].nlargest(10, "-log10(p_adj)")
-                for _, row in top_sig.iterrows():
-                    fig_volcano.add_annotation(x=row["log2FC"], y=row["-log10(p_adj)"], text=row["Gene"], showarrow=False, font=dict(size=10), yshift=8)
-                fig_volcano.update_layout(showlegend=False)
-                st.plotly_chart(fig_volcano, use_container_width=True)
-                sig_df = de_df[de_df["significant"]].sort_values("log2FC", key=abs, ascending=False)
-                if not sig_df.empty:
-                    st.markdown(f"**{len(sig_df)} significant genes** (|log2FC| > 1, adjusted p < 0.05)")
-                    st.dataframe(sig_df[["Gene", "log2FC", "p_adj", "Mean A", "Mean B"]].reset_index(drop=True), use_container_width=True, hide_index=True)
-                else:
-                    st.info("No genes meet significance threshold (|log2FC| > 1, adjusted p < 0.05)")
-        else:
-            st.warning("Clustering or marker gene data not available for DE analysis")
+                            background_genes = {c.replace("expr_", "") for c in expr_cols}
+                            all_results = []
+                            for db_name in enrich_dbs:
+                                gmt_path = f"{gmt_dir}/{db_name}.gmt"
+                                try:
+                                    gmt_dict = _load_gmt(gmt_path)
+                                except Exception as gmt_err:
+                                    st.warning(f"Could not load gene set file `{gmt_path}`: {gmt_err}")
+                                    continue
+                                db_result = _run_local_enrichment(gene_list, gmt_dict, background_genes, gene_set_name=db_name)
+                                if not db_result.empty:
+                                    all_results.append(db_result)
 
-    # Pathway Enrichment section
-    st.markdown("---")
-    with st.expander("Pathway Enrichment", expanded=False):
-        cluster_col_enrich = _get_cluster_column(df)
-        if cluster_col_enrich and expr_cols:
-            enrich_clusters = sorted(df[cluster_col_enrich].unique(), key=lambda x: int(x) if str(x).isdigit() else x)
-            enr_col1, enr_col2, enr_col3 = st.columns([2, 2, 1], vertical_alignment="bottom")
-            with enr_col1:
-                enrich_cluster = st.selectbox("Select Cluster:", enrich_clusters, key="enrich_cluster")
-            with enr_col2:
-                enrich_dbs = st.multiselect("Enrichment Databases:",
-                    ["GO_Biological_Process_2023", "KEGG_2021_Human", "Reactome_2022",
-                     "GO_Molecular_Function_2023", "GO_Cellular_Component_2023"],
-                    default=["GO_Biological_Process_2023"], key="enrich_dbs")
-            with enr_col3:
-                enrich_run = st.button("Run Enrichment", use_container_width=True, key="enrich_run_btn")
+                            if all_results:
+                                st.session_state[enrich_cache_key] = pd.concat(all_results, ignore_index=True).sort_values("P-value")
+                            else:
+                                st.session_state[enrich_cache_key] = pd.DataFrame()
+                        except Exception as e:
+                            st.error(f"Enrichment failed: {e}")
 
-            enrich_cache_key = f"enrich_{enrich_cluster}_{'_'.join(enrich_dbs)}"
-            if enrich_run and enrich_dbs:
-                with st.spinner("Running pathway enrichment via Enrichr..."):
-                    try:
-                        import gseapy as gp
-                        try:
-                            marker_mapping_e = download_cluster_markers_mapping(run_id)
-                            gene_list = marker_mapping_e[str(enrich_cluster)].dropna().tolist() if str(enrich_cluster) in marker_mapping_e.columns else marker_mapping_e.iloc[:, 0].dropna().tolist()
-                        except Exception:
-                            cl_mean = df[df[cluster_col_enrich] == enrich_cluster][expr_cols].mean()
-                            gene_list = [c.replace("expr_", "") for c in cl_mean.nlargest(50).index]
-                        enr_results = gp.enrichr(gene_list=gene_list, gene_sets=enrich_dbs, organism="human", outdir=None, no_plot=True)
-                        st.session_state[enrich_cache_key] = enr_results.results
-                    except ImportError:
-                        st.error("gseapy is not installed. Add `gseapy` to requirements.txt.")
-                    except Exception as e:
-                        st.error(f"Enrichment failed: {e}")
+                if enrich_cache_key in st.session_state:
+                    enr_df = st.session_state[enrich_cache_key]
+                    if not enr_df.empty:
+                        enr_df["-log10(Adjusted P-value)"] = -np.log10(enr_df["Adjusted P-value"].clip(lower=1e-300))
+                        top_terms = enr_df.nsmallest(15, "Adjusted P-value")
+                        fig_enrich = px.bar(top_terms.sort_values("-log10(Adjusted P-value)"),
+                            x="-log10(Adjusted P-value)", y="Term", color="-log10(Adjusted P-value)",
+                            color_continuous_scale="Viridis", orientation="h",
+                            title=f"Top Enriched Pathways — Cluster {enrich_cluster}",
+                            height=max(400, len(top_terms) * 30), template="plotly_dark")
+                        fig_enrich.update_layout(yaxis=dict(autorange="reversed"), showlegend=False)
+                        st.plotly_chart(fig_enrich, use_container_width=True)
+                        st.dataframe(enr_df[["Term", "Overlap", "Adjusted P-value", "Genes", "Gene_set"]].head(30), use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No enrichment results found.")
+            else:
+                st.warning("Clustering or marker gene data not available for enrichment analysis")
+        _enrich_fragment()
 
-            if enrich_cache_key in st.session_state:
-                enr_df = st.session_state[enrich_cache_key]
-                if not enr_df.empty:
-                    enr_df["-log10(Adjusted P-value)"] = -np.log10(enr_df["Adjusted P-value"].clip(lower=1e-300))
-                    top_terms = enr_df.nsmallest(15, "Adjusted P-value")
-                    fig_enrich = px.bar(top_terms.sort_values("-log10(Adjusted P-value)"),
-                        x="-log10(Adjusted P-value)", y="Term", color="-log10(Adjusted P-value)",
-                        color_continuous_scale="Viridis", orientation="h",
-                        title=f"Top Enriched Pathways — Cluster {enrich_cluster}",
-                        height=max(400, len(top_terms) * 30), template="plotly_dark")
-                    fig_enrich.update_layout(yaxis=dict(autorange="reversed"), showlegend=False)
-                    st.plotly_chart(fig_enrich, use_container_width=True)
-                    st.dataframe(enr_df[["Term", "Overlap", "Adjusted P-value", "Genes", "Gene_set"]].head(30), use_container_width=True, hide_index=True)
-                else:
-                    st.info("No enrichment results found.")
-        else:
-            st.warning("Clustering or marker gene data not available for enrichment analysis")
-
-    # Trajectory / Pseudotime section
-    st.markdown("---")
-    with st.expander("Trajectory Analysis (Pseudotime)", expanded=False):
+    # --- Trajectory tab ---
+    with tab_traj:
+        st.markdown("##### Trajectory Analysis (Pseudotime)")
         if "dpt_pseudotime" in df.columns:
-            st.markdown("##### Diffusion Pseudotime")
             fig_traj = px.scatter(df, x="UMAP_0", y="UMAP_1", color="dpt_pseudotime",
                 color_continuous_scale="Viridis", title="UMAP colored by Pseudotime",
                 labels={"dpt_pseudotime": "Pseudotime"}, height=500, template="plotly_dark")
@@ -532,9 +641,9 @@ def _display_results_viewer():
         else:
             st.info("Pseudotime data is not available for this run. Re-run the processing pipeline with **Compute Pseudotime** enabled.")
 
-    # QC section
-    st.markdown("---")
-    with st.expander("QC & Other Analysis Outputs", expanded=False):
+    # --- QC & Outputs tab ---
+    with tab_qc:
+        st.markdown("##### QC & Other Analysis Outputs")
         st.info("All analysis outputs (QC plots, PCA, highly variable genes, marker genes heatmap, UMAP, etc.) are available in the MLflow run.")
         st.link_button("Open MLflow Run (View All Plots & Artifacts)", mlflow_url, type="primary")
         st.markdown("---")
@@ -542,9 +651,9 @@ def _display_results_viewer():
                     "- Quality control plots\n- PCA and variance explained plots\n- Highly variable genes\n"
                     "- Full-resolution UMAP\n- Marker genes heatmap\n- Complete AnnData object")
 
-    # Raw data
-    st.markdown("---")
-    with st.expander("View Raw Data Table"):
+    # --- Raw Data tab ---
+    with tab_raw:
+        st.markdown("##### Raw Data Table")
         cluster_col = _get_cluster_column(df)
         default_cols = [cluster_col, 'UMAP_0', 'UMAP_1'] if cluster_col else ['UMAP_0', 'UMAP_1']
         default_cols += expr_cols[:3]
@@ -553,13 +662,6 @@ def _display_results_viewer():
             st.dataframe(df[display_cols].head(100), use_container_width=True)
             st.caption(f"Showing first 100 of {len(df):,} cells")
 
-    st.markdown("---")
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col2:
-        csv_data = df.to_csv(index=False).encode('utf-8')
-        st.download_button(label="Download CSV", data=csv_data, file_name=f"singlecell_results_{st.session_state['singlecell_run_id'][:8]}.csv", mime="text/csv")
-    with col3:
-        st.link_button("MLflow Run", mlflow_url, type="secondary")
 
 
 def render():

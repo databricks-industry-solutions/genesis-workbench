@@ -1,0 +1,19 @@
+resources:
+  jobs:
+    download_genesets_gwb:
+      name: download_genesets_gwb
+      tags:
+        application: genesis_workbench
+        module: single_cell
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+
+      tasks:
+        - task_key: download_genesets
+          notebook_task:
+            notebook_path: ../notebooks/download_genesets.py
+            source: WORKSPACE

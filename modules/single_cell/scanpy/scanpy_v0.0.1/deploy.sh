@@ -30,5 +30,12 @@ echo ""
 databricks bundle run download_gene_references_gwb $EXTRA_PARAMS --no-wait
 
 echo ""
+echo "▶️ [scanpy] Downloading gene set (GMT) files for pathway enrichment"
+echo "🚨 This job might take a long time to finish. See Jobs & Pipeline tab for status"
+echo ""
+
+databricks bundle run download_genesets_gwb $EXTRA_PARAMS --no-wait
+
+echo ""
 echo "✅ [scanpy] Deployment complete"
 echo ""
