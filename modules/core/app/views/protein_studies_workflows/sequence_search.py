@@ -88,7 +88,7 @@ def _display_hit_dialog(selected_idx):
         try:
             pdb_str = hit_esmfold(target_seq)
             html = molstar_html_multibody(pdb_str)
-            components.html(html, height=700)
+            components.html(html, height=540)
         except Exception as e:
             st.warning(f"Structure prediction unavailable: {e}")
 

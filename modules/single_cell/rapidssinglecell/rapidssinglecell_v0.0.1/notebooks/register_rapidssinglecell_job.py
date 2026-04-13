@@ -68,6 +68,21 @@ set_app_permissions_for_job(job_id=run_rapidssinglecell_job_id, user_email=user_
 
 # COMMAND ----------
 
+# Register as batch model so it appears in the Deployed Models tab
+from genesis_workbench.models import register_batch_model
+
+register_batch_model(
+    model_name="rapids_singlecell",
+    model_display_name="Rapids-SingleCell Analysis (GPU)",
+    model_description="GPU-accelerated single-cell QC, clustering, UMAP, marker gene detection, and optional pseudotime using RAPIDS",
+    model_category="single_cell",
+    module="single_cell",
+    job_id=run_rapidssinglecell_job_id,
+    job_name="run_rapidssinglecell",
+    cluster_type="GPU",
+    added_by=user_email,
+)
+
 print(f"Successfully registered rapids-singlecell job with ID: {run_rapidssinglecell_job_id}")
 print(f"App permissions granted for job execution")
 

@@ -19,13 +19,16 @@ def _get_endpoint_name(model_suffix: str) -> str:
     return f"gwb_{model_suffix}_endpoint"
 
 
-def _query_endpoint(endpoint_name: str, payload: dict):
-    """Query a serving endpoint and return the raw response."""
+def _query_endpoint(endpoint_name: str, payload):
+    """Query a serving endpoint and return the raw response.
+
+    The Databricks SDK query() only supports the `inputs=` kwarg.
+    Pass the payload directly as a list or dict — the SDK handles serialization.
+    """
     logger.info(f"Querying endpoint: {endpoint_name}")
     response = workspace_client.serving_endpoints.query(
         name=endpoint_name,
-        inputs=payload.get("inputs"),
-        dataframe_split=payload.get("dataframe_split"),
+        inputs=payload,
     )
     return response.predictions
 
@@ -58,8 +61,8 @@ def lognorm_counts(expression_df: pd.DataFrame, target_sum: float = 1e4) -> pd.D
 def get_gene_order() -> list:
     """Fetch the canonical gene order list from the SCimilarity GeneOrder endpoint."""
     endpoint = _get_endpoint_name("scimilarity_gene_order")
-    result = _query_endpoint(endpoint, {"inputs": ["get_gene_order"]})
-    # Result is a list of gene lists; take the first one
+    # GeneOrder expects a simple dict with an "input" key
+    result = _query_endpoint(endpoint, {"input": ["get_gene_order"]})
     if isinstance(result, list) and len(result) > 0:
         genes = result[0] if isinstance(result[0], list) else result
     else:
@@ -67,26 +70,52 @@ def get_gene_order() -> list:
     return genes
 
 
-def get_cell_embeddings(expression_json: str, obs_json: str = None) -> pd.DataFrame:
+def get_cell_embeddings(normed_df: pd.DataFrame, obs_df: pd.DataFrame = None) -> pd.DataFrame:
     """Generate 128-D cell embeddings via the SCimilarity GetEmbedding endpoint.
 
+    The endpoint expects celltype_sample as a JSON DataFrame where each row has a
+    'celltype_subsample' column containing a list of expression values (one per gene).
+
     Args:
-        expression_json: JSON (orient='split') of the expression DataFrame
-        obs_json: JSON (orient='split') of the cell metadata DataFrame, or None
+        normed_df: Aligned and log-normalized expression DataFrame (cells x genes)
+        obs_df: Optional cell metadata DataFrame with same index as normed_df
 
     Returns:
         DataFrame with columns: input_index, celltype_sample_index, embedding, + metadata
     """
     endpoint = _get_endpoint_name("scimilarity_get_embedding")
-    result = _query_endpoint(endpoint, {
-        "dataframe_split": {
-            "columns": ["celltype_sample", "celltype_sample_obs"],
-            "data": [[expression_json, obs_json if obs_json else "null"]],
-        }
-    })
+
+    # Build the celltype_subsample wrapper: each row is a list of expression values
+    dense_rows = normed_df.values.tolist()
+    celltype_subsample_pdf = pd.DataFrame(
+        [{"celltype_subsample": row} for row in dense_rows],
+        index=normed_df.index,
+    )
+    celltype_sample_json = celltype_subsample_pdf.to_json(orient="split")
+
+    # The model's predict() calls pd.read_json(obs_json, orient='split') — passing
+    # "null" causes NoneType.items() error. Build a minimal obs DataFrame with the
+    # same index so the model can merge correctly.
+    if obs_df is not None:
+        obs_json = obs_df.to_json(orient="split")
+    else:
+        empty_obs = pd.DataFrame(index=normed_df.index)
+        obs_json = empty_obs.to_json(orient="split")
+
+    payload = [{
+        "celltype_sample": celltype_sample_json,
+        "celltype_sample_obs": obs_json,
+    }]
+    logger.info(f"GetEmbedding request: {len(dense_rows)} cells, payload size ~{len(celltype_sample_json)} chars")
+    result = _query_endpoint(endpoint, payload)
+    logger.info(f"GetEmbedding response type: {type(result)}, preview: {str(result)[:200]}")
+    if result is None:
+        raise RuntimeError(f"GetEmbedding endpoint returned None for {len(dense_rows)} cells")
     if isinstance(result, dict):
         return pd.DataFrame(result)
-    return pd.DataFrame(result)
+    if isinstance(result, list):
+        return pd.DataFrame(result)
+    raise RuntimeError(f"GetEmbedding unexpected response type: {type(result)}")
 
 
 def search_nearest_cells(embedding: list, k: int = 100) -> dict:
@@ -100,12 +129,21 @@ def search_nearest_cells(embedding: list, k: int = 100) -> dict:
         dict with nn_idxs, nn_dists, results_metadata (JSON string)
     """
     endpoint = _get_endpoint_name("scimilarity_search_nearest")
-    result = _query_endpoint(endpoint, {
-        "dataframe_split": {
-            "columns": ["embedding", "params"],
-            "data": [[embedding, json.dumps({"k": k})]],
-        }
-    })
+    # Flatten embedding if needed
+    if hasattr(embedding, "tolist"):
+        embedding = embedding.tolist()
+    if isinstance(embedding, list) and len(embedding) == 1 and isinstance(embedding[0], (list, tuple)):
+        embedding = embedding[0]
+    embedding = [float(x) for x in embedding]
+
+    payload = {
+        "embedding": embedding,
+        "params": json.dumps({"k": k}),
+    }
+    result = _query_endpoint(endpoint, payload)
+    # Result is typically a list with one dict; extract the first
+    if isinstance(result, list) and len(result) > 0 and isinstance(result[0], dict):
+        return result[0]
     return result
 
 
@@ -167,10 +205,30 @@ def annotate_clusters(
     sampled_normed = normed.loc[sampled_indices]
     sampled_clusters = markers_df.loc[sampled_indices, cluster_col].values
 
-    # Step 4: Get embeddings (batch all sampled cells at once)
-    _progress(25, f"Generating embeddings for {len(sampled_indices)} sampled cells...")
-    expression_json = sampled_normed.to_json(orient="split")
-    embeddings_result = get_cell_embeddings(expression_json)
+    # Step 4: Get embeddings in batches to stay under the 16MB request limit.
+    # Each cell has ~18K gene values; at ~10 bytes per float in JSON, one cell is ~180KB.
+    # Batch size of 5 keeps each request well under 16MB.
+    EMBEDDING_BATCH_SIZE = 5
+    total_sampled = len(sampled_indices)
+    _progress(25, f"Generating embeddings for {total_sampled} sampled cells...")
+
+    all_embedding_dfs = []
+    for batch_start in range(0, total_sampled, EMBEDDING_BATCH_SIZE):
+        batch_end = min(batch_start + EMBEDDING_BATCH_SIZE, total_sampled)
+        batch_normed = sampled_normed.iloc[batch_start:batch_end]
+        batch_pct = 25 + int((batch_end / total_sampled) * 20)
+        _progress(batch_pct, f"Generating embeddings ({batch_end}/{total_sampled} cells)...")
+        try:
+            batch_result = get_cell_embeddings(batch_normed)
+            if batch_result.empty:
+                raise RuntimeError(f"Empty result for batch {batch_start}-{batch_end}")
+            all_embedding_dfs.append(batch_result)
+        except Exception as e:
+            raise RuntimeError(f"Embedding failed for cells {batch_start}-{batch_end}: {e}") from e
+
+    if not all_embedding_dfs:
+        raise RuntimeError("No embeddings were generated for any batch")
+    embeddings_result = pd.concat(all_embedding_dfs, ignore_index=True)
 
     # Step 5: Search nearest neighbors for each cell
     _progress(50, "Searching reference database...")

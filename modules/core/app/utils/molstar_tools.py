@@ -32,6 +32,26 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+MOLSTAR_DARK_CSS = """
+<style>
+    body { background: #1e1e1e; margin: 0; }
+    .msp-plugin { background: #1e1e1e !important; }
+    .msp-plugin .msp-layout-static { background: #1e1e1e !important; }
+    .msp-plugin .msp-scrollable-container { background: #252526 !important; }
+    .msp-plugin .msp-btn { background: #333 !important; color: #ccc !important; }
+    .msp-plugin .msp-form-control { background: #333 !important; color: #ccc !important; border-color: #555 !important; }
+    .msp-plugin .msp-control-group-header { background: #2d2d2d !important; color: #ccc !important; }
+    .msp-plugin .msp-section-header { color: #ccc !important; }
+    .msp-plugin .msp-icon { color: #aaa !important; }
+    .msp-plugin .msp-semi-transparent-background { background: rgba(30,30,30,0.8) !important; }
+    .msp-plugin .msp-log-entry { color: #ccc !important; }
+    .msp-plugin .msp-tree-row { color: #ccc !important; }
+    .msp-plugin .msp-control-row { color: #ccc !important; }
+    .msp-plugin .msp-accent-offset { background: #333 !important; }
+    .msp-plugin .msp-representation-entry { background: #2d2d2d !important; }
+</style>
+"""
+
 DUMMY_PDB = """HEADER    HYDROLASE                               01-JAN-00   1ABC
 ATOM      1  N   ASP A  21      28.259  15.188   8.489  1.00 28.95           N
 ATOM      2  CA  ASP A  21      28.698  14.971   7.110  1.00 27.84           C
@@ -44,7 +64,7 @@ ATOM      8  OD2 ASP A  21      25.410  14.654   5.515  1.00 30.95           O
 END"""
 
 def html_as_iframe(html : str) -> str:
-    return f"""<iframe style="width: 100%; height: 500px" border: None;" srcdoc='{html}'></iframe>"""
+    return f"""<iframe style="width: 100%; height: 520px; border: none;" srcdoc='{html}'></iframe>"""
 
 def molstar_html_singlebody(pdb : str, name:Optional[str]=None, with_iframe:Optional[bool]=True) -> str:
     logging.info('doing single body molstar')
@@ -58,51 +78,23 @@ def molstar_html_singlebody(pdb : str, name:Optional[str]=None, with_iframe:Opti
 
     # undefined, {label_dict_str} 
     html_str = f"""
-            <!DOCTYPE html>
-            <html>
-                <head>
-                    <script src="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.js"></script>
-                    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.css">
-                </head>
-                <body>
-                    <div id="protein-viewer" style="width: 1200px; height: 400px; position: center"></div>
-                    <script>
-                        console.log("Initializing viewer...");
-                        (async function() {{
-                            // Create plugin instance
-                            const viewer = new rcsbMolstar.Viewer("protein-viewer", {{layoutShowLog: false, backgroundColor: 0x1e1e1e}});
-
-                            // PDB data in base64
-                            const pdbData = "{pdb_base64}";
-
-                            // Convert base64 to blob
-                            const blob = new Blob(
-                                [atob(pdbData)],
-                                {{ type: "text/plain" }}
-                            );
-
-                            // Create object URL
-                            const url = URL.createObjectURL(blob);
-
-                            try {{
-                                // Load structure
-                                const structure = await viewer.loadStructureFromUrl(url, "pdb");
-                                console.log("Structure loaded successfully");
-                                //const model = structure.model;
-                                //model.label = "some name";
-                                //plugin.managers.structure.hierarchy.update(structure);
-                                // Request a UI update
-                                //plugin.managers.structure.updateStructure(structure);
-
-                                // viewer.requestReprRender();
-                            }} catch (error) {{
-                                console.error("Error loading structure:", error);
-                            }}
-                      }})();
-
-                    </script>
-                </body>
-            </html>"""
+    <!DOCTYPE html>
+    <html>
+        <head>
+            <script src="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.js"></script>
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.css">
+            """ + MOLSTAR_DARK_CSS + f"""
+        </head>
+        <body>
+            <div id="viewer" style="width: 100%; height: 500px;"></div>
+            <script>
+                (async function() {{
+                    const viewer = new rcsbMolstar.Viewer("viewer", {{layoutShowLog: false, backgroundColor: 0x1e1e1e}});
+                    await viewer.loadStructureFromData(atob("{pdb_base64}"), "pdb", false);
+                }})();
+            </script>
+        </body>
+    </html>"""
     if with_iframe:
         logging.info('wrap with iframe')
         return html_as_iframe(html_str)
@@ -132,40 +124,23 @@ def molstar_html_multibody(pdbs : Union[str, List[str]], names: Optional[Union[s
                 list_label_dicts_strs.append("{}")
     # undefined,  {str(list_label_dicts[i])}
 
-    html_str = f"""
-            <!DOCTYPE html>
-            <html>
-                <head>
-                    <script src="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.js"></script>
-                    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.css">
-                </head>
-                <body>
-                    <div id="protein-viewer" style="width: 1200px; height: 400px; position: center"></div>
-                    <script>
-                        console.log("Initializing viewer...");
-                        (async function() {{
-                            // Create plugin instance
-                            const viewer = new rcsbMolstar.Viewer("protein-viewer", {{layoutShowLog: false, backgroundColor: 0x1e1e1e}});"""
+    html_str = """
+    <!DOCTYPE html>
+    <html>
+        <head>
+            <script src="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.js"></script>
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.css">
+            """ + MOLSTAR_DARK_CSS + """
+        </head>
+        <body>
+            <div id="viewer" style="width: 100%; height: 500px;"></div>
+            <script>
+                (async function() {
+                    const viewer = new rcsbMolstar.Viewer("viewer", {layoutShowLog: false, backgroundColor: 0x1e1e1e});"""
     for i, pdb in enumerate(pdbs):
         pdb_base64 = base64.b64encode(pdb.encode()).decode()
         html_str += f"""
-                            const pdbData_{i} = "{pdb_base64}";
-                            const blob_{i} = new Blob(
-                                                [atob(pdbData_{i})],
-                                                {{ type: "text/plain" }}
-                                            );
-                            const url_{i} = URL.createObjectURL(blob_{i});"""
-
-    html_str += """
-                        try {"""
-    for i, pdb in enumerate(pdbs):
-        html_str += f"""
-                            await viewer.loadStructureFromUrl(url_{i}, "pdb" );"""
-    html_str += """
-                        } catch (error) {
-                            console.error("Error loading structure:", error);
-                        }"""
-        
+                    await viewer.loadStructureFromData(atob("{pdb_base64}"), "pdb", false);"""
     html_str += """
                 })();
             </script>

@@ -15,16 +15,20 @@ def render():
 
     user_info = get_user_info()
 
-    if "singlecell_runs_df" not in st.session_state:
+    # Use a separate session key so annotation tab only shows scanpy/rapids runs
+    if "singlecell_processing_runs_df" not in st.session_state:
         with st.spinner("Loading available runs..."):
             try:
-                runs_df = search_singlecell_runs(user_email=user_info.user_email)
-                st.session_state["singlecell_runs_df"] = runs_df
+                # Fetch scanpy and rapids runs separately, then combine
+                scanpy_runs = search_singlecell_runs(user_email=user_info.user_email, processing_mode="scanpy")
+                rapids_runs = search_singlecell_runs(user_email=user_info.user_email, processing_mode="rapids-singlecell")
+                runs_df = pd.concat([scanpy_runs, rapids_runs], ignore_index=True)
+                st.session_state["singlecell_processing_runs_df"] = runs_df
             except Exception as e:
                 st.error(f"Error loading runs: {e}")
                 return
 
-    runs_df = st.session_state.get("singlecell_runs_df", pd.DataFrame())
+    runs_df = st.session_state.get("singlecell_processing_runs_df", pd.DataFrame())
     if runs_df.empty:
         st.info("No completed processing runs found. Run an analysis first in the Raw Single Cell Processing tab.")
         return
@@ -39,9 +43,9 @@ def render():
     with col1:
         selected_display = st.selectbox("Select a completed processing run:", list(runs_df["display_name"]), key="annotation_run_select")
     with col2:
-        cells_per_cluster = st.number_input("Cells per cluster:", min_value=5, max_value=100, value=30, step=5, key="annotation_cpc")
+        cells_per_cluster = st.number_input("Cells per cluster:", min_value=3, max_value=50, value=10, step=5, key="annotation_cpc")
     with col3:
-        k_neighbors = st.number_input("Neighbors (k):", min_value=10, max_value=500, value=100, step=10, key="annotation_k")
+        k_neighbors = st.number_input("Neighbors (k):", min_value=5, max_value=200, value=20, step=5, key="annotation_k")
 
     run_id = dict(zip(runs_df["display_name"], runs_df["run_id"]))[selected_display]
     annotate_btn = st.button("Annotate Clusters", type="primary", key="annotate_btn")
@@ -65,20 +69,24 @@ def render():
             st.error("No cluster column found in the data.")
             return
 
-        progress = st.progress(0, text="Starting annotation...")
+        status_container = st.container()
+        with status_container:
+            progress = st.progress(0, text="Starting annotation...")
+            spinner = st.empty()
 
-        try:
-            results_df = annotate_clusters(
-                markers_df, cluster_col=cluster_col,
-                cells_per_cluster=cells_per_cluster, k_neighbors=k_neighbors,
-                progress_callback=lambda pct, text: progress.progress(min(pct, 100), text=text),
-            )
-            st.session_state[annotation_cache_key] = results_df
-            st.session_state[f"annotation_markers_{run_id}"] = markers_df
-            st.session_state[f"annotation_cluster_col_{run_id}"] = cluster_col
-        except Exception as e:
-            st.error(f"Annotation failed: {e}")
-            return
+        with spinner, st.spinner("Running annotation..."):
+            try:
+                results_df = annotate_clusters(
+                    markers_df, cluster_col=cluster_col,
+                    cells_per_cluster=cells_per_cluster, k_neighbors=k_neighbors,
+                    progress_callback=lambda pct, text: progress.progress(min(pct, 100), text=text),
+                )
+                st.session_state[annotation_cache_key] = results_df
+                st.session_state[f"annotation_markers_{run_id}"] = markers_df
+                st.session_state[f"annotation_cluster_col_{run_id}"] = cluster_col
+            except Exception as e:
+                st.error(f"Annotation failed: {e}")
+                return
 
     if annotation_cache_key in st.session_state:
         results_df = st.session_state[annotation_cache_key]

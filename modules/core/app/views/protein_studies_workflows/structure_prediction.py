@@ -89,7 +89,7 @@ def render():
             with st.spinner("Generating structure.."):
                 with prot_viewer:
                     html = _esmfold_btn_fn(view_esmfold_input_sequence)
-                    components.html(html, height=700)
+                    components.html(html, height=540)
 
         if clear_view_esmfold_btn:
             prot_viewer.empty()
@@ -212,7 +212,7 @@ def render():
                     pdb_result = hit_boltz(view_boltz_input_sequence)
                     with boltz_viewer:
                         html = molstar_html_multibody(pdb_result)
-                        components.html(html, height=700)
+                        components.html(html, height=540)
                 except Exception as e:
                     st.error(f"Error predicting structure: {e}")
 

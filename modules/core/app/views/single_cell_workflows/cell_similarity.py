@@ -18,16 +18,19 @@ def render():
 
     user_info = get_user_info()
 
-    if "singlecell_runs_df" not in st.session_state:
+    # Use a separate session key so similarity tab only shows scanpy/rapids runs
+    if "singlecell_processing_runs_df" not in st.session_state:
         with st.spinner("Loading available runs..."):
             try:
-                runs_df = search_singlecell_runs(user_email=user_info.user_email)
-                st.session_state["singlecell_runs_df"] = runs_df
+                scanpy_runs = search_singlecell_runs(user_email=user_info.user_email, processing_mode="scanpy")
+                rapids_runs = search_singlecell_runs(user_email=user_info.user_email, processing_mode="rapids-singlecell")
+                runs_df = pd.concat([scanpy_runs, rapids_runs], ignore_index=True)
+                st.session_state["singlecell_processing_runs_df"] = runs_df
             except Exception as e:
                 st.error(f"Error loading runs: {e}")
                 return
 
-    runs_df = st.session_state.get("singlecell_runs_df", pd.DataFrame())
+    runs_df = st.session_state.get("singlecell_processing_runs_df", pd.DataFrame())
     if runs_df.empty:
         st.info("No completed processing runs found. Run an analysis first.")
         return
@@ -83,62 +86,66 @@ def render():
     sim_cache_key = f"sim_results_{sim_run_id}_{sim_cluster}_{sim_k}"
 
     if sim_search_btn:
-        progress = st.progress(0, text="Starting similarity search...")
-        try:
-            progress.progress(10, text="Fetching gene order...")
-            gene_order = get_gene_order()
+        status_container = st.container()
+        with status_container:
+            progress = st.progress(0, text="Starting similarity search...")
+            spinner = st.empty()
 
-            progress.progress(20, text="Preparing expression matrix...")
-            expr_cols = [c for c in markers_df.columns if c.startswith("expr_")]
-            gene_names = [c.replace("expr_", "") for c in expr_cols]
-            expr_df = markers_df[expr_cols].copy()
-            expr_df.columns = gene_names
-            aligned = align_to_gene_order(expr_df, gene_order)
-            normed = lognorm_counts(aligned)
+        with spinner, st.spinner("Running similarity search..."):
+            try:
+                progress.progress(10, text="Fetching gene order...")
+                gene_order = get_gene_order()
 
-            cl_mask = markers_df[cluster_col] == sim_cluster
-            cl_indices = markers_df.index[cl_mask].tolist()
-            n_sample = min(20, len(cl_indices))
-            sampled = cl_indices[:n_sample]
+                progress.progress(20, text="Preparing expression matrix...")
+                expr_cols = [c for c in markers_df.columns if c.startswith("expr_")]
+                gene_names = [c.replace("expr_", "") for c in expr_cols]
+                expr_df = markers_df[expr_cols].copy()
+                expr_df.columns = gene_names
+                aligned = align_to_gene_order(expr_df, gene_order)
+                normed = lognorm_counts(aligned)
 
-            progress.progress(40, text=f"Generating embeddings for {n_sample} cells...")
-            sample_normed = normed.loc[sampled]
-            expression_json = sample_normed.to_json(orient="split")
-            embeddings_result = get_cell_embeddings(expression_json)
+                cl_mask = markers_df[cluster_col] == sim_cluster
+                cl_indices = markers_df.index[cl_mask].tolist()
+                n_sample = min(20, len(cl_indices))
+                sampled = cl_indices[:n_sample]
 
-            progress.progress(60, text="Searching reference database...")
-            all_metadata = []
-            total = len(embeddings_result)
-            for i, row in embeddings_result.iterrows():
-                embedding = row["embedding"]
-                if isinstance(embedding, str):
-                    embedding = json.loads(embedding)
-                pct = 60 + int((i + 1) / total * 30)
-                progress.progress(pct, text=f"Searching cell {i + 1}/{total}...")
-                try:
-                    result = search_nearest_cells(embedding, k=sim_k)
-                    meta_json = result.get("results_metadata") if isinstance(result, dict) else None
-                    if meta_json and isinstance(meta_json, str):
-                        nn_meta = pd.read_json(meta_json, orient="split") if "columns" in meta_json else pd.read_json(meta_json)
-                    elif isinstance(meta_json, (dict, list)):
-                        nn_meta = pd.DataFrame(meta_json)
-                    else:
-                        nn_meta = pd.DataFrame()
-                    all_metadata.append(nn_meta)
-                except Exception:
-                    pass
+                progress.progress(40, text=f"Generating embeddings for {n_sample} cells...")
+                sample_normed = normed.loc[sampled]
+                embeddings_result = get_cell_embeddings(sample_normed)
 
-            progress.progress(95, text="Aggregating results...")
-            if all_metadata:
-                combined = pd.concat(all_metadata, ignore_index=True)
-                st.session_state[sim_cache_key] = combined
-            else:
-                st.warning("No search results returned.")
+                progress.progress(60, text="Searching reference database...")
+                all_metadata = []
+                total = len(embeddings_result)
+                for i, row in embeddings_result.iterrows():
+                    embedding = row["embedding"]
+                    if isinstance(embedding, str):
+                        embedding = json.loads(embedding)
+                    pct = 60 + int((i + 1) / total * 30)
+                    progress.progress(pct, text=f"Searching cell {i + 1}/{total}...")
+                    try:
+                        result = search_nearest_cells(embedding, k=sim_k)
+                        meta_json = result.get("results_metadata") if isinstance(result, dict) else None
+                        if meta_json and isinstance(meta_json, str):
+                            nn_meta = pd.read_json(meta_json, orient="split") if "columns" in meta_json else pd.read_json(meta_json)
+                        elif isinstance(meta_json, (dict, list)):
+                            nn_meta = pd.DataFrame(meta_json)
+                        else:
+                            nn_meta = pd.DataFrame()
+                        all_metadata.append(nn_meta)
+                    except Exception:
+                        pass
+
+                progress.progress(95, text="Aggregating results...")
+                if all_metadata:
+                    combined = pd.concat(all_metadata, ignore_index=True)
+                    st.session_state[sim_cache_key] = combined
+                else:
+                    st.warning("No search results returned.")
+                    return
+                progress.progress(100, text="Search complete!")
+            except Exception as e:
+                st.error(f"Similarity search failed: {e}")
                 return
-            progress.progress(100, text="Search complete!")
-        except Exception as e:
-            st.error(f"Similarity search failed: {e}")
-            return
 
     if sim_cache_key in st.session_state:
         combined = st.session_state[sim_cache_key]

@@ -1,5 +1,37 @@
 # Genesis Workbench — Changelog
 
+## development (2026-04-11/13)
+
+### Protein Studies — New workflows
+
+- **Boltz Structure Prediction**: Added Boltz as a third structure prediction model alongside ESMFold and AlphaFold2 in the Structure Prediction tab. Supports multi-chain complexes (protein-protein, protein-ligand with SMILES input). Uses the already-deployed Boltz endpoint with proper input formatting (`protein_A:SEQUENCE`).
+- **Inverse Folding with ProteinMPNN**: New standalone tab where users paste a PDB backbone and ProteinMPNN designs multiple sequences that fold into that structure. Selectbox to browse designs, auto-validates each with ESMFold and displays the predicted structure. Includes a default PDB (ubiquitin fragment) for immediate testing.
+
+### Single Cell — New workflows
+
+- **Cell Type Annotation via SCimilarity**: Automatic cluster annotation using the 3 SCimilarity endpoints (GeneOrder, GetEmbedding, SearchNearest) against a 23M-cell reference database. Generates cell embeddings in batches, searches nearest neighbors, majority-vote prediction per cluster. Displays annotation table + UMAP colored by predicted cell type. Includes progress bar with spinner.
+- **Cell Similarity Search**: Standalone tab to search the 23M-cell reference for cells similar to a selected cluster. Shows neighbor cell type distribution (bar chart), disease distribution (bar chart), study sources, and full results table.
+- **Differential Expression Viewer**: Pairwise DE between any two user-selected clusters in the results viewer. Mann-Whitney U test with Benjamini-Hochberg correction. Interactive volcano plot with labeled significant genes and sortable results table.
+- **Pathway Enrichment Analysis**: Enrichr-based GO/KEGG/Reactome enrichment of cluster marker genes via gseapy. Bar chart of top enriched pathways and full results table with overlap, p-values, and gene lists.
+- **Trajectory / Pseudotime Analysis**: Optional diffusion pseudotime computation added to both Scanpy and Rapids-SingleCell processing pipelines (new "Compute Pseudotime" checkbox). Results viewer shows UMAP colored by pseudotime and gene expression along pseudotime with LOWESS trendline.
+- **Gene Perturbation Prediction (scGPT)**: New scGPT perturbation model for zero-shot prediction of gene knockout/overexpression effects. New registration notebook (`03_register_scgpt_perturbation.py`), deployment notebook (`04_import_perturbation_gwb.py`), and job YAML tasks. UI tab with gene selector ranked by cluster expression, perturbation type radio, bar chart of top affected genes, scatter plot (original vs predicted), and summary metrics.
+
+### Deployment optimizations
+
+- **SCimilarity**: Smart skip when model files already exist in Volume (saves 60+ min on re-deploy). Parallel model + sample data downloads via ThreadPoolExecutor. Quiet wget/tar output. CPU nodes for wget and GeneOrder job clusters instead of GPU (cost savings).
+- **scGPT**: Skip model/data downloads when files already exist. Pre-load model weights in `load_context()` instead of re-reading 2-3 GB from disk on every `predict()` call. Smaller input_example (10x1500 instead of 1000x1000) for faster model logging. Force float32 dtype in perturbation model to avoid float16/float32 mismatches.
+
+### UI consistency
+
+- **Mol* viewer standardization**: Added dark theme CSS (`MOLSTAR_DARK_CSS`) to `molstar_tools.py` matching the small molecule viewer style. Standardized viewer dimensions to `width: 100%; height: 500px` (was hardcoded `1200px x 400px`). Switched to `loadStructureFromData` API. Uniform `components.html` height (540px) across all protein studies and small molecule views.
+
+### Infrastructure
+
+- **destroy.sh safety**: Changed `rm .deployed` to `rm -f .deployed` in all 7 module destroy scripts to avoid errors when file doesn't exist.
+- **App permissions**: Automated `CAN_QUERY` grants on serving endpoints and `CAN_MANAGE_RUN` on jobs during deployment via `grant_app_permissions.py`.
+
+---
+
 ## add_small_molecule_studies (2026-04-09/10)
 
 ### Home page overhaul
