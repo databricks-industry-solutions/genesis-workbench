@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import os
 import plotly.express as px
+from datetime import datetime
 from mlflow.tracking import MlflowClient
 
 from utils.streamlit_helper import get_user_info
@@ -28,15 +29,18 @@ def _display_run_analysis():
     )
     mode = "rapids-singlecell" if "rapids-singlecell" in mode_display else mode_display
     default_experiment = "rapidssinglecell_genesis_workbench" if mode == "rapids-singlecell" else "scanpy_genesis_workbench"
-    default_run_name = "rapidssinglecell_analysis" if mode == "rapids-singlecell" else "scanpy_analysis"
+    _ts = datetime.now().strftime("%Y%m%d_%H%M")
+    default_run_name = f"rapidssinglecell_{_ts}" if mode == "rapids-singlecell" else f"scanpy_{_ts}"
 
     with st.form("scanpy_analysis_form", enter_to_submit=False):
         col1, col2 = st.columns([1, 1])
 
         with col1:
             st.markdown("**Data Configuration:**")
-            data_path = st.text_input("Data Path (h5ad file)", placeholder="/Volumes/catalog/schema/volume/file.h5ad",
-                                      help="Path to the h5ad file in Unity Catalog Volumes")
+            _default_h5ad = f"/Volumes/{os.environ.get('CORE_CATALOG_NAME', 'catalog')}/{os.environ.get('CORE_SCHEMA_NAME', 'schema')}/raw_h5ad/0ae6f031-2f9c-4247-8b26-db320d6efd32.h5ad"
+            data_path = st.text_input("Data Path (h5ad file)", value=_default_h5ad,
+                                      placeholder="/Volumes/catalog/schema/volume/file.h5ad",
+                                      help="Path to the h5ad file in Unity Catalog Volumes. Default is a CellxGene reference dataset.")
             gene_name_column = st.text_input("Gene Name Column (optional)", value="", placeholder="e.g., gene_name, feature_name",
                                              help="Name of column in var containing gene names. Leave empty to use Ensembl reference mapping.")
 

@@ -3,6 +3,7 @@ import streamlit.components.v1 as components
 import os
 import json
 import pandas as pd
+from datetime import datetime
 
 from genesis_workbench.models import (ModelCategory,
                                       get_available_models,
@@ -130,7 +131,7 @@ with diffdock_tab:
 
             st.markdown("**MLflow Tracking:**")
             diffdock_mlflow_experiment = st.text_input("MLflow Experiment:", value="gwb_molecular_docking", key="diffdock_mlflow_exp")
-            diffdock_mlflow_run_name = st.text_input("Run Name:", value="molecular_docking_run", key="diffdock_mlflow_run")
+            diffdock_mlflow_run_name = st.text_input("Run Name:", value=f"molecular_docking_{datetime.now().strftime('%Y%m%d_%H%M')}", key="diffdock_mlflow_run")
             run_docking = st.form_submit_button("Run Docking", type="primary")
 
     with viewer_col:

@@ -68,25 +68,6 @@ set_app_permissions_for_job(job_id=run_scanpy_job_id, user_email=user_email)
 
 # COMMAND ----------
 
-# Grant the app service principal READ access on the scanpy_reference volume
-# (needed for local pathway enrichment to read GMT gene set files)
-from databricks.sdk import WorkspaceClient
-import os
-
-w = WorkspaceClient()
-app_name = os.environ.get("DATABRICKS_APP_NAME", "")
-if app_name:
-    app = w.apps.get(name=app_name)
-    try:
-        spark.sql(f"GRANT READ VOLUME ON VOLUME {catalog}.{schema}.scanpy_reference TO `{app.service_principal_client_id}`")
-        print(f"Granted READ VOLUME on scanpy_reference to app SP {app.service_principal_client_id}")
-    except Exception as e:
-        print(f"⚠️ Volume grant failed (may already be inherited): {e}")
-else:
-    print("⚠️ DATABRICKS_APP_NAME not set, skipping volume grant")
-
-# COMMAND ----------
-
 # Register as batch model so it appears in the Deployed Models tab
 from genesis_workbench.models import register_batch_model
 

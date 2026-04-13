@@ -94,7 +94,7 @@ resources:
               - metric: RUN_DURATION_SECONDS
                 op: GREATER_THAN
                 value: 43200
-                
+
       parameters:
         - name: catalog
           default: ${var.core_catalog_name}
@@ -214,7 +214,7 @@ resources:
             node_type_id: ${var.cpu_node_type}
             driver_node_type_id: ${var.cpu_node_type}
             custom_tags:
-              ResourceClass: SingleNode            
+              ResourceClass: SingleNode
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD

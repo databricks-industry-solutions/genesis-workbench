@@ -37,5 +37,12 @@ echo ""
 databricks bundle run download_genesets_gwb $EXTRA_PARAMS --no-wait
 
 echo ""
+echo "▶️ [scanpy] Downloading CellxGene reference datasets"
+echo "🚨 This job might take a long time to finish. See Jobs & Pipeline tab for status"
+echo ""
+
+databricks bundle run download_cellxgene_gwb $EXTRA_PARAMS --no-wait
+
+echo ""
 echo "✅ [scanpy] Deployment complete"
 echo ""
