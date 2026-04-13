@@ -297,15 +297,14 @@ def _display_results_viewer():
 
     if is_categorical:
         fig = px.scatter(df, x='UMAP_0', y='UMAP_1', color=color_col, hover_data=hover_data_dict,
-                         title=f"UMAP colored by {color_col}", width=900, height=650)
+                         title=f"UMAP colored by {color_col}", width=900, height=650, template="plotly_dark")
     else:
         fig = px.scatter(df, x='UMAP_0', y='UMAP_1', color=color_col, color_continuous_scale=color_scale.lower(),
-                         hover_data=hover_data_dict, title=f"UMAP colored by {color_col}", width=900, height=650)
+                         hover_data=hover_data_dict, title=f"UMAP colored by {color_col}", width=900, height=650, template="plotly_dark")
 
     fig.update_traces(marker=dict(size=point_size, opacity=opacity, line=dict(width=0)))
-    fig.update_layout(plot_bgcolor='white',
-                      xaxis=dict(showgrid=True, gridcolor='lightgray', title='UMAP 1'),
-                      yaxis=dict(showgrid=True, gridcolor='lightgray', title='UMAP 2'), font=dict(size=12))
+    fig.update_layout(xaxis=dict(title='UMAP 1'),
+                      yaxis=dict(title='UMAP 2'), font=dict(size=12))
     st.plotly_chart(fig, use_container_width=True)
 
     # Dataset Summary
@@ -379,12 +378,12 @@ def _display_results_viewer():
 
             fig_dotplot = px.scatter(dotplot_df, x='Gene', y='Cluster', color='Expression', size='Size',
                                     color_continuous_scale=cs, labels={'Expression': color_label},
-                                    title=f"Marker Expression by Cluster ({color_label})", height=max(400, len(heatmap_data.index) * 50))
+                                    title=f"Marker Expression by Cluster ({color_label})", height=max(400, len(heatmap_data.index) * 50),
+                                    template="plotly_dark")
             fig_dotplot.update_traces(marker=dict(sizemode='diameter', sizeref=dotplot_df['Size'].max() / 15, line=dict(width=0.5, color='white')))
             fig_dotplot.update_xaxes(tickangle=45, tickfont=dict(size=font_size))
             fig_dotplot.update_yaxes(tickfont=dict(size=font_size))
-            fig_dotplot.update_layout(plot_bgcolor='white', xaxis=dict(showgrid=True, gridcolor='lightgray'),
-                                     yaxis=dict(showgrid=True, gridcolor='lightgray'), font=dict(size=font_size))
+            fig_dotplot.update_layout(font=dict(size=font_size))
             st.plotly_chart(fig_dotplot, use_container_width=True)
         else:
             st.warning("Clustering information or marker genes not available")
@@ -436,14 +435,15 @@ def _display_results_viewer():
                     color_discrete_map={True: "#E74C3C", False: "#95A5A6"},
                     hover_data=["Gene", "Mean A", "Mean B"],
                     title=f"Volcano Plot: Cluster {de_cluster_a} vs {de_cluster_b}",
-                    labels={"log2FC": "log2 Fold Change", "-log10(p_adj)": "-log10(Adjusted P-value)"}, height=450)
+                    labels={"log2FC": "log2 Fold Change", "-log10(p_adj)": "-log10(Adjusted P-value)"}, height=450,
+                    template="plotly_dark")
                 fig_volcano.add_vline(x=1, line_dash="dash", line_color="gray")
                 fig_volcano.add_vline(x=-1, line_dash="dash", line_color="gray")
                 fig_volcano.add_hline(y=-np.log10(0.05), line_dash="dash", line_color="gray")
                 top_sig = de_df[de_df["significant"]].nlargest(10, "-log10(p_adj)")
                 for _, row in top_sig.iterrows():
                     fig_volcano.add_annotation(x=row["log2FC"], y=row["-log10(p_adj)"], text=row["Gene"], showarrow=False, font=dict(size=10), yshift=8)
-                fig_volcano.update_layout(showlegend=False, plot_bgcolor="white")
+                fig_volcano.update_layout(showlegend=False)
                 st.plotly_chart(fig_volcano, use_container_width=True)
                 sig_df = de_df[de_df["significant"]].sort_values("log2FC", key=abs, ascending=False)
                 if not sig_df.empty:
@@ -498,8 +498,8 @@ def _display_results_viewer():
                         x="-log10(Adjusted P-value)", y="Term", color="-log10(Adjusted P-value)",
                         color_continuous_scale="Viridis", orientation="h",
                         title=f"Top Enriched Pathways — Cluster {enrich_cluster}",
-                        height=max(400, len(top_terms) * 30))
-                    fig_enrich.update_layout(yaxis=dict(autorange="reversed"), plot_bgcolor="white", showlegend=False)
+                        height=max(400, len(top_terms) * 30), template="plotly_dark")
+                    fig_enrich.update_layout(yaxis=dict(autorange="reversed"), showlegend=False)
                     st.plotly_chart(fig_enrich, use_container_width=True)
                     st.dataframe(enr_df[["Term", "Overlap", "Adjusted P-value", "Genes", "Gene_set"]].head(30), use_container_width=True, hide_index=True)
                 else:
@@ -514,9 +514,8 @@ def _display_results_viewer():
             st.markdown("##### Diffusion Pseudotime")
             fig_traj = px.scatter(df, x="UMAP_0", y="UMAP_1", color="dpt_pseudotime",
                 color_continuous_scale="Viridis", title="UMAP colored by Pseudotime",
-                labels={"dpt_pseudotime": "Pseudotime"}, height=500)
+                labels={"dpt_pseudotime": "Pseudotime"}, height=500, template="plotly_dark")
             fig_traj.update_traces(marker=dict(size=3, opacity=0.7))
-            fig_traj.update_layout(plot_bgcolor="white")
             st.plotly_chart(fig_traj, use_container_width=True)
             if expr_cols:
                 traj_gene = st.selectbox("Color by gene expression along pseudotime:",
@@ -526,9 +525,9 @@ def _display_results_viewer():
                     traj_scatter = df[["dpt_pseudotime", traj_col]].dropna().sort_values("dpt_pseudotime")
                     fig_gene_traj = px.scatter(traj_scatter, x="dpt_pseudotime", y=traj_col, trendline="lowess",
                         title=f"{traj_gene} expression along pseudotime",
-                        labels={"dpt_pseudotime": "Pseudotime", traj_col: f"{traj_gene} Expression"}, height=350)
+                        labels={"dpt_pseudotime": "Pseudotime", traj_col: f"{traj_gene} Expression"}, height=350,
+                        template="plotly_dark")
                     fig_gene_traj.update_traces(marker=dict(size=3, opacity=0.5))
-                    fig_gene_traj.update_layout(plot_bgcolor="white")
                     st.plotly_chart(fig_gene_traj, use_container_width=True)
         else:
             st.info("Pseudotime data is not available for this run. Re-run the processing pipeline with **Compute Pseudotime** enabled.")

@@ -102,7 +102,7 @@ def render():
             markers_df["Predicted Cell Type"] = markers_df[cluster_col].astype(str).map(cluster_to_type).fillna("Unknown")
 
             fig_anno = px.scatter(markers_df, x="UMAP_0", y="UMAP_1", color="Predicted Cell Type",
-                                 title="UMAP — Predicted Cell Types", height=550)
+                                 title="UMAP — Predicted Cell Types", height=550, template="plotly_dark")
             fig_anno.update_traces(marker=dict(size=3, opacity=0.7))
-            fig_anno.update_layout(plot_bgcolor="white", legend=dict(font=dict(size=11)))
+            fig_anno.update_layout(legend=dict(font=dict(size=11)))
             st.plotly_chart(fig_anno, use_container_width=True)

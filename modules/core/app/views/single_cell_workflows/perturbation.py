@@ -16,25 +16,36 @@ logger = logging.getLogger(__name__)
 
 
 def _hit_perturbation_endpoint(expression, gene_names, genes_to_perturb, perturbation_type):
-    """Call the scGPT perturbation endpoint."""
+    """Call the scGPT perturbation endpoint.
+
+    Embeds the perturbation parameters (genes_to_perturb, perturbation_type)
+    directly in the input payload rather than using the SDK params kwarg,
+    which may not be passed correctly to custom PyFunc models.
+    """
     endpoint_name = get_endpoint_name("scGPT Perturbation")
     ws = WorkspaceClient()
 
+    # Pack everything into the input — the model's predict() will read
+    # genes_to_perturb and perturbation_type from model_input if params is empty
     model_input = [{
         "expression": expression,
         "gene_names": json.dumps(gene_names),
+        "genes_to_perturb": ",".join(genes_to_perturb) if isinstance(genes_to_perturb, list) else genes_to_perturb,
+        "perturbation_type": perturbation_type,
     }]
     logger.info(f"Calling perturbation endpoint {endpoint_name} with {len(expression)} genes, perturbing {genes_to_perturb}")
-    response = ws.serving_endpoints.query(
-        name=endpoint_name,
-        inputs=model_input,
-        params={
-            "genes_to_perturb": ",".join(genes_to_perturb) if isinstance(genes_to_perturb, list) else genes_to_perturb,
-            "perturbation_type": perturbation_type,
-        },
-    )
-    logger.info(f"Perturbation endpoint result: {response}")
-    
+
+    try:
+        response = ws.serving_endpoints.query(
+            name=endpoint_name,
+            inputs=model_input,
+        )
+        logger.info(f"Perturbation endpoint responded")
+        logger.info(f"Response: {response}")
+    except Exception as e:
+        logger.error(f"Perturbation endpoint call failed: {e}")
+        raise RuntimeError(f"Endpoint call failed: {e}") from e
+
     if response.predictions is None:
         raise RuntimeError(f"Endpoint {endpoint_name} returned no predictions. Check endpoint logs for errors.")
     return response.predictions
@@ -239,8 +250,13 @@ def render():
                         result_df[col] = pd.to_numeric(result_df[col], errors="coerce")
 
                 result_df = result_df.sort_values("abs_delta", ascending=False)
+                if result_df["abs_delta"].sum() == 0:
+                    st.warning(
+                        "All expression deltas are zero — the perturbation may not have been applied. "
+                        "Check that the selected gene(s) exist in the scGPT model vocabulary."
+                    )
                 st.session_state[perturb_cache_key] = result_df
-                progress.progress(100, text="Prediction complete!")
+                progress.progress(100, text="Prediction complete")
             except Exception as e:
                 st.error(f"Perturbation prediction failed: {e}")
                 with st.expander("Error details"):
@@ -267,8 +283,9 @@ def render():
                 color_continuous_scale="RdBu_r",
                 color_continuous_midpoint=0,
                 height=max(400, top_n * 25),
+                template="plotly_dark",
             )
-            fig_bar.update_layout(yaxis=dict(autorange="reversed"), plot_bgcolor="white")
+            fig_bar.update_layout(yaxis=dict(autorange="reversed"))
             st.plotly_chart(fig_bar, use_container_width=True)
 
             # Scatter plot: original vs predicted
@@ -281,11 +298,11 @@ def render():
                     title="Original vs Predicted Expression",
                     labels={"original_expression": "Original", "predicted_expression": "Predicted"},
                     height=400,
+                    template="plotly_dark",
                 )
                 max_val = max(result_df["original_expression"].max(), result_df["predicted_expression"].max())
                 fig_scatter.add_shape(type="line", x0=0, y0=0, x1=max_val, y1=max_val,
                                       line=dict(dash="dash", color="gray"))
-                fig_scatter.update_layout(plot_bgcolor="white")
                 st.plotly_chart(fig_scatter, use_container_width=True)
 
             with col2:

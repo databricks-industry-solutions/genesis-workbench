@@ -240,14 +240,20 @@ class PerturbationModelWrapper(mlflow.pyfunc.PythonModel):
             dict with gene_name, original_expression, predicted_expression, delta, abs_delta
         """
         params = params or {}
-        perturbation_type = params.get("perturbation_type", "knockout")
 
-        genes_to_perturb = params.get("genes_to_perturb", "")
+        # Read the first row of model_input
+        row = model_input.iloc[0] if hasattr(model_input, 'iloc') else model_input[0]
+
+        # Perturbation params can come from params dict OR from model_input columns
+        # (the SDK params kwarg may not always reach custom PyFunc models)
+        perturbation_type = params.get("perturbation_type") or row.get("perturbation_type", "knockout")
+
+        genes_to_perturb = params.get("genes_to_perturb") or row.get("genes_to_perturb", "")
         if isinstance(genes_to_perturb, str):
             genes_to_perturb = [g.strip() for g in genes_to_perturb.split(",") if g.strip()]
 
-        expression = np.array(model_input["expression"].iloc[0], dtype=np.float32)
-        gene_names = model_input["gene_names"].iloc[0]
+        expression = np.array(row["expression"], dtype=np.float32)
+        gene_names = row["gene_names"]
         if isinstance(gene_names, str):
             gene_names = json.loads(gene_names)
 
@@ -352,14 +358,11 @@ test_expression = [random.uniform(0, 5) for _ in test_genes]
 input_data = pd.DataFrame({
     "expression": [test_expression],
     "gene_names": [json.dumps(test_genes)],
+    "genes_to_perturb": [test_genes[0]],
+    "perturbation_type": ["knockout"],
 })
 
-test_params = {
-    "genes_to_perturb": test_genes[0],  # Perturb the first gene
-    "perturbation_type": "knockout",
-}
-
-output_example = perturb_model.predict(context, model_input=input_data, params=test_params)
+output_example = perturb_model.predict(context, model_input=input_data)
 print(f"Prediction returned {len(output_example['gene_name'])} genes")
 print(f"Top 5 affected genes by |delta|:")
 sorted_idx = np.argsort(output_example["abs_delta"])[::-1][:5]
@@ -379,7 +382,6 @@ from mlflow.models import infer_signature
 signature = infer_signature(
     model_input=input_data,
     model_output=output_example,
-    params=test_params,
 )
 
 # COMMAND ----------
@@ -413,7 +415,7 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
         },
         pip_requirements="../requirements.txt",
         signature=signature,
-        input_example=(input_data, test_params),
+        input_example=input_data,
         registered_model_name=registered_model_name,
     )
 

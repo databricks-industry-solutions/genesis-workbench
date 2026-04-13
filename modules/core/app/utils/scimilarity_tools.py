@@ -308,5 +308,5 @@ def annotate_clusters(
             "Top Predictions": top_types_str,
         })
 
-    _progress(100, "Annotation complete!")
+    _progress(100, "Annotation complete")
     return pd.DataFrame(cluster_results)

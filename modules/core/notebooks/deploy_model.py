@@ -281,73 +281,46 @@ else:
 if model_deployed:
     hostname = spark.conf.get("spark.databricks.workspaceUrl")
 
-    # Check if an active deployment already exists for this model
-    existing_deployment = spark.sql(f"""
+    # Upsert deployment using MERGE INTO keyed on deploy_model_uc_name
+    spark.sql(f"""
+        MERGE INTO {catalog}.{schema}.model_deployments AS target
+        USING (SELECT '{model_uc_name}' AS deploy_model_uc_name) AS source
+        ON target.deploy_model_uc_name = source.deploy_model_uc_name AND target.is_active = true
+        WHEN MATCHED THEN UPDATE SET
+            target.deployment_name = '{deployment_name}',
+            target.deployment_description = '{deployment_description}',
+            target.input_adapter = '{input_adapter_str}',
+            target.output_adapter = '{output_adapter_str}',
+            target.is_adapter = {is_adapter},
+            target.deploy_model_uc_name = '{model_uc_name}',
+            target.deploy_model_uc_version = {model_uc_version},
+            target.model_deployed_date = CURRENT_TIMESTAMP(),
+            target.model_deployed_by = '{deploy_user}',
+            target.model_endpoint_name = '{deploy_result.name}',
+            target.model_invoke_url = 'https://{hostname}/serving-endpoints/{deploy_result.name}/invocations'
+        WHEN NOT MATCHED THEN INSERT
+            (deployment_id, deployment_name, deployment_description, model_id,
+             input_adapter, output_adapter, is_adapter, deploy_model_uc_name,
+             deploy_model_uc_version, model_deployed_date, model_deployed_by,
+             model_deploy_platform, model_endpoint_name, model_invoke_url,
+             is_active, deactivated_timestamp)
+        VALUES
+            ({deploy_id}, '{deployment_name}', '{deployment_description}', {gwb_model_id},
+             '{input_adapter_str}', '{output_adapter_str}', {is_adapter},
+             '{model_uc_name}', {model_uc_version}, CURRENT_TIMESTAMP(), '{deploy_user}',
+             'model_serving', '{deploy_result.name}',
+             'https://{hostname}/serving-endpoints/{deploy_result.name}/invocations',
+             true, NULL)
+    """)
+
+    # Retrieve the actual deployment_id (may be existing if MERGE matched)
+    actual_deployment = spark.sql(f"""
         SELECT deployment_id FROM {catalog}.{schema}.model_deployments
-        WHERE model_id = {gwb_model_id} AND is_active = true
+        WHERE deploy_model_uc_name = '{model_uc_name}' AND is_active = true
         LIMIT 1
     """).toPandas()
+    deploy_id = int(actual_deployment.iloc[0]["deployment_id"])
 
-    if len(existing_deployment) > 0:
-        # Update existing deployment instead of inserting a new row
-        existing_deploy_id = existing_deployment.iloc[0]["deployment_id"]
-        print(f"Updating existing deployment {existing_deploy_id}")
-        spark.sql(f"""
-            UPDATE {catalog}.{schema}.model_deployments SET
-                deployment_name = '{deployment_name}',
-                deployment_description = '{deployment_description}',
-                input_adapter = '{input_adapter_str}',
-                output_adapter = '{output_adapter_str}',
-                is_adapter = {is_adapter},
-                deploy_model_uc_name = '{model_uc_name}',
-                deploy_model_uc_version = {model_uc_version},
-                model_deployed_date = CURRENT_TIMESTAMP(),
-                model_deployed_by = '{deploy_user}',
-                model_endpoint_name = '{deploy_result.name}',
-                model_invoke_url = 'https://{hostname}/serving-endpoints/{deploy_result.name}/invocations'
-            WHERE deployment_id = {existing_deploy_id}
-        """)
-        deploy_id = existing_deploy_id
-    else:
-        # Insert new deployment
-        print(f"Creating new deployment {deploy_id}")
-        spark.sql(f"""
-            INSERT INTO {catalog}.{schema}.model_deployments(
-                deployment_id,
-                deployment_name,
-                deployment_description,
-                model_id,
-                input_adapter,
-                output_adapter,
-                is_adapter,
-                deploy_model_uc_name,
-                deploy_model_uc_version,
-                model_deployed_date,
-                model_deployed_by,
-                model_deploy_platform,
-                model_endpoint_name,
-                model_invoke_url,
-                is_active,
-                deactivated_timestamp
-            ) VALUES (
-                {deploy_id},
-                '{deployment_name}',
-                '{deployment_description}',
-                {gwb_model_id},
-                '{input_adapter_str}',
-                '{output_adapter_str}',
-                {is_adapter},
-                '{model_uc_name}',
-                {model_uc_version},
-                CURRENT_TIMESTAMP(),
-                '{deploy_user}',
-                'model_serving',
-                '{deploy_result.name}',
-                'https://{hostname}/serving-endpoints/{deploy_result.name}/invocations',
-                true,
-                NULL
-            )
-        """)
 else:
     print("No deployments made")
 
@@ -355,12 +328,11 @@ else:
 # COMMAND ----------
 
 if model_deployed:
-    #update model table — use existing deploy_id if updated, new if inserted
-    current_deployment_ids = [str(deploy_id)] if len(existing_deployment) > 0 else current_deployment_ids
+    #update model table with deployment info
     spark.sql(f"""
             UPDATE {catalog}.{schema}.models SET
                 is_model_deployed = true,
-                deployment_ids = '{','.join(current_deployment_ids)}'
+                deployment_ids = '{deploy_id}'
             WHERE model_id = {gwb_model_id}
     """)
 

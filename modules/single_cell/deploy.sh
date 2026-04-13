@@ -25,7 +25,7 @@ echo "Extra Params: $EXTRA_PARAMS"
 echo "###########################################"
 echo "⏩️ Starting deploy of Single Cell module  #"
 
-for module in scanpy/scanpy_v0.0.1 rapidssinglecell/rapidssinglecell_v0.0.1 scgpt/scgpt_v0.2.4 scimilarity/scimilarity_v0.4.0_weights_v1.1
+for module in scgpt/scgpt_v0.2.4
     do
         echo "###########################################"
         echo "Deploying $module"

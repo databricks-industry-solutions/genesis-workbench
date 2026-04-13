@@ -193,25 +193,58 @@ def get_batch_models(model_category: str) -> pd.DataFrame:
     return execute_select_query(query)
 
 
-def insert_model_info(model_info : GWBModelInfo):
-    """Register the model in GWB"""
-    columns = []
-    values = []
-    params = []
+def _sql_val(val):
+    """Format a Python value as a SQL literal, escaping single quotes and handling None."""
+    if val is None:
+        return 'NULL'
+    s = str(val).replace("'", "''")
+    return f"'{s}'"
 
-    for key, value in asdict(model_info).items():
-        columns.append(key)
-        if isinstance(value, StrEnum):
-            values.append(str(value))
-        else:
-            values.append(value)
-        params.append("?")
 
-    insert_sql = f"""
-        INSERT INTO {os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.models ({",".join(columns)}) 
-        values ({",".join(params)})
-        """
-    execute_parameterized_inserts(insert_sql, [ values ])
+def upsert_model_info(model_info: GWBModelInfo):
+    """Register or update the model in GWB using MERGE INTO keyed on model_uc_name."""
+    catalog = os.environ['CORE_CATALOG_NAME']
+    schema = os.environ['CORE_SCHEMA_NAME']
+    mi = model_info
+
+    query = f"""
+        MERGE INTO {catalog}.{schema}.models AS target
+        USING (SELECT {_sql_val(mi.model_uc_name)} AS model_uc_name) AS source
+        ON target.model_uc_name = source.model_uc_name
+        WHEN MATCHED THEN UPDATE SET
+            target.model_name = {_sql_val(mi.model_name)},
+            target.model_display_name = {_sql_val(mi.model_display_name)},
+            target.model_source_version = {_sql_val(mi.model_source_version)},
+            target.model_origin = {_sql_val(mi.model_origin)},
+            target.model_description_url = {_sql_val(mi.model_description_url)},
+            target.model_category = {_sql_val(mi.model_category)},
+            target.model_uc_version = {_sql_val(mi.model_uc_version)},
+            target.model_owner = {_sql_val(mi.model_owner)},
+            target.model_added_by = {_sql_val(mi.model_added_by)},
+            target.model_added_date = {_sql_val(mi.model_added_date)},
+            target.model_input_schema = {_sql_val(mi.model_input_schema)},
+            target.model_output_schema = {_sql_val(mi.model_output_schema)},
+            target.model_params_schema = {_sql_val(mi.model_params_schema)},
+            target.is_active = true,
+            target.deactivated_timestamp = NULL
+        WHEN NOT MATCHED THEN INSERT
+            (model_id, model_name, model_display_name, model_source_version,
+             model_origin, model_description_url, model_category, model_uc_name,
+             model_uc_version, model_owner, model_added_by, model_added_date,
+             model_input_schema, model_output_schema, model_params_schema,
+             is_model_deployed, deployment_ids, is_active, deactivated_timestamp)
+        VALUES
+            ({mi.model_id}, {_sql_val(mi.model_name)}, {_sql_val(mi.model_display_name)},
+             {_sql_val(mi.model_source_version)}, {_sql_val(mi.model_origin)},
+             {_sql_val(mi.model_description_url)}, {_sql_val(mi.model_category)},
+             {_sql_val(mi.model_uc_name)}, {_sql_val(mi.model_uc_version)},
+             {_sql_val(mi.model_owner)}, {_sql_val(mi.model_added_by)},
+             {_sql_val(mi.model_added_date)}, {_sql_val(mi.model_input_schema)},
+             {_sql_val(mi.model_output_schema)}, {_sql_val(mi.model_params_schema)},
+             {mi.is_model_deployed}, {_sql_val(mi.deployment_ids)},
+             {mi.is_active}, {_sql_val(mi.deactivated_timestamp)})
+    """
+    execute_non_select_query(query)
 
 
 def register_batch_model(model_name: str, model_display_name: str, model_description: str,
@@ -323,8 +356,15 @@ def import_model_from_uc(user_email : str,
         is_active = True,
         deactivated_timestamp=None
     )
-    insert_model_info(gwb_model)
-    return gwb_model_id
+    upsert_model_info(gwb_model)
+
+    # Retrieve the persisted model_id (may differ from gwb_model_id if row already existed)
+    catalog = os.environ['CORE_CATALOG_NAME']
+    schema = os.environ['CORE_SCHEMA_NAME']
+    result_df = execute_select_query(
+        f"SELECT model_id FROM {catalog}.{schema}.models WHERE model_uc_name = '{model_uc_name}'"
+    )
+    return int(result_df.iloc[0]['model_id'])
 
 
 def deploy_model_endpoint(catalog_name: str,

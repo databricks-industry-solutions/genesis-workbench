@@ -142,7 +142,7 @@ def render():
                 else:
                     st.warning("No search results returned.")
                     return
-                progress.progress(100, text="Search complete!")
+                progress.progress(100, text="Search complete")
             except Exception as e:
                 st.error(f"Similarity search failed: {e}")
                 return
@@ -158,8 +158,8 @@ def render():
                 type_counts = combined["prediction"].value_counts().head(15)
                 fig_types = px.bar(x=type_counts.values, y=type_counts.index, orientation="h",
                     title="Neighbor Cell Types", labels={"x": "Count", "y": "Cell Type"},
-                    color=type_counts.values, color_continuous_scale="Viridis")
-                fig_types.update_layout(yaxis=dict(autorange="reversed"), plot_bgcolor="white", showlegend=False, height=400)
+                    color=type_counts.values, color_continuous_scale="Viridis", template="plotly_dark")
+                fig_types.update_layout(yaxis=dict(autorange="reversed"), showlegend=False, height=400)
                 st.plotly_chart(fig_types, use_container_width=True)
 
         with chart_col2:
@@ -167,8 +167,8 @@ def render():
                 disease_counts = combined["disease"].value_counts().head(15)
                 fig_disease = px.bar(x=disease_counts.values, y=disease_counts.index, orientation="h",
                     title="Neighbor Disease Distribution", labels={"x": "Count", "y": "Disease"},
-                    color=disease_counts.values, color_continuous_scale="Reds")
-                fig_disease.update_layout(yaxis=dict(autorange="reversed"), plot_bgcolor="white", showlegend=False, height=400)
+                    color=disease_counts.values, color_continuous_scale="Reds", template="plotly_dark")
+                fig_disease.update_layout(yaxis=dict(autorange="reversed"), showlegend=False, height=400)
                 st.plotly_chart(fig_disease, use_container_width=True)
 
         if "study" in combined.columns:
