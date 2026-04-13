@@ -14,25 +14,64 @@ Genesis Workbench simplifies deploying GPU-accelerated biological AI models on D
 ## Core Modules
 
 ### Single Cell Module
-- **scGPT** — Single-cell transformer for genomics analysis
-- **SCimilarity** — Cell similarity and annotation
+- **scGPT** — Single-cell transformer for gene embeddings and perturbation prediction
+- **scGPT Perturbation** — Zero-shot gene knockout/overexpression effect prediction using scGPT's transformer
+- **SCimilarity** — Cell similarity search and cell type annotation against a 23M-cell reference database (3 endpoints: GeneOrder, GetEmbedding, SearchNearest)
+- **Scanpy** — CPU-based single-cell QC, clustering, UMAP, marker gene detection, optional diffusion pseudotime
+- **Rapids-SingleCell** — GPU-accelerated single-cell analysis (CUDA-optimized version of Scanpy pipeline)
+
+**UI Workflows:**
+- **Raw Processing** — QC → normalize → HVG → PCA → cluster → UMAP → markers (Scanpy or Rapids)
+- **Cell Type Annotation** — Automatic cluster annotation via SCimilarity reference search with UMAP visualization
+- **Cell Similarity Search** — Search 23M-cell reference for cells similar to a cluster, with disease/study breakdowns
+- **Differential Expression** — Pairwise DE between clusters with volcano plot (Mann-Whitney U + BH correction)
+- **Pathway Enrichment** — GO/KEGG/Reactome enrichment of cluster markers via Enrichr (gseapy)
+- **Trajectory Analysis** — Diffusion pseudotime with UMAP coloring and gene expression along pseudotime
+- **Perturbation Prediction** — Predict gene knockout/overexpression effects with gene selector ranked by cluster expression
 
 ### Protein Studies Module
-- **ESMFold** — Protein structure prediction
-- **AlphaFold2** — Protein structure modeling
-- **ProteinMPNN** — Protein sequence design
-- **RFDiffusion** — Protein structure generation via diffusion
-- **Boltz-1** — Multi-chain protein structure prediction
+- **ESMFold** — Fast protein structure prediction from sequence
+- **AlphaFold2** — High-accuracy protein structure prediction (batch job)
+- **Boltz-1** — Multi-chain protein structure prediction (protein-protein, protein-ligand complexes)
+- **ProteinMPNN** — Protein sequence design from backbone structure
+- **RFDiffusion** — Protein backbone generation via diffusion (inpainting)
+- **ESM2 Embeddings** — 1280-D protein sequence embeddings for similarity search
+
+**UI Workflows:**
+- **Structure Prediction** — ESMFold (real-time), AlphaFold2 (batch), and Boltz (real-time, multi-chain)
+- **Protein Design** — ESMFold → RFDiffusion inpainting → ProteinMPNN → ESMFold validation pipeline
+- **Inverse Folding** — Standalone ProteinMPNN: paste PDB backbone → get designed sequences → auto-fold with ESMFold
+- **Sequence Search** — ESM2 embeddings → vector search → Smith-Waterman alignment → ranked results
+
+### Small Molecule Module
+- **Chemprop** — Molecular property prediction (BBBP, ClinTox, ADMET)
+- **DiffDock** — Molecular docking via diffusion
+- **Proteina-Complexa** — Protein binder design (protein-protein, ligand, motif scaffolding)
+
+**UI Workflows:**
+- **Binder Design** — Proteina-Complexa protein binder generation with ESMFold validation
+- **Ligand Binder Design** — Small-molecule binder design with DiffDock docking validation
+- **Motif Scaffolding** — Scaffold generation with ProteinMPNN sequence optimization
+- **ADMET & Safety** — Multi-model property profiling (BBB penetration, toxicity, ADMET)
+
+### Disease Biology Module
+- **VCF Ingestion** — VCF-to-Delta via Glow
+- **Variant Annotation** — ClinVar annotation with gene filtering
+- **GWAS Analysis** — Genome-wide association studies pipeline
 
 ### BioNeMo Integration
 - NVIDIA BioNeMo container infrastructure
-- Pre-trained models optimized for enterprise workloads
+- Pre-trained models optimized for enterprise workloads (ESM2 fine-tuning)
+
+### Parabricks Module
+- NVIDIA Parabricks GPU-accelerated genomics pipelines (alignment, variant calling)
 
 ### Access Management & Monitoring
-- Security controls and observability dashboards
+- Security controls, endpoint management, and observability dashboards
+- Start All Endpoints keep-alive feature
 
 ## Key Dependencies
-- Streamlit (UI), Databricks SDK, MLflow, BioPython, PyTorch ecosystem
+- Streamlit (UI), Databricks SDK, MLflow, BioPython, PyTorch, gseapy, scipy, Plotly, parasail
 
 ## Deployment
 
@@ -89,3 +128,7 @@ Genesis Workbench simplifies deploying GPU-accelerated biological AI models on D
 - User mentions Genesis Workbench, protein folding, single-cell analysis, scGPT, AlphaFold, ESMFold, BioNeMo, or drug discovery workflows on Databricks
 - User wants to demo life sciences capabilities on Databricks
 - User needs to set up GPU-accelerated biological model inference
+- User asks about cell type annotation, differential expression, pathway enrichment, pseudotime analysis, or gene perturbation prediction
+- User asks about molecular docking, protein binder design, ADMET profiling, or inverse folding
+- User asks about variant annotation, GWAS, or VCF ingestion on Databricks
+- User asks about sequence search or protein similarity search

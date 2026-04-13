@@ -21,25 +21,24 @@ def start_scanpy_job(
     n_top_genes: int,
     n_pcs: int,
     cluster_resolution: float,
-    user_info: UserInfo
+    user_info: UserInfo,
+    compute_pseudotime: bool = False,
 ):
     """
     Trigger the scanpy analysis job with specified parameters
     Returns: (job_id, run_id) tuple
     """
     w = WorkspaceClient()
-    
-    # Get job ID from settings table (loaded into env vars by initialize())
+
     scanpy_job_id = os.environ.get("RUN_SCANPY_JOB_ID")
     if not scanpy_job_id:
         raise RuntimeError("Scanpy job not registered. Please deploy the single_cell module first.")
-    
-    # Get full experiment path using user's mlflow folder
+
     experiment = set_mlflow_experiment(
-        experiment_tag=mlflow_experiment,  # Simple name from user
+        experiment_tag=mlflow_experiment,
         user_email=user_info.user_email
     )
-    
+
     job_run = w.jobs.run_now(
         job_id=scanpy_job_id,
         job_parameters={
@@ -47,7 +46,7 @@ def start_scanpy_job(
             "schema": os.environ["CORE_SCHEMA_NAME"],
             "user_email": user_info.user_email,
             "data_path": data_path,
-            "mlflow_experiment": experiment.name,  # Full path like /Users/email/folder/experiment_name
+            "mlflow_experiment": experiment.name,
             "mlflow_run_name": mlflow_run_name,
             "gene_name_column": gene_name_column,
             "species": species,
@@ -59,9 +58,10 @@ def start_scanpy_job(
             "n_top_genes": str(n_top_genes),
             "n_pcs": str(n_pcs),
             "cluster_resolution": str(cluster_resolution),
+            "compute_pseudotime": str(compute_pseudotime).lower(),
         }
     )
-    
+
     return scanpy_job_id, job_run.run_id
 
 
@@ -79,25 +79,24 @@ def start_rapids_singlecell_job(
     n_top_genes: int,
     n_pcs: int,
     cluster_resolution: float,
-    user_info: UserInfo
+    user_info: UserInfo,
+    compute_pseudotime: bool = False,
 ):
     """
     Trigger the rapids-singlecell analysis job with specified parameters
     Returns: (job_id, run_id) tuple
     """
     w = WorkspaceClient()
-    
-    # Get job ID from settings table (loaded into env vars by initialize())
+
     rapids_job_id = os.environ.get("RUN_RAPIDSSINGLECELL_JOB_ID")
     if not rapids_job_id:
         raise RuntimeError("rapids-singlecell job not registered. Please deploy the rapids-singlecell module first.")
-    
-    # Get full experiment path using user's mlflow folder
+
     experiment = set_mlflow_experiment(
-        experiment_tag=mlflow_experiment,  # Simple name from user
+        experiment_tag=mlflow_experiment,
         user_email=user_info.user_email
     )
-    
+
     job_run = w.jobs.run_now(
         job_id=rapids_job_id,
         job_parameters={
@@ -105,7 +104,7 @@ def start_rapids_singlecell_job(
             "schema": os.environ["CORE_SCHEMA_NAME"],
             "user_email": user_info.user_email,
             "data_path": data_path,
-            "mlflow_experiment": experiment.name,  # Full path like /Users/email/folder/experiment_name
+            "mlflow_experiment": experiment.name,
             "mlflow_run_name": mlflow_run_name,
             "gene_name_column": gene_name_column,
             "species": species,
@@ -117,9 +116,10 @@ def start_rapids_singlecell_job(
             "n_top_genes": str(n_top_genes),
             "n_pcs": str(n_pcs),
             "cluster_resolution": str(cluster_resolution),
+            "compute_pseudotime": str(compute_pseudotime).lower(),
         }
     )
-    
+
     return rapids_job_id, job_run.run_id
 
 

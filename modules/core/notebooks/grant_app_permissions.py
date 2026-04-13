@@ -5,6 +5,8 @@
 # MAGIC Grants the Genesis Workbench app service principal:
 # MAGIC - `CAN_QUERY` on all serving endpoints
 # MAGIC - `CAN_MANAGE_RUN` on all registered jobs (from the settings table)
+# MAGIC - `READ VOLUME` on all volumes in the schema
+# MAGIC - `EXECUTE` on all registered models in Unity Catalog
 
 # COMMAND ----------
 
@@ -145,6 +147,43 @@ for row in job_ids_df:
             print(f"  Already has CAN_MANAGE_RUN on job {job_id}, skipping")
     except Exception as e:
         print(f"  Warning: Could not set permissions on job {job_id}: {e}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC #### Grant READ VOLUME on all volumes in the schema
+
+# COMMAND ----------
+
+try:
+    spark.sql(f"GRANT READ VOLUME ON SCHEMA {catalog}.{schema} TO `{app_sp_id}`")
+    print(f"Granted READ VOLUME on schema {catalog}.{schema}")
+except Exception as e:
+    print(f"Warning: Could not grant READ VOLUME on schema: {e}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC #### Grant EXECUTE on all registered models in Unity Catalog
+
+# COMMAND ----------
+
+model_names_df = spark.sql(
+    f"SELECT DISTINCT deploy_model_uc_name FROM model_deployments WHERE is_active = true AND deploy_model_uc_name IS NOT NULL"
+).collect()
+
+print(f"Found {len(model_names_df)} registered models in model_deployments")
+
+for row in model_names_df:
+    model_uc_name = row["deploy_model_uc_name"]
+    try:
+        spark.sql(f"GRANT EXECUTE ON FUNCTION {model_uc_name} TO `{app_sp_id}`")
+        print(f"  Granted EXECUTE on {model_uc_name}")
+    except Exception as e:
+        if "already has" in str(e).lower() or "inherited" in str(e).lower():
+            print(f"  Already has EXECUTE on {model_uc_name}, skipping")
+        else:
+            print(f"  Warning: Could not grant EXECUTE on {model_uc_name}: {e}")
 
 # COMMAND ----------
 

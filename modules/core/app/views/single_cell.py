@@ -6,7 +6,7 @@ from genesis_workbench.models import (ModelCategory,
                                       get_deployed_models,
                                       get_batch_models)
 
-from views.single_cell_workflows import settings, processing
+from views.single_cell_workflows import settings, processing, cell_type_annotation, cell_similarity, perturbation
 
 st.title(":material/microbiology:  Single Cell Studies")
 
@@ -32,21 +32,28 @@ with st.spinner("Loading data"):
             if not batch_df.empty:
                 batch_df.columns = ["Name", "Description", "Endpoint Name", "Cluster"]
                 batch_df["Type"] = "Batch"
-                batch_df["Model Id"] = ""
-                batch_df["Deploy Id"] = ""
-                batch_df["Model Name"] = ""
-                batch_df["Source Version"] = ""
-                batch_df["UC Name/Version"] = ""
+                batch_df["Model Id"] = None
+                batch_df["Deploy Id"] = None
+                batch_df["Model Name"] = None
+                batch_df["Source Version"] = None
+                batch_df["UC Name/Version"] = None
                 rows.append(batch_df)
         except Exception:
             pass
         deployed_single_cell_models_df = pd.concat(rows, ignore_index=True)
+        # Force all ID columns to string to avoid Arrow int64/object conflicts
+        for col in ["Model Id", "Deploy Id"]:
+            if col in deployed_single_cell_models_df.columns:
+                deployed_single_cell_models_df[col] = deployed_single_cell_models_df[col].astype(str).replace("None", "")
         st.session_state["deployed_single_cell_models_df"] = deployed_single_cell_models_df
     deployed_single_cell_models_df = st.session_state["deployed_single_cell_models_df"]
 
-settings_tab, processing_tab = st.tabs([
+settings_tab, processing_tab, annotation_tab, similarity_tab, perturbation_tab = st.tabs([
     "Deployed Models",
     "Raw Single Cell Processing",
+    "Cell Type Annotation",
+    "Cell Similarity",
+    "Perturbation Prediction",
 ])
 
 with settings_tab:
@@ -54,3 +61,12 @@ with settings_tab:
 
 with processing_tab:
     processing.render()
+
+with annotation_tab:
+    cell_type_annotation.render()
+
+with similarity_tab:
+    cell_similarity.render()
+
+with perturbation_tab:
+    perturbation.render()

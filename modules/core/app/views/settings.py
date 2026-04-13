@@ -22,46 +22,45 @@ with general_tab:
 
         st.text_input("Application Schema Location: ", f"{core_catalog_name}.{core_schema_name}")
 
-        st.write(f"SQL Warehouse ID: {sql_warehouse_id}")
+        st.text_input("SQL Warehouse ID:", value=sql_warehouse_id, disabled=True)
 
     st.divider()
-    st.markdown("##### Settings")
 
-    try:
-        with st.spinner("Loading settings..."):
-            other_settings_df = execute_select_query(
-                f"SELECT key, value, module FROM {core_catalog_name}.{core_schema_name}.settings "
-                f"WHERE key NOT LIKE '%_job_id' ORDER BY module, key"
-            )
-        if not other_settings_df.empty:
-            other_settings_df.columns = ["Setting", "Value", "Module"]
-            other_settings_df["Setting"] = other_settings_df["Setting"].str.replace("_", " ").str.title()
-            other_settings_df["Module"] = other_settings_df["Module"].str.replace("_", " ").str.title()
-            st.dataframe(other_settings_df, use_container_width=True, hide_index=True)
-        else:
-            st.info("No additional settings found.")
-    except Exception as e:
-        st.warning(f"Could not load settings: {e}")
+    settings_subtab, workflows_subtab = st.tabs(["Settings", "Registered Workflows"])
 
-    st.divider()
-    st.markdown("##### Registered Workflows")
+    with settings_subtab:
+        try:
+            with st.spinner("Loading settings..."):
+                other_settings_df = execute_select_query(
+                    f"SELECT key, value, module FROM {core_catalog_name}.{core_schema_name}.settings "
+                    f"WHERE key NOT LIKE '%_job_id' ORDER BY module, key"
+                )
+            if not other_settings_df.empty:
+                other_settings_df.columns = ["Setting", "Value", "Module"]
+                other_settings_df["Setting"] = other_settings_df["Setting"].str.replace("_", " ").str.title()
+                other_settings_df["Module"] = other_settings_df["Module"].str.replace("_", " ").str.title()
+                st.dataframe(other_settings_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("No additional settings found.")
+        except Exception as e:
+            st.warning(f"Could not load settings: {e}")
 
-    try:
-        with st.spinner("Loading registered workflows..."):
-            workflows_df = execute_select_query(
-                f"SELECT key, value, module FROM {core_catalog_name}.{core_schema_name}.settings "
-                f"WHERE key LIKE '%_job_id' ORDER BY module, key"
-            )
-        if not workflows_df.empty:
-            workflows_df.columns = ["Workflow", "Job ID", "Module"]
-            # Clean up workflow names for display
-            workflows_df["Workflow"] = workflows_df["Workflow"].str.replace("_job_id", "").str.replace("_", " ").str.title()
-            workflows_df["Module"] = workflows_df["Module"].str.replace("_", " ").str.title()
-            st.dataframe(workflows_df, use_container_width=True, hide_index=True)
-        else:
-            st.info("No workflows registered yet. Deploy modules to register workflows.")
-    except Exception as e:
-        st.warning(f"Could not load registered workflows: {e}")
+    with workflows_subtab:
+        try:
+            with st.spinner("Loading registered workflows..."):
+                workflows_df = execute_select_query(
+                    f"SELECT key, value, module FROM {core_catalog_name}.{core_schema_name}.settings "
+                    f"WHERE key LIKE '%_job_id' ORDER BY module, key"
+                )
+            if not workflows_df.empty:
+                workflows_df.columns = ["Workflow", "Job ID", "Module"]
+                workflows_df["Workflow"] = workflows_df["Workflow"].str.replace("_job_id", "").str.replace("_", " ").str.title()
+                workflows_df["Module"] = workflows_df["Module"].str.replace("_", " ").str.title()
+                st.dataframe(workflows_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("No workflows registered yet. Deploy modules to register workflows.")
+        except Exception as e:
+            st.warning(f"Could not load registered workflows: {e}")
 
 
 with model_mgmt_tab:

@@ -99,7 +99,7 @@ def render():
                             progress_callback=_get_progress_callback(status_generation))
 
                         st.button("View MLflow Experiment", on_click=lambda: open_mlflow_experiment_window(experiment_id))
-                        components.html(html, height=700)
+                        components.html(html, height=540)
                     except MLflowExperimentAccessException:
                         st.error("Cannot access MLflow folder. Please complete MLflow Setup in the profile page")
                     except Exception as e:

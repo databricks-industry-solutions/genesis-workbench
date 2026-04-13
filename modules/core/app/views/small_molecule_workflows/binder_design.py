@@ -4,6 +4,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 import mlflow
+from datetime import datetime
 from genesis_workbench.models import set_mlflow_experiment
 from utils.streamlit_helper import get_user_info, open_mlflow_experiment_window
 from utils.small_molecule_tools import (
@@ -56,7 +57,7 @@ def render():
 
             st.markdown("**MLflow Tracking:**")
             mlflow_experiment = st.text_input("MLflow Experiment:", value="gwb_binder_design", key="binder_mlflow_exp")
-            mlflow_run_name = st.text_input("Run Name:", value="binder_design_run", key="binder_mlflow_run")
+            mlflow_run_name = st.text_input("Run Name:", value=f"binder_design_{datetime.now().strftime('%Y%m%d_%H%M')}", key="binder_mlflow_run")
             run_btn = st.form_submit_button("Design Binders", type="primary")
 
     with viewer_col:

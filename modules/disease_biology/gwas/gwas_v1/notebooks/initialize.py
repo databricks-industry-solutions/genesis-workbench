@@ -116,4 +116,19 @@ else:
 
 # COMMAND ----------
 
+# Register Glow as a batch model so it appears in the Deployed Models tab
+from genesis_workbench.models import register_batch_model
+
+register_batch_model(
+    model_name="glow",
+    model_display_name="Glow Genomics",
+    model_description="GPU-accelerated genomics library for VCF ingestion, variant annotation, and GWAS analysis on Spark",
+    model_category="disease_biology",
+    module="disease_biology",
+    job_id=gwas_analysis_job_id,
+    job_name="gwas_analysis",
+    cluster_type="CPU",
+    added_by=user_email,
+)
+
 print("Disease Biology GWAS module initialization complete")

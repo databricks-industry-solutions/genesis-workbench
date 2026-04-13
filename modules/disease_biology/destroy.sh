@@ -27,4 +27,4 @@ for module in gwas/gwas_v1 vcf_ingestion/vcf_ingestion_v1 variant_annotation/var
         cd ../..
     done
 
-rm .deployed
+rm -f .deployed

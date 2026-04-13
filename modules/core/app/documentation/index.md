@@ -23,7 +23,10 @@
 
 ## Single Cell
 
-- [Single Cell Analysis](single_cell_analysis.md) — End-to-end scRNA-seq processing with Scanpy or RAPIDS, plus interactive results viewer
+- [Single Cell Analysis](single_cell_analysis.md) — End-to-end scRNA-seq processing with Scanpy or RAPIDS, plus interactive results viewer with differential expression, pathway enrichment, and trajectory analysis
+- [Cell Type Annotation](cell_type_annotation.md) — Predict cell types per cluster using SCimilarity's 23M-cell reference database
+- [Cell Similarity Search](cell_similarity.md) — Find matching cells across published studies using SCimilarity embeddings
+- [Gene Perturbation Prediction](perturbation_prediction.md) — Predict effects of gene knockouts or overexpression using scGPT
 
 ## NVIDIA BioNeMo
 

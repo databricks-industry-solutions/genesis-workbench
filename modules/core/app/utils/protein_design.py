@@ -45,6 +45,50 @@ def hit_esmfold(sequence):
 def hit_rfdiffusion(input_dict):
     return hit_model_endpoint('RFDiffusion', [input_dict])[0]
 
+@mlflow.trace(span_type="LLM")
+def hit_boltz(sequence, msa="no_msa", use_msa_server="True"):
+    """Call Boltz endpoint for structure prediction.
+
+    Args:
+        sequence: Protein sequence string, or a formatted input string like
+                  "protein_A:SEQ;rna_B:SEQ" for multi-chain complexes.
+        msa: MSA option - "no_msa" for fast prediction, or path to MSA file.
+        use_msa_server: "True" to use MSA server, "False" to skip.
+
+    Returns:
+        PDB string of the predicted structure.
+    """
+    # If the user passed a plain sequence, wrap it in the Boltz input format
+    if not any(prefix in sequence for prefix in ["protein_", "rna_", "dna_", "smiles_", ":"]):
+        boltz_input = f"protein_A:{sequence}"
+    else:
+        boltz_input = sequence
+
+    payload = [{
+        "input": boltz_input,
+        "msa": msa,
+        "use_msa_server": use_msa_server,
+    }]
+
+    endpoint_name = get_endpoint_name("Boltz")
+    try:
+        logger.info(f"Sending request to Boltz endpoint: {endpoint_name}")
+        response = workspace_client.serving_endpoints.query(
+            name=endpoint_name,
+            inputs=payload,
+        )
+        logger.info("Received response from Boltz endpoint")
+        result = response.predictions
+        if isinstance(result, list) and len(result) > 0:
+            entry = result[0]
+            if isinstance(entry, dict) and "pdb" in entry:
+                return entry["pdb"]
+            return entry
+        return result
+    except Exception as e:
+        logger.error(f"Error querying Boltz: {str(e)}", exc_info=True)
+        raise
+
 @mlflow.trace(span_type="TOOL")
 def hit_proteinmpnn(pdb_str):
     return hit_model_endpoint('ProteinMPNN', [pdb_str])

@@ -84,14 +84,16 @@ class ScimilaritySetup:
         self.model_dir = f"{base_dir}/model"
         self.downloads_dir = f"{base_dir}/downloads"
         self.data_dir = f"{base_dir}/data/adams_etal_2020"
-        
+
         # URLs for downloads
         self.model_url = "http://zenodo.org/records/10685499/files/model_v1.1.tar.gz?download=1"
         self.sample_data_url = "https://zenodo.org/records/13685881/files/GSE136831_subsample.h5ad?download=1"
-        
+
         # File paths
         self.model_tarball = f"{self.downloads_dir}/model_v1.1.tar.gz"
         self.sample_data_path = f"{self.data_dir}/GSE136831_subsample.h5ad"
+        # Check for the extracted model file, not just the tarball
+        self.gene_order_path = f"{self.model_dir}/model_v1.1/gene_order.tsv"
 
     def create_directory(self, directory_path):
         """Create directory if it doesn't exist"""
@@ -100,86 +102,94 @@ class ScimilaritySetup:
     
     def download_file(self, url, destination):
         """Download a file from URL to destination"""
-        if os.path.exists(destination):
-            logger.info(f"File already exists at {destination}")
+        if os.path.exists(destination) and os.path.getsize(destination) > 0:
+            logger.info(f"File already exists at {destination} ({os.path.getsize(destination)} bytes), skipping download")
             return
-        
+
         logger.info(f"Downloading {url} to {destination}")
         try:
-            subprocess.run(["wget", "-O", destination, url, "--verbose"], check=True)
-            logger.info(f"Download complete: {destination}")
+            subprocess.run(["wget", "-q", "--show-progress", "-O", destination, url], check=True)
+            logger.info(f"Download complete: {destination} ({os.path.getsize(destination)} bytes)")
         except subprocess.CalledProcessError as e:
             logger.error(f"Download failed: {e}")
             raise
-    
+
     def extract_tarball(self, tarball_path, extract_to):
         """Extract a tarball to specified directory"""
         logger.info(f"Extracting {tarball_path} to {extract_to}")
         try:
-            subprocess.run(["tar", "--no-same-owner", "-xzvf", tarball_path, "-C", extract_to], check=True)
+            subprocess.run(["tar", "--no-same-owner", "-xzf", tarball_path, "-C", extract_to], check=True)
             logger.info(f"Extraction complete to {extract_to}")
         except subprocess.CalledProcessError as e:
             logger.error(f"Extraction failed: {e}")
             raise
-    
-    def list_directory(self, directory_path):
-        """List files in directory with details"""
-        logger.info(f"Contents of {directory_path}:")
-        try:
-            result = subprocess.run(["ls", "-lah", directory_path], check=True, capture_output=True, text=True)
-            logger.info(result.stdout)
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to list directory: {e}")
-    
+
+    def model_already_extracted(self):
+        """Check if the model is already extracted by looking for gene_order.tsv"""
+        return os.path.exists(self.gene_order_path)
+
     def setup_model(self):
-        """Download and extract the model"""
+        """Download and extract the model (skips if already extracted)"""
+        if self.model_already_extracted():
+            logger.info(f"Model already extracted at {self.model_dir}, skipping download and extraction")
+            return self.model_dir
+
+        start = time.time()
         self.create_directory(self.downloads_dir)
         self.create_directory(self.model_dir)
-        
+
         self.download_file(self.model_url, self.model_tarball)
-        
-        # Set permissions and extract
+
         subprocess.run(["chmod", "u+rx", self.model_tarball], check=True)
         self.extract_tarball(self.model_tarball, self.model_dir)
-        
-        # Verify extraction
-        self.list_directory(self.model_dir)
-        
+
+        elapsed = time.time() - start
+        logger.info(f"Model setup complete in {elapsed:.0f}s")
         return self.model_dir
-    
+
     def setup_sample_data(self):
-        """Download sample data"""
+        """Download sample data (skips if already present)"""
+        if os.path.exists(self.sample_data_path) and os.path.getsize(self.sample_data_path) > 0:
+            logger.info(f"Sample data already exists at {self.sample_data_path}, skipping download")
+            return self.sample_data_path
+
+        start = time.time()
         self.create_directory(self.data_dir)
         self.download_file(self.sample_data_url, self.sample_data_path)
-        
-        # Verify download
-        self.list_directory(self.data_dir)
-        
+
+        elapsed = time.time() - start
+        logger.info(f"Sample data setup complete in {elapsed:.0f}s")
         return self.sample_data_path
-    
+
     def run_full_setup(self):
-        """Run complete setup process"""
+        """Run complete setup. Downloads model and sample data in parallel.
+        Skips entirely if model files already exist in the Volume."""
         start_time = time.time()
-        logger.info("Starting SCimilarity setup...")
-        
-        if os.path.exists(self.model_tarball) and os.path.exists(self.sample_data_path):
-            logger.info("Files already exist. Skipping setup.")
+
+        if self.model_already_extracted() and os.path.exists(self.sample_data_path):
+            logger.info("Model and sample data already present in Volume. Nothing to download.")
             return {
                 "model_dir": self.model_dir,
-                "sample_data_path": self.sample_data_path
+                "sample_data_path": self.sample_data_path,
+                "skipped": True,
             }
-        
-        model_dir = self.setup_model()
-        sample_data_path = self.setup_sample_data()
-        
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        logger.info(f"Setup complete. SCimilarity model and sample data are ready. Elapsed time: {elapsed_time:.2f} seconds.")
-        
-        return {
-            "model_dir": model_dir,
-            "sample_data_path": sample_data_path
-        }
+
+        logger.info("Starting SCimilarity setup (downloading missing files)...")
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        results = {}
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = {
+                executor.submit(self.setup_model): "model_dir",
+                executor.submit(self.setup_sample_data): "sample_data_path",
+            }
+            for future in as_completed(futures):
+                key = futures[future]
+                results[key] = future.result()
+
+        elapsed_time = time.time() - start_time
+        logger.info(f"Setup complete in {elapsed_time:.0f}s.")
+        return results
 
 # For use in DABs or as a module
 def setup_scimilarity(base_dir=f"/Volumes/{CATALOG}/{DB_SCHEMA}/{MODEL_FAMILY}", run_model_setup=True, run_data_setup=True):

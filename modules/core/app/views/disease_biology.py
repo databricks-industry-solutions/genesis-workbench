@@ -29,7 +29,7 @@ from utils.disease_biology import (
     render_runs_html_table,
 )
 from utils.streamlit_helper import get_user_info, open_run_window
-
+from genesis_workbench.models import get_batch_models
 
 from datetime import datetime
 
@@ -63,12 +63,32 @@ def _show_in_progress_banner(df):
 user_info = get_user_info()
 _ts = datetime.now().strftime("%Y%m%d_%H%M")
 
-alignment_tab, gwas_tab, ingestion_tab, annotation_tab = st.tabs([
+# Load deployed batch models for disease biology
+with st.spinner("Loading data"):
+    if "deployed_disease_biology_models_df" not in st.session_state:
+        try:
+            batch_df = get_batch_models("disease_biology")
+            if not batch_df.empty:
+                batch_df.columns = ["Name", "Description", "Job Name", "Cluster"]
+            st.session_state["deployed_disease_biology_models_df"] = batch_df
+        except Exception:
+            st.session_state["deployed_disease_biology_models_df"] = pd.DataFrame()
+    deployed_disease_biology_models_df = st.session_state["deployed_disease_biology_models_df"]
+
+settings_tab, alignment_tab, gwas_tab, ingestion_tab, annotation_tab = st.tabs([
+    "Deployed Models",
     "Variant Calling",
     "GWAS Analysis",
     "VCF Ingestion",
     "Variant Annotation",
 ])
+
+with settings_tab:
+    st.markdown("###### Deployed Models")
+    if not deployed_disease_biology_models_df.empty:
+        st.dataframe(deployed_disease_biology_models_df, use_container_width=True, hide_index=True)
+    else:
+        st.info("No batch models registered for Disease Biology. Deploy the GWAS or Parabricks module to register models.")
 
 
 # ── Variant Calling result-row selection callback ──

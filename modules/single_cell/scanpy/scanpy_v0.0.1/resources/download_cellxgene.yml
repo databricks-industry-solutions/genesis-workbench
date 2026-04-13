@@ -1,0 +1,41 @@
+resources:
+  jobs:
+    download_cellxgene_gwb:
+      name: download_cellxgene_gwb
+      tags:
+        application: genesis_workbench
+        module: single_cell
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: census_version
+          default: "2025-11-08"
+
+      tasks:
+        - task_key: download_cellxgene
+          job_cluster_key: cellxgene_cluster
+          notebook_task:
+            notebook_path: ../notebooks/download_cellxgene.py
+            source: WORKSPACE
+          timeout_seconds: 14400
+
+      job_clusters:
+        - job_cluster_key: cellxgene_cluster
+          new_cluster:
+            spark_version: 15.4.x-scala2.12
+            spark_conf:
+              spark.master: local[*, 4]
+              spark.databricks.cluster.profile: singleNode
+            node_type_id: ${var.cpu_node_type}
+            driver_node_type_id: ${var.cpu_node_type}
+            custom_tags:
+              ResourceClass: SingleNode
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            num_workers: 0
+            aws_attributes:
+              availability: ON_DEMAND

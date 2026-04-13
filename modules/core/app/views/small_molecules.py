@@ -3,6 +3,7 @@ import streamlit.components.v1 as components
 import os
 import json
 import pandas as pd
+from datetime import datetime
 
 from genesis_workbench.models import (ModelCategory,
                                       get_available_models,
@@ -50,15 +51,18 @@ with st.spinner("Loading data"):
             if not batch_df.empty:
                 batch_df.columns = ["Name", "Description", "Endpoint Name", "Cluster"]
                 batch_df["Type"] = "Batch"
-                batch_df["Model Id"] = ""
-                batch_df["Deploy Id"] = ""
-                batch_df["Model Name"] = ""
-                batch_df["Source Version"] = ""
-                batch_df["UC Name/Version"] = ""
+                batch_df["Model Id"] = None
+                batch_df["Deploy Id"] = None
+                batch_df["Model Name"] = None
+                batch_df["Source Version"] = None
+                batch_df["UC Name/Version"] = None
                 rows.append(batch_df)
         except Exception:
             pass
         deployed_small_molecule_models_df = pd.concat(rows, ignore_index=True)
+        for col in ["Model Id", "Deploy Id"]:
+            if col in deployed_small_molecule_models_df.columns:
+                deployed_small_molecule_models_df[col] = deployed_small_molecule_models_df[col].astype(str).replace("None", "")
         st.session_state["deployed_small_molecule_models_df"] = deployed_small_molecule_models_df
     deployed_small_molecule_models_df = st.session_state["deployed_small_molecule_models_df"]
 
@@ -127,7 +131,7 @@ with diffdock_tab:
 
             st.markdown("**MLflow Tracking:**")
             diffdock_mlflow_experiment = st.text_input("MLflow Experiment:", value="gwb_molecular_docking", key="diffdock_mlflow_exp")
-            diffdock_mlflow_run_name = st.text_input("Run Name:", value="molecular_docking_run", key="diffdock_mlflow_run")
+            diffdock_mlflow_run_name = st.text_input("Run Name:", value=f"molecular_docking_{datetime.now().strftime('%Y%m%d_%H%M')}", key="diffdock_mlflow_run")
             run_docking = st.form_submit_button("Run Docking", type="primary")
 
     with viewer_col:

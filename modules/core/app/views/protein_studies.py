@@ -8,7 +8,7 @@ from genesis_workbench.models import (ModelCategory,
 import pandas as pd
 from utils.streamlit_helper import get_user_info
 
-from views.protein_studies_workflows import settings, structure_prediction, protein_design, sequence_search
+from views.protein_studies_workflows import settings, structure_prediction, protein_design, sequence_search, inverse_folding
 
 st.title(":material/biotech: Protein Studies")
 
@@ -34,21 +34,24 @@ with st.spinner("Loading data"):
             if not batch_df.empty:
                 batch_df.columns = ["Name", "Description", "Endpoint Name", "Cluster"]
                 batch_df["Type"] = "Batch"
-                batch_df["Model Id"] = ""
-                batch_df["Deploy Id"] = ""
-                batch_df["Model Name"] = ""
-                batch_df["Source Version"] = ""
-                batch_df["UC Name/Version"] = ""
+                batch_df["Model Id"] = None
+                batch_df["Deploy Id"] = None
+                batch_df["Model Name"] = None
+                batch_df["Source Version"] = None
+                batch_df["UC Name/Version"] = None
                 rows.append(batch_df)
         except Exception:
             pass
         deployed_protein_models_df = pd.concat(rows, ignore_index=True)
+        for col in ["Model Id", "Deploy Id"]:
+            if col in deployed_protein_models_df.columns:
+                deployed_protein_models_df[col] = deployed_protein_models_df[col].astype(str).replace("None", "")
         st.session_state["deployed_protein_models_df"] = deployed_protein_models_df
     deployed_protein_models_df = st.session_state["deployed_protein_models_df"]
 
 user_info = get_user_info()
 
-settings_tab, sequence_search_tab, protein_structure_prediction_tab, protein_design_tab = st.tabs(["Deployed Models", "Sequence Search", "Protein Structure Prediction", "Protein Design"])
+settings_tab, sequence_search_tab, protein_structure_prediction_tab, protein_design_tab, inverse_folding_tab = st.tabs(["Deployed Models", "Sequence Search", "Protein Structure Prediction", "Protein Design", "Inverse Folding"])
 
 with settings_tab:
     settings.render(available_protein_models_df, deployed_protein_models_df)
@@ -61,3 +64,6 @@ with protein_structure_prediction_tab:
 
 with protein_design_tab:
     protein_design.render()
+
+with inverse_folding_tab:
+    inverse_folding.render()

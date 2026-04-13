@@ -33,6 +33,8 @@ _MODEL_ENDPOINT_MAP = {
     "RFDiffusion": "rfdiffusion_inpainting",
     "Boltz": "boltz",
     "AlphaFold2": "alphafold2",
+    # Single Cell
+    "scGPT Perturbation": "scgpt_perturbation",
 }
 
 def get_endpoint_name(model_name: str) -> str:

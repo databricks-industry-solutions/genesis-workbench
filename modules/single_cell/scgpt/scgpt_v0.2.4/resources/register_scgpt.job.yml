@@ -20,6 +20,22 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/02_import_model_gwb.py
 
+        # Perturbation model — reuses same weights, different PyFunc wrapper
+        # Uses its own parameter (perturb_model_name) to avoid colliding with
+        # the job-level model_name=scgpt used by the embedding model
+        - task_key: register_scgpt_perturbation_task
+          depends_on:
+            - task_key: "register_scgpt_task"
+          job_cluster_key: job_cluster_get_embedding
+          notebook_task:
+            notebook_path: ../notebooks/03_register_scgpt_perturbation.py
+
+        - task_key: import_scgpt_perturbation_task
+          depends_on:
+            - task_key: "register_scgpt_perturbation_task"
+          notebook_task:
+            notebook_path: ../notebooks/04_import_perturbation_gwb.py
+
       environments: ## serverless
         - environment_key: default
           spec:
@@ -33,6 +49,8 @@ resources:
           #default: ${var.module_schema_name}
         - name: model_name
           default: scgpt
+        - name: perturb_model_name
+          default: scgpt_perturbation
         - name: cache_dir
           default: ${resources.volumes.scgpt_cache_dir.name}
         - name: experiment_name

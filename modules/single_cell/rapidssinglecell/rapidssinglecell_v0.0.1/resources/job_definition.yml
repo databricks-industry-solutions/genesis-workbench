@@ -9,9 +9,7 @@ resources:
 
       tasks:
         - task_key: run_rapidssinglecell
-          environment_key: gpu_env
-          compute:
-            hardware_accelerator: "GPU_1xA10"
+          job_cluster_key: gpu_ml_cluster
           notebook_task:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
@@ -20,15 +18,23 @@ resources:
               species: hsapiens
             source: WORKSPACE
 
-      environments:
-        - environment_key: gpu_env
-          spec:
-            environment_version: "4"
-            dependencies:
-              - --extra-index-url https://download.pytorch.org/whl/cu121
-              - rapids-singlecell
-              - scikit-learn>=1.5,<1.6
-              - numpy<2
+      job_clusters:
+        - job_cluster_key: gpu_ml_cluster
+          new_cluster:
+            num_workers: 0
+            node_type_id: ${var.gpu_t4_rapids_node_type}
+            driver_node_type_id: ${var.gpu_t4_rapids_node_type}
+            spark_version: ${var.gpu_ml_spark_version}
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*, 4]
+            custom_tags:
+              ResourceClass: SingleNode
+            aws_attributes:
+              availability: ON_DEMAND
 
       parameters:
         - name: catalog

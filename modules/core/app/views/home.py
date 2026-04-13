@@ -48,21 +48,33 @@ if st.session_state.get("mlflow_access_verified") is False:
 
 
 def _build_doc_context(docs):
-    """Build a compact summary of available workflows for the LLM prompt."""
+    """Build a compact summary of available workflows for the LLM prompt.
+
+    Includes the intro paragraph plus all section/subsection headings so the
+    LLM knows the full feature set covered by each document.
+    """
     lines = []
     for doc in docs:
         title = doc["title"]
         intro = ""
+        sections = []
         in_intro = False
         for line in doc["content"].splitlines():
             if line.startswith("# ") and not in_intro:
                 in_intro = True
                 continue
-            if line.startswith("## "):
-                break
+            if line.startswith("## ") or line.startswith("### "):
+                in_intro = False
+                heading = line.lstrip("#").strip()
+                if heading:
+                    sections.append(heading)
+                continue
             if in_intro:
                 intro += line + " "
-        lines.append(f"- **{title}**: {intro.strip()}")
+        entry = f"- **{title}**: {intro.strip()}"
+        if sections:
+            entry += " Sections: " + ", ".join(sections) + "."
+        lines.append(entry)
     return "\n".join(lines)
 
 
@@ -121,7 +133,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 assistant_tab, search_tab = st.tabs([
-    ":material/assistant: What do you want to do?",
+    ":material/assistant: AI Assistant",
     ":material/search: Search Documentation",
 ])
 
@@ -177,25 +189,29 @@ with search_tab:
     st.markdown("")  # spacer between tabs and content
     st.markdown("")  # spacer between tabs and content
 
-    doc_query = st.text_input(
-        "doc_search",
-        value="",
-        placeholder="Search workflows, methods, inputs...",
-        label_visibility="collapsed",
-        key="doc_search_input",
-    )
+    @st.fragment
+    def _search_fragment():
+        doc_query = st.text_input(
+            "doc_search",
+            value="",
+            placeholder="Search workflows, methods, inputs...",
+            label_visibility="collapsed",
+            key="doc_search_input",
+        )
 
-    if doc_query.strip():
-        words = doc_query.strip().lower().split()
-        results = [
-            doc for doc in doc_index
-            if all(w in doc["title"].lower() or w in doc["content"].lower() for w in words)
-        ]
-        if results:
-            for r in results:
-                with st.expander(r["title"]):
-                    st.markdown(r["content"])
+        if doc_query.strip():
+            words = doc_query.strip().lower().split()
+            results = [
+                doc for doc in doc_index
+                if all(w in doc["title"].lower() or w in doc["content"].lower() for w in words)
+            ]
+            if results:
+                for r in results:
+                    with st.expander(r["title"]):
+                        st.markdown(r["content"])
+            else:
+                st.caption("No results found.")
         else:
-            st.caption("No results found.")
-    else:
-        st.caption(f"{len(doc_index)} workflow documents available. Type to search.")
+            st.caption(f"{len(doc_index)} workflow documents available. Type to search.")
+
+    _search_fragment()

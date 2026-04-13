@@ -379,7 +379,7 @@ for idx, orig in enumerate(test_loader):
         print(f"Complex {idx}: FAILED - {e}")
         traceback.print_exc()
 
-print("Inference complete!")
+print("Inference complete")
 
 # COMMAND ----------
 

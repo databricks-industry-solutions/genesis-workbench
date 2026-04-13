@@ -1,5 +1,21 @@
 # Installation Instructions
 
+### Claude Code Skills Available
+
+This project includes [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skills in the `claude_skills/` directory that can assist with deployment, troubleshooting, and development. If you use Claude Code, these skills are automatically available:
+
+| Skill | Description |
+|-------|-------------|
+| `genesis-workbench` | Overview of all modules, models, and workflows |
+| `genesis-workbench-installation` | Step-by-step deployment, environment configuration, and known issues |
+| `genesis-workbench-troubleshooting` | Common deployment failures, endpoint errors, and fixes |
+| `genesis-workbench-workflows` | End-to-end user guide for every UI workflow tab |
+| `genesis-workbench-development` | How to add new models, endpoints, and UI workflows |
+
+To use these skills, copy the skill files to your Claude Code skills directory or reference them directly. They cover everything from initial setup to adding new biological AI models.
+
+---
+
 ### Module Deploy and Destroy process
 
 #### Anatomy

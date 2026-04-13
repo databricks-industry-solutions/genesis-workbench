@@ -68,6 +68,21 @@ set_app_permissions_for_job(job_id=run_scanpy_job_id, user_email=user_email)
 
 # COMMAND ----------
 
+# Register as batch model so it appears in the Deployed Models tab
+from genesis_workbench.models import register_batch_model
+
+register_batch_model(
+    model_name="scanpy",
+    model_display_name="Scanpy Single Cell Analysis",
+    model_description="CPU-based single-cell QC, clustering, UMAP, marker gene detection, and optional pseudotime",
+    model_category="single_cell",
+    module="single_cell",
+    job_id=run_scanpy_job_id,
+    job_name="run_scanpy",
+    cluster_type="CPU",
+    added_by=user_email,
+)
+
 print(f"Successfully registered scanpy job with ID: {run_scanpy_job_id}")
 print(f"App permissions granted for job execution")
 
