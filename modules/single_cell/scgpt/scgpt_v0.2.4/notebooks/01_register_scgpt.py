@@ -63,38 +63,44 @@ print(f"Cache full path: {cache_full_path} established")
 
 # COMMAND ----------
 
-#: downnload model
+#: download model (skips if already present in Volume)
 import gdown
+import os
+
 model_dir = f'{cache_full_path}/models/'
 print(f"Model dir: {model_dir}")
 
-# with the file ID, for example, the | blood                     | Pretrained on 10.3 million blood and bone marrow cells. |
-# [link](https://drive.google.com/drive/folders/1kkug5C7NjvXIwQGGaGoqXTk_Lb_pDrBU?usp=sharing) |
-########################################################
-# Feb 19, 2026 update to use whole-human (recommended) model instead of blood model. | [link](https://drive.google.com/drive/folders/1oWh_-ZRdhtoGQ2Fw24HP41FgLoomVo-y?usp=sharing) |
-# ########################################################
-id = "1oWh_-ZRdhtoGQ2Fw24HP41FgLoomVo-y"
-# gdown.download(id=id, )
-gdown_return = gdown.download_folder(id=id, output=f"{model_dir}/")
+# Check if model files already exist to skip re-download on re-deploy
+model_file_check = os.path.join(model_dir, "best_model.pt")
+if os.path.exists(model_file_check) and os.path.getsize(model_file_check) > 0:
+    print(f"Model already exists at {model_file_check} ({os.path.getsize(model_file_check)} bytes), skipping download")
+    for root, dirs, files in os.walk(model_dir):
+        if "best_model.pt" in files:
+            model_dir = root
+            break
+else:
+    # Feb 19, 2026 update: whole-human (recommended) model
+    id = "1oWh_-ZRdhtoGQ2Fw24HP41FgLoomVo-y"
+    gdown_return = gdown.download_folder(id=id, output=f"{model_dir}/")
+    model_dir = gdown_return[0].rsplit('/', 1)[0]
 
-model_dir = gdown_return[0].rsplit('/', 1)[0]
 print(f"Model dir: {model_dir}")
 
 
 # COMMAND ----------
 
-#: downnload data
+#: download data (skips if already present in Volume)
 import wget
-import os
-# old url: https://figshare.com/ndownloader/files/25717328, which will download a 0kb size file due to 
-# This usually happens because the Figshare “ndownloader” URL now returns a blocked/redirect/challenge response to non-browser clients, so your script creates the output file but receives no real payload (or gets a 403/HTML instead of the .h5ad). Servers commonly enforce this via User-Agent or similar bot checks, which shows up as HTTP 403 “Forbidden” for bare urllib-style requests
-file_url = "https://api.figshare.com/v2/file/download/25717328"
-file_path = f'{cache_full_path}/data/'
-os.makedirs(os.path.dirname(file_path), exist_ok=True)
-file_path = f'{cache_full_path}/data/file.h5ad'
-print(f"Dataset dir: {file_path}")
 
-wget.download(file_url, str(file_path))
+file_path = f'{cache_full_path}/data/file.h5ad'
+os.makedirs(os.path.dirname(file_path), exist_ok=True)
+print(f"Dataset path: {file_path}")
+
+if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+    print(f"Dataset already exists at {file_path} ({os.path.getsize(file_path)} bytes), skipping download")
+else:
+    file_url = "https://api.figshare.com/v2/file/download/25717328"
+    wget.download(file_url, str(file_path))
 
 
 
@@ -185,6 +191,36 @@ class TransformerModelWrapper(mlflow.pyfunc.PythonModel):
         self.mask_value = self.model_configs["mask_value"]
         self.n_bins = self.model_configs["n_bins"]
         self.n_hvg = self.model_configs["n_hvg"]
+
+        # Pre-load model weights once during startup instead of on every predict() call.
+        # This avoids re-reading 2-3 GB from disk on every REST request.
+        self._loaded_model = TransformerModel(
+            ntoken=self.ntokens,
+            d_model=self.embsize,
+            nhead=self.nhead,
+            d_hid=self.d_hid,
+            nlayers=self.nlayers,
+            vocab=self.vocab,
+            pad_value=self.pad_value,
+            n_input_bins=self.n_bins,
+        )
+        try:
+            self._loaded_model.load_state_dict(torch.load(self.model_file, map_location=self.device))
+            print(f"Loaded all model params from {self.model_file}")
+        except Exception:
+            model_dict = self._loaded_model.state_dict()
+            pretrained_dict = torch.load(self.model_file, map_location=self.device)
+            pretrained_dict = {
+                k: v for k, v in pretrained_dict.items()
+                if k in model_dict and v.shape == model_dict[k].shape
+            }
+            model_dict.update(pretrained_dict)
+            self._loaded_model.load_state_dict(model_dict)
+            print(f"Loaded {len(pretrained_dict)}/{len(model_dict)} matching params from {self.model_file}")
+
+        self._loaded_model.to(self.device)
+        self._loaded_model.eval()
+        print(f"Model ready on {self.device}")
 
     def preprocess(
         self,
@@ -301,39 +337,9 @@ class TransformerModelWrapper(mlflow.pyfunc.PythonModel):
             )
             print("preprocessing finished!")
 
-        print("Now defining the TransformerModel!")
-        self.model = TransformerModel(
-            ntoken=params.get("ntokens", self.ntokens),
-            d_model=params.get("embsize", self.embsize),
-            nhead=params.get("nhead", self.nhead),
-            d_hid=params.get("d_hid", self.d_hid),
-            nlayers=params.get("nlayers", self.nlayers),
-            vocab=self.vocab,
-            pad_value=params.get("pad_value", self.pad_value),
-            n_input_bins=params.get(
-                "n_input_bins",
-                self.n_input_bins if hasattr(self, "n_input_bins") else self.n_bins,
-            ),
-        )
-
-        try:
-            self.model.load_state_dict(torch.load(self.model_file))
-            print(f"Loading all model params from {self.model_file}")
-        except:
-            model_dict = self.model.state_dict()
-            pretrained_dict = torch.load(self.model_file)
-            pretrained_dict = {
-                k: v
-                for k, v in pretrained_dict.items()
-                if k in model_dict and v.shape == model_dict[k].shape
-            }
-            for k, v in pretrained_dict.items():
-                print(f"Loading params {k} with shape {v.shape}")
-                model_dict.update(pretrained_dict)
-                self.model.load_state_dict(model_dict)
-
-        self.model.to(self.device)
-        self.model.eval()
+        # Use the model pre-loaded in load_context() -- avoids reloading 2-3 GB
+        # of weights from disk on every request.
+        self.model = self._loaded_model
 
         gene_ids = np.array([id for id in self.gene2idx.values()])
         gene_embeddings = self.model.encoder(
@@ -413,11 +419,21 @@ dir(adata)
 
 # COMMAND ----------
 
-# DBTITLE 1,Generate input example from Subset of AnnData Object
-adata_subset = adata[:1000,:1000]
-#: version 1 (original format): input_data = pd.DataFrame({'adata_sparsematrix': [adata_subset.X], 'adata_obs': [adata_subset.obs], 'adata_var':[adata_subset.var]})
-#: version 2 (serving_input format):
-input_data = pd.DataFrame({'adata_sparsematrix': [adata_subset.X.toarray().tolist()], 'adata_obs': [adata_subset.obs.to_json(orient='split')], 'adata_var':[adata_subset.var.to_json(orient='split')]})
+# DBTITLE 1,Generate input example from small subset of AnnData Object
+# Use a small subset (10 cells x 1500 genes) to keep the input_example compact
+# while having enough genes to survive HVG filtering (subset_hvg defaults to 1200).
+# Large input_examples (e.g., 1000x1000) cause slow model logging and bloated
+# MLflow artifacts. The model handles any size at inference time.
+adata_subset = adata[:10, :1500]
+
+# Each column must be JSON-serializable for model serving:
+#   - adata_sparsematrix: sparse -> dense -> list of lists  (NOT numpy array)
+#   - adata_obs/adata_var: DataFrame -> JSON string         (NOT raw DataFrame)
+input_data = pd.DataFrame({
+    'adata_sparsematrix': [adata_subset.X.toarray().tolist()],
+    'adata_obs': [adata_subset.obs.to_json(orient='split')],
+    'adata_var': [adata_subset.var.to_json(orient='split')],
+})
 
 
 

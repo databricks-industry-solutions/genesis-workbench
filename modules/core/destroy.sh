@@ -27,7 +27,7 @@ echo "=========================================================="
 
 databricks bundle destroy --var="$EXTRA_PARAMS" --auto-approve
 
-rm .deployed
+rm -f .deployed
 
 if [ $? -eq 0 ]; then
     echo "✅ SUCCESS! Destroy complete."

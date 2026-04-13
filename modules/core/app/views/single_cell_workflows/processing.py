@@ -2,6 +2,7 @@
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 import os
 import plotly.express as px
 from mlflow.tracking import MlflowClient
@@ -68,6 +69,8 @@ def _display_run_analysis():
             st.markdown("**Dimensionality Reduction & Clustering:**")
             n_pcs = st.number_input("Number of Principal Components", min_value=0, value=50, step=5)
             cluster_resolution = st.number_input("Cluster Resolution", min_value=0.0, max_value=2.0, value=0.15, step=0.05, format="%.2f")
+            compute_pseudotime = st.checkbox("Compute Pseudotime", value=False,
+                                             help="Compute diffusion pseudotime for trajectory analysis. Adds a pseudotime column to results.")
 
         st.divider()
         submit_button = st.form_submit_button("Start Analysis", use_container_width=True)
@@ -90,7 +93,8 @@ def _display_run_analysis():
             params = dict(data_path=data_path, mlflow_experiment=mlflow_experiment, mlflow_run_name=mlflow_run_name,
                           gene_name_column=gene_name_column, species=species, min_genes=min_genes, min_cells=min_cells,
                           pct_counts_mt=pct_counts_mt, n_genes_by_counts=n_genes_by_counts, target_sum=target_sum,
-                          n_top_genes=n_top_genes, n_pcs=n_pcs, cluster_resolution=cluster_resolution, user_info=user_info)
+                          n_top_genes=n_top_genes, n_pcs=n_pcs, cluster_resolution=cluster_resolution,
+                          user_info=user_info, compute_pseudotime=compute_pseudotime)
 
             start_fn = start_scanpy_job if mode == "scanpy" else start_rapids_singlecell_job if mode == "rapids-singlecell" else None
             if start_fn is None:
@@ -384,6 +388,150 @@ def _display_results_viewer():
             st.plotly_chart(fig_dotplot, use_container_width=True)
         else:
             st.warning("Clustering information or marker genes not available")
+
+    # Differential Expression section
+    st.markdown("---")
+    with st.expander("Differential Expression", expanded=False):
+        cluster_col_de = _get_cluster_column(df)
+        if cluster_col_de and expr_cols:
+            de_clusters = sorted(df[cluster_col_de].unique(), key=lambda x: int(x) if str(x).isdigit() else x)
+            de_col1, de_col2, de_col3 = st.columns([2, 2, 1], vertical_alignment="bottom")
+            with de_col1:
+                de_cluster_a = st.selectbox("Cluster A:", de_clusters, key="de_cluster_a")
+            with de_col2:
+                de_cluster_b = st.selectbox("Cluster B:", [c for c in de_clusters if c != de_cluster_a], key="de_cluster_b")
+            with de_col3:
+                de_compute = st.button("Compute DE", use_container_width=True, key="de_compute_btn")
+
+            de_cache_key = f"de_results_{de_cluster_a}_{de_cluster_b}"
+            if de_compute:
+                with st.spinner("Computing differential expression..."):
+                    from scipy.stats import mannwhitneyu
+                    cells_a = df[df[cluster_col_de] == de_cluster_a]
+                    cells_b = df[df[cluster_col_de] == de_cluster_b]
+                    de_results = []
+                    for col in expr_cols:
+                        gene = col.replace("expr_", "")
+                        vals_a, vals_b = cells_a[col].values, cells_b[col].values
+                        mean_a, mean_b = vals_a.mean(), vals_b.mean()
+                        log2fc = np.log2((mean_a + 1e-9) / (mean_b + 1e-9))
+                        try:
+                            _, pval = mannwhitneyu(vals_a, vals_b, alternative="two-sided")
+                        except ValueError:
+                            pval = 1.0
+                        de_results.append({"Gene": gene, "log2FC": log2fc, "p_value": pval, "Mean A": mean_a, "Mean B": mean_b})
+                    de_df = pd.DataFrame(de_results).sort_values("p_value")
+                    n_tests = len(de_df)
+                    de_df["rank"] = range(1, n_tests + 1)
+                    de_df["p_adj"] = (de_df["p_value"] * n_tests / de_df["rank"]).clip(upper=1.0)
+                    de_df["-log10(p_adj)"] = -np.log10(de_df["p_adj"].clip(lower=1e-300))
+                    de_df = de_df.drop(columns=["rank"])
+                    st.session_state[de_cache_key] = de_df
+
+            if de_cache_key in st.session_state:
+                de_df = st.session_state[de_cache_key]
+                de_df["significant"] = (de_df["p_adj"] < 0.05) & (de_df["log2FC"].abs() > 1)
+                fig_volcano = px.scatter(
+                    de_df, x="log2FC", y="-log10(p_adj)", color="significant",
+                    color_discrete_map={True: "#E74C3C", False: "#95A5A6"},
+                    hover_data=["Gene", "Mean A", "Mean B"],
+                    title=f"Volcano Plot: Cluster {de_cluster_a} vs {de_cluster_b}",
+                    labels={"log2FC": "log2 Fold Change", "-log10(p_adj)": "-log10(Adjusted P-value)"}, height=450)
+                fig_volcano.add_vline(x=1, line_dash="dash", line_color="gray")
+                fig_volcano.add_vline(x=-1, line_dash="dash", line_color="gray")
+                fig_volcano.add_hline(y=-np.log10(0.05), line_dash="dash", line_color="gray")
+                top_sig = de_df[de_df["significant"]].nlargest(10, "-log10(p_adj)")
+                for _, row in top_sig.iterrows():
+                    fig_volcano.add_annotation(x=row["log2FC"], y=row["-log10(p_adj)"], text=row["Gene"], showarrow=False, font=dict(size=10), yshift=8)
+                fig_volcano.update_layout(showlegend=False, plot_bgcolor="white")
+                st.plotly_chart(fig_volcano, use_container_width=True)
+                sig_df = de_df[de_df["significant"]].sort_values("log2FC", key=abs, ascending=False)
+                if not sig_df.empty:
+                    st.markdown(f"**{len(sig_df)} significant genes** (|log2FC| > 1, adjusted p < 0.05)")
+                    st.dataframe(sig_df[["Gene", "log2FC", "p_adj", "Mean A", "Mean B"]].reset_index(drop=True), use_container_width=True, hide_index=True)
+                else:
+                    st.info("No genes meet significance threshold (|log2FC| > 1, adjusted p < 0.05)")
+        else:
+            st.warning("Clustering or marker gene data not available for DE analysis")
+
+    # Pathway Enrichment section
+    st.markdown("---")
+    with st.expander("Pathway Enrichment", expanded=False):
+        cluster_col_enrich = _get_cluster_column(df)
+        if cluster_col_enrich and expr_cols:
+            enrich_clusters = sorted(df[cluster_col_enrich].unique(), key=lambda x: int(x) if str(x).isdigit() else x)
+            enr_col1, enr_col2, enr_col3 = st.columns([2, 2, 1], vertical_alignment="bottom")
+            with enr_col1:
+                enrich_cluster = st.selectbox("Select Cluster:", enrich_clusters, key="enrich_cluster")
+            with enr_col2:
+                enrich_dbs = st.multiselect("Enrichment Databases:",
+                    ["GO_Biological_Process_2023", "KEGG_2021_Human", "Reactome_2022",
+                     "GO_Molecular_Function_2023", "GO_Cellular_Component_2023"],
+                    default=["GO_Biological_Process_2023"], key="enrich_dbs")
+            with enr_col3:
+                enrich_run = st.button("Run Enrichment", use_container_width=True, key="enrich_run_btn")
+
+            enrich_cache_key = f"enrich_{enrich_cluster}_{'_'.join(enrich_dbs)}"
+            if enrich_run and enrich_dbs:
+                with st.spinner("Running pathway enrichment via Enrichr..."):
+                    try:
+                        import gseapy as gp
+                        try:
+                            marker_mapping_e = download_cluster_markers_mapping(run_id)
+                            gene_list = marker_mapping_e[str(enrich_cluster)].dropna().tolist() if str(enrich_cluster) in marker_mapping_e.columns else marker_mapping_e.iloc[:, 0].dropna().tolist()
+                        except Exception:
+                            cl_mean = df[df[cluster_col_enrich] == enrich_cluster][expr_cols].mean()
+                            gene_list = [c.replace("expr_", "") for c in cl_mean.nlargest(50).index]
+                        enr_results = gp.enrichr(gene_list=gene_list, gene_sets=enrich_dbs, organism="human", outdir=None, no_plot=True)
+                        st.session_state[enrich_cache_key] = enr_results.results
+                    except ImportError:
+                        st.error("gseapy is not installed. Add `gseapy` to requirements.txt.")
+                    except Exception as e:
+                        st.error(f"Enrichment failed: {e}")
+
+            if enrich_cache_key in st.session_state:
+                enr_df = st.session_state[enrich_cache_key]
+                if not enr_df.empty:
+                    enr_df["-log10(Adjusted P-value)"] = -np.log10(enr_df["Adjusted P-value"].clip(lower=1e-300))
+                    top_terms = enr_df.nsmallest(15, "Adjusted P-value")
+                    fig_enrich = px.bar(top_terms.sort_values("-log10(Adjusted P-value)"),
+                        x="-log10(Adjusted P-value)", y="Term", color="-log10(Adjusted P-value)",
+                        color_continuous_scale="Viridis", orientation="h",
+                        title=f"Top Enriched Pathways — Cluster {enrich_cluster}",
+                        height=max(400, len(top_terms) * 30))
+                    fig_enrich.update_layout(yaxis=dict(autorange="reversed"), plot_bgcolor="white", showlegend=False)
+                    st.plotly_chart(fig_enrich, use_container_width=True)
+                    st.dataframe(enr_df[["Term", "Overlap", "Adjusted P-value", "Genes", "Gene_set"]].head(30), use_container_width=True, hide_index=True)
+                else:
+                    st.info("No enrichment results found.")
+        else:
+            st.warning("Clustering or marker gene data not available for enrichment analysis")
+
+    # Trajectory / Pseudotime section
+    st.markdown("---")
+    with st.expander("Trajectory Analysis (Pseudotime)", expanded=False):
+        if "dpt_pseudotime" in df.columns:
+            st.markdown("##### Diffusion Pseudotime")
+            fig_traj = px.scatter(df, x="UMAP_0", y="UMAP_1", color="dpt_pseudotime",
+                color_continuous_scale="Viridis", title="UMAP colored by Pseudotime",
+                labels={"dpt_pseudotime": "Pseudotime"}, height=500)
+            fig_traj.update_traces(marker=dict(size=3, opacity=0.7))
+            fig_traj.update_layout(plot_bgcolor="white")
+            st.plotly_chart(fig_traj, use_container_width=True)
+            if expr_cols:
+                traj_gene = st.selectbox("Color by gene expression along pseudotime:",
+                    sorted([c.replace("expr_", "") for c in expr_cols]), key="traj_gene_select")
+                traj_col = f"expr_{traj_gene}"
+                if traj_col in df.columns:
+                    traj_scatter = df[["dpt_pseudotime", traj_col]].dropna().sort_values("dpt_pseudotime")
+                    fig_gene_traj = px.scatter(traj_scatter, x="dpt_pseudotime", y=traj_col, trendline="lowess",
+                        title=f"{traj_gene} expression along pseudotime",
+                        labels={"dpt_pseudotime": "Pseudotime", traj_col: f"{traj_gene} Expression"}, height=350)
+                    fig_gene_traj.update_traces(marker=dict(size=3, opacity=0.5))
+                    fig_gene_traj.update_layout(plot_bgcolor="white")
+                    st.plotly_chart(fig_gene_traj, use_container_width=True)
+        else:
+            st.info("Pseudotime data is not available for this run. Re-run the processing pipeline with **Compute Pseudotime** enabled.")
 
     # QC section
     st.markdown("---")

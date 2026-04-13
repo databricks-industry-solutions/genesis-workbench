@@ -35,4 +35,4 @@ for module in chemprop/chemprop_v2 diffdock/diffdock_v1 proteina_complexa/protei
         cd ../..
     done
 
-rm .deployed
+rm -f .deployed

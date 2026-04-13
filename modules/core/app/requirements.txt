@@ -9,5 +9,7 @@ parasail
 plotly
 openai
 rdkit
+gseapy
+scipy
 
 lib/genesis_workbench-0.1.0-py3-none-any.whl

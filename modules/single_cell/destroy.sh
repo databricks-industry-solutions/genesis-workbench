@@ -33,4 +33,4 @@ for module in scanpy/scanpy_v0.0.1 rapidssinglecell/rapidssinglecell_v0.0.1 scgp
         cd ../..
     done
 
-rm .deployed
+rm -f .deployed

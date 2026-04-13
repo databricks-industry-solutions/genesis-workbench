@@ -88,12 +88,13 @@ resources:
           default: Small  # Keep Small (0-4 concurrency) — Medium OOMs loading ~23M cell reference
 
       job_clusters:
+        # wget only downloads files — CPU node is sufficient and cheaper than GPU
         - job_cluster_key: job_cluster_wget
           new_cluster:
             num_workers: 0
-            node_type_id: ${var.a10_node_type} 
-            driver_node_type_id: ${var.a10_node_type}  
-            spark_version: '14.3.x-gpu-ml-scala2.12'
+            node_type_id: ${var.cpu_node_type}
+            driver_node_type_id: ${var.cpu_node_type}
+            spark_version: '14.3.x-cpu-ml-scala2.12'
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             single_user_name: ${workspace.current_user.userName}
@@ -102,18 +103,16 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
-            # On-demand avoids spot preemption during long-running model
-            # registration/download jobs
             aws_attributes:
               availability: ON_DEMAND
 
+        # GeneOrder registration is lightweight (50KB TSV) — CPU node is sufficient
         - job_cluster_key: job_cluster_gene_order
           new_cluster:
             num_workers: 0
-            ### NEED larger compute for SCimilarity
-            node_type_id: ${var.a10_node_type}  
-            driver_node_type_id: ${var.a10_node_type}  
-            spark_version: '14.3.x-gpu-ml-scala2.12'
+            node_type_id: ${var.cpu_node_type}
+            driver_node_type_id: ${var.cpu_node_type}
+            spark_version: '14.3.x-cpu-ml-scala2.12'
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             single_user_name: ${workspace.current_user.userName}

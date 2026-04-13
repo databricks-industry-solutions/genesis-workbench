@@ -38,6 +38,7 @@ dbutils.widgets.text("target_sum", "10000", "Target Sum for Normalization")
 dbutils.widgets.text("n_top_genes", "500", "Number of Highly Variable Genes")
 dbutils.widgets.text("n_pcs", "50", "Number of Principal Components")
 dbutils.widgets.text("cluster_resolution", "0.2", "Cluster Resolution")
+dbutils.widgets.text("compute_pseudotime", "false", "Compute Pseudotime (true/false)")
 
 # COMMAND ----------
 
@@ -58,6 +59,7 @@ parameters = {
   'n_top_genes': int(dbutils.widgets.get("n_top_genes")),
   'n_pcs': int(dbutils.widgets.get("n_pcs")),
   'cluster_resolution': float(dbutils.widgets.get("cluster_resolution")),
+  'compute_pseudotime': dbutils.widgets.get("compute_pseudotime").lower() == "true",
 }
 
 metrics = {}
@@ -329,6 +331,23 @@ sc.pl.umap(
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ### Diffusion Pseudotime (optional)
+
+# COMMAND ----------
+
+if parameters.get('compute_pseudotime', False):
+    import numpy as np
+    print("Computing diffusion pseudotime...")
+    adata.uns['iroot'] = int(np.flatnonzero(adata.obs['cluster'] == '0')[0])
+    sc.tl.diffmap(adata)
+    sc.tl.dpt(adata)
+    print(f"Pseudotime range: {adata.obs['dpt_pseudotime'].min():.3f} - {adata.obs['dpt_pseudotime'].max():.3f}")
+else:
+    print("Pseudotime computation skipped (compute_pseudotime=false)")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ### Find marker genes for each cluster
 
 # COMMAND ----------
@@ -452,6 +471,10 @@ else:
 # Add each marker gene as a column
 for i, gene in enumerate(marker_genes):
     df_flat[f"expr_{gene}"] = expression_matrix[:, i]
+
+# Add pseudotime if computed
+if 'dpt_pseudotime' in adata.obs.columns:
+    df_flat['dpt_pseudotime'] = adata.obs.loc[adata_markers.obs_names, 'dpt_pseudotime'].values
 
 # COMMAND ----------
 

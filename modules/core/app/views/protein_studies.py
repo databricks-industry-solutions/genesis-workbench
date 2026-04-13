@@ -8,7 +8,7 @@ from genesis_workbench.models import (ModelCategory,
 import pandas as pd
 from utils.streamlit_helper import get_user_info
 
-from views.protein_studies_workflows import settings, structure_prediction, protein_design, sequence_search
+from views.protein_studies_workflows import settings, structure_prediction, protein_design, sequence_search, inverse_folding
 
 st.title(":material/biotech: Protein Studies")
 
@@ -48,7 +48,7 @@ with st.spinner("Loading data"):
 
 user_info = get_user_info()
 
-settings_tab, sequence_search_tab, protein_structure_prediction_tab, protein_design_tab = st.tabs(["Deployed Models", "Sequence Search", "Protein Structure Prediction", "Protein Design"])
+settings_tab, sequence_search_tab, protein_structure_prediction_tab, protein_design_tab, inverse_folding_tab = st.tabs(["Deployed Models", "Sequence Search", "Protein Structure Prediction", "Protein Design", "Inverse Folding"])
 
 with settings_tab:
     settings.render(available_protein_models_df, deployed_protein_models_df)
@@ -61,3 +61,6 @@ with protein_structure_prediction_tab:
 
 with protein_design_tab:
     protein_design.render()
+
+with inverse_folding_tab:
+    inverse_folding.render()

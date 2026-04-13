@@ -25,7 +25,6 @@ echo "Catalog: $core_catalog_name"
 echo "Schema: $core_schema_name"
 
 set +e
-echo "databricks volumes create $core_catalog_name $core_schema_name alphafold MANAGED"
 databricks volumes create $core_catalog_name $core_schema_name alphafold MANAGED
 if [ "$?" -eq "0" ]
 then

@@ -45,6 +45,10 @@ def hit_esmfold(sequence):
 def hit_rfdiffusion(input_dict):
     return hit_model_endpoint('RFDiffusion', [input_dict])[0]
 
+@mlflow.trace(span_type="LLM")
+def hit_boltz(sequence):
+    return hit_model_endpoint('boltz', [sequence])[0]
+
 @mlflow.trace(span_type="TOOL")
 def hit_proteinmpnn(pdb_str):
     return hit_model_endpoint('ProteinMPNN', [pdb_str])

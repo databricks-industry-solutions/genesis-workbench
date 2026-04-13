@@ -24,9 +24,10 @@ databricks bundle run register_scanpy_job $EXTRA_PARAMS
 
 echo ""
 echo "▶️ [scanpy] Downloading gene reference tables"
+echo "🚨 This job might take a long time to finish. See Jobs & Pipeline tab for status"
 echo ""
 
-databricks bundle run download_gene_references_gwb $EXTRA_PARAMS
+databricks bundle run download_gene_references_gwb $EXTRA_PARAMS --no-wait
 
 echo ""
 echo "✅ [scanpy] Deployment complete"

@@ -28,5 +28,5 @@ for module in boltz/boltz_1 esmfold/esmfold_v1 protein_mpnn/protein_mpnn_v0.1.0 
     done
 
 
-rm .deployed
+rm -f .deployed
 

@@ -6,7 +6,7 @@ import os
 import logging
 
 from utils.molstar_tools import molstar_html_multibody
-from utils.protein_design import hit_esmfold
+from utils.protein_design import hit_esmfold, hit_boltz
 from utils.protein_structure import (start_run_alphafold_job,
                                      search_alphafold_runs_by_run_name,
                                      search_alphafold_runs_by_experiment_name,
@@ -71,7 +71,7 @@ def render():
     user_info = get_user_info()
     st.markdown("###### Predict Protein Structure")
 
-    view_model_choice = st.pills("Model:", ["ESMFold", "AlphaFold2"],
+    view_model_choice = st.pills("Model:", ["ESMFold", "AlphaFold2", "Boltz"],
                                  selection_mode="single", default="ESMFold")
 
     if view_model_choice == "ESMFold":
@@ -193,3 +193,28 @@ def render():
             selected_row_for_view = alphafold_results_selected_row.selection.rows
             if len(selected_row_for_view) > 0 and alphafold_result_view_btn:
                 _display_view_alphafold_result_dialog(selected_row_for_view)
+
+    if view_model_choice == "Boltz":
+        c1, c2, c3 = st.columns([3, 1, 1], vertical_alignment="bottom")
+        with c1:
+            view_boltz_input_sequence = st.text_area(
+                "Provide an input sequence to predict the structure:",
+                "MTYKLILNGKTLKGETTTEAVDAATAEKVFKQYANDNGVDGEWTYDAATKTFTVTE",
+                key="view_boltz_input_sequence")
+        with c2:
+            view_structure_boltz_btn = st.button("Predict", key="view_structure_boltz_btn")
+            clear_view_boltz_btn = st.button("Clear", key="clear_view_boltz_btn")
+
+        boltz_viewer = st.container()
+        if view_structure_boltz_btn:
+            with st.spinner("Predicting structure with Boltz..."):
+                try:
+                    pdb_result = hit_boltz(view_boltz_input_sequence)
+                    with boltz_viewer:
+                        html = molstar_html_multibody(pdb_result)
+                        components.html(html, height=700)
+                except Exception as e:
+                    st.error(f"Error predicting structure: {e}")
+
+        if clear_view_boltz_btn:
+            boltz_viewer.empty()
