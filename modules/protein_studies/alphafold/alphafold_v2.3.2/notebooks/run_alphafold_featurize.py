@@ -138,6 +138,7 @@ print(os.environ['AF_FASTA_FILE'])
 
 # DBTITLE 1,run alphafold - featurize
 # MAGIC %sh
+# MAGIC set -euo pipefail
 # MAGIC
 # MAGIC FLAGS="--data_dir=${BASEDIR}\
 # MAGIC   --fasta_paths=${AF_FASTA_FILE}\

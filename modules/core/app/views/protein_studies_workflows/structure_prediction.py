@@ -4,6 +4,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import os
 import logging
+from datetime import datetime
 
 from utils.molstar_tools import molstar_html_multibody
 from utils.protein_design import hit_esmfold, hit_boltz
@@ -104,9 +105,9 @@ def render():
 
         c1, c2, c3 = st.columns([1, 1, 1], vertical_alignment="bottom")
         with c1:
-            view_alphafold_run_experiment = st.text_input("MLflow Experiment:", "", placeholder="structure_prediction_alphafold")
+            view_alphafold_run_experiment = st.text_input("MLflow Experiment:", value="alphafold_structure_prediction")
         with c2:
-            view_alphafold_run_label = st.text_input("Run Name:", "", placeholder="my_run_123")
+            view_alphafold_run_label = st.text_input("Run Name:", value=f"alphafold_{datetime.now().strftime('%Y%m%d_%H%M')}")
         with c3:
             view_structure_alphafold_btn = st.button("Start Job", key="view_structure_alphafold_btn")
 

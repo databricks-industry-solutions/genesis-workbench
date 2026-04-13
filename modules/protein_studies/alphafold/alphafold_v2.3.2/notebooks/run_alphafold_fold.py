@@ -146,6 +146,7 @@ print(os.environ['AF_FASTA_FILE'])
 
 # DBTITLE 1,run alphafold folding-only
 # MAGIC %sh
+# MAGIC set -euo pipefail
 # MAGIC
 # MAGIC echo "Base directory: $BASEDIR"
 # MAGIC
