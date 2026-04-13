@@ -1,6 +1,8 @@
 """Single Cell -- Gene Perturbation Prediction tab via scGPT."""
 
 import json
+import traceback
+import logging
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -9,6 +11,8 @@ import plotly.express as px
 from utils.streamlit_helper import get_user_info, get_endpoint_name
 from utils.single_cell_analysis import (download_singlecell_markers_df, search_singlecell_runs)
 from databricks.sdk import WorkspaceClient
+
+logger = logging.getLogger(__name__)
 
 
 def _hit_perturbation_endpoint(expression, gene_names, genes_to_perturb, perturbation_type):
@@ -20,6 +24,7 @@ def _hit_perturbation_endpoint(expression, gene_names, genes_to_perturb, perturb
         "expression": expression,
         "gene_names": json.dumps(gene_names),
     }]
+    logger.info(f"Calling perturbation endpoint {endpoint_name} with {len(expression)} genes, perturbing {genes_to_perturb}")
     response = ws.serving_endpoints.query(
         name=endpoint_name,
         inputs=model_input,
@@ -28,6 +33,10 @@ def _hit_perturbation_endpoint(expression, gene_names, genes_to_perturb, perturb
             "perturbation_type": perturbation_type,
         },
     )
+    logger.info(f"Perturbation endpoint result: {response}")
+    
+    if response.predictions is None:
+        raise RuntimeError(f"Endpoint {endpoint_name} returned no predictions. Check endpoint logs for errors.")
     return response.predictions
 
 
@@ -41,13 +50,27 @@ def render():
 
     user_info = get_user_info()
 
-    # Check if endpoint is deployed
+    # Check if endpoint is actually deployed and reachable (not just in the map)
     try:
-        get_endpoint_name("scGPT Perturbation")
+        endpoint_name = get_endpoint_name("scGPT Perturbation")
+        ws = WorkspaceClient()
+        ep_info = ws.serving_endpoints.get(name=endpoint_name)
+        ep_state = ep_info.state.ready if ep_info.state else None
+        if ep_state and ep_state.value == "NOT_READY":
+            st.warning(
+                f"The scGPT Perturbation endpoint (`{endpoint_name}`) exists but is not ready. "
+                "It may be starting up or updating. Please wait and try again."
+            )
     except RuntimeError:
         st.warning(
-            "The scGPT Perturbation endpoint is not deployed yet. "
-            "Deploy the scGPT module to enable perturbation prediction."
+            "The scGPT Perturbation endpoint is not configured. "
+            "Add it to `_MODEL_ENDPOINT_MAP` in streamlit_helper.py."
+        )
+        return
+    except Exception as e:
+        st.warning(
+            f"The scGPT Perturbation endpoint (`{endpoint_name}`) is not deployed or not accessible: {e}\n\n"
+            "Deploy the scGPT module with perturbation tasks enabled to use this feature."
         )
         return
 
@@ -89,8 +112,11 @@ def render():
                 markers_df = download_singlecell_markers_df(run_id)
                 st.session_state["perturb_markers_df"] = markers_df
                 st.session_state["perturb_run_id"] = run_id
+                st.success(f"Loaded {len(markers_df):,} cells")
             except Exception as e:
-                st.error(f"Failed to load run: {e}")
+                st.error(f"Failed to load run data: {e}")
+                with st.expander("Error details"):
+                    st.code(traceback.format_exc())
                 return
 
     if "perturb_markers_df" not in st.session_state:
@@ -176,77 +202,111 @@ def render():
 
         with spinner_placeholder, st.spinner("Running perturbation prediction..."):
             try:
-                progress.progress(30, text="Calling scGPT perturbation endpoint...")
+                progress.progress(20, text="Validating inputs...")
+                if len(mean_expression) == 0:
+                    st.error("No expression data found for the selected cluster.")
+                    return
+                if len(gene_names) != len(mean_expression):
+                    st.error(f"Gene count ({len(gene_names)}) does not match expression count ({len(mean_expression)}).")
+                    return
+
+                progress.progress(30, text=f"Calling scGPT perturbation endpoint (perturbing {', '.join(genes_to_perturb)})...")
                 result = _hit_perturbation_endpoint(
                     expression=mean_expression,
                     gene_names=gene_names,
                     genes_to_perturb=genes_to_perturb,
                     perturbation_type=perturb_type.lower(),
                 )
-                progress.progress(90, text="Processing results...")
+                progress.progress(80, text="Processing results...")
 
                 if isinstance(result, list) and len(result) > 0:
                     result = result[0] if isinstance(result[0], dict) else result
 
+                if not isinstance(result, dict) or "gene_name" not in result:
+                    st.error(f"Unexpected response format from endpoint. Got: {type(result)}")
+                    with st.expander("Raw response"):
+                        st.json(str(result)[:2000])
+                    return
+
                 result_df = pd.DataFrame(result)
+                if result_df.empty:
+                    st.warning("Prediction returned no results. The perturbed genes may not be in the model vocabulary.")
+                    return
+
+                # Ensure numeric columns
+                for col in ["original_expression", "predicted_expression", "delta", "abs_delta"]:
+                    if col in result_df.columns:
+                        result_df[col] = pd.to_numeric(result_df[col], errors="coerce")
+
                 result_df = result_df.sort_values("abs_delta", ascending=False)
                 st.session_state[perturb_cache_key] = result_df
                 progress.progress(100, text="Prediction complete!")
             except Exception as e:
                 st.error(f"Perturbation prediction failed: {e}")
+                with st.expander("Error details"):
+                    st.code(traceback.format_exc())
                 return
 
     if perturb_cache_key in st.session_state:
         result_df = st.session_state[perturb_cache_key]
         st.markdown("---")
-        st.markdown(f"##### Perturbation Results: {perturb_genes_input} ({perturb_type})")
+        st.markdown(f"##### Perturbation Results: {perturb_genes_display} ({perturb_type})")
 
-        # Top affected genes bar chart
-        top_n = min(20, len(result_df))
-        top_genes = result_df.head(top_n)
+        try:
+            # Top affected genes bar chart
+            top_n = min(20, len(result_df))
+            top_genes = result_df.head(top_n)
 
-        fig_bar = px.bar(
-            top_genes,
-            x="delta", y="gene_name",
-            orientation="h",
-            title=f"Top {top_n} Most Affected Genes",
-            labels={"delta": "Expression Change (delta)", "gene_name": "Gene"},
-            color="delta",
-            color_continuous_scale="RdBu_r",
-            color_continuous_midpoint=0,
-            height=max(400, top_n * 25),
-        )
-        fig_bar.update_layout(yaxis=dict(autorange="reversed"), plot_bgcolor="white")
-        st.plotly_chart(fig_bar, use_container_width=True)
-
-        # Scatter plot: original vs predicted
-        col1, col2 = st.columns(2)
-        with col1:
-            fig_scatter = px.scatter(
-                result_df,
-                x="original_expression", y="predicted_expression",
-                hover_data=["gene_name", "delta"],
-                title="Original vs Predicted Expression",
-                labels={"original_expression": "Original", "predicted_expression": "Predicted"},
-                height=400,
+            fig_bar = px.bar(
+                top_genes,
+                x="delta", y="gene_name",
+                orientation="h",
+                title=f"Top {top_n} Most Affected Genes",
+                labels={"delta": "Expression Change (delta)", "gene_name": "Gene"},
+                color="delta",
+                color_continuous_scale="RdBu_r",
+                color_continuous_midpoint=0,
+                height=max(400, top_n * 25),
             )
-            # Add y=x reference line
-            max_val = max(result_df["original_expression"].max(), result_df["predicted_expression"].max())
-            fig_scatter.add_shape(type="line", x0=0, y0=0, x1=max_val, y1=max_val,
-                                  line=dict(dash="dash", color="gray"))
-            fig_scatter.update_layout(plot_bgcolor="white")
-            st.plotly_chart(fig_scatter, use_container_width=True)
+            fig_bar.update_layout(yaxis=dict(autorange="reversed"), plot_bgcolor="white")
+            st.plotly_chart(fig_bar, use_container_width=True)
 
-        with col2:
-            st.markdown("**Summary**")
-            st.metric("Total genes analyzed", len(result_df))
-            sig_genes = result_df[result_df["abs_delta"] > result_df["abs_delta"].quantile(0.95)]
-            st.metric("Significantly affected (top 5%)", len(sig_genes))
-            st.metric("Max |delta|", f"{result_df['abs_delta'].max():.4f}")
+            # Scatter plot: original vs predicted
+            col1, col2 = st.columns(2)
+            with col1:
+                fig_scatter = px.scatter(
+                    result_df,
+                    x="original_expression", y="predicted_expression",
+                    hover_data=["gene_name", "delta"],
+                    title="Original vs Predicted Expression",
+                    labels={"original_expression": "Original", "predicted_expression": "Predicted"},
+                    height=400,
+                )
+                max_val = max(result_df["original_expression"].max(), result_df["predicted_expression"].max())
+                fig_scatter.add_shape(type="line", x0=0, y0=0, x1=max_val, y1=max_val,
+                                      line=dict(dash="dash", color="gray"))
+                fig_scatter.update_layout(plot_bgcolor="white")
+                st.plotly_chart(fig_scatter, use_container_width=True)
 
-        # Full results table
-        with st.expander("Full Results Table"):
-            st.dataframe(
-                result_df[["gene_name", "original_expression", "predicted_expression", "delta", "abs_delta"]].head(100),
-                use_container_width=True, hide_index=True,
-            )
+            with col2:
+                st.markdown("**Summary**")
+                st.metric("Total genes analyzed", len(result_df))
+                sig_genes = result_df[result_df["abs_delta"] > result_df["abs_delta"].quantile(0.95)]
+                st.metric("Significantly affected (top 5%)", len(sig_genes))
+                st.metric("Max |delta|", f"{result_df['abs_delta'].max():.4f}")
+
+            # Full results table
+            with st.expander("Full Results Table"):
+                display_df = result_df[["gene_name", "original_expression", "predicted_expression", "delta", "abs_delta"]].head(100).copy()
+                # Ensure all numeric columns are float to avoid Arrow serialization issues
+                for col in ["original_expression", "predicted_expression", "delta", "abs_delta"]:
+                    display_df[col] = display_df[col].astype(float)
+                st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+        except Exception as e:
+            st.error(f"Error displaying results: {e}")
+            with st.expander("Error details"):
+                st.code(traceback.format_exc())
+            with st.expander("Raw result data"):
+                st.write(result_df.dtypes.to_dict())
+                st.write(result_df.head(5).to_dict())

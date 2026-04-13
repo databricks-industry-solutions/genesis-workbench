@@ -50,15 +50,18 @@ with st.spinner("Loading data"):
             if not batch_df.empty:
                 batch_df.columns = ["Name", "Description", "Endpoint Name", "Cluster"]
                 batch_df["Type"] = "Batch"
-                batch_df["Model Id"] = ""
-                batch_df["Deploy Id"] = ""
-                batch_df["Model Name"] = ""
-                batch_df["Source Version"] = ""
-                batch_df["UC Name/Version"] = ""
+                batch_df["Model Id"] = None
+                batch_df["Deploy Id"] = None
+                batch_df["Model Name"] = None
+                batch_df["Source Version"] = None
+                batch_df["UC Name/Version"] = None
                 rows.append(batch_df)
         except Exception:
             pass
         deployed_small_molecule_models_df = pd.concat(rows, ignore_index=True)
+        for col in ["Model Id", "Deploy Id"]:
+            if col in deployed_small_molecule_models_df.columns:
+                deployed_small_molecule_models_df[col] = deployed_small_molecule_models_df[col].astype(str).replace("None", "")
         st.session_state["deployed_small_molecule_models_df"] = deployed_small_molecule_models_df
     deployed_small_molecule_models_df = st.session_state["deployed_small_molecule_models_df"]
 
