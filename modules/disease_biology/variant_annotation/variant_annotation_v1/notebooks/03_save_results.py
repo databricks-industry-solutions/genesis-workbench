@@ -10,6 +10,7 @@ dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id")
 dbutils.widgets.text("mlflow_run_id", "", "MLflow Run ID")
+dbutils.widgets.text("run_name", "", "Run Name")
 dbutils.widgets.text("user_email", "a@b.com", "User Email")
 
 catalog = dbutils.widgets.get("catalog")
@@ -38,6 +39,7 @@ catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
 mlflow_run_id = dbutils.widgets.get("mlflow_run_id")
+run_name = dbutils.widgets.get("run_name")
 user_email = dbutils.widgets.get("user_email")
 
 # COMMAND ----------
@@ -64,8 +66,8 @@ mlflow.set_tracking_uri("databricks")
 pathogenic_table = f"{catalog}.{schema}.variant_annotation_pathogenic"
 clinical_annotated_table = f"{catalog}.{schema}.variant_annotation_clinical_annotated"
 
-pathogenic_df = spark.table(pathogenic_table)
-annotated_df = spark.table(clinical_annotated_table)
+pathogenic_df = spark.table(pathogenic_table).where(F.col("run_name") == run_name)
+annotated_df = spark.table(clinical_annotated_table).where(F.col("run_name") == run_name)
 
 # COMMAND ----------
 
@@ -83,6 +85,13 @@ gene_names = [row["gene"] for row in genes_analyzed]
 gene_counts = annotated_df.groupBy("gene").count().collect()
 gene_summary = {row["gene"]: row["count"] for row in gene_counts}
 
+# Category breakdown (present when ACMG mode was used)
+has_categories = "category" in annotated_df.columns
+category_summary = {}
+if has_categories:
+    category_counts = annotated_df.groupBy("category").count().collect()
+    category_summary = {row["category"]: row["count"] for row in category_counts}
+
 # COMMAND ----------
 
 with mlflow.start_run(run_id=mlflow_run_id) as run:
@@ -92,6 +101,10 @@ with mlflow.start_run(run_id=mlflow_run_id) as run:
 
     for gene, count in gene_summary.items():
         mlflow.log_metric(f"variants_{gene}", count)
+
+    if has_categories:
+        for category, count in category_summary.items():
+            mlflow.log_metric(f"variants_category_{category.lower()}", count)
 
     mlflow.set_tag("genes_analyzed", ",".join(gene_names))
     mlflow.set_tag("job_status", "annotation_complete")
@@ -103,6 +116,11 @@ with mlflow.start_run(run_id=mlflow_run_id) as run:
 print(f"Results summary:")
 print(f"  Total annotated variants: {total_annotated}")
 print(f"  Pathogenic variants: {total_pathogenic}")
-print(f"  Genes analyzed: {', '.join(gene_names)}")
-for gene, count in gene_summary.items():
-    print(f"    {gene}: {count} variants")
+print(f"  Genes analyzed ({len(gene_names)}): {', '.join(gene_names)}")
+if has_categories:
+    print(f"  Variants by category:")
+    for category, count in sorted(category_summary.items()):
+        print(f"    {category}: {count} variants")
+else:
+    for gene, count in gene_summary.items():
+        print(f"    {gene}: {count} variants")

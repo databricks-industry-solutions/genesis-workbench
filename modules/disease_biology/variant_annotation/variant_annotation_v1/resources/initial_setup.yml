@@ -39,7 +39,7 @@ resources:
         - name: variant_annotation_job_id
           default: ${resources.jobs.variant_annotation.id}
         - name: variant_annotation_dashboard_id
-          default: ${resources.dashboards.brca_cancer_risk.id}
+          default: ${resources.dashboards.variant_annotation_dashboard.id}
         - name: user_email
           default: ${var.current_user}
 
