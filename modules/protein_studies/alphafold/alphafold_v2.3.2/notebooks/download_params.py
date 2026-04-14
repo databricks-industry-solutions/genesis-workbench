@@ -11,5 +11,5 @@
 # MAGIC   ./download_alphafold_params.sh /local_disk0/downloads
 # MAGIC   cd /
 # MAGIC   echo "Copying to $MODEL_VOLUME"
-# MAGIC   cp -r /local_disk0/downloads/params $MODEL_VOLUME/datasets/
+# MAGIC   cp -r /local_disk0/downloads/params $MODEL_VOLUME/datasets/params
 # MAGIC fi
