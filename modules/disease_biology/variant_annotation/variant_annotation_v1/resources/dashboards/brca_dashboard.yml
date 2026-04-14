@@ -3,6 +3,8 @@ resources:
     brca_cancer_risk:
       display_name: "BRCA Hereditary Cancer Risk Assessment"
       warehouse_id: ${var.sql_warehouse_id}
+      dataset_catalog: ${var.core_catalog_name}
+      dataset_schema: ${var.core_schema_name}
       file_path: brca_cancer_risk_assessment.lvdash.json
       permissions:
         - user_name: ${var.current_user}
