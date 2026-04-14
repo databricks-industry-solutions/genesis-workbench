@@ -4,14 +4,14 @@
       "name": "ds_total_brca_variants",
       "displayName": "Total BRCA Variants",
       "queryLines": [
-        "SELECT COUNT(*) as total_variants FROM serverless_rg_catalog.brca_demo.parabricks_brca_clinical_annotated"
+        "SELECT COUNT(*) as total_variants FROM variant_annotation_clinical_annotated"
       ]
     },
     {
       "name": "ds_pathogenic_count",
       "displayName": "Pathogenic Variants Count",
       "queryLines": [
-        "SELECT COUNT(*) as pathogenic_count FROM serverless_rg_catalog.brca_demo.parabricks_brca_pathogenic"
+        "SELECT COUNT(*) as pathogenic_count FROM variant_annotation_pathogenic"
       ]
     },
     {
@@ -29,7 +29,7 @@
         "  disease_name,\n",
         "  array_join(variant_ids, ', ') as variant_ids\n",
         "FROM\n",
-        "  serverless_rg_catalog.brca_demo.parabricks_brca_pathogenic\n",
+        "  variant_annotation_pathogenic\n",
         "ORDER BY\n",
         "  gene,\n",
         "  position"
@@ -56,8 +56,8 @@
         "  END as pathogenicity_category,\n",
         "  COUNT(*) as count\n",
         "FROM\n",
-        "  serverless_rg_catalog.brca_demo.parabricks_brca_clinical_annotated a\n",
-        "    LEFT JOIN serverless_rg_catalog.brca_demo.parabricks_brca_pathogenic p\n",
+        "  variant_annotation_clinical_annotated a\n",
+        "    LEFT JOIN variant_annotation_pathogenic p\n",
         "      ON a.chromosome = p.chromosome\n",
         "      AND a.start = p.start\n",
         "      AND a.ref = p.ref\n",
@@ -72,7 +72,7 @@
       "name": "ds_gene_distribution",
       "displayName": "Gene Distribution",
       "queryLines": [
-        "SELECT gene, COUNT(*) as variant_count FROM serverless_rg_catalog.brca_demo.parabricks_brca_clinical_annotated GROUP BY gene ORDER BY gene"
+        "SELECT gene, COUNT(*) as variant_count FROM variant_annotation_clinical_annotated GROUP BY gene ORDER BY gene"
       ]
     },
     {
@@ -89,7 +89,7 @@
         "  COALESCE(array_join(clinical_significance, ', '), 'Not in ClinVar') as significance,\n",
         "  COALESCE(array_join(disease_name, ', '), 'N/A') as disease\n",
         "FROM\n",
-        "  serverless_rg_catalog.brca_demo.parabricks_brca_clinical_annotated\n",
+        "  variant_annotation_clinical_annotated\n",
         "ORDER BY\n",
         "  gene,\n",
         "  position"
@@ -104,7 +104,7 @@
         "  zygosity,\n",
         "  COUNT(*) as variant_count\n",
         "FROM\n",
-        "  serverless_rg_catalog.brca_demo.parabricks_brca_clinical_annotated\n",
+        "  variant_annotation_clinical_annotated\n",
         "GROUP BY\n",
         "  gene,\n",
         "  zygosity\n",
@@ -122,7 +122,7 @@
         "  gene,\n",
         "  COUNT(*) as variant_count\n",
         "FROM\n",
-        "  serverless_rg_catalog.brca_demo.parabricks_brca_pathogenic\n",
+        "  variant_annotation_pathogenic\n",
         "WHERE\n",
         "  disease_name IS NOT NULL\n",
         "  AND disease_name != ''\n",
@@ -142,7 +142,7 @@
         "  qual,\n",
         "  zygosity\n",
         "FROM\n",
-        "  serverless_rg_catalog.brca_demo.parabricks_brca_clinical_annotated"
+        "  variant_annotation_clinical_annotated"
       ]
     }
   ],
