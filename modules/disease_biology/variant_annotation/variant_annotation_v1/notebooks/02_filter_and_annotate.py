@@ -14,6 +14,7 @@ dbutils.widgets.text("variants_table", "", "Variants Table (from spike step)")
 dbutils.widgets.text("gene_regions", '[{"name":"BRCA1","contig":"chr17","start":43044292,"end":43170327},{"name":"BRCA2","contig":"chr13","start":32315086,"end":32400268}]', "Gene Regions JSON")
 dbutils.widgets.text("gene_panel_mode", "custom", "Gene Panel Mode (custom or acmg)")
 dbutils.widgets.text("mlflow_run_id", "", "MLflow Run ID")
+dbutils.widgets.text("run_name", "", "Run Name")
 dbutils.widgets.text("user_email", "a@b.com", "User Email")
 
 catalog = dbutils.widgets.get("catalog")
@@ -45,6 +46,7 @@ variants_table = dbutils.widgets.get("variants_table")
 gene_regions_json = dbutils.widgets.get("gene_regions")
 gene_panel_mode = dbutils.widgets.get("gene_panel_mode")
 mlflow_run_id = dbutils.widgets.get("mlflow_run_id")
+run_name = dbutils.widgets.get("run_name")
 user_email = dbutils.widgets.get("user_email")
 
 # COMMAND ----------
@@ -63,6 +65,40 @@ from functools import reduce
 mlflow.set_registry_uri("databricks-uc")
 mlflow.set_tracking_uri("databricks")
 
+
+def merge_by_run_name(df, table, run_name, key_cols=("chromosome", "start", "ref", "alt")):
+    """MERGE INTO table using run_name + key_cols. Same run_name updates, new inserts."""
+    df = df.withColumn("run_name", F.lit(run_name))
+    temp_view = f"_tmp_{table.split('.')[-1]}"
+    df.createOrReplaceTempView(temp_view)
+
+    if not spark.catalog.tableExists(table):
+        df.write.option("overwriteSchema", "true").saveAsTable(table)
+        return
+
+    merge_on = " AND ".join([f"target.`{c}` = source.`{c}`" for c in key_cols])
+    cols = df.columns
+    update_set = ", ".join([f"target.`{c}` = source.`{c}`" for c in cols if c != "run_name"])
+    insert_cols = ", ".join([f"`{c}`" for c in cols])
+    insert_vals = ", ".join([f"source.`{c}`" for c in cols])
+
+    spark.sql(f"""
+        MERGE INTO {table} AS target
+        USING {temp_view} AS source
+        ON target.run_name = source.run_name AND {merge_on}
+        WHEN MATCHED THEN UPDATE SET {update_set}
+        WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({insert_vals})
+    """)
+
+    delete_on = " AND ".join([f"source.`{c}` = target.`{c}`" for c in key_cols])
+    spark.sql(f"""
+        DELETE FROM {table} AS target WHERE target.run_name = '{run_name}'
+        AND NOT EXISTS (
+            SELECT 1 FROM {temp_view} AS source
+            WHERE source.run_name = target.run_name AND {delete_on}
+        )
+    """)
+
 # COMMAND ----------
 
 # MAGIC %md
@@ -70,9 +106,9 @@ mlflow.set_tracking_uri("databricks")
 
 # COMMAND ----------
 
-# Use the output from the spike step
+# Use the output from the spike step, filtered to this run
 source_table = f"{catalog}.{schema}.variant_annotation_variants_with_pathogenic"
-vcf_df = spark.table(source_table)
+vcf_df = spark.table(source_table).where(F.col("run_name") == run_name)
 
 use_acmg = gene_panel_mode.strip().lower() == "acmg"
 
@@ -193,7 +229,7 @@ annotated = joined.select(*select_cols)
 # COMMAND ----------
 
 clinical_annotated_table = f"{catalog}.{schema}.variant_annotation_clinical_annotated"
-annotated.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(clinical_annotated_table)
+merge_by_run_name(annotated, clinical_annotated_table, run_name)
 
 # Filter pathogenic variants
 pathogenic = annotated.where(
@@ -202,10 +238,10 @@ pathogenic = annotated.where(
 )
 
 pathogenic_table = f"{catalog}.{schema}.variant_annotation_pathogenic"
-pathogenic.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(pathogenic_table)
+merge_by_run_name(pathogenic, pathogenic_table, run_name)
 
-pathogenic_count = spark.table(pathogenic_table).count()
-annotated_count = spark.table(clinical_annotated_table).count()
+pathogenic_count = spark.table(pathogenic_table).where(F.col("run_name") == run_name).count()
+annotated_count = spark.table(clinical_annotated_table).where(F.col("run_name") == run_name).count()
 
 # COMMAND ----------
 
@@ -218,6 +254,7 @@ with mlflow.start_run(run_id=mlflow_run_id) as run:
     mlflow.log_param("clinvar_table", clinvar_table)
     mlflow.log_metric("gene_region_variants", annotated_count)
     mlflow.log_metric("pathogenic_variants", pathogenic_count)
+    mlflow.set_tag("run_name", run_name)
     mlflow.set_tag("annotated_table", clinical_annotated_table)
     mlflow.set_tag("pathogenic_table", pathogenic_table)
     mlflow.set_tag("job_status", "annotation_complete")

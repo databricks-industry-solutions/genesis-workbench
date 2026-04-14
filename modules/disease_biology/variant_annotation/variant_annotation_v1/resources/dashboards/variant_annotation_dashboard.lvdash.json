@@ -4,14 +4,14 @@
       "name": "ds_total_variants",
       "displayName": "Total Variants",
       "queryLines": [
-        "SELECT COUNT(*) as total_variants FROM variant_annotation_clinical_annotated"
+        "SELECT COUNT(*) as total_variants FROM variant_annotation_clinical_annotated WHERE run_name = :run_name"
       ]
     },
     {
       "name": "ds_pathogenic_count",
       "displayName": "Pathogenic Variants Count",
       "queryLines": [
-        "SELECT COUNT(*) as pathogenic_count FROM variant_annotation_pathogenic"
+        "SELECT COUNT(*) as pathogenic_count FROM variant_annotation_pathogenic WHERE run_name = :run_name"
       ]
     },
     {
@@ -32,6 +32,8 @@
         "  array_join(variant_ids, ', ') as variant_ids\n",
         "FROM\n",
         "  variant_annotation_pathogenic\n",
+        "WHERE\n",
+        "  run_name = :run_name\n",
         "ORDER BY\n",
         "  gene,\n",
         "  position"
@@ -64,6 +66,9 @@
         "      AND a.start = p.start\n",
         "      AND a.ref = p.ref\n",
         "      AND a.alt = p.alt\n",
+        "      AND a.run_name = p.run_name\n",
+        "WHERE\n",
+        "  a.run_name = :run_name\n",
         "GROUP BY\n",
         "  1\n",
         "ORDER BY\n",
@@ -74,7 +79,7 @@
       "name": "ds_gene_distribution",
       "displayName": "Gene Distribution",
       "queryLines": [
-        "SELECT gene, COUNT(*) as variant_count FROM variant_annotation_clinical_annotated GROUP BY gene ORDER BY variant_count DESC"
+        "SELECT gene, COUNT(*) as variant_count FROM variant_annotation_clinical_annotated WHERE run_name = :run_name GROUP BY gene ORDER BY variant_count DESC"
       ]
     },
     {
@@ -86,6 +91,8 @@
         "  COUNT(*) as variant_count\n",
         "FROM\n",
         "  variant_annotation_clinical_annotated\n",
+        "WHERE\n",
+        "  run_name = :run_name\n",
         "GROUP BY\n",
         "  category\n",
         "ORDER BY\n",
@@ -109,6 +116,8 @@
         "  COALESCE(array_join(disease_name, ', '), 'N/A') as disease\n",
         "FROM\n",
         "  variant_annotation_clinical_annotated\n",
+        "WHERE\n",
+        "  run_name = :run_name\n",
         "ORDER BY\n",
         "  gene,\n",
         "  position"
@@ -124,6 +133,8 @@
         "  COUNT(*) as variant_count\n",
         "FROM\n",
         "  variant_annotation_clinical_annotated\n",
+        "WHERE\n",
+        "  run_name = :run_name\n",
         "GROUP BY\n",
         "  gene,\n",
         "  zygosity\n",
@@ -145,6 +156,7 @@
         "WHERE\n",
         "  disease_name IS NOT NULL\n",
         "  AND disease_name != ''\n",
+        "  AND run_name = :run_name\n",
         "GROUP BY\n",
         "  disease_name,\n",
         "  gene\n",
@@ -161,8 +173,28 @@
         "  qual,\n",
         "  zygosity\n",
         "FROM\n",
-        "  variant_annotation_clinical_annotated"
+        "  variant_annotation_clinical_annotated\n",
+        "WHERE\n",
+        "  run_name = :run_name"
       ]
+    }
+  ],
+  "parameters": [
+    {
+      "name": "run_name",
+      "displayName": "Run Name",
+      "keyword": "run_name",
+      "dataType": "STRING",
+      "defaultSelection": {
+        "values": {
+          "dataType": "STRING",
+          "values": [
+            {
+              "value": ""
+            }
+          ]
+        }
+      }
     }
   ],
   "pages": [

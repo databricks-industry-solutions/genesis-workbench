@@ -11,6 +11,20 @@ st.set_page_config(layout="wide")
 st.markdown("""
 <style>
     .block-container { padding-top: 1rem; }
+
+    /* Make dataframe selection checkboxes visible on dark background */
+    [data-testid="stDataFrame"] input[type="checkbox"] {
+        accent-color: white;
+        outline: 2px solid #ff4b4b;
+        outline-offset: 1px;
+        width: 16px;
+        height: 16px;
+    }
+    [data-testid="stCheckbox"] input[type="checkbox"] {
+        accent-color: white;
+        outline: 2px solid #ff4b4b;
+        outline-offset: 1px;
+    }
 </style>
 """, unsafe_allow_html=True)
 deployed_modules = []

@@ -75,6 +75,8 @@ resources:
           default: ""
         - name: mlflow_run_id
           default: ""
+        - name: run_name
+          default: ""
         - name: user_email
           default: ${var.current_user}
 

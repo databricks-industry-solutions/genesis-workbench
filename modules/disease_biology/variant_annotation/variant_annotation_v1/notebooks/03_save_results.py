@@ -10,6 +10,7 @@ dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id")
 dbutils.widgets.text("mlflow_run_id", "", "MLflow Run ID")
+dbutils.widgets.text("run_name", "", "Run Name")
 dbutils.widgets.text("user_email", "a@b.com", "User Email")
 
 catalog = dbutils.widgets.get("catalog")
@@ -38,6 +39,7 @@ catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
 mlflow_run_id = dbutils.widgets.get("mlflow_run_id")
+run_name = dbutils.widgets.get("run_name")
 user_email = dbutils.widgets.get("user_email")
 
 # COMMAND ----------
@@ -64,8 +66,8 @@ mlflow.set_tracking_uri("databricks")
 pathogenic_table = f"{catalog}.{schema}.variant_annotation_pathogenic"
 clinical_annotated_table = f"{catalog}.{schema}.variant_annotation_clinical_annotated"
 
-pathogenic_df = spark.table(pathogenic_table)
-annotated_df = spark.table(clinical_annotated_table)
+pathogenic_df = spark.table(pathogenic_table).where(F.col("run_name") == run_name)
+annotated_df = spark.table(clinical_annotated_table).where(F.col("run_name") == run_name)
 
 # COMMAND ----------
 

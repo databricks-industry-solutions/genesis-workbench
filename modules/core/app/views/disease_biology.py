@@ -735,7 +735,7 @@ def _display_annotation_results_dialog(selected_row_index):
 
     with st.spinner("Loading annotation results..."):
         try:
-            results_df = pull_annotation_results(run_id)
+            results_df = pull_annotation_results(run_id, run_name=run_name)
 
             if results_df.empty:
                 st.warning("No pathogenic variants found for this run.")
@@ -772,16 +772,30 @@ def _display_annotation_results_dialog(selected_row_index):
             st.markdown("**Pathogenic Variant Details**")
             st.dataframe(results_df, use_container_width=True, hide_index=True)
 
-            # Embedded Variant Annotation Dashboard
-            dashboard_id = os.environ.get("VARIANT_ANNOTATION_DASHBOARD_ID")
-            if dashboard_id:
+            # Variant Annotation Charts
+            st.divider()
+            chart_c1, chart_c2 = st.columns(2)
+            with chart_c1:
+                st.markdown("**Variant Distribution by Gene**")
+                gene_counts = results_df.groupby("gene").size().reset_index(name="count")
+                gene_counts = gene_counts.sort_values("count", ascending=False)
+                st.bar_chart(gene_counts, x="gene", y="count")
+            with chart_c2:
+                if "zygosity" in results_df.columns:
+                    st.markdown("**Zygosity Distribution**")
+                    zyg_counts = results_df.groupby("zygosity").size().reset_index(name="count")
+                    st.bar_chart(zyg_counts, x="zygosity", y="count")
+
+            if "disease_name" in results_df.columns:
                 st.divider()
-                st.markdown("**Variant Annotation Dashboard**")
-                host_name = os.getenv("DATABRICKS_HOSTNAME", "")
-                if not host_name.startswith("https://"):
-                    host_name = "https://" + host_name
-                dashboard_url = f"{host_name}/embed/dashboardsv3/{dashboard_id}"
-                components.iframe(dashboard_url, height=600, scrolling=True)
+                st.markdown("**Disease Associations**")
+                disease_df = results_df[results_df["disease_name"].notna() & (results_df["disease_name"] != "")]
+                if not disease_df.empty:
+                    disease_counts = disease_df.groupby("disease_name").size().reset_index(name="count")
+                    disease_counts = disease_counts.sort_values("count", ascending=False)
+                    st.bar_chart(disease_counts, x="disease_name", y="count")
+                else:
+                    st.info("No disease associations found.")
 
         except Exception as e:
             st.error(f"Error loading results: {e}")

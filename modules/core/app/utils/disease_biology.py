@@ -642,11 +642,13 @@ def start_variant_annotation(user_info: UserInfo,
                 "gene_panel_mode": gene_panel_mode,
                 "pathogenic_vcf_path": pathogenic_vcf_path,
                 "mlflow_run_id": mlflow_run_id,
+                "run_name": mlflow_run_name,
                 "user_email": user_info.user_email
             }
         )
         mlflow.set_tag("origin", "genesis_workbench")
         mlflow.set_tag("feature", "variant_annotation")
+        mlflow.set_tag("run_name", mlflow_run_name)
         mlflow.set_tag("created_by", user_info.user_email)
         mlflow.set_tag("job_run_id", job_run_id)
         mlflow.set_tag("job_status", "started")
@@ -731,10 +733,15 @@ def search_variant_annotation_runs_by_experiment_name(user_email: str, experimen
     return result
 
 
-def pull_annotation_results(run_id: str) -> pd.DataFrame:
+def pull_annotation_results(run_id: str, run_name: str = "") -> pd.DataFrame:
     """Pull pathogenic variant results for a given annotation run."""
     catalog = os.environ["CORE_CATALOG_NAME"]
     schema = os.environ["CORE_SCHEMA_NAME"]
+
+    # Use provided run_name, fall back to MLflow tag
+    if not run_name:
+        run = mlflow.get_run(run_id)
+        run_name = run.data.tags.get("run_name", "")
 
     table = f"{catalog}.{schema}.variant_annotation_pathogenic"
 
@@ -749,11 +756,14 @@ def pull_annotation_results(run_id: str) -> pd.DataFrame:
     if "category" in available_cols:
         extra_cols = "category, condition, "
 
+    run_name_filter = f"WHERE run_name = '{run_name}'" if run_name else ""
+
     query = f"""
         SELECT gene, {extra_cols}chromosome, start as position, ref, alt, zygosity,
                array_join(clinical_significance, ', ') as clinical_significance,
                array_join(disease_name, ', ') as disease_name
         FROM {table}
+        {run_name_filter}
         ORDER BY gene, position
     """
     return execute_select_query(query)

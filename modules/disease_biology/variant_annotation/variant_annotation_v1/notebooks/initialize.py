@@ -60,6 +60,56 @@ spark.sql(f"USE SCHEMA {schema}")
 
 # COMMAND ----------
 
+# Schema migration: ensure variant annotation tables exist with the run_name column
+va_tables = {
+    "variant_annotation_variants_with_pathogenic": """
+        CREATE TABLE IF NOT EXISTS {fq} (
+            contigName STRING, start LONG, end LONG, names ARRAY<STRING>,
+            referenceAllele STRING, alternateAlleles ARRAY<STRING>,
+            qual DOUBLE, filters ARRAY<STRING>, splitFromMultiAllelic BOOLEAN,
+            INFO_CLINVAR STRING, genotypes ARRAY<STRUCT<sampleId:STRING, calls:ARRAY<INT>>>,
+            run_name STRING
+        )
+    """,
+    "variant_annotation_clinical_annotated": """
+        CREATE TABLE IF NOT EXISTS {fq} (
+            gene STRING, category STRING, condition STRING,
+            chromosome STRING, start LONG, ref STRING, alt STRING,
+            zygosity STRING, qual DOUBLE,
+            clinical_significance ARRAY<STRING>, disease_name ARRAY<STRING>,
+            variant_ids ARRAY<STRING>,
+            genotypes ARRAY<STRUCT<sampleId:STRING, calls:ARRAY<INT>>>,
+            run_name STRING
+        )
+    """,
+    "variant_annotation_pathogenic": """
+        CREATE TABLE IF NOT EXISTS {fq} (
+            gene STRING, category STRING, condition STRING,
+            chromosome STRING, start LONG, ref STRING, alt STRING,
+            zygosity STRING, qual DOUBLE,
+            clinical_significance ARRAY<STRING>, disease_name ARRAY<STRING>,
+            variant_ids ARRAY<STRING>,
+            genotypes ARRAY<STRUCT<sampleId:STRING, calls:ARRAY<INT>>>,
+            run_name STRING
+        )
+    """,
+}
+
+for tbl, ddl in va_tables.items():
+    fq = f"{catalog}.{schema}.{tbl}"
+    if spark.catalog.tableExists(fq):
+        cols = [c.name for c in spark.table(fq).schema]
+        if "run_name" not in cols:
+            spark.sql(f"ALTER TABLE {fq} ADD COLUMNS (run_name STRING)")
+            print(f"Added run_name column to {tbl}")
+        else:
+            print(f"{tbl} already has run_name column")
+    else:
+        spark.sql(ddl.format(fq=fq))
+        print(f"Created table {tbl}")
+
+# COMMAND ----------
+
 query = f"""
     MERGE INTO settings AS target
     USING (
