@@ -16,6 +16,16 @@ echo ""
 databricks bundle deploy $EXTRA_PARAMS --force
 
 echo ""
+echo "▶️ [Variant Annotation] Uploading ACMG gene panel BED file to volume"
+echo ""
+
+# Parse catalog/schema from the --var params for the fs cp command
+eval $(echo "$EXTRA_PARAMS" | tr ',' '\n' | grep -E '^core_catalog_name=|^core_schema_name=' | sed 's/^/export /')
+
+databricks fs mkdirs "dbfs:/Volumes/$core_catalog_name/$core_schema_name/variant_annotation_reference/acmg"
+databricks fs cp data/ACMG_SFv3.2_GRCh38.bed "dbfs:/Volumes/$core_catalog_name/$core_schema_name/variant_annotation_reference/acmg/ACMG_SFv3.2_GRCh38.bed" --overwrite
+
+echo ""
 echo "▶️ [Variant Annotation] Running initial setup job"
 echo "🚨 This job will download ClinVar and set up reference data. See Jobs & Pipeline tab for status"
 echo ""

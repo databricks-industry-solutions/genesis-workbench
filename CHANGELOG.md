@@ -51,7 +51,7 @@
 ### Disease Biology — New module
 - **GWAS Pipeline**: Parabricks `fq2bam` + `haplotypecaller` (split from single `pbrun germline`), `--low-memory` flag, real-time log streaming, input file validation, BWA index download
 - **VCF Ingestion**: VCF-to-Delta via Glow, auto-generated output table names (`vcf_ingested_{timestamp}`), output table logged as MLflow tag for downstream lookup
-- **Variant Annotation**: ClinVar annotation with BRCA gene filtering, Lakeview dashboard with auto-updated catalog/schema references (fixed `lakeview.update` SDK API to use `Dashboard` object)
+- **Variant Annotation**: ClinVar annotation with gene panel filtering (BRCA1/BRCA2, ACMG SF v3.2 81-gene panel via BED file, or custom regions), Lakeview dashboard with auto-updated catalog/schema references (fixed `lakeview.update` SDK API to use `Dashboard` object)
 - **Parabricks**: Fixed Python 3.12 pip incompatibility (`python -m ensurepip`), separate `%sh`/`%pip` cells, reference genome download switched from FTP to HTTPS, downloads to local disk then copies to Volume
 - **GWAS Analysis cluster**: Changed from single-node to 4-worker multi-node for parallel processing
 - All disease biology init workflows use MERGE INTO for idempotent settings inserts

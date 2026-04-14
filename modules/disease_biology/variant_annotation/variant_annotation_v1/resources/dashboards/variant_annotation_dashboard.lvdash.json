@@ -1,8 +1,8 @@
 {
   "datasets": [
     {
-      "name": "ds_total_brca_variants",
-      "displayName": "Total BRCA Variants",
+      "name": "ds_total_variants",
+      "displayName": "Total Variants",
       "queryLines": [
         "SELECT COUNT(*) as total_variants FROM variant_annotation_clinical_annotated"
       ]
@@ -20,6 +20,8 @@
       "queryLines": [
         "SELECT\n",
         "  gene,\n",
+        "  COALESCE(category, 'N/A') as category,\n",
+        "  COALESCE(condition, 'N/A') as condition,\n",
         "  chromosome,\n",
         "  start as position,\n",
         "  ref,\n",
@@ -72,15 +74,32 @@
       "name": "ds_gene_distribution",
       "displayName": "Gene Distribution",
       "queryLines": [
-        "SELECT gene, COUNT(*) as variant_count FROM variant_annotation_clinical_annotated GROUP BY gene ORDER BY gene"
+        "SELECT gene, COUNT(*) as variant_count FROM variant_annotation_clinical_annotated GROUP BY gene ORDER BY variant_count DESC"
       ]
     },
     {
-      "name": "ds_all_brca_variants",
-      "displayName": "All BRCA Variants with Annotations",
+      "name": "ds_category_distribution",
+      "displayName": "Category Distribution",
+      "queryLines": [
+        "SELECT\n",
+        "  COALESCE(category, 'N/A') as category,\n",
+        "  COUNT(*) as variant_count\n",
+        "FROM\n",
+        "  variant_annotation_clinical_annotated\n",
+        "GROUP BY\n",
+        "  category\n",
+        "ORDER BY\n",
+        "  variant_count DESC"
+      ]
+    },
+    {
+      "name": "ds_all_variants",
+      "displayName": "All Variants with Annotations",
       "queryLines": [
         "SELECT\n",
         "  gene,\n",
+        "  COALESCE(category, 'N/A') as category,\n",
+        "  COALESCE(condition, 'N/A') as condition,\n",
         "  chromosome,\n",
         "  start as position,\n",
         "  ref,\n",
@@ -149,7 +168,7 @@
   "pages": [
     {
       "name": "page_main",
-      "displayName": "BRCA Hereditary Cancer Risk Assessment",
+      "displayName": "Variant Annotation Results",
       "layout": [
         {
           "widget": {
@@ -158,7 +177,7 @@
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "ds_total_brca_variants",
+                  "datasetName": "ds_total_variants",
                   "fields": [
                     {
                       "name": "total_variants",
@@ -175,12 +194,12 @@
               "encodings": {
                 "value": {
                   "fieldName": "total_variants",
-                  "displayName": "Total BRCA Variants"
+                  "displayName": "Total Variants"
                 }
               },
               "frame": {
                 "showTitle": true,
-                "title": "Total BRCA Variants Analyzed"
+                "title": "Total Variants Analyzed"
               }
             }
           },
@@ -220,7 +239,7 @@
               },
               "frame": {
                 "showTitle": true,
-                "title": "⚠️ Pathogenic Variants Detected"
+                "title": "Pathogenic Variants Detected"
               }
             }
           },
@@ -277,24 +296,14 @@
                 "color": {
                   "fieldName": "gene",
                   "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "BRCA1",
-                        "color": "#FF3621"
-                      },
-                      {
-                        "value": "BRCA2",
-                        "color": "#00A972"
-                      }
-                    ]
+                    "type": "categorical"
                   },
                   "displayName": "Gene"
                 }
               },
               "frame": {
                 "showTitle": true,
-                "title": "BRCA1 vs BRCA2 Variant Distribution"
+                "title": "Variant Distribution by Gene"
               }
             }
           },
@@ -394,6 +403,14 @@
                       "expression": "`gene`"
                     },
                     {
+                      "name": "category",
+                      "expression": "`category`"
+                    },
+                    {
+                      "name": "condition",
+                      "expression": "`condition`"
+                    },
+                    {
                       "name": "chromosome",
                       "expression": "`chromosome`"
                     },
@@ -433,7 +450,7 @@
             "spec": {
               "version": 2,
               "frame": {
-                "title": "⚠️ Actionable Pathogenic Variant Details",
+                "title": "Actionable Pathogenic Variant Details",
                 "showTitle": true
               },
               "rowsPerPage": 25,
@@ -443,6 +460,14 @@
                   {
                     "fieldName": "gene",
                     "displayName": "Gene"
+                  },
+                  {
+                    "fieldName": "category",
+                    "displayName": "Category"
+                  },
+                  {
+                    "fieldName": "condition",
+                    "displayName": "Condition"
                   },
                   {
                     "fieldName": "chromosome",
@@ -510,11 +535,19 @@
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "ds_all_brca_variants",
+                  "datasetName": "ds_all_variants",
                   "fields": [
                     {
                       "name": "gene",
                       "expression": "`gene`"
+                    },
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    },
+                    {
+                      "name": "condition",
+                      "expression": "`condition`"
                     },
                     {
                       "name": "chromosome",
@@ -552,7 +585,7 @@
             "spec": {
               "version": 2,
               "frame": {
-                "title": "Complete BRCA Variant Catalog",
+                "title": "Complete Variant Catalog",
                 "showTitle": true
               },
               "rowsPerPage": 25,
@@ -562,6 +595,14 @@
                   {
                     "fieldName": "gene",
                     "displayName": "Gene"
+                  },
+                  {
+                    "fieldName": "category",
+                    "displayName": "Category"
+                  },
+                  {
+                    "fieldName": "condition",
+                    "displayName": "Condition"
                   },
                   {
                     "fieldName": "chromosome",
@@ -732,17 +773,7 @@
                   "fieldName": "gene",
                   "displayName": "Gene",
                   "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "BRCA1",
-                        "color": "#FF3621"
-                      },
-                      {
-                        "value": "BRCA2",
-                        "color": "#00A972"
-                      }
-                    ]
+                    "type": "categorical"
                   }
                 },
                 "label": {
@@ -810,17 +841,7 @@
                   "fieldName": "gene",
                   "displayName": "Gene",
                   "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "BRCA1",
-                        "color": "#FF3621"
-                      },
-                      {
-                        "value": "BRCA2",
-                        "color": "#00A972"
-                      }
-                    ]
+                    "type": "categorical"
                   }
                 }
               }
@@ -831,6 +852,70 @@
             "y": 10,
             "width": 6,
             "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "w_category_dist",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_category_distribution",
+                  "fields": [
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    },
+                    {
+                      "name": "variant_count",
+                      "expression": "`variant_count`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "category",
+                  "displayName": "Category",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "variant_count",
+                  "displayName": "Variant Count",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "category",
+                  "displayName": "Category",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Variants by ACMG Category"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 19,
+            "width": 6,
+            "height": 3
           }
         }
       ],

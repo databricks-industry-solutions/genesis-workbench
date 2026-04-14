@@ -83,6 +83,13 @@ gene_names = [row["gene"] for row in genes_analyzed]
 gene_counts = annotated_df.groupBy("gene").count().collect()
 gene_summary = {row["gene"]: row["count"] for row in gene_counts}
 
+# Category breakdown (present when ACMG mode was used)
+has_categories = "category" in annotated_df.columns
+category_summary = {}
+if has_categories:
+    category_counts = annotated_df.groupBy("category").count().collect()
+    category_summary = {row["category"]: row["count"] for row in category_counts}
+
 # COMMAND ----------
 
 with mlflow.start_run(run_id=mlflow_run_id) as run:
@@ -92,6 +99,10 @@ with mlflow.start_run(run_id=mlflow_run_id) as run:
 
     for gene, count in gene_summary.items():
         mlflow.log_metric(f"variants_{gene}", count)
+
+    if has_categories:
+        for category, count in category_summary.items():
+            mlflow.log_metric(f"variants_category_{category.lower()}", count)
 
     mlflow.set_tag("genes_analyzed", ",".join(gene_names))
     mlflow.set_tag("job_status", "annotation_complete")
@@ -103,6 +114,11 @@ with mlflow.start_run(run_id=mlflow_run_id) as run:
 print(f"Results summary:")
 print(f"  Total annotated variants: {total_annotated}")
 print(f"  Pathogenic variants: {total_pathogenic}")
-print(f"  Genes analyzed: {', '.join(gene_names)}")
-for gene, count in gene_summary.items():
-    print(f"    {gene}: {count} variants")
+print(f"  Genes analyzed ({len(gene_names)}): {', '.join(gene_names)}")
+if has_categories:
+    print(f"  Variants by category:")
+    for category, count in sorted(category_summary.items()):
+        print(f"    {category}: {count} variants")
+else:
+    for gene, count in gene_summary.items():
+        print(f"    {gene}: {count} variants")

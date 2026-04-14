@@ -741,23 +741,42 @@ def _display_annotation_results_dialog(selected_row_index):
                 st.warning("No pathogenic variants found for this run.")
                 return
 
-            mc1, mc2 = st.columns(2)
-            with mc1:
-                st.metric("Pathogenic Variants", f"{len(results_df):,}")
-            with mc2:
-                genes = results_df['gene'].unique().tolist()
-                st.metric("Genes", ", ".join(genes))
+            has_categories = "category" in results_df.columns
+
+            if has_categories:
+                mc1, mc2, mc3 = st.columns(3)
+                with mc1:
+                    st.metric("Pathogenic Variants", f"{len(results_df):,}")
+                with mc2:
+                    genes = results_df['gene'].unique().tolist()
+                    st.metric("Genes", f"{len(genes)}")
+                with mc3:
+                    categories = results_df['category'].unique().tolist()
+                    st.metric("Categories", f"{len(categories)}")
+
+                st.divider()
+                st.markdown("**Variants by Category**")
+                cat_counts = results_df.groupby("category").size().reset_index(name="count")
+                cat_counts = cat_counts.sort_values("count", ascending=False)
+                st.dataframe(cat_counts, use_container_width=True, hide_index=True)
+            else:
+                mc1, mc2 = st.columns(2)
+                with mc1:
+                    st.metric("Pathogenic Variants", f"{len(results_df):,}")
+                with mc2:
+                    genes = results_df['gene'].unique().tolist()
+                    st.metric("Genes", ", ".join(genes))
 
             st.divider()
 
             st.markdown("**Pathogenic Variant Details**")
             st.dataframe(results_df, use_container_width=True, hide_index=True)
 
-            # Embedded BRCA Cancer Risk Dashboard
+            # Embedded Variant Annotation Dashboard
             dashboard_id = os.environ.get("VARIANT_ANNOTATION_DASHBOARD_ID")
             if dashboard_id:
                 st.divider()
-                st.markdown("**BRCA Cancer Risk Dashboard**")
+                st.markdown("**Variant Annotation Dashboard**")
                 host_name = os.getenv("DATABRICKS_HOSTNAME", "")
                 if not host_name.startswith("https://"):
                     host_name = "https://" + host_name
@@ -830,20 +849,26 @@ with annotation_tab:
                 help="Table from the selected VCF Ingestion run"
             )
 
-        st.markdown("**Gene Regions:**")
+        st.markdown("**Gene Panel:**")
         gene_preset = st.selectbox(
-            "Preset gene regions:",
-            ["BRCA1 + BRCA2", "Custom"],
-            help="Select a preset or provide custom gene regions as JSON"
+            "Gene panel:",
+            ["ACMG SF v3.2 (81 genes)", "BRCA1 + BRCA2", "Custom"],
+            help="Select a gene panel or provide custom gene regions as JSON"
         )
 
-        if gene_preset == "Custom":
+        if gene_preset == "ACMG SF v3.2 (81 genes)":
+            annot_gene_panel_mode = "acmg"
+            annot_gene_regions = ""
+            st.caption("81 medically-actionable genes: Cancer (29), Cardiovascular (44), Metabolic (4), Miscellaneous (4)")
+        elif gene_preset == "Custom":
+            annot_gene_panel_mode = "custom"
             annot_gene_regions = st.text_area(
                 "Gene regions JSON:",
                 value='[{"name":"BRCA1","contig":"chr17","start":43044292,"end":43170327}]',
                 help='JSON array of gene regions with name, contig, start, end'
             )
         else:
+            annot_gene_panel_mode = "custom"
             annot_gene_regions = '[{"name":"BRCA1","contig":"chr17","start":43044292,"end":43170327},{"name":"BRCA2","contig":"chr13","start":32315086,"end":32400268}]'
             st.caption("Using BRCA1 (chr17:43,044,292-43,170,327) and BRCA2 (chr13:32,315,086-32,400,268)")
 
@@ -873,10 +898,11 @@ with annotation_tab:
                     job_run_id = start_variant_annotation(
                         user_info=user_info,
                         variants_table=annot_variants_table.strip(),
-                        gene_regions=annot_gene_regions.strip(),
+                        gene_regions=annot_gene_regions.strip() if annot_gene_regions else "",
                         pathogenic_vcf_path=annot_pathogenic_vcf.strip() if annot_pathogenic_vcf else "",
                         mlflow_experiment_name=annot_experiment.strip(),
                         mlflow_run_name=annot_run_name.strip(),
+                        gene_panel_mode=annot_gene_panel_mode,
                     )
                     st.success(f"Variant annotation job started with run id: {job_run_id}")
                     job_id = os.getenv("VARIANT_ANNOTATION_JOB_ID")

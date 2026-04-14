@@ -1,0 +1,82 @@
+#chrom	chromStart	chromEnd	name	score	strand	category	condition
+chr1	17018721	17054032	SDHB	0	.	Cancer	Hereditary Paraganglioma-Pheochromocytoma
+chr1	45329241	45340440	MUTYH	0	.	Cancer	MUTYH-Associated Polyposis
+chr1	55039547	55064852	PCSK9	0	.	Cardiovascular	Hypercholesterolemia Autosomal Dominant 3
+chr1	68428821	68449954	RPE65	0	.	Cancer	RPE65-Related Retinopathy
+chr1	115700020	115768714	CASQ2	0	.	Cardiovascular	CPVT 2
+chr1	156082572	156140081	LMNA	0	.	Cardiovascular	Dilated Cardiomyopathy 1A
+chr1	161314380	161363206	SDHC	0	.	Cancer	Paragangliomas 3
+chr1	201039511	201112426	CACNA1S	0	.	Cardiovascular	Malignant Hyperthermia
+chr1	201359013	201377680	TNNT2	0	.	Cardiovascular	Dilated Cardiomyopathy 1D - HCM 2
+chr1	237042183	237833988	RYR2	0	.	Cardiovascular	CPVT 1
+chr2	21001428	21044073	APOB	0	.	Cardiovascular	Familial Hypercholesterolemia 2
+chr2	47160081	47176936	CALM2	0	.	Cardiovascular	Long QT Syndrome 15 [NEW v3.2]
+chr2	47403066	47709830	MSH2	0	.	Cancer	Lynch Syndrome 1
+chr2	47783144	47810101	MSH6	0	.	Cancer	Lynch Syndrome 5
+chr2	96248513	96265997	TMEM127	0	.	Cancer	Pheochromocytoma
+chr2	178525988	178807423	TTN	0	.	Cardiovascular	Dilated Cardiomyopathy truncating variants
+chr2	188974372	189012746	COL3A1	0	.	Cardiovascular	Ehlers-Danlos Syndrome Vascular Type
+chr2	219418376	219426734	DES	0	.	Cardiovascular	Dilated Cardiomyopathy 1I - Myofibrillar Myopathy 1
+chrX	38327683	38422928	OTC	0	.	Metabolic	Ornithine Transcarbamylase Deficiency
+chrX	101397802	101407925	GLA	0	.	Metabolic	Fabry Disease
+chr3	10141777	10153667	VHL	0	.	Cancer	Von Hippel-Lindau Syndrome
+chr3	14125051	14143680	TMEM43	0	.	Cardiovascular	ARVC Type 5
+chr3	15601360	15722516	BTD	0	.	Metabolic	Biotinidase Deficiency
+chr3	30606355	30694142	TGFBR2	0	.	Cardiovascular	Loeys-Dietz Syndrome Type 1B
+chr3	36993465	37050846	MLH1	0	.	Cancer	Lynch Syndrome 2
+chr3	38548061	38649687	SCN5A	0	.	Cardiovascular	Long QT Syndrome 3 - Brugada Syndrome 1
+chr3	46857871	46882182	MYL3	0	.	Cardiovascular	Familial HCM 8
+chr3	52451099	52454041	TNNC1	0	.	Cardiovascular	Dilated Cardiomyopathy 1Z
+chr5	112707497	112846239	APC	0	.	Cancer	Familial Adenomatous Polyposis
+chr6	7541670	7586714	DSP	0	.	Cardiovascular	ARVC Type 8 - Dilated Cardiomyopathy
+chr6	26087428	26098343	HFE	0	.	Miscellaneous	Hereditary Hemochromatosis
+chr6	123216338	123636950	TRDN	0	.	Cardiovascular	CPVT 5 - Long QT Syndrome
+chr7	5970924	6009106	PMS2	0	.	Cancer	Lynch Syndrome 4
+chr7	128830405	128859272	FLNC	0	.	Cardiovascular	Dilated Cardiomyopathy - Myofibrillar Myopathy 5
+chr7	150944960	150978321	KCNH2	0	.	Cardiovascular	Long QT Syndrome 2
+chr7	151556126	151877115	PRKAG2	0	.	Cardiovascular	Familial HCM 6
+chr9	99103646	99154192	TGFBR1	0	.	Cardiovascular	Loeys-Dietz Syndrome Type 1A
+chr9	127815015	127854658	ENG	0	.	Cardiovascular	Hereditary Hemorrhagic Telangiectasia Type 1
+chr9	132891348	132945378	TSC1	0	.	Cancer	Tuberous Sclerosis 1
+chr10	43077068	43130351	RET	0	.	Cancer	Familial Medullary Thyroid Cancer - MEN2
+chr10	86755762	86932844	BMPR1A	0	.	Cancer	Juvenile Polyposis Syndrome
+chr10	87863624	87971930	PTEN	0	.	Cancer	PTEN Hamartoma Tumor Syndrome
+chr10	88935073	88991337	ACTA2	0	.	Cardiovascular	Familial Thoracic Aortic Aneurysm 6
+chr10	110643244	110839468	RBM20	0	.	Cardiovascular	Dilated Cardiomyopathy 1DD
+chr10	119651379	119677819	BAG3	0	.	Cardiovascular	Dilated Cardiomyopathy 1HH - Myofibrillar Myopathy 6
+chr11	2445007	2849105	KCNQ1	0	.	Cardiovascular	Long QT Syndrome 1
+chr11	32387774	32435539	WT1	0	.	Cancer	Wilms Tumor
+chr11	47331405	47352702	MYBPC3	0	.	Cardiovascular	Familial HCM 4
+chr11	61430123	61446733	SDHAF2	0	.	Cancer	Paragangliomas 2
+chr11	64803515	64811294	MEN1	0	.	Cancer	Multiple Endocrine Neoplasia Type 1
+chr11	112086872	112095794	SDHD	0	.	Cancer	Hereditary Paraganglioma-Pheochromocytoma
+chr12	32790754	32896777	PKP2	0	.	Cardiovascular	ARVC Type 9
+chr12	51906943	51923361	ACVRL1	0	.	Cardiovascular	Hereditary Hemorrhagic Telangiectasia Type 2
+chr12	110910844	110921449	MYL2	0	.	Cardiovascular	Familial HCM 10
+chr12	120978542	121002512	HNF1A	0	.	Miscellaneous	Maturity-Onset Diabetes of the Young
+chr13	32315507	32400268	BRCA2	0	.	Cancer	Hereditary Breast and Ovarian Cancer
+chr13	48303750	48481890	RB1	0	.	Cancer	Retinoblastoma
+chr13	51932668	52012132	ATP7B	0	.	Miscellaneous	Wilson Disease
+chr14	23412739	23435660	MYH7	0	.	Cardiovascular	Dilated Cardiomyopathy 1S - HCM 1
+chr14	65006100	65102695	MAX	0	.	Cancer	Pheochromocytoma
+chr14	90396501	90408268	CALM1	0	.	Cardiovascular	CPVT 4 - Long QT Syndrome 14 [NEW v3.2]
+chr15	34790229	34795549	ACTC1	0	.	Cardiovascular	Familial HCM 11
+chr15	48408312	48645709	FBN1	0	.	Cardiovascular	Marfan Syndrome
+chr15	63042746	63071915	TPM1	0	.	Cardiovascular	Familial HCM 3
+chr15	67065601	67195169	SMAD3	0	.	Cardiovascular	Loeys-Dietz Syndrome Type 3
+chr16	2047984	2089491	TSC2	0	.	Cancer	Tuberous Sclerosis 2
+chr16	15703134	15857028	MYH11	0	.	Cardiovascular	Familial Thoracic Aortic Aneurysm 4
+chr16	23603164	23641310	PALB2	0	.	Cancer	Hereditary Breast Cancer
+chr17	7668420	7687490	TP53	0	.	Cancer	Li-Fraumeni Syndrome 1
+chr17	43044294	43170327	BRCA1	0	.	Cancer	Hereditary Breast and Ovarian Cancer
+chr17	80101580	80119881	GAA	0	.	Metabolic	Pompe Disease
+chr18	31058839	31102421	DSC2	0	.	Cardiovascular	ARVC Type 11
+chr18	31498176	31549008	DSG2	0	.	Cardiovascular	ARVC Type 10
+chr18	31591876	31598821	TTR	0	.	Cardiovascular	Hereditary Transthyretin-Related Amyloidosis
+chr18	51030212	51085042	SMAD4	0	.	Cancer	Juvenile Polyposis Syndrome - HHT Syndrome
+chr19	1205777	1228431	STK11	0	.	Cancer	Peutz-Jeghers Syndrome
+chr19	11089462	11133820	LDLR	0	.	Cardiovascular	Familial Hypercholesterolemia 1
+chr19	38433690	38587564	RYR1	0	.	Cardiovascular	Malignant Hyperthermia
+chr19	46601073	46610782	CALM3	0	.	Cardiovascular	Long QT Syndrome 16 [NEW v3.2]
+chr19	55151766	55157732	TNNI3	0	.	Cardiovascular	Familial HCM 7
+chr22	29603555	29698600	NF2	0	.	Cancer	Neurofibromatosis Type 2

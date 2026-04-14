@@ -88,7 +88,7 @@ set_app_permissions_for_job(job_id=variant_annotation_job_id, user_email=user_em
 # MAGIC %md
 # MAGIC #### Dashboard catalog/schema
 # MAGIC The dashboard uses `dataset_catalog` and `dataset_schema` parameters
-# MAGIC (set in brca_dashboard.yml) so queries resolve to the correct catalog/schema
+# MAGIC (set in variant_annotation_dashboard.yml) so queries resolve to the correct catalog/schema
 # MAGIC at deploy time. No runtime substitution needed.
 
 
