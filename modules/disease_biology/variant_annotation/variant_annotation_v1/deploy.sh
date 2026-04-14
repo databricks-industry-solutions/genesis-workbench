@@ -13,7 +13,7 @@ echo ""
 echo "▶️ [Variant Annotation] Deploying bundle"
 echo ""
 
-databricks bundle deploy $EXTRA_PARAMS
+databricks bundle deploy $EXTRA_PARAMS --force
 
 echo ""
 echo "▶️ [Variant Annotation] Running initial setup job"
