@@ -1,8 +1,8 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC ### Download ClinVar Reference Database
-# MAGIC Downloads the ClinVar GRCh38 VCF from NCBI and saves it as a Delta table
-# MAGIC for use in variant clinical annotation.
+# MAGIC ### Download Reference Databases
+# MAGIC Downloads the ClinVar GRCh38 VCF from NCBI and the ACMG SF v3.2 gene panel BED file,
+# MAGIC then saves both as Delta tables for use in variant clinical annotation.
 
 # COMMAND ----------
 
@@ -101,3 +101,48 @@ clinvar_df.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable
 
 row_count = spark.table(clinvar_table).count()
 print(f"ClinVar loaded: {row_count} variants written to {clinvar_table}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC #### Download and Load ACMG SF v3.2 Gene Panel
+# MAGIC
+# MAGIC The ACMG Secondary Findings v3.2 list contains 81 medically actionable genes:
+# MAGIC - **Cancer** (29 genes): BRCA1, BRCA2, TP53, APC, MLH1, MSH2, etc.
+# MAGIC - **Cardiovascular** (44 genes): MYBPC3, SCN5A, KCNQ1, TTN, etc.
+# MAGIC - **Metabolic** (4 genes): GAA, GLA, OTC, BTD
+# MAGIC - **Miscellaneous** (4 genes): HFE, HNF1A, ATP7B, RPE65
+
+# COMMAND ----------
+
+# The BED file is uploaded to the UC Volume by deploy.sh
+acmg_bed_path = f"/Volumes/{catalog}/{schema}/variant_annotation_reference/acmg/ACMG_SFv3.2_GRCh38.bed"
+print(f"Reading ACMG BED file from {acmg_bed_path}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC #### Load ACMG Gene Panel into Delta table
+
+# COMMAND ----------
+
+from pyspark.sql.types import StructType, StructField, StringType, LongType, IntegerType
+
+acmg_schema = StructType([
+    StructField("chrom", StringType(), False),
+    StructField("chromStart", LongType(), False),
+    StructField("chromEnd", LongType(), False),
+    StructField("name", StringType(), False),
+    StructField("score", IntegerType(), True),
+    StructField("strand", StringType(), True),
+    StructField("category", StringType(), True),
+    StructField("condition", StringType(), True),
+])
+
+acmg_df = spark.read.csv(acmg_bed_path, sep="\t", comment="#", schema=acmg_schema)
+
+acmg_table = f"{catalog}.{schema}.acmg_gene_panel"
+acmg_df.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(acmg_table)
+
+acmg_count = spark.table(acmg_table).count()
+print(f"ACMG gene panel loaded: {acmg_count} gene regions written to {acmg_table}")

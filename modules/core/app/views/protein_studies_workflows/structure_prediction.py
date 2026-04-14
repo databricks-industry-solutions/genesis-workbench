@@ -50,16 +50,6 @@ def _display_view_alphafold_result_dialog(selected_row_for_view):
     include_pdb = False
     pdb_to_compare = None
 
-    pdb_compare_c1, pdb_compare_c2 = st.columns([2, 1], vertical_alignment="bottom")
-    with pdb_compare_c1:
-        af_run_compare_pbm_id = st.text_input("PDB Code: ")
-    with pdb_compare_c2:
-        compare_pdb_btn = st.button("Compare")
-
-    if len(af_run_compare_pbm_id.strip()) > 0:
-        include_pdb = True
-        pdb_to_compare = af_run_compare_pbm_id.strip()
-
     with st.spinner("Fetching result"):
         try:
             html_to_display = _view_structure_from_alphafold_run(run_id=run_id, run_name=run_name, pdb_code=pdb_to_compare, include_pdb=include_pdb)
@@ -147,7 +137,7 @@ def render():
             search_alphafold_run_mode = st.pills("Search By:", ["Experiment Name", "Run Name"],
                                                  selection_mode="single", default="Experiment Name")
         with c2:
-            search_alphafold_text = st.text_input(f"{search_alphafold_run_mode} contains:", "", key="search_alphafold_text")
+            search_alphafold_text = st.text_input(f"{search_alphafold_run_mode} contains:", value="alphafold", key="search_alphafold_text")
         with c3:
             search_alphafold_run_button = st.button("Search", key="search_alphafold_run_button")
 

@@ -21,8 +21,7 @@ def _derive_status(row):
 
 # Progress visualization for search results
 _PROGRESS_MAP = {
-    # Variant Calling (1 main task)
-    "started":              "🟩⬜",
+    # Variant Calling (2 steps)
     "alignment_complete":   "🟩🟩",
     # GWAS Analysis (3 main tasks)
     "phenotype_prepared":   "🟩⬜⬜",
@@ -608,11 +607,15 @@ def start_variant_annotation(user_info: UserInfo,
                               gene_regions: str,
                               pathogenic_vcf_path: str,
                               mlflow_experiment_name: str,
-                              mlflow_run_name: str):
+                              mlflow_run_name: str,
+                              gene_panel_mode: str = "custom"):
     """Start a variant annotation job.
 
     Creates an MLflow run, then triggers the Databricks workflow.
     Returns the Databricks job run id.
+
+    Args:
+        gene_panel_mode: "custom" for JSON gene regions, "acmg" for ACMG SF v3.2 panel.
     """
     experiment = set_mlflow_experiment(
         experiment_tag=mlflow_experiment_name,
@@ -624,7 +627,9 @@ def start_variant_annotation(user_info: UserInfo,
     with mlflow.start_run(run_name=mlflow_run_name, experiment_id=experiment.experiment_id) as run:
         mlflow_run_id = run.info.run_id
         mlflow.log_param("variants_table", variants_table)
-        mlflow.log_param("gene_regions", gene_regions)
+        mlflow.log_param("gene_panel_mode", gene_panel_mode)
+        if gene_panel_mode != "acmg":
+            mlflow.log_param("gene_regions", gene_regions)
 
         job_run_id = execute_workflow(
             job_id=os.environ["VARIANT_ANNOTATION_JOB_ID"],
@@ -634,13 +639,16 @@ def start_variant_annotation(user_info: UserInfo,
                 "sql_warehouse_id": os.environ["SQL_WAREHOUSE"],
                 "variants_table": variants_table,
                 "gene_regions": gene_regions,
+                "gene_panel_mode": gene_panel_mode,
                 "pathogenic_vcf_path": pathogenic_vcf_path,
                 "mlflow_run_id": mlflow_run_id,
+                "run_name": mlflow_run_name,
                 "user_email": user_info.user_email
             }
         )
         mlflow.set_tag("origin", "genesis_workbench")
         mlflow.set_tag("feature", "variant_annotation")
+        mlflow.set_tag("run_name", mlflow_run_name)
         mlflow.set_tag("created_by", user_info.user_email)
         mlflow.set_tag("job_run_id", job_run_id)
         mlflow.set_tag("job_status", "started")
@@ -725,16 +733,37 @@ def search_variant_annotation_runs_by_experiment_name(user_email: str, experimen
     return result
 
 
-def pull_annotation_results(run_id: str) -> pd.DataFrame:
+def pull_annotation_results(run_id: str, run_name: str = "") -> pd.DataFrame:
     """Pull pathogenic variant results for a given annotation run."""
     catalog = os.environ["CORE_CATALOG_NAME"]
     schema = os.environ["CORE_SCHEMA_NAME"]
 
+    # Use provided run_name, fall back to MLflow tag
+    if not run_name:
+        run = mlflow.get_run(run_id)
+        run_name = run.data.tags.get("run_name", "")
+
+    table = f"{catalog}.{schema}.variant_annotation_pathogenic"
+
+    # Check if ACMG columns (category, condition) exist in the table
+    try:
+        cols_df = execute_select_query(f"DESCRIBE {table}")
+        available_cols = cols_df["col_name"].tolist() if "col_name" in cols_df.columns else []
+    except Exception:
+        available_cols = []
+
+    extra_cols = ""
+    if "category" in available_cols:
+        extra_cols = "category, condition, "
+
+    run_name_filter = f"WHERE run_name = '{run_name}'" if run_name else ""
+
     query = f"""
-        SELECT gene, chromosome, start as position, ref, alt, zygosity,
+        SELECT gene, {extra_cols}chromosome, start as position, ref, alt, zygosity,
                array_join(clinical_significance, ', ') as clinical_significance,
                array_join(disease_name, ', ') as disease_name
-        FROM {catalog}.{schema}.variant_annotation_pathogenic
+        FROM {table}
+        {run_name_filter}
         ORDER BY gene, position
     """
     return execute_select_query(query)

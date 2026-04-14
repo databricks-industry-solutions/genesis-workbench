@@ -69,9 +69,13 @@ resources:
           default: ""
         - name: gene_regions
           default: '[{"name":"BRCA1","contig":"chr17","start":43044292,"end":43170327},{"name":"BRCA2","contig":"chr13","start":32315086,"end":32400268}]'
+        - name: gene_panel_mode
+          default: "custom"
         - name: pathogenic_vcf_path
           default: ""
         - name: mlflow_run_id
+          default: ""
+        - name: run_name
           default: ""
         - name: user_email
           default: ${var.current_user}

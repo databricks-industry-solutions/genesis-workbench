@@ -13,6 +13,7 @@ dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id")
 dbutils.widgets.text("variants_table", "", "Source Variants Table")
 dbutils.widgets.text("pathogenic_vcf_path", "", "Pathogenic VCF Path (optional)")
 dbutils.widgets.text("mlflow_run_id", "", "MLflow Run ID")
+dbutils.widgets.text("run_name", "", "Run Name")
 dbutils.widgets.text("user_email", "a@b.com", "User Email")
 
 catalog = dbutils.widgets.get("catalog")
@@ -52,6 +53,7 @@ sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
 variants_table = dbutils.widgets.get("variants_table")
 pathogenic_vcf_path = dbutils.widgets.get("pathogenic_vcf_path")
 mlflow_run_id = dbutils.widgets.get("mlflow_run_id")
+run_name = dbutils.widgets.get("run_name")
 user_email = dbutils.widgets.get("user_email")
 
 # COMMAND ----------
@@ -67,6 +69,40 @@ import pyspark.sql.functions as F
 
 mlflow.set_registry_uri("databricks-uc")
 mlflow.set_tracking_uri("databricks")
+
+
+def merge_by_run_name(df, table, run_name, key_cols=("contigName", "start", "referenceAllele")):
+    """MERGE INTO table using run_name + key_cols. Same run_name updates, new inserts."""
+    df = df.withColumn("run_name", F.lit(run_name))
+    temp_view = f"_tmp_{table.split('.')[-1]}"
+    df.createOrReplaceTempView(temp_view)
+
+    if not spark.catalog.tableExists(table):
+        df.write.option("overwriteSchema", "true").saveAsTable(table)
+        return
+
+    merge_on = " AND ".join([f"target.`{c}` = source.`{c}`" for c in key_cols])
+    cols = df.columns
+    update_set = ", ".join([f"target.`{c}` = source.`{c}`" for c in cols if c != "run_name"])
+    insert_cols = ", ".join([f"`{c}`" for c in cols])
+    insert_vals = ", ".join([f"source.`{c}`" for c in cols])
+
+    spark.sql(f"""
+        MERGE INTO {table} AS target
+        USING {temp_view} AS source
+        ON target.run_name = source.run_name AND {merge_on}
+        WHEN MATCHED THEN UPDATE SET {update_set}
+        WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({insert_vals})
+    """)
+
+    delete_on = " AND ".join([f"source.`{c}` = target.`{c}`" for c in key_cols])
+    spark.sql(f"""
+        DELETE FROM {table} AS target WHERE target.run_name = '{run_name}'
+        AND NOT EXISTS (
+            SELECT 1 FROM {temp_view} AS source
+            WHERE source.run_name = target.run_name AND {delete_on}
+        )
+    """)
 
 # COMMAND ----------
 
@@ -96,19 +132,21 @@ with mlflow.start_run(run_id=mlflow_run_id) as run:
             allowMissingColumns=True
         )
 
-        enhanced_variants.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(output_table)
+        merge_by_run_name(enhanced_variants, output_table, run_name)
 
-        final_count = spark.table(output_table).count()
+        final_count = spark.table(output_table).where(F.col("run_name") == run_name).count()
         mlflow.log_param("pathogenic_vcf_path", pathogenic_vcf_path)
         mlflow.log_metric("pathogenic_variants_added", pathogenic_count)
         mlflow.log_metric("enhanced_variant_count", final_count)
         mlflow.set_tag("spike_status", "spiked")
+        mlflow.set_tag("run_name", run_name)
 
         print(f"Spiked {pathogenic_count} pathogenic variants. Total: {final_count}")
     else:
         # No spiking — pass through the source table
-        existing_variants.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(output_table)
+        merge_by_run_name(existing_variants, output_table, run_name)
         mlflow.set_tag("spike_status", "passthrough")
+        mlflow.set_tag("run_name", run_name)
         print(f"No pathogenic VCF provided. Passed through {original_count} variants.")
 
     mlflow.set_tag("output_table", output_table)

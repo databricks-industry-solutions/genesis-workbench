@@ -15,6 +15,7 @@ from utils.single_cell_analysis import (start_scanpy_job,
                                         download_cluster_markers_mapping,
                                         get_mlflow_run_url,
                                         search_singlecell_runs)
+from utils.scimilarity_tools import annotate_clusters
 
 
 def _display_run_analysis():
@@ -297,6 +298,13 @@ def _display_results_viewer():
 
     run_id = filtered_options[selected_display]
 
+    # Reset analysis when user picks a different run
+    prev_run_id = st.session_state.get('singlecell_run_id')
+    if prev_run_id and prev_run_id != run_id:
+        for key in ['singlecell_df', 'singlecell_run_id', 'singlecell_mlflow_url',
+                     f'annotation_{prev_run_id}', f'annotation_cluster_col_{prev_run_id}']:
+            st.session_state.pop(key, None)
+
     if load_button:
         with st.spinner("Loading data from MLflow..."):
             try:
@@ -363,59 +371,120 @@ def _display_results_viewer():
         st.info("This viewer displays a subsampled dataset (max 10,000 cells) with marker genes only for faster, interactive plotting. "
                 "The complete output AnnData object with all genes is available in the MLflow run.")
 
-        col1, col2, col3 = st.columns([2, 2, 1])
-        with col1:
-            color_type = st.selectbox("Color by:", ["Cluster", "Marker Gene", "QC Metric"])
+        annotation_cache_key = f"annotation_{run_id}"
 
-        with col2:
-            if color_type == "Cluster":
-                cluster_options = [c for c in obs_categorical if c in ['leiden', 'louvain', 'cluster']]
-                if not cluster_options: cluster_options = obs_categorical
-                color_col = st.selectbox("Select cluster column:", cluster_options if cluster_options else ['leiden'])
-            elif color_type == "Marker Gene":
+        @st.fragment
+        def _umap_fragment():
+            # --- Cell Type Annotation ---
+            st.markdown("###### Cell Type Annotation")
+            st.caption("Annotate clusters using SCimilarity's 23M-cell reference database.")
+            anno_col1, anno_col2, anno_col3 = st.columns([2, 2, 2], vertical_alignment="bottom")
+            with anno_col1:
+                anno_cpc = st.number_input("Cells per cluster:", min_value=3, max_value=50, value=10, step=5, key="umap_anno_cpc")
+            with anno_col2:
+                anno_k = st.number_input("Neighbors (k):", min_value=5, max_value=200, value=20, step=5, key="umap_anno_k")
+            with anno_col3:
+                anno_btn = st.button("Annotate Clusters", type="primary", key="umap_anno_btn")
+
+            if anno_btn:
                 cluster_col = _get_cluster_column(df)
                 if not cluster_col:
-                    selected_gene = st.selectbox("Select gene:", sorted([c.replace('expr_', '') for c in expr_cols]))
-                    color_col = f"expr_{selected_gene}"
+                    st.error("No cluster column found in the data.")
+                elif 'UMAP_0' not in df.columns:
+                    st.error("UMAP coordinates not found — cannot annotate.")
                 else:
-                    mean_expr_by_cluster = df.groupby(cluster_col)[expr_cols].mean()
-                    gene_to_cluster = {col.replace('expr_', ''): mean_expr_by_cluster[col].idxmax() for col in expr_cols}
-                    gene_options_annotated = [f"{gene} (Cluster {gene_to_cluster[gene]})" for gene in sorted(gene_to_cluster.keys())]
-                    annotated_to_gene = {f"{gene} (Cluster {gene_to_cluster[gene]})": gene for gene in gene_to_cluster.keys()}
-                    selected_gene_annotated = st.selectbox("Select gene:", gene_options_annotated)
-                    selected_gene = annotated_to_gene[selected_gene_annotated]
-                    color_col = f"expr_{selected_gene}"
+                    progress = st.progress(0, text="Starting annotation...")
+                    with st.spinner("Running annotation..."):
+                        try:
+                            results_df = annotate_clusters(
+                                df, cluster_col=cluster_col,
+                                cells_per_cluster=anno_cpc, k_neighbors=anno_k,
+                                progress_callback=lambda pct, text: progress.progress(min(pct, 100), text=text),
+                            )
+                            st.session_state[annotation_cache_key] = results_df
+                            st.session_state[f"annotation_cluster_col_{run_id}"] = cluster_col
+                        except Exception as e:
+                            st.error(f"Annotation failed: {e}")
+
+            if annotation_cache_key in st.session_state:
+                results_df = st.session_state[annotation_cache_key]
+                st.dataframe(results_df, use_container_width=True, hide_index=True)
+
+            st.divider()
+
+            # --- Prepare annotation overlay if available ---
+            has_annotation = annotation_cache_key in st.session_state
+            if has_annotation:
+                anno_results = st.session_state[annotation_cache_key]
+                anno_cluster_col = st.session_state.get(f"annotation_cluster_col_{run_id}", _get_cluster_column(df))
+                if anno_cluster_col:
+                    cluster_to_type = dict(zip(anno_results["Cluster"].astype(str), anno_results["Predicted Cell Type"]))
+                    df["Predicted Cell Type"] = df[anno_cluster_col].astype(str).map(cluster_to_type).fillna("Unknown")
+                    # Rename cluster labels to "<id> - <Predicted Type>"
+                    cluster_to_label = {k: f"{k} - {v}" for k, v in cluster_to_type.items()}
+                    df[anno_cluster_col] = df[anno_cluster_col].astype(str).map(cluster_to_label).fillna(df[anno_cluster_col].astype(str))
+
+            # --- UMAP color controls ---
+            color_options = ["Cluster", "Marker Gene", "QC Metric"]
+            if has_annotation:
+                color_options.insert(1, "Predicted Cell Type")
+
+            col1, col2, col3, col4, col5 = st.columns([2, 2, 1, 1, 1])
+            with col1:
+                color_type = st.selectbox("Color by:", color_options)
+            with col2:
+                if color_type == "Predicted Cell Type":
+                    color_col = "Predicted Cell Type"
+                    st.selectbox("Column:", ["Predicted Cell Type"], disabled=True)
+                elif color_type == "Cluster":
+                    cluster_options = [c for c in obs_categorical if c in ['leiden', 'louvain', 'cluster']]
+                    if not cluster_options: cluster_options = obs_categorical
+                    color_col = st.selectbox("Select cluster column:", cluster_options if cluster_options else ['leiden'])
+                elif color_type == "Marker Gene":
+                    cluster_col = _get_cluster_column(df)
+                    if not cluster_col:
+                        selected_gene = st.selectbox("Select gene:", sorted([c.replace('expr_', '') for c in expr_cols]))
+                        color_col = f"expr_{selected_gene}"
+                    else:
+                        mean_expr_by_cluster = df.groupby(cluster_col)[expr_cols].mean()
+                        gene_to_cluster = {col.replace('expr_', ''): mean_expr_by_cluster[col].idxmax() for col in expr_cols}
+                        gene_options_annotated = [f"{gene} (Cluster {gene_to_cluster[gene]})" for gene in sorted(gene_to_cluster.keys())]
+                        annotated_to_gene = {f"{gene} (Cluster {gene_to_cluster[gene]})": gene for gene in gene_to_cluster.keys()}
+                        selected_gene_annotated = st.selectbox("Select gene:", gene_options_annotated)
+                        selected_gene = annotated_to_gene[selected_gene_annotated]
+                        color_col = f"expr_{selected_gene}"
+                else:
+                    metric_options = [c for c in obs_numerical if c in ['n_genes', 'n_counts', 'pct_counts_mt', 'n_genes_by_counts']]
+                    if not metric_options: metric_options = obs_numerical[:5] if obs_numerical else ['n_genes']
+                    color_col = st.selectbox("Select metric:", metric_options)
+            with col3:
+                point_size = st.slider("Point size:", 1, 10, 3)
+            with col4:
+                opacity = st.slider("Opacity:", 0.1, 1.0, 0.8)
+            with col5:
+                color_scale = st.selectbox("Color scale:", ["Viridis", "Plasma", "Blues", "Reds", "RdBu", "Portland", "Turbo"])
+
+            # --- Render UMAP ---
+            if 'UMAP_0' not in df.columns or 'UMAP_1' not in df.columns:
+                st.warning("UMAP coordinates not found in data.")
             else:
-                metric_options = [c for c in obs_numerical if c in ['n_genes', 'n_counts', 'pct_counts_mt', 'n_genes_by_counts']]
-                if not metric_options: metric_options = obs_numerical[:5] if obs_numerical else ['n_genes']
-                color_col = st.selectbox("Select metric:", metric_options)
+                is_categorical = color_col in obs_categorical or color_type in ("Cluster", "Predicted Cell Type")
+                hover_data_dict = {'UMAP_0': ':.2f', 'UMAP_1': ':.2f'}
+                for gene_col in expr_cols[:3]: hover_data_dict[gene_col] = ':.2f'
 
-        with col3:
-            point_size = st.slider("Point size:", 1, 10, 3)
+                if is_categorical:
+                    fig = px.scatter(df, x='UMAP_0', y='UMAP_1', color=color_col, hover_data=hover_data_dict,
+                                     title=f"UMAP colored by {color_col}", width=900, height=650, template="plotly_dark")
+                else:
+                    fig = px.scatter(df, x='UMAP_0', y='UMAP_1', color=color_col, color_continuous_scale=color_scale.lower(),
+                                     hover_data=hover_data_dict, title=f"UMAP colored by {color_col}", width=900, height=650, template="plotly_dark")
 
-        with st.expander("Advanced Options"):
-            col_a, col_b = st.columns(2)
-            with col_a: opacity = st.slider("Opacity:", 0.1, 1.0, 0.8)
-            with col_b: color_scale = st.selectbox("Color scale:", ["Viridis", "Plasma", "Blues", "Reds", "RdBu", "Portland", "Turbo"])
+                fig.update_traces(marker=dict(size=point_size, opacity=opacity, line=dict(width=0)))
+                fig.update_layout(xaxis=dict(title='UMAP 1'),
+                                  yaxis=dict(title='UMAP 2'), font=dict(size=12))
+                st.plotly_chart(fig, use_container_width=True)
 
-        if 'UMAP_0' not in df.columns or 'UMAP_1' not in df.columns:
-            st.warning("UMAP coordinates not found in data.")
-        else:
-            is_categorical = color_col in obs_categorical or color_type == "Cluster"
-            hover_data_dict = {'UMAP_0': ':.2f', 'UMAP_1': ':.2f'}
-            for gene_col in expr_cols[:3]: hover_data_dict[gene_col] = ':.2f'
-
-            if is_categorical:
-                fig = px.scatter(df, x='UMAP_0', y='UMAP_1', color=color_col, hover_data=hover_data_dict,
-                                 title=f"UMAP colored by {color_col}", width=900, height=650, template="plotly_dark")
-            else:
-                fig = px.scatter(df, x='UMAP_0', y='UMAP_1', color=color_col, color_continuous_scale=color_scale.lower(),
-                                 hover_data=hover_data_dict, title=f"UMAP colored by {color_col}", width=900, height=650, template="plotly_dark")
-
-            fig.update_traces(marker=dict(size=point_size, opacity=opacity, line=dict(width=0)))
-            fig.update_layout(xaxis=dict(title='UMAP 1'),
-                              yaxis=dict(title='UMAP 2'), font=dict(size=12))
-            st.plotly_chart(fig, use_container_width=True)
+        _umap_fragment()
 
     # --- Marker Genes dot plot tab ---
     with tab_dotplot:

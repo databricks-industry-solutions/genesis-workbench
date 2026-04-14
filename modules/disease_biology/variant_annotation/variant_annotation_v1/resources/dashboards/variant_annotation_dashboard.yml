@@ -1,11 +1,11 @@
 resources:
   dashboards:
-    brca_cancer_risk:
-      display_name: "BRCA Hereditary Cancer Risk Assessment"
+    variant_annotation_dashboard:
+      display_name: "Variant Annotation Results"
       warehouse_id: ${var.sql_warehouse_id}
       dataset_catalog: ${var.core_catalog_name}
       dataset_schema: ${var.core_schema_name}
-      file_path: brca_cancer_risk_assessment.lvdash.json
+      file_path: variant_annotation_dashboard.lvdash.json
       permissions:
         - user_name: ${var.current_user}
           level: CAN_MANAGE

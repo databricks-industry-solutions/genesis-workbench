@@ -12,7 +12,9 @@ dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id")
 dbutils.widgets.text("variants_table", "", "Variants Table (from spike step)")
 dbutils.widgets.text("gene_regions", '[{"name":"BRCA1","contig":"chr17","start":43044292,"end":43170327},{"name":"BRCA2","contig":"chr13","start":32315086,"end":32400268}]', "Gene Regions JSON")
+dbutils.widgets.text("gene_panel_mode", "custom", "Gene Panel Mode (custom or acmg)")
 dbutils.widgets.text("mlflow_run_id", "", "MLflow Run ID")
+dbutils.widgets.text("run_name", "", "Run Name")
 dbutils.widgets.text("user_email", "a@b.com", "User Email")
 
 catalog = dbutils.widgets.get("catalog")
@@ -42,7 +44,9 @@ schema = dbutils.widgets.get("schema")
 sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
 variants_table = dbutils.widgets.get("variants_table")
 gene_regions_json = dbutils.widgets.get("gene_regions")
+gene_panel_mode = dbutils.widgets.get("gene_panel_mode")
 mlflow_run_id = dbutils.widgets.get("mlflow_run_id")
+run_name = dbutils.widgets.get("run_name")
 user_email = dbutils.widgets.get("user_email")
 
 # COMMAND ----------
@@ -61,7 +65,39 @@ from functools import reduce
 mlflow.set_registry_uri("databricks-uc")
 mlflow.set_tracking_uri("databricks")
 
-gene_regions = json.loads(gene_regions_json)
+
+def merge_by_run_name(df, table, run_name, key_cols=("chromosome", "start", "ref", "alt")):
+    """MERGE INTO table using run_name + key_cols. Same run_name updates, new inserts."""
+    df = df.withColumn("run_name", F.lit(run_name))
+    temp_view = f"_tmp_{table.split('.')[-1]}"
+    df.createOrReplaceTempView(temp_view)
+
+    if not spark.catalog.tableExists(table):
+        df.write.option("overwriteSchema", "true").saveAsTable(table)
+        return
+
+    merge_on = " AND ".join([f"target.`{c}` = source.`{c}`" for c in key_cols])
+    cols = df.columns
+    update_set = ", ".join([f"target.`{c}` = source.`{c}`" for c in cols if c != "run_name"])
+    insert_cols = ", ".join([f"`{c}`" for c in cols])
+    insert_vals = ", ".join([f"source.`{c}`" for c in cols])
+
+    spark.sql(f"""
+        MERGE INTO {table} AS target
+        USING {temp_view} AS source
+        ON target.run_name = source.run_name AND {merge_on}
+        WHEN MATCHED THEN UPDATE SET {update_set}
+        WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({insert_vals})
+    """)
+
+    delete_on = " AND ".join([f"source.`{c}` = target.`{c}`" for c in key_cols])
+    spark.sql(f"""
+        DELETE FROM {table} AS target WHERE target.run_name = '{run_name}'
+        AND NOT EXISTS (
+            SELECT 1 FROM {temp_view} AS source
+            WHERE source.run_name = target.run_name AND {delete_on}
+        )
+    """)
 
 # COMMAND ----------
 
@@ -70,37 +106,61 @@ gene_regions = json.loads(gene_regions_json)
 
 # COMMAND ----------
 
-# Use the output from the spike step
+# Use the output from the spike step, filtered to this run
 source_table = f"{catalog}.{schema}.variant_annotation_variants_with_pathogenic"
-vcf_df = spark.table(source_table)
+vcf_df = spark.table(source_table).where(F.col("run_name") == run_name)
 
-# Build filter condition for each gene region
-region_filters = []
-for region in gene_regions:
-    region_filter = (
-        (F.col("contigName") == region["contig"]) &
-        (F.col("start") >= region["start"]) &
-        (F.col("end") <= region["end"])
+use_acmg = gene_panel_mode.strip().lower() == "acmg"
+
+if use_acmg:
+    # ACMG mode: spatial join against the gene panel Delta table
+    gene_panel = spark.table(f"{catalog}.{schema}.acmg_gene_panel")
+    panel_gene_count = gene_panel.select("name").distinct().count()
+
+    gene_variants = vcf_df.join(
+        gene_panel,
+        (vcf_df.contigName == gene_panel.chrom) &
+        (vcf_df.start >= gene_panel.chromStart) &
+        (vcf_df.start <= gene_panel.chromEnd),
+        "inner"
     )
-    region_filters.append(region_filter)
 
-combined_filter = reduce(lambda a, b: a | b, region_filters)
-gene_variants = vcf_df.where(combined_filter)
+    # Rename 'name' from BED table to 'gene' for consistency
+    gene_variants = gene_variants.withColumnRenamed("name", "gene")
 
-# Add gene name based on region
-gene_case = F.when(F.lit(False), F.lit(""))
-for region in gene_regions:
-    gene_case = gene_case.when(
-        (F.col("contigName") == region["contig"]) &
-        (F.col("start") >= region["start"]) &
-        (F.col("end") <= region["end"]),
-        F.lit(region["name"])
-    )
-gene_case = gene_case.otherwise(F.lit("Unknown"))
+    print(f"ACMG mode: filtering against {panel_gene_count} genes from gene panel table")
 
-gene_variants = gene_variants.withColumn("gene", gene_case)
+else:
+    # Custom mode: use JSON-based coordinate filtering (original behavior)
+    gene_regions = json.loads(gene_regions_json)
 
-# Add derived columns
+    region_filters = []
+    for region in gene_regions:
+        region_filter = (
+            (F.col("contigName") == region["contig"]) &
+            (F.col("start") >= region["start"]) &
+            (F.col("end") <= region["end"])
+        )
+        region_filters.append(region_filter)
+
+    combined_filter = reduce(lambda a, b: a | b, region_filters)
+    gene_variants = vcf_df.where(combined_filter)
+
+    # Add gene name based on region
+    gene_case = F.when(F.lit(False), F.lit(""))
+    for region in gene_regions:
+        gene_case = gene_case.when(
+            (F.col("contigName") == region["contig"]) &
+            (F.col("start") >= region["start"]) &
+            (F.col("end") <= region["end"]),
+            F.lit(region["name"])
+        )
+    gene_case = gene_case.otherwise(F.lit("Unknown"))
+
+    gene_variants = gene_variants.withColumn("gene", gene_case)
+    panel_gene_count = len(gene_regions)
+
+# Add derived columns (shared by both modes)
 gene_variants = gene_variants.withColumn(
     "chromosome", F.col("contigName")
 ).withColumn(
@@ -116,7 +176,7 @@ gene_variants = gene_variants.withColumn(
 )
 
 gene_variant_count = gene_variants.count()
-print(f"Found {gene_variant_count} variants in {len(gene_regions)} gene region(s)")
+print(f"Found {gene_variant_count} variants in {panel_gene_count} gene region(s)")
 
 # COMMAND ----------
 
@@ -129,15 +189,24 @@ clinvar_table = f"{catalog}.{schema}.clinvar_variants"
 clinvar_df = spark.table(clinvar_table)
 
 # Join variants with ClinVar (handle chr prefix mismatch)
-annotated = gene_variants.alias("gv").join(
+joined = gene_variants.alias("gv").join(
     clinvar_df.alias("cv"),
     (F.regexp_replace(F.col("gv.contigName"), "chr", "") == F.col("cv.contigName")) &
     (F.col("gv.start") == F.col("cv.start")) &
     (F.col("gv.referenceAllele") == F.col("cv.referenceAllele")) &
     (F.col("gv.alternateAlleles")[0] == F.col("cv.alternateAlleles")[0]),
     "left_outer"
-).select(
+)
+
+select_cols = [
     F.col("gv.gene"),
+]
+# Include category/condition columns from BED table when in ACMG mode
+if use_acmg:
+    select_cols.append(F.col("gv.category"))
+    select_cols.append(F.col("gv.condition"))
+
+select_cols.extend([
     F.col("gv.chromosome"),
     F.col("gv.start"),
     F.col("gv.ref"),
@@ -148,7 +217,9 @@ annotated = gene_variants.alias("gv").join(
     F.col("cv.INFO_CLNDN").alias("disease_name"),
     F.col("cv.INFO_CLNVI").alias("variant_ids"),
     F.col("gv.genotypes"),
-)
+])
+
+annotated = joined.select(*select_cols)
 
 # COMMAND ----------
 
@@ -158,7 +229,7 @@ annotated = gene_variants.alias("gv").join(
 # COMMAND ----------
 
 clinical_annotated_table = f"{catalog}.{schema}.variant_annotation_clinical_annotated"
-annotated.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(clinical_annotated_table)
+merge_by_run_name(annotated, clinical_annotated_table, run_name)
 
 # Filter pathogenic variants
 pathogenic = annotated.where(
@@ -167,18 +238,23 @@ pathogenic = annotated.where(
 )
 
 pathogenic_table = f"{catalog}.{schema}.variant_annotation_pathogenic"
-pathogenic.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(pathogenic_table)
+merge_by_run_name(pathogenic, pathogenic_table, run_name)
 
-pathogenic_count = spark.table(pathogenic_table).count()
-annotated_count = spark.table(clinical_annotated_table).count()
+pathogenic_count = spark.table(pathogenic_table).where(F.col("run_name") == run_name).count()
+annotated_count = spark.table(clinical_annotated_table).where(F.col("run_name") == run_name).count()
 
 # COMMAND ----------
 
 with mlflow.start_run(run_id=mlflow_run_id) as run:
-    mlflow.log_param("gene_regions", gene_regions_json)
+    mlflow.log_param("gene_panel_mode", gene_panel_mode)
+    if use_acmg:
+        mlflow.log_param("gene_panel", "ACMG_SFv3.2")
+    else:
+        mlflow.log_param("gene_regions", gene_regions_json)
     mlflow.log_param("clinvar_table", clinvar_table)
     mlflow.log_metric("gene_region_variants", annotated_count)
     mlflow.log_metric("pathogenic_variants", pathogenic_count)
+    mlflow.set_tag("run_name", run_name)
     mlflow.set_tag("annotated_table", clinical_annotated_table)
     mlflow.set_tag("pathogenic_table", pathogenic_table)
     mlflow.set_tag("job_status", "annotation_complete")
