@@ -39,7 +39,7 @@ schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
-# MAGIC %pip install -q databricks-sdk>=0.50.0 databricks-sql-connector>=4.0.2 mlflow>=2.15
+# MAGIC %pip install -q databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0
 # MAGIC %pip install -q \
 # MAGIC     --find-links https://data.pyg.org/whl/torch-2.7.0+cu126.html \
 # MAGIC     torch==2.7.1 \
@@ -54,7 +54,7 @@ schema = dbutils.widgets.get("schema")
 # MAGIC     loralib==0.1.2 \
 # MAGIC     einops==0.8.2 \
 # MAGIC     transformers==5.5.0 \
-# MAGIC     jaxtyping
+# MAGIC     jaxtyping==0.3.9
 
 # COMMAND ----------
 
@@ -662,42 +662,42 @@ conda_env = {
                 "einops==0.8.2",
                 "transformers==5.5.0",
                 "mlflow==3.10.1",
-                "jaxtyping",
-                "numpy>=2.0,<3",
-                "scipy>=1.13,<2",
-                "scikit-learn",
-                "pandas>=2.3.0",
-                "torchmetrics>=1.6,<2.0",
-                "atomworks",
-                "jax",
-                "colabdesign",
-                "loguru",
-                "biopandas",
-                "biopython",
-                "cpdb-protein",
-                "deepdiff",
-                "dm-tree",
-                "h5py",
-                "mdtraj",
-                "ml-collections",
-                "modin",
-                "multipledispatch",
-                "plotly",
-                "prody",
-                "pydantic",
-                "python-dotenv",
-                "rich",
-                "rich-click",
-                "seaborn",
-                "wandb",
-                "wget",
-                "xarray",
-                "toolz",
+                "jaxtyping==0.3.9",
+                "numpy==2.4.4",
+                "scipy==1.17.1",
+                "scikit-learn==1.8.0",
+                "pandas==2.3.3",
+                "torchmetrics==1.9.0",
+                "atomworks==1.0.3",
+                "jax==0.9.2",
+                "colabdesign==1.1.1",
+                "loguru==0.7.3",
+                "biopandas==0.5.1",
+                "biopython==1.87",
+                "cpdb-protein==0.2.1",
+                "deepdiff==9.0.0",
+                "dm-tree==0.1.10",
+                "h5py==3.16.0",
+                "mdtraj==1.11.1.post1",
+                "ml-collections==1.1.0",
+                "modin==0.37.1",
+                "multipledispatch==1.0.0",
+                "plotly==6.7.0",
+                "prody==2.6.1",
+                "pydantic==2.12.5",
+                "python-dotenv==1.2.2",
+                "rich==14.3.4",
+                "rich-click==1.9.7",
+                "seaborn==0.13.2",
+                "wandb==0.25.1",
+                "wget==3.2",
+                "xarray==2026.2.0",
+                "toolz==1.1.0",
                 "joblib==1.4.2",
                 "tqdm==4.66.4",
-                "openbabel-wheel",
-                "cloudpickle",
-                "pyyaml",
+                "openbabel-wheel==3.1.1.23",
+                "cloudpickle==3.1.2",
+                "pyyaml==6.0.3",
             ]
         },
     ],
