@@ -46,7 +46,7 @@ schema = dbutils.widgets.get("schema")
 # COMMAND ----------
 
 # MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3
-# MAGIC %pip install chemprop==2.2.3 rdkit==2025.3.6 torch==2.7.1 lightning==2.6.1 PyTDC==1.1.15 scikit-learn==1.8.0
+# MAGIC %pip install chemprop==2.2.3 rdkit==2025.3.6 torch==2.7.1 torchvision==0.22.1 lightning==2.6.1 PyTDC==1.1.15 scikit-learn==1.8.0
 # MAGIC %pip install mlflow[databricks]==2.22.0
 
 # COMMAND ----------
@@ -483,6 +483,7 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
             "chemprop==2.2.3",
             "rdkit==2025.3.6",
             "torch==2.7.1",
+            "torchvision==0.22.1",
             "lightning==2.6.1",
             "numpy",
             "pandas",

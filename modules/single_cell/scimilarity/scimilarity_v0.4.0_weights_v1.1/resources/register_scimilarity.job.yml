@@ -104,12 +104,13 @@ resources:
             custom_tags:
               ResourceClass: SingleNode
 
-        # GeneOrder registration is lightweight (50KB TSV) — CPU node is sufficient
+        # GeneOrder registration runs utils.py which loads the ~23M cell reference DB (20-40 GB RAM)
+        # via CellQuery(model_path); needs a high-memory node, not just the 50KB TSV it logs.
         - job_cluster_key: job_cluster_gene_order
           new_cluster:
             num_workers: 0
-            node_type_id: ${var.cpu_node_type}
-            driver_node_type_id: ${var.cpu_node_type}
+            node_type_id: ${var.cpu_xlarge_node_type}
+            driver_node_type_id: ${var.cpu_xlarge_node_type}
             spark_version: '14.3.x-cpu-ml-scala2.12'
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
