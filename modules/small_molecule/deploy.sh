@@ -33,8 +33,8 @@ for module in chemprop/chemprop_v2 diffdock/diffdock_v1 proteina_complexa/protei
         cd $module
         chmod +x deploy.sh
 
-        echo "Running command deploy.sh --var=\"$EXTRA_PARAMS\" "
-        ./deploy.sh --var="$EXTRA_PARAMS"
+        echo "Running command deploy.sh $CLOUD --var=\"$EXTRA_PARAMS\" "
+        ./deploy.sh $CLOUD --var="$EXTRA_PARAMS"
         cd ../..
     done
 echo "##############################################"

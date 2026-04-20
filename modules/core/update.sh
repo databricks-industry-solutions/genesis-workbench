@@ -10,6 +10,13 @@ fi
 
 CLOUD=$1
 
+case "$CLOUD" in
+  aws)   TARGET=prod_aws ;;
+  azure) TARGET=prod_azure ;;
+  gcp)   TARGET=prod_gcp ;;
+  *) echo "Usage: $0 <aws|azure|gcp>"; exit 1 ;;
+esac
+
 source module.env
 source ../../application.env
 
@@ -66,19 +73,19 @@ echo ""
 echo "▶️ Validating bundle"
 echo ""
 
-databricks bundle validate --var="$EXTRA_PARAMS"
+databricks bundle validate --target $TARGET --var="$EXTRA_PARAMS"
 
 echo ""
-echo "▶️ Deploying bundle"
+echo "▶️ Deploying bundle (target=$TARGET)"
 echo ""
 
-databricks bundle deploy --var="$EXTRA_PARAMS"
+databricks bundle deploy --target $TARGET --var="$EXTRA_PARAMS"
 
 echo ""
 echo "▶️ Deploying UI Application"
 echo ""
 
-databricks bundle run genesis_workbench_app --var="$EXTRA_PARAMS"
+databricks bundle run --target $TARGET genesis_workbench_app --var="$EXTRA_PARAMS"
 
 echo ""
 echo "▶️ Granting app service principal access to catalog"
@@ -96,7 +103,7 @@ echo ""
 echo "▶️ Granting app permissions for endpoints and jobs"
 echo ""
 
-databricks bundle run grant_app_permissions_job --var="$EXTRA_PARAMS" 
+databricks bundle run --target $TARGET grant_app_permissions_job --var="$EXTRA_PARAMS"
 
 echo ""
 echo "▶️ Copying libraries to UC Volume"

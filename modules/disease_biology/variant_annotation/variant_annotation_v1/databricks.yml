@@ -8,7 +8,7 @@ include:
   - resources/dashboards/*.yml
 
 targets:
-  prod:
+  prod_aws:
     mode: production
     default: true
     workspace:
@@ -18,3 +18,65 @@ targets:
         level: CAN_MANAGE
     run_as:
       user_name: ${var.current_user}
+    resources:
+      jobs:
+        variant_annotation_initial_setup_job:
+          job_clusters:
+            - job_cluster_key: variant_annotation_setup_cluster
+              new_cluster:
+                aws_attributes:
+                  availability: ON_DEMAND
+        variant_annotation:
+          job_clusters:
+            - job_cluster_key: variant_annotation_cluster
+              new_cluster:
+                aws_attributes:
+                  availability: ON_DEMAND
+
+  prod_azure:
+    mode: production
+    workspace:
+      root_path: ${var.current_working_directory}
+    permissions:
+      - user_name: ${var.current_user}
+        level: CAN_MANAGE
+    run_as:
+      user_name: ${var.current_user}
+    resources:
+      jobs:
+        variant_annotation_initial_setup_job:
+          job_clusters:
+            - job_cluster_key: variant_annotation_setup_cluster
+              new_cluster:
+                azure_attributes:
+                  availability: ON_DEMAND_AZURE
+        variant_annotation:
+          job_clusters:
+            - job_cluster_key: variant_annotation_cluster
+              new_cluster:
+                azure_attributes:
+                  availability: ON_DEMAND_AZURE
+
+  prod_gcp:
+    mode: production
+    workspace:
+      root_path: ${var.current_working_directory}
+    permissions:
+      - user_name: ${var.current_user}
+        level: CAN_MANAGE
+    run_as:
+      user_name: ${var.current_user}
+    resources:
+      jobs:
+        variant_annotation_initial_setup_job:
+          job_clusters:
+            - job_cluster_key: variant_annotation_setup_cluster
+              new_cluster:
+                gcp_attributes:
+                  availability: ON_DEMAND_GCP
+        variant_annotation:
+          job_clusters:
+            - job_cluster_key: variant_annotation_cluster
+              new_cluster:
+                gcp_attributes:
+                  availability: ON_DEMAND_GCP

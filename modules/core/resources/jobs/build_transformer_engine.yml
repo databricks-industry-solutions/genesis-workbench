@@ -26,8 +26,6 @@ resources:
             node_type_id: ${var.a10_node_type}
             driver_node_type_id: ${var.a10_node_type}
             spark_version: '15.4.x-gpu-ml-scala2.12'
-            aws_attributes:
-              availability: ON_DEMAND
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             single_user_name: ${workspace.current_user.userName}

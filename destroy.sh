@@ -5,6 +5,13 @@ set -e
 CWD=$1
 CLOUD=$2
 
+case "$CLOUD" in
+  aws)   TARGET=prod_aws ;;
+  azure) TARGET=prod_azure ;;
+  gcp)   TARGET=prod_gcp ;;
+  *) echo "Usage: destroy <module> <aws|azure|gcp>"; exit 1 ;;
+esac
+
 echo "#################################################################################"
 echo "ALL RESOURCES deployed as part of $CWD module will deleted        "
 echo "This operation CANNOT be undone. "
@@ -49,7 +56,7 @@ if [[ "$answer" =~ ^([yY][eE][sS]|[yY])$ ]]; then
         
         echo "⏩️ Running job to delete all endpoints and archive the inference tables"
 
-        databricks bundle run --params "module=$CWD,destroy_user_email=$user_email" destroy_module_job --var="$EXTRA_PARAMS"
+        databricks bundle run --target $TARGET --params "module=$CWD,destroy_user_email=$user_email" destroy_module_job --var="$EXTRA_PARAMS"
         cd ../..
     fi
     

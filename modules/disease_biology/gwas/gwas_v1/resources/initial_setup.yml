@@ -58,7 +58,5 @@ resources:
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD
             num_workers: 0
-            aws_attributes:
-              availability: ON_DEMAND
 
       tags: ${var.common_resource_tags}

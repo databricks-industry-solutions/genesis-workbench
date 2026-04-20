@@ -28,10 +28,10 @@ echo "⚙️ Starting destroy of module Small Molecule"
 for module in chemprop/chemprop_v2 diffdock/diffdock_v1 proteina_complexa/proteina_complexa_v1
     do
         cd $module
-        echo "Running command destroy.sh --var=\"$EXTRA_PARAMS\" "
+        echo "Running command destroy.sh $CLOUD --var=\"$EXTRA_PARAMS\" "
         chmod +x destroy.sh
 
-        ./destroy.sh --var="$EXTRA_PARAMS"
+        ./destroy.sh $CLOUD --var="$EXTRA_PARAMS"
         cd ../..
     done
 

@@ -20,10 +20,10 @@ echo "⚙️ Starting destroy of module Protein Studies"
 for module in alphafold/alphafold_v2.3.2 boltz/boltz_1 esmfold/esmfold_v1 protein_mpnn/protein_mpnn_v0.1.0 rfdiffusion/rfdiffusion_v1.1.0 esm2_embeddings/esm2_embeddings_v1 sequence_search/sequence_search_v1
     do
         cd $module
-        echo "Running command destroy.sh --var=\"$EXTRA_PARAMS\" " 
+        echo "Running command destroy.sh $CLOUD --var=\"$EXTRA_PARAMS\" "
         chmod +x destroy.sh
-        
-        ./destroy.sh --var="$EXTRA_PARAMS" 
+
+        ./destroy.sh $CLOUD --var="$EXTRA_PARAMS"
         cd ../..
     done
 

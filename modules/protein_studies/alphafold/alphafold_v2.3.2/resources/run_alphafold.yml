@@ -145,8 +145,6 @@ resources:
             runtime_engine: STANDARD
             num_workers: 0
             # On-demand avoids spot preemption during long-running protein folding jobs
-            aws_attributes:
-              availability: ON_DEMAND
       environments:
         - environment_key: default
           spec:

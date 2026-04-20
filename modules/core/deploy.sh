@@ -10,6 +10,13 @@ fi
 
 CLOUD=$1
 
+case "$CLOUD" in
+  aws)   TARGET=prod_aws ;;
+  azure) TARGET=prod_azure ;;
+  gcp)   TARGET=prod_gcp ;;
+  *) echo "Usage: $0 <aws|azure|gcp>"; exit 1 ;;
+esac
+
 source module.env
 source ../../application.env
 
@@ -99,13 +106,13 @@ echo ""
 echo "▶️ Validating bundle"
 echo ""
 
-databricks bundle validate --var="$EXTRA_PARAMS"
+databricks bundle validate --target $TARGET --var="$EXTRA_PARAMS"
 
 echo ""
-echo "▶️ Deploying bundle"
+echo "▶️ Deploying bundle (target=$TARGET)"
 echo ""
 
-databricks bundle deploy --var="$EXTRA_PARAMS"
+databricks bundle deploy --target $TARGET --var="$EXTRA_PARAMS"
 
 #Run init job only if not deployed before
 if [[ ! -e ".deployed" ]]; then
@@ -114,14 +121,14 @@ if [[ ! -e ".deployed" ]]; then
   echo "▶️ Running initialization job"
   echo ""
 
-  databricks bundle run initialize_core_job --var="$EXTRA_PARAMS"
+  databricks bundle run --target $TARGET initialize_core_job --var="$EXTRA_PARAMS"
 fi
 
 echo ""
 echo "▶️ Deploying UI Application"
 echo ""
 
-databricks bundle run genesis_workbench_app --var="$EXTRA_PARAMS"
+databricks bundle run --target $TARGET genesis_workbench_app --var="$EXTRA_PARAMS"
 
 echo ""
 echo "▶️ Granting app service principal access to catalog"

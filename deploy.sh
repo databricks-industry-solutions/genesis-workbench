@@ -16,6 +16,13 @@ fi
 CWD=$1
 CLOUD=$2
 
+case "$CLOUD" in
+  aws)   TARGET=prod_aws ;;
+  azure) TARGET=prod_azure ;;
+  gcp)   TARGET=prod_gcp ;;
+  *) echo "Usage: deploy <module> <aws|azure|gcp>"; exit 1 ;;
+esac
+
 if [[ "$CWD" != "core" && ! -f "modules/core/.deployed" ]]; then
     echo "🚫 Deploy core module first before installing sub-modules"
     exit 1
@@ -58,7 +65,7 @@ fi
 EXTRA_PARAMS="$EXTRA_PARAMS_GENERAL,$EXTRA_PARAMS_CLOUD,$EXTRA_PARAMS_MODULE"
 user_email=$(databricks current-user me | jq '.emails[0].value' | tr -d '"')
         
-databricks bundle run --params "module=$CWD" initialize_module_job --var="$EXTRA_PARAMS"
+databricks bundle run --target $TARGET --params "module=$CWD" initialize_module_job --var="$EXTRA_PARAMS"
 
 cd ../..
 

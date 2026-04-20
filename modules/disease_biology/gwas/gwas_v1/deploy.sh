@@ -1,19 +1,27 @@
 #!/bin/bash
 set -e
 
-EXTRA_PARAMS=${@: 1}
+CLOUD=$1
+EXTRA_PARAMS=${@:2}
+
+case "$CLOUD" in
+  aws)   TARGET=prod_aws ;;
+  azure) TARGET=prod_azure ;;
+  gcp)   TARGET=prod_gcp ;;
+  *) echo "Usage: $0 <aws|azure|gcp> --var=..."; exit 1 ;;
+esac
 
 echo ""
-echo "▶️ [GWAS] Validating bundle"
+echo "▶️ [GWAS] Validating bundle (target=$TARGET)"
 echo ""
 
-databricks bundle validate $EXTRA_PARAMS
+databricks bundle validate --target $TARGET $EXTRA_PARAMS
 
 echo ""
-echo "▶️ [GWAS] Deploying bundle"
+echo "▶️ [GWAS] Deploying bundle (target=$TARGET)"
 echo ""
 
-databricks bundle deploy $EXTRA_PARAMS
+databricks bundle deploy --target $TARGET $EXTRA_PARAMS
 
 echo ""
 echo "▶️ [GWAS] Running initial setup job"
@@ -21,5 +29,5 @@ echo "🚨 This job will install Glow and download reference genomes. See Jobs &
 echo ""
 
 user_email=$(databricks current-user me | jq '.emails[0].value' | tr -d '"')
-databricks bundle run --params "user_email=$user_email" gwas_initial_setup_job $EXTRA_PARAMS --no-wait
+databricks bundle run --target $TARGET --params "user_email=$user_email" gwas_initial_setup_job $EXTRA_PARAMS --no-wait
 

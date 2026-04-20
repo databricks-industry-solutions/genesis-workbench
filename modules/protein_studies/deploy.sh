@@ -25,8 +25,8 @@ for module in alphafold/alphafold_v2.3.2 boltz/boltz_1 esmfold/esmfold_v1 protei
         cd $module
         chmod +x deploy.sh
         
-        echo "Running command deploy.sh --var=\"$EXTRA_PARAMS\" " 
-        ./deploy.sh --var="$EXTRA_PARAMS" 
+        echo "Running command deploy.sh $CLOUD --var=\"$EXTRA_PARAMS\" "
+        ./deploy.sh $CLOUD --var="$EXTRA_PARAMS"
         cd ../..        
     done
 

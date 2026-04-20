@@ -1,11 +1,18 @@
-
 #!/bin/bash
 set -e
 
-EXTRA_PARAMS=${@: 1}
+CLOUD=$1
+EXTRA_PARAMS=${@:2}
+
+case "$CLOUD" in
+  aws)   TARGET=prod_aws ;;
+  azure) TARGET=prod_azure ;;
+  gcp)   TARGET=prod_gcp ;;
+  *) echo "Usage: $0 <aws|azure|gcp> --var=..."; exit 1 ;;
+esac
 
 echo ""
-echo "▶️ [AlphaFold] Creating a Volume if not exists"
+echo "▶️ [AlphaFold] Creating a Volume if not exists (target=$TARGET)"
 echo ""
 
 pairs=${EXTRA_PARAMS#--var=}
@@ -35,20 +42,20 @@ fi
 set -e
 
 echo ""
-echo "▶️ [AlphaFold] Validating bundle"
+echo "▶️ [AlphaFold] Validating bundle (target=$TARGET)"
 echo ""
 
-databricks bundle validate $EXTRA_PARAMS
+databricks bundle validate --target $TARGET $EXTRA_PARAMS
 
 echo ""
-echo "▶️ [AlphaFold] Deploying bundle"
+echo "▶️ [AlphaFold] Deploying bundle (target=$TARGET)"
 echo ""
 
-databricks bundle deploy $EXTRA_PARAMS
+databricks bundle deploy --target $TARGET $EXTRA_PARAMS
 
 echo ""
 echo "▶️ [AlphaFold] Running model file downloads"
 echo "🚨 This job might take a long time to finish. See Jobs & Pipeline tab for status"
 echo ""
 
-databricks bundle run alphafold_register_and_downloads $EXTRA_PARAMS --no-wait
+databricks bundle run --target $TARGET alphafold_register_and_downloads $EXTRA_PARAMS --no-wait
