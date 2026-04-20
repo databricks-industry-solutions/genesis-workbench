@@ -8,6 +8,7 @@ This project includes [Claude Code](https://docs.anthropic.com/en/docs/claude-co
 |-------|-------------|
 | `genesis-workbench` | Overview of all modules, models, and workflows |
 | `genesis-workbench-installation` | Step-by-step deployment, environment configuration, and known issues |
+| `genesis-workbench-deploy-wizard` | Guided interactive deployment: asks for cloud/catalog/schema/warehouse, writes env files, runs deploy.sh, auto-fixes common failures |
 | `genesis-workbench-troubleshooting` | Common deployment failures, endpoint errors, and fixes |
 | `genesis-workbench-workflows` | End-to-end user guide for every UI workflow tab |
 | `genesis-workbench-development` | How to add new models, endpoints, and UI workflows |
