@@ -1,0 +1,178 @@
+---
+name: genesis-workbench-deploy-wizard
+description: Interactive guided deployment of Genesis Workbench to a Databricks workspace. Walks the user through cloud/catalog/schema/warehouse selection, writes the required env files, runs ./deploy.sh module-by-module, and auto-fixes common failures (expired Terraform PGP key, missing catalog, wrong DEFAULT profile, Python version mismatch).
+---
+
+# Genesis Workbench Deploy Wizard
+
+Drive a first-time (or repeat) deployment of [Genesis Workbench](https://github.com/databricks-industry-solutions/genesis-workbench) to a Databricks workspace through an interactive, validated conversational flow. This skill asks the user one short question at a time, checks each answer against the live workspace with the `databricks` CLI, writes the `.env` files, and invokes `./deploy.sh` in the correct order.
+
+Use this skill whenever the user says things like "deploy Genesis Workbench", "install GWB on a new workspace", "set up genesis workbench", or is sitting in a cloned `genesis-workbench` repo and asks about deployment.
+
+## Pre-flight checks (run first, in parallel)
+
+```bash
+python3 --version                        # warn if < 3.11
+poetry --version
+jq --version
+databricks --version
+which terraform && terraform version     # used to bypass expired HashiCorp PGP key
+databricks auth profiles                 # confirm DEFAULT exists and is valid
+databricks current-user me               # confirms auth works
+```
+
+If any required tool is missing:
+- **databricks CLI**: https://docs.databricks.com/aws/en/dev-tools/cli/install
+- **terraform**: `brew install terraform` (macOS) — required to work around the expired-PGP-key issue below.
+- **poetry**: `deploy.sh` installs it via `pip install poetry`; no action needed.
+- **jq**: `brew install jq`.
+
+If Python 3.10 is detected, warn but don't block — `Installation.md` recommends 3.11 but most deploys still work. If Python < 3.10, stop and require an upgrade.
+
+## Conversational flow
+
+Ask these in order, using `AskUserQuestion` for anything with a finite choice set (cloud, catalog from list, warehouse from list, yes/no). For free-text values (workspace URL, custom catalog name, schema, app name), ask in plain text.
+
+### 1. Target cloud
+`aws` or `azure`. Drives which of `aws.env` / `azure.env` is consumed by `deploy.sh`. GCP is not supported by current deploy scripts.
+
+### 2. Workspace URL
+Read the current `DEFAULT` profile from `databricks auth profiles`. Ask the user whether that's the intended target.
+- If yes, continue.
+- If no, instruct the user: run `databricks auth login --host <url>` in their own terminal (interactive; do **not** auto-run). Wait for them to confirm, then re-check `databricks current-user me`.
+
+### 3. Catalog
+Run `databricks catalogs list` and show the user the `MANAGED_CATALOG` rows. Ask: use an existing one (pick from list) or create a new one (type name).
+- If create: confirm first, then `databricks catalogs create <name>`. Catalog creation is cheap but visible in the metastore — always confirm before creating.
+- Validate the chosen catalog exists with `databricks catalogs get <name>` before writing it to `application.env`.
+
+### 4. Schema
+Default: `genesis_workbench`. Remind the user it must be *dedicated* to GWB (the deploy process writes many tables there). Don't validate its existence — `deploy.sh` creates it.
+
+### 5. SQL warehouse
+Run `databricks warehouses list` and show `HEALTHY` warehouses. Ask: pick one, or the user will create a new 2X-Small.
+- If they need to create one, link them to https://docs.databricks.com/aws/en/compute/sql-warehouse/create and wait.
+- Capture the warehouse ID, validate with `databricks warehouses get <id>`.
+
+### 6. Core module settings
+Read current `modules/core/module.env` (if present) and offer each field with the current value as a default the user can accept or override:
+- `dev_user_prefix` — e.g. `demo`. Namespaces dev resources.
+- `app_name` — Databricks App name, must be unique per workspace (e.g. `genesis-workbench`).
+- `secret_scope_name` — e.g. `genesis_workbench_secret_scope`. Created by the deploy if missing.
+- `llm_endpoint_name` — default `databricks-claude-sonnet-4-6`. Validate it exists: `databricks serving-endpoints get <name>`.
+
+### 7. BioNeMo module (optional)
+Ask: deploy the `bionemo` module? If yes, collect:
+- `bionemo_docker_userid`
+- `bionemo_docker_token` (secret — handle with care, don't echo back)
+- `bionemo_docker_image` (tag)
+
+Remind the user: the BioNeMo container must be pre-built and pushed (see `modules/bionemo/docker/build_docker.sh`).
+
+### 8. Which additional modules to deploy
+After `core`, ask the user to pick from: `protein_studies`, `single_cell`, `small_molecule`, `disease_biology`, `parabricks`, `bionemo`. Deploy one at a time; each triggers long-running background jobs.
+
+## Writing the env files
+
+Use the `Write` tool — **no comments, no blank lines** (the `paste -sd,` used in `deploy.sh:44-45` flattens comments into the bundle variable string and breaks).
+
+**`application.env`** (repo root):
+```
+workspace_url=<url>
+core_catalog_name=<catalog>
+core_schema_name=<schema>
+sql_warehouse_id=<warehouse_id>
+```
+
+**`modules/core/module.env`**:
+```
+dev_user_prefix=<prefix>
+app_name=<app_name>
+secret_scope_name=<secret_scope_name>
+llm_endpoint_name=<llm_endpoint_name>
+```
+
+**`modules/bionemo/module.env`** (only if deploying BioNeMo):
+```
+bionemo_docker_userid=<userid>
+bionemo_docker_token=<token>
+bionemo_docker_image=<image>
+```
+
+`aws.env` / `azure.env` have sensible defaults; only overwrite if the user asks for non-default node types.
+
+## Auto-patch for expired Terraform PGP key
+
+Databricks CLI tries to download Terraform and verify HashiCorp's PGP signature, which has expired. Symptom:
+
+```
+Error: error downloading Terraform: unable to verify checksums signature: openpgp: key expired
+```
+
+Before running any deploy, check whether `deploy.sh` already exports `DATABRICKS_TF_EXEC_PATH` and `DATABRICKS_TF_VERSION`. If not, inject these two lines immediately after `set -e`:
+
+```bash
+export DATABRICKS_TF_EXEC_PATH=$(which terraform)
+export DATABRICKS_TF_VERSION=$(terraform version -json | jq -r .terraform_version)
+```
+
+(Use the user's actual locally-installed Terraform binary + version, not hardcoded paths.) This tells the Databricks CLI to use the local Terraform and skip the signed download.
+
+## Running the deploy
+
+Always run `core` first:
+```bash
+./deploy.sh core <cloud>
+```
+
+After it completes, verify the lock file:
+```bash
+ls modules/core/.deployed
+```
+
+Then loop through the modules the user chose in step 8:
+```bash
+./deploy.sh <module> <cloud>
+```
+
+Wait for each to complete before starting the next — each kicks off background model-registration jobs that can run for hours. Watch the Jobs UI at `<workspace_url>/jobs`.
+
+## Error auto-handlers
+
+| Failure signal | Action |
+|---|---|
+| `openpgp: key expired` | Apply the Terraform env-var patch above. If `terraform` isn't installed locally, tell the user to `brew install terraform` and retry. |
+| `Catalog '<name>' does not exist` | Offer to create it via `databricks catalogs create`. Confirm first. |
+| `databricks current-user me` fails / 401 | Tell the user to re-auth: `databricks auth login --host <workspace_url>` in their own terminal. |
+| `./deploy.sh` exits non-zero before `.deployed` is written | Surface the last ~30 lines of output, check for known patterns (catalog, warehouse, secret scope), and point at `SKILL_GENESIS_WORKBENCH_TROUBLESHOOTING.md` for anything uncovered. |
+| Python < 3.11 detected | Warn once; recommend a 3.11 venv; continue unless < 3.10. |
+| `app_name` collision | Databricks Apps names are workspace-unique. If the deploy fails with a name conflict, ask for a new `app_name`, rewrite `modules/core/module.env`, and retry. |
+| LLM endpoint not found | Default `databricks-claude-sonnet-4-6` may not exist in every workspace. Offer to pick an existing serving endpoint from `databricks serving-endpoints list`. |
+
+## Post-deploy
+
+When `modules/core/.deployed` exists, print:
+- Databricks App URL: `<workspace_url>/apps/<app_name>`
+- Jobs UI (to track background registration): `<workspace_url>/jobs`
+- Reminder: model-registration jobs for some modules (AlphaFold, Parabricks, BioNeMo) can run for many hours.
+
+Offer the user the next module to deploy, or stop.
+
+## When to use this skill
+
+- User says "deploy Genesis Workbench", "install GWB", "set up Genesis Workbench on a new workspace", "run deploy.sh".
+- User is in a cloned `genesis-workbench` repo and asks about deployment steps.
+- User hits a deploy failure and asks for guided recovery — resume at the appropriate step.
+
+## When NOT to use this skill
+
+- User is destroying / tearing down (see `destroy.sh`; a separate skill would be appropriate).
+- User is developing a new module — use `genesis-workbench-development` instead.
+- User is troubleshooting a UI workflow — use `genesis-workbench-workflows` or `_troubleshooting`.
+
+## Related skills
+
+- `genesis-workbench` — overview of modules and workflows.
+- `genesis-workbench-installation` — reference documentation for the deployment process.
+- `genesis-workbench-troubleshooting` — recipes for common post-deploy failures.
+- `databricks-authentication` — use this if the `DEFAULT` profile needs to be reset.
