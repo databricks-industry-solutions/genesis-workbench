@@ -11,6 +11,7 @@ When a user in this repo asks for help with deployment, installation, developmen
 | Overview of GWB — modules, capabilities, architecture | [`claude_skills/SKILL_GENESIS_WORKBENCH.md`](claude_skills/SKILL_GENESIS_WORKBENCH.md) |
 | Deploy failures, registration errors, endpoint issues, runtime errors | [`claude_skills/SKILL_GENESIS_WORKBENCH_TROUBLESHOOTING.md`](claude_skills/SKILL_GENESIS_WORKBENCH_TROUBLESHOOTING.md) |
 | Watch jobs during/after a deploy; diagnose failures as they surface | [`claude_skills/SKILL_GENESIS_WORKBENCH_DEPLOY_MONITOR.md`](claude_skills/SKILL_GENESIS_WORKBENCH_DEPLOY_MONITOR.md) |
+| Maintain or extend the GWB demo playbook (Google Doc) | [`claude_skills/SKILL_GENESIS_WORKBENCH_PLAYBOOK.md`](claude_skills/SKILL_GENESIS_WORKBENCH_PLAYBOOK.md) |
 | Adding new models / workflows / UI tabs | [`claude_skills/SKILL_GENESIS_WORKBENCH_DEVELOPMENT.md`](claude_skills/SKILL_GENESIS_WORKBENCH_DEVELOPMENT.md) |
 | Using the GWB UI — how each tab works, inputs/outputs | [`claude_skills/SKILL_GENESIS_WORKBENCH_WORKFLOWS.md`](claude_skills/SKILL_GENESIS_WORKBENCH_WORKFLOWS.md) |
 
