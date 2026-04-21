@@ -284,6 +284,16 @@ Please contact your workspace administrator to use this feature.
 - Skip Disease Biology → Variant Calling tab (uses parabricks alignment) — pivot to pre-called VCFs for GWAS / VCF Ingestion / Variant Annotation (those use Glow, not Parabricks)
 - Bionemo finetune/inference jobs may hit the same gate at runtime (embedded `new_cluster` with Docker image) — untested on gated workspaces
 
+**Architecture note — could parabricks refactor to bionemo's per-job-cluster pattern?**
+
+Structurally yes. Parabricks' `resources/parabricks_cluster.yml` declares a STANDALONE cluster materialized at bundle-deploy time; that's what hits the Container Services gate at `terraform apply`. Refactoring to bionemo-style (cluster inlined as `new_cluster:` per-job) would move cluster creation to job-run time.
+
+BUT: Databricks Container Services gates ANY cluster using a custom `docker_image`, whether standalone or ephemeral. So the refactor just moves the failure from deploy-time to run-time. Under the most common workspace policy, the end state is the same: you can't actually USE parabricks without the feature enabled.
+
+**Speculative maybe:** some org policies gate only persistent/interactive clusters and allow ephemeral job clusters. Worth testing post-Monday as a data point; not a reliable fix.
+
+**Refactor effort (if ever done):** ~1-2 hours YAML + affected jobs (parabricks internal + disease_biology's `gwas_parabricks_alignment`). Candidate improvement if combined with a workspace that confirms the "ephemeral-only" policy hypothesis.
+
 **Fix for upstream (Installation.md / deploy wizard):** add a preflight check that verifies Custom Containers is enabled when the user opts into Parabricks. Early-fail with a clear message instead of mid-deploy cluster-create error.
 
 **Severity:** MEDIUM — blocks parabricks-specific deploys; disease_biology's `gwas_parabricks_alignment` job will likely also fail at runtime for the same reason if the setting stays off.
