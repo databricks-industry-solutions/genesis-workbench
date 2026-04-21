@@ -10,7 +10,7 @@ fi
 CLOUD=$1
 
 EXTRA_PARAMS_CLOUD=$(paste -sd, "../../$CLOUD.env")
-EXTRA_PARAMS_GENERAL=$(paste -sd, "../../application.env")
+EXTRA_PARAMS_GENERAL=$(grep -v '^databricks_profile=' ../../application.env | tr '\n' ',' | sed 's/,$//')
 
 if [[ -f "module.env" ]]; then
     EXTRA_PARAMS_MODULE=$(paste -sd, "module.env")

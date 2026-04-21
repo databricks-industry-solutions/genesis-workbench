@@ -22,7 +22,7 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/initialize.py
           max_retries: 0
-          timeout_seconds: 600
+          timeout_seconds: 3600
 
       environments:
         - environment_key: default

@@ -4,8 +4,20 @@ set -e
 
 # Use locally-installed Terraform to avoid the expired HashiCorp PGP key
 # that breaks the Databricks CLI's embedded Terraform download.
-export DATABRICKS_TF_EXEC_PATH=/opt/homebrew/bin/terraform
-export DATABRICKS_TF_VERSION=1.3.9
+# Dynamic path + version detection (was hardcoded to /opt/homebrew/bin/terraform + 1.3.9 —
+# see docs/deployments/fevm-mmt-aws-usw2/UX-GAPS.md entry #1).
+export DATABRICKS_TF_EXEC_PATH="$(command -v terraform)"
+export DATABRICKS_TF_VERSION="$(terraform version -json | jq -r .terraform_version)"
+
+# Source application.env early so databricks_profile is available for CLI calls.
+# Falls back to DEFAULT if not set — preserves existing behavior.
+if [ -f "application.env" ]; then
+    set -a
+    source application.env
+    set +a
+fi
+export DATABRICKS_CONFIG_PROFILE="${databricks_profile:-DEFAULT}"
+echo "Using databricks profile: $DATABRICKS_CONFIG_PROFILE"
 
 if [ "$#" -lt 2 ]; then
     echo "Usage: deploy <module> <cloud> "
@@ -30,9 +42,14 @@ fi
 
 echo "Installing Poetry"
 
-#curl -sSL https://install.python-poetry.org | python3 -
-#export PATH="/root/.local/bin:$PATH"
-pip install poetry
+# Prefer the official curl-based installer — bypasses PEP 668 (Homebrew's
+# externally-managed-environment) and works without --user or venv gymnastics.
+# Falls back gracefully if poetry is already on PATH.
+if ! command -v poetry >/dev/null 2>&1; then
+    curl -sSL https://install.python-poetry.org | python3 -
+fi
+export PATH="$HOME/.local/bin:$PATH"
+command -v poetry || { echo "❌ poetry install failed"; exit 1; }
 
 echo "================================"
 echo "⚙️ Preparing to deploy module $CWD"
@@ -54,7 +71,7 @@ echo "======================================="
 cd modules/core
 
 EXTRA_PARAMS_CLOUD=$(paste -sd, "../../$CLOUD.env")
-EXTRA_PARAMS_GENERAL=$(paste -sd, "../../application.env")
+EXTRA_PARAMS_GENERAL=$(grep -v '^databricks_profile=' ../../application.env | tr '\n' ',' | sed 's/,$//')
 
 if [[ -f "module.env" ]]; then
     EXTRA_PARAMS_MODULE=$(paste -sd, "module.env")
