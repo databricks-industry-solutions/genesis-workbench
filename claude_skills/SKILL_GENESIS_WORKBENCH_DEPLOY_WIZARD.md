@@ -50,7 +50,10 @@ Run `databricks catalogs list` and show the user the `MANAGED_CATALOG` rows. Ask
 Default: `genesis_workbench`. Remind the user it must be *dedicated* to GWB (the deploy process writes many tables there). Don't validate its existence — `deploy.sh` creates it.
 
 ### 5. SQL warehouse
-Run `databricks warehouses list` and show `HEALTHY` warehouses. Ask: pick one, or the user will create a new 2X-Small.
+Run `databricks warehouses list` and show warehouses — it's fine if they're `STOPPED`, they start on demand.
+
+**Always re-validate** `sql_warehouse_id` even if `application.env` already exists. Warehouse IDs go stale between sessions (deleted, recreated, workspace swapped). Run `databricks warehouses get <id>` before trusting the file; if it 404s, prompt the user to pick a fresh one.
+
 - If they need to create one, link them to https://docs.databricks.com/aws/en/compute/sql-warehouse/create and wait.
 - Capture the warehouse ID, validate with `databricks warehouses get <id>`.
 
@@ -61,16 +64,22 @@ Read current `modules/core/module.env` (if present) and offer each field with th
 - `secret_scope_name` — e.g. `genesis_workbench_secret_scope`. Created by the deploy if missing.
 - `llm_endpoint_name` — default `databricks-claude-sonnet-4-6`. Validate it exists: `databricks serving-endpoints get <name>`.
 
-### 7. BioNeMo module (optional)
-Ask: deploy the `bionemo` module? If yes, collect:
-- `bionemo_docker_userid`
-- `bionemo_docker_token` (secret — handle with care, don't echo back)
-- `bionemo_docker_image` (tag)
+### 7. Docker-backed modules (BioNeMo, Parabricks, disease_biology) — creds required
+**`bionemo`, `parabricks`, AND `disease_biology`** all require docker-registry creds in a `module.env`. The bundle YAML declares these as required vars (see `modules/bionemo/variables.yml`, `modules/parabricks/variables.yml`, and each of `modules/disease_biology/{gwas,variant_annotation,vcf_ingestion}/*/variables.yml`). Missing them → `bundle validate` fails with `no value assigned to required variable parabricks_docker_userid` (or equivalent).
 
-Remind the user: the BioNeMo container must be pre-built and pushed (see `modules/bionemo/docker/build_docker.sh`).
+**disease_biology reuses the parabricks creds** — its GWAS pipeline uses parabricks for alignment, and all three sub-bundles (gwas, variant_annotation, vcf_ingestion) import the same var set. Write the same three values to BOTH `modules/parabricks/module.env` AND `modules/disease_biology/module.env`.
+
+For each module the user opts into, collect:
+- `<module>_docker_userid` (for disease_biology, use `parabricks_docker_userid`)
+- `<module>_docker_token` (secret — handle with care, don't echo back)
+- `<module>_docker_image` — can be Docker Hub (`<user>/<image>:<tag>`), NGC (`nvcr.io/...`), or any other registry. Must be pre-built and pushed (see `modules/<module>/docker/build_docker.sh` where present).
+
+If user is pushing to Docker Hub, the token is usually a Docker Hub PAT (`dckr_pat_*`). If NGC, the userid is typically `$oauthtoken` and the token is the NGC API key.
 
 ### 8. Which additional modules to deploy
 After `core`, ask the user to pick from: `protein_studies`, `single_cell`, `small_molecule`, `disease_biology`, `parabricks`, `bionemo`. Deploy one at a time; each triggers long-running background jobs.
+
+**Treat the approved module order as a contract.** Once the user confirms the list in step 8, deploy in exactly that order. If a module is blocked (e.g., waiting on docker creds from step 7) do NOT jump over it to a later unblocked module without first asking the user to explicitly re-approve the swap. Past user feedback: silent reordering has been rejected.
 
 ## Writing the env files
 
@@ -99,6 +108,13 @@ bionemo_docker_token=<token>
 bionemo_docker_image=<image>
 ```
 
+**`modules/parabricks/module.env`** (only if deploying Parabricks — **also required**, not just BioNeMo):
+```
+parabricks_docker_userid=<userid>
+parabricks_docker_token=<token>
+parabricks_docker_image=<image>
+```
+
 `aws.env` / `azure.env` have sensible defaults; only overwrite if the user asks for non-default node types.
 
 ## Auto-patch for expired Terraform PGP key
@@ -118,6 +134,8 @@ export DATABRICKS_TF_VERSION=$(terraform version -json | jq -r .terraform_versio
 
 (Use the user's actual locally-installed Terraform binary + version, not hardcoded paths.) This tells the Databricks CLI to use the local Terraform and skip the signed download.
 
+**If the exports already exist but with hardcoded paths** (e.g., `DATABRICKS_TF_EXEC_PATH=/opt/homebrew/bin/terraform`), verify the hardcoded path actually exists on the current machine: `[ -x /opt/homebrew/bin/terraform ]`. If not, rewrite the lines to use `$(which terraform)` / `$(terraform version -json | jq -r .terraform_version)`.
+
 ## Running the deploy
 
 Always run `core` first:
@@ -130,12 +148,26 @@ After it completes, verify the lock file:
 ls modules/core/.deployed
 ```
 
-Then loop through the modules the user chose in step 8:
+Then loop through the modules the user chose in step 8, **in the exact order the user approved**:
 ```bash
 ./deploy.sh <module> <cloud>
 ```
 
-Wait for each to complete before starting the next — each kicks off background model-registration jobs that can run for hours. Watch the Jobs UI at `<workspace_url>/jobs`.
+Wait for each `deploy.sh` to return (it drives `databricks bundle deploy` + an `initialize_module_job` run). That's fast (minutes). What runs *after* is module-specific:
+
+- `small_molecule`, `protein_studies`, `single_cell`, `disease_biology` — spawn multiple `register_*` jobs against GPU clusters. These are the ones that can hit quota at cluster-create time.
+- `bionemo` — spawns `dbx_bionemo_initial_setup`, then registers on-demand finetune/inference jobs (no `register_*` jobs).
+- `parabricks` — primarily builds a docker-backed cluster template; actual compute runs on-demand from the app.
+
+**Between modules, poll until the first post-deploy job run spawned by the module reaches `RUNNING` or a terminal state** (not just `PENDING`). This is the quota gate. Use:
+```bash
+databricks jobs list --limit 50 | grep -iE "<module-keyword>"
+databricks jobs list-runs --job-id <id> --limit 1
+databricks jobs get-run <run-id> | jq '.state'
+```
+Only advance to the next module once the predecessor's first job is past `PENDING`. This serializes GPU cluster-create and surfaces quota issues one module at a time.
+
+Watch the Jobs UI at `<workspace_url>/jobs` throughout.
 
 ## Error auto-handlers
 

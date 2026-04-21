@@ -39,7 +39,7 @@ schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
-# MAGIC %pip install -q databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0
+# MAGIC %pip install -q databricks-sdk>=0.50.0 databricks-sql-connector>=4.0.2 mlflow>=2.15
 # MAGIC %pip install -q \
 # MAGIC     --find-links https://data.pyg.org/whl/torch-2.7.0+cu126.html \
 # MAGIC     torch==2.7.1 \
@@ -54,7 +54,7 @@ schema = dbutils.widgets.get("schema")
 # MAGIC     loralib==0.1.2 \
 # MAGIC     einops==0.8.2 \
 # MAGIC     transformers==5.5.0 \
-# MAGIC     jaxtyping==0.3.9
+# MAGIC     jaxtyping
 
 # COMMAND ----------
 
@@ -661,13 +661,13 @@ conda_env = {
                 "loralib==0.1.2",
                 "einops==0.8.2",
                 "transformers==5.5.0",
+                "torchmetrics==1.9.0",
                 "mlflow==3.10.1",
                 "jaxtyping==0.3.9",
                 "numpy==2.4.4",
                 "scipy==1.17.1",
                 "scikit-learn==1.8.0",
                 "pandas==2.3.3",
-                "torchmetrics==1.9.0",
                 "atomworks==1.0.3",
                 "jax==0.9.2",
                 "colabdesign==1.1.1",

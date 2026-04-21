@@ -146,6 +146,9 @@ resources:
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD
             num_workers: 0
+            cluster_log_conf:
+              dbfs:
+                destination: dbfs:/cluster-logs/alphafold-downloads
 
         - job_cluster_key: download_unirefs_cluster
           new_cluster:
@@ -209,6 +212,9 @@ resources:
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD
             num_workers: 0
+            cluster_log_conf:
+              dbfs:
+                destination: dbfs:/cluster-logs/alphafold-downloads
 
       tags: ${var.common_resource_tags}
 
