@@ -76,6 +76,40 @@ For each module the user opts into, collect:
 
 If user is pushing to Docker Hub, the token is usually a Docker Hub PAT (`dckr_pat_*`). If NGC, the userid is typically `$oauthtoken` and the token is the NGC API key.
 
+### 7a. Secret-scope setup (recommended for Docker creds)
+
+Instead of storing Docker PATs as plaintext in `module.env`, use a Databricks secret scope and reference the secrets via `{{secrets/<scope>/<key>}}` in `module.env`.
+
+**Automated setup** — repo ships a script that creates the scope + populates the four Docker credentials:
+
+```bash
+./scripts/setup_secret_scope.sh <profile> [scope-name]
+```
+
+It prompts for the four credentials (bionemo user/token, parabricks user/token — tokens read with `-s` so they don't echo), creates the scope, puts the secrets with the `gwb_<module>_docker_{user,token}` naming convention, and prints the `module.env` reference template to copy-paste.
+
+**Module.env references after setup:**
+```
+bionemo_docker_userid={{secrets/<scope>/gwb_bionemo_docker_user}}
+bionemo_docker_token={{secrets/<scope>/gwb_bionemo_docker_token}}
+parabricks_docker_userid={{secrets/<scope>/gwb_parabricks_docker_user}}
+parabricks_docker_token={{secrets/<scope>/gwb_parabricks_docker_token}}
+```
+
+Full convention + rationale: `docs/deployments/docker-secrets-convention.md`.
+
+### 7b. Init jobs need user_email on first run
+
+Several per-module `dbx_<module>_initial_setup` jobs widget-default `user_email=a@b.com` — trigger them with the actual user email to avoid `ResourceDoesNotExist: Principal UserName(a@b.com)` failures:
+
+```bash
+databricks jobs run-now \
+  --json '{"job_id":<job-id>,"job_parameters":{"user_email":"<user@databricks.com>"}}' \
+  --profile <profile>
+```
+
+Affects bionemo, parabricks, and any destroy_module run. Logged as UX-GAPS #15.
+
 ### 8. Which additional modules to deploy
 After `core`, ask the user to pick from: `protein_studies`, `single_cell`, `small_molecule`, `disease_biology`, `parabricks`, `bionemo`. Deploy one at a time; each triggers long-running background jobs.
 
