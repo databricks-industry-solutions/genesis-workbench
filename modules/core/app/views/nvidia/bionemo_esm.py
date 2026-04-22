@@ -10,15 +10,18 @@ from utils.streamlit_helper import get_user_info, open_run_window
 
 
 def display_finetune_tab():
+    _cat = os.environ.get('CORE_CATALOG_NAME', 'catalog')
+    _sch = os.environ.get('CORE_SCHEMA_NAME', 'schema')
+    _base = f"/Volumes/{_cat}/{_sch}/bionemo/esm2/ft_data"
     with st.form("finetune_esm_form", enter_to_submit=False ):
         c1,c2,c3 = st.columns([1,1,1], vertical_alignment="top")
         with c1:
             esm_variant = st.selectbox("ESM Variant",get_variants(BionemoModelType.ESM2))
-            train_data = st.text_input("Train Data (UC Volume Path *.csv):", " ", help="A CSV file with `sequence` column and a `target` column")
-            evaluation_data = st.text_input("Evaluation Data (UC Volume Path *.csv):", help="A CSV file with `sequence` column and a `target` column")
-            should_use_lora =  st.toggle("Use LoRA?") 
-            finetune_label = st.text_input("Finetuning Label:", " ", help="A unique name for the finetuning run, so that you can refer it later")
-            experiment_name = st.text_input("Experiment Name:", " ", help="An MLflow experiment name to track the run")
+            train_data = st.text_input("Train Data (UC Volume Path *.csv):", f"{_base}/BLAT_ECOLX_Tenaillon2013_metadata_train.csv", help="A CSV file with `sequence` column and a `target` column")
+            evaluation_data = st.text_input("Evaluation Data (UC Volume Path *.csv):", f"{_base}/BLAT_ECOLX_Tenaillon2013_metadata_eval.csv", help="A CSV file with `sequence` column and a `target` column")
+            should_use_lora =  st.toggle("Use LoRA?")
+            finetune_label = st.text_input("Finetuning Label:", "esm2_blat_ecolx_finetune", help="A unique name for the finetuning run, so that you can refer it later")
+            experiment_name = st.text_input("Experiment Name:", "sequence_level_regression", help="An MLflow experiment name to track the run")
             start_finetune_button_clicked = st.form_submit_button("Start Finetuning Run")
 
         with c2:
@@ -87,7 +90,10 @@ def display_finetune_tab():
 
 
 def display_inference_tab():
-    st.markdown("###### Run Inference")   
+    _cat = os.environ.get('CORE_CATALOG_NAME', 'catalog')
+    _sch = os.environ.get('CORE_SCHEMA_NAME', 'schema')
+    _base = f"/Volumes/{_cat}/{_sch}/bionemo/esm2/ft_data"
+    st.markdown("###### Run Inference")
 
     c1,c2 = st.columns([1,2])
     with c1:
@@ -115,9 +121,9 @@ def display_inference_tab():
         col1,col2 = st.columns([1,1])
         with col1:
             inf_task_type = st.selectbox("Task Type:",["regression","classification"], help="Must match the task type used during fine-tuning. If mismatched, the notebook will auto-detect from the model output.")
-            inf_data_location = st.text_input("Data Location:(UC Volume Path *.csv):","", help="A CSV file with `sequence` column")
-            inf_sequence_column_name = st.text_input("Sequence Column Name:","", help="The column containing the sequence in the csv file")
-            inf_result_location = st.text_input("Result Location: (UC Volume Folder)","", help="Results will be saved as results.csv in the given folder. Please make sure the folder exists.")
+            inf_data_location = st.text_input("Data Location:(UC Volume Path *.csv):", f"{_base}/BLAT_ECOLX_Tenaillon2013_metadata_eval.csv", help="A CSV file with `sequence` column")
+            inf_sequence_column_name = st.text_input("Sequence Column Name:", "sequence", help="The column containing the sequence in the csv file")
+            inf_result_location = st.text_input("Result Location: (UC Volume Folder)", f"/Volumes/{_cat}/{_sch}/bionemo/esm2/results", help="Results will be saved as results.csv in the given folder. Please make sure the folder exists.")
             start_inference_button_clicked = st.form_submit_button("Run Inference")
         
     inference_started = False
