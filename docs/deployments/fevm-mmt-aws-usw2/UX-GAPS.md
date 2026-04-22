@@ -519,6 +519,27 @@ Plus `initialize.py` should `os.makedirs(f"/Volumes/{_cat}/{_sch}/bionemo/esm2/r
 
 No new data shipping required — just UI defaults reflecting what init already staged.
 
+**2026-04-21 — PATCHED LOCALLY on `mmt/e2fe_gwb_deploy` branch.** Edits applied to `modules/core/app/views/nvidia/bionemo_esm.py` (6 text_input defaults across `display_finetune_tab()` + `display_inference_tab()`, plus module-level `_cat`/`_sch`/`_base` from `CORE_CATALOG_NAME`/`CORE_SCHEMA_NAME` env vars — same pattern already used by `disease_biology.py:277` and `single_cell_workflows/processing.py:41`). Verified on e2-demo-field-eng after app redeploy — BioNeMo tab now shows paste-ready paths, finetune label, experiment name, sequence column, and result location. Defaults are catalog/schema-agnostic; they resolve per-workspace via env vars injected into the app runtime. **Still needs:** upstream PR to `version_pinning` branch; `initialize.py` should also `os.makedirs(.../results, exist_ok=True)` so the result folder exists out of the box (separate small PR).
+
+---
+
+## 19. Module-registration state lags in UI (brief error banner before self-correct)
+
+**Location:** UI — observed on BioNeMo tab (and previously on other module tabs) immediately after a successful `./deploy.sh <module>`.
+
+**Gap:** After `./deploy.sh <module> aws` completes and writes the `<module>_deployed=true` row to `settings`, the UI briefly renders a "module not configured / error-like" state before auto-correcting. The auto-correction happens without any user action (refresh, click) — the app has reactive polling that catches up within a few seconds. But during that window the tab looks broken.
+
+**How a user hits it:** Deploy finishes, they switch to the app tab to confirm, see an error banner or "module not deployed" message, start troubleshooting. It resolves itself before they find the cause.
+
+**Observed:** 2026-04-21 on e2-demo-field-eng, immediately after `./deploy.sh bionemo aws` returned success. The BioNeMo tab showed an error briefly, then displayed correctly within a few seconds without any refresh. Reported as "the error like before" — suggesting the same pattern was seen on the sandbox too.
+
+**Proposed fix:**
+- Option A (lowest-effort): Skeleton / "syncing..." placeholder while the app's settings-table status check is in-flight, instead of rendering stale/incomplete state as error.
+- Option B: After `initialize_module_job` completes, the job's on-success path could explicitly invalidate the app's cached settings snapshot, shortening the "bad state" window.
+- Option C: Clear "just-deployed — waiting for sync" indicator for N seconds post-registration, separate from actual error states.
+
+**Severity:** LOW — self-resolves in seconds, doesn't block anything. But affects live-demo polish; pattern of "see an error → nope never mind" is disorienting for SA HUNTER attendees watching over May's shoulder.
+
 ---
 
 *(further entries as we find them)*
