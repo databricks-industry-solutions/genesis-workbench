@@ -5,9 +5,10 @@ Cell search and annotation using [SCimilarity](https://genentech.github.io/scimi
 ## What it does
 
 1. **Downloads** SCimilarity model weights + Adams et al. sample dataset
-2. **Registers** three MLflow custom pyfunc models in Unity Catalog
-3. **Deploys** three model serving endpoints
-4. **Extracts** disease/celltype sample data for endpoint testing
+2. **Registers** MLflow custom pyfunc models in Unity Catalog (gene order + cell embedding)
+3. **Deploys** model serving endpoints for those pyfuncs
+4. **Extracts** the 23M-cell reference corpus to a Delta table and builds a Databricks Vector Search index for nearest-neighbor search (mirrors the Protein Sequence Search pattern)
+5. **Extracts** disease/celltype sample data for endpoint testing
 
 ## Serving Endpoints
 
@@ -15,13 +16,12 @@ Cell search and annotation using [SCimilarity](https://genentech.github.io/scimi
 |---|---|---|---|---|
 | `gwb_mmt_scimilarity_gene_order_endpoint` | `scimilarity_gene_order` | Returns gene ordering for dataset alignment | CPU | Small |
 | `gwb_mmt_scimilarity_get_embedding_endpoint` | `scimilarity_get_embedding` | Neural network inference — generates cell embeddings from gene expression | GPU Medium (4xA10G) | Small |
-| `gwb_mmt_scimilarity_search_nearest_endpoint` | `scimilarity_search_nearest` | FAISS nearest-neighbor search across ~23M cell reference | GPU Medium (4xA10G) | Small |
+| `gwb_mmt_scimilarity_search_nearest_endpoint` | `scimilarity_search_nearest` | **DEPRECATED** — superseded by the Vector Search index; will be removed next release | GPU Medium (4xA10G) | Small |
 
-**Why GPU for all endpoints?**
-All models depend on `scimilarity==0.4.0` which transitively pulls in `torch` + `pytorch-lightning`. GPU serving environments have torch pre-cached in the base image, so container builds are fast. CPU serving works functionally but triggers a full torch install from scratch (~slow build). Keep all endpoints on GPU for fast, consistent deployments.
+Nearest-neighbor cell search now runs against a **Databricks Vector Search index** (`scimilarity_cell_index`) that is Delta-synced from `scimilarity_cells`. The app-side `search_nearest_cells` in `modules/core/app/utils/scimilarity_tools.py` queries the index directly — no per-request model serving endpoint in the loop. This matches the pattern used by the Protein Sequence Search feature.
 
-**Why Small concurrency for search_nearest?**
-`search_nearest` loads ~23M cell reference into RAM (~12GB per worker). Small concurrency (0-4 workers) keeps total memory within the node's limits. Medium concurrency (0-16) causes OOM.
+**Why GPU for the embedder endpoint?**
+`scimilarity==0.4.0` transitively pulls in `torch` + `pytorch-lightning`. GPU serving environments have torch pre-cached in the base image, so container builds are fast. CPU serving works functionally but triggers a full torch install from scratch (~slow build).
 
 Workload type and size are configurable per endpoint via job parameters (see below).
 
@@ -29,11 +29,13 @@ Workload type and size are configurable per endpoint via job parameters (see bel
 
 ```
 01_wget_scimilarity (download model + sample data)
-    ├── 02_register_GeneOrder
-    ├── 03_register_GetEmbedding
-    ├── 04_register_SearchNearest
-    │       └── 05_importNserve_model_gwb (deploy endpoints after all register tasks)
-    └── 06a_extractNsave_DiseaseCellTypeSamples (extract sample data)
+    ├── 02_register_GeneOrder ─────────────────────┐
+    ├── 03_register_GetEmbedding ──────────────────┤
+    ├── 04_register_SearchNearest (deprecated) ────┤
+    │                                               └── 05_importNserve_model_gwb
+    ├── 06a_extractNsave_DiseaseCellTypeSamples
+    └── 06b_extract_reference_to_delta
+            └── 06c_create_cell_vector_index
 ```
 
 All tasks run on `14.3.x-gpu-ml-scala2.12` A10 GPU clusters (ON_DEMAND).
@@ -67,10 +69,11 @@ Registration runs log to: `/Shared/dbx_genesis_workbench_models/gwb_modules_scim
 | `01_wget_scimilarity.py` | Download model weights + Adams et al. sample dataset to UC Volume |
 | `02_register_GeneOrder.py` | Register gene order pyfunc model |
 | `03_register_GetEmbedding.py` | Register cell embedding pyfunc model |
-| `04_register_SearchNearest.py` | Register nearest-neighbor search pyfunc model |
+| `04_register_SearchNearest.py` | **DEPRECATED** — register nearest-neighbor search pyfunc model (superseded by 06b + 06c) |
 | `05_importNserve_model_gwb.py` | Import models into GWB catalog + deploy serving endpoints |
 | `06a_extractNsave_DiseaseCellTypeSamples.py` | Extract IPF myofibroblast samples for testing |
-| `06b_checkNuse_SCimilarityEndpoints.ipynb` | Guided walkthrough of using served endpoints |
+| `06b_extract_reference_to_delta.py` | Write the 23M-cell reference corpus to Delta table `scimilarity_cells` |
+| `06c_create_cell_vector_index.py` | Create VS endpoint + Delta Sync index `scimilarity_cell_index` |
 | `utils.py` | Shared setup: pip installs, config variables, data preprocessing |
 
 ## Data

@@ -5,10 +5,16 @@ import numpy as np
 import pandas as pd
 from databricks.sdk import WorkspaceClient
 
+from genesis_workbench.workbench import execute_select_query
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 workspace_client = WorkspaceClient()
+
+# Vector Search index suffixes (created by notebooks 06b/06c in the scimilarity module)
+SCIMILARITY_CELLS_TABLE = "scimilarity_cells"
+SCIMILARITY_CELL_INDEX = "scimilarity_cell_index"
 
 
 def _get_endpoint_name(model_suffix: str) -> str:
@@ -118,17 +124,30 @@ def get_cell_embeddings(normed_df: pd.DataFrame, obs_df: pd.DataFrame = None) ->
     raise RuntimeError(f"GetEmbedding unexpected response type: {type(result)}")
 
 
-def search_nearest_cells(embedding: list, k: int = 100) -> dict:
-    """Search the 23M-cell reference database for k nearest neighbors.
+def search_nearest_cells(embedding: list, k: int = 100,
+                         catalog: str = None, schema: str = None) -> dict:
+    """Search the externalized SCimilarity reference for k nearest neighbors.
+
+    Queries the Vector Search index for cell_id + distance, then fetches cell
+    metadata (cell_type, disease, tissue, study) from the scimilarity_cells
+    Delta table. Matches the protein sequence search pattern — no per-request
+    PyFunc endpoint in the loop.
 
     Args:
         embedding: 128-element list of floats
         k: Number of nearest neighbors
+        catalog: UC catalog (defaults to CORE_CATALOG_NAME env)
+        schema: UC schema (defaults to CORE_SCHEMA_NAME env)
 
     Returns:
-        dict with nn_idxs, nn_dists, results_metadata (JSON string)
+        dict with nn_idxs (list of cell_ids), nn_dists, results_metadata
+        (JSON string, orient="split", DataFrame with `prediction` column).
     """
-    endpoint = _get_endpoint_name("scimilarity_search_nearest")
+    if catalog is None:
+        catalog = os.environ.get("CORE_CATALOG_NAME", "genesis_workbench")
+    if schema is None:
+        schema = os.environ.get("CORE_SCHEMA_NAME", "genesis_schema")
+
     # Flatten embedding if needed
     if hasattr(embedding, "tolist"):
         embedding = embedding.tolist()
@@ -136,15 +155,54 @@ def search_nearest_cells(embedding: list, k: int = 100) -> dict:
         embedding = embedding[0]
     embedding = [float(x) for x in embedding]
 
-    payload = {
-        "embedding": embedding,
-        "params": json.dumps({"k": k}),
+    index_name = f"{catalog}.{schema}.{SCIMILARITY_CELL_INDEX}"
+    results = workspace_client.vector_search_indexes.query_index(
+        index_name=index_name,
+        columns=["cell_id"],
+        query_vector=embedding,
+        num_results=k,
+    )
+
+    cell_ids, dists = [], []
+    if results.result and results.result.data_array:
+        for row in results.result.data_array:
+            cell_ids.append(row[0])
+            dists.append(float(row[-1]) if len(row) > 1 else 0.0)
+
+    metadata_df = _fetch_cell_metadata(cell_ids, catalog, schema)
+
+    # annotate_clusters expects a `prediction` column (from the old SCimilarity PyFunc shape).
+    if not metadata_df.empty and "cell_type" in metadata_df.columns:
+        metadata_df = metadata_df.rename(columns={"cell_type": "prediction"})
+
+    return {
+        "nn_idxs": cell_ids,
+        "nn_dists": dists,
+        "results_metadata": metadata_df.to_json(orient="split"),
     }
-    result = _query_endpoint(endpoint, payload)
-    # Result is typically a list with one dict; extract the first
-    if isinstance(result, list) and len(result) > 0 and isinstance(result[0], dict):
-        return result[0]
-    return result
+
+
+def _fetch_cell_metadata(cell_ids: list, catalog: str, schema: str) -> pd.DataFrame:
+    """Fetch cell metadata from the scimilarity_cells Delta table.
+
+    Preserves the order of cell_ids to keep `nn_idxs` aligned with the metadata rows.
+    """
+    if not cell_ids:
+        return pd.DataFrame()
+
+    ids_str = ", ".join(f"'{cid}'" for cid in cell_ids)
+    query = f"""
+        SELECT cell_id, cell_type, disease, tissue, study
+        FROM {catalog}.{schema}.{SCIMILARITY_CELLS_TABLE}
+        WHERE cell_id IN ({ids_str})
+    """
+    df = execute_select_query(query)
+
+    # execute_select_query returns rows in arbitrary order — reindex by cell_id
+    # to align with the VS hit order.
+    if not df.empty and "cell_id" in df.columns:
+        df = df.set_index("cell_id").reindex(cell_ids).reset_index()
+    return df
 
 
 def annotate_clusters(

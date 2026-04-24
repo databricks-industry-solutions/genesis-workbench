@@ -54,6 +54,24 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/06a_extractNsave_DiseaseCellTypeSamples.py
 
+        # Externalize the 23M-cell reference to a Delta table for Vector Search.
+        # Needs a memory-sized single-node cluster — CellQuery loads ~12 GB into RAM.
+        # Runs in parallel with register_* tasks after wget completes.
+        - task_key: extract_reference_to_delta_task
+          depends_on:
+            - task_key: wget_SCimilarity_task
+          job_cluster_key: job_cluster_search_nearest
+          notebook_task:
+            notebook_path: ../notebooks/06b_extract_reference_to_delta.py
+
+        # Create the Databricks Vector Search endpoint and Delta Sync index.
+        # Lightweight — runs on serverless once the source Delta table exists.
+        - task_key: create_cell_vector_index_task
+          depends_on:
+            - task_key: extract_reference_to_delta_task
+          notebook_task:
+            notebook_path: ../notebooks/06c_create_cell_vector_index.py
+
       environments: ## serverless
         - environment_key: default
           spec:

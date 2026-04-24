@@ -1,5 +1,15 @@
 # Databricks notebook source
 # MAGIC %md
+# MAGIC > **DEPRECATED** — superseded by the externalized Vector Search index.
+# MAGIC > See `06b_extract_reference_to_delta.py` + `06c_create_cell_vector_index.py`,
+# MAGIC > and the app-side `search_nearest_cells` in `modules/core/app/utils/scimilarity_tools.py`
+# MAGIC > which now queries the VS index + Delta table directly.
+# MAGIC > This notebook will be removed in the next release once the new path has been in
+# MAGIC > production for one release cycle.
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC #### Run Initialization
 
 # COMMAND ----------
