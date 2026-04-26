@@ -17,6 +17,7 @@ variables:
       module: bionemo
       created_by: ${workspace.current_user.short_name}
    
+      RemoveAfter: "2027-12-31"
   core_catalog_name:
     description: primary catalog where data, models, and files are stored for this project.
   

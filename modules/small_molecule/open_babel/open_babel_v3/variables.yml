@@ -17,6 +17,7 @@ variables:
       module: open_babel
       created_by: ${workspace.current_user.short_name}
 
+      RemoveAfter: "2027-12-31"
   cpu_node_type:
     description: Node type for CPU vms
 
