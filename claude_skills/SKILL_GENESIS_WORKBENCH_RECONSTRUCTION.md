@@ -115,33 +115,67 @@ databricks apps logs $APP_NAME --profile $PROFILE | grep -E 'Initializing|User b
 
 ## Pattern 2: Serving endpoints swept (UC models survived)
 
-**Symptom:** App loads but module pages fail when invoking models. `serving-endpoints list` shows 1 of N expected endpoints.
+**Symptom:** App loads but module pages fail when invoking models. `serving-endpoints list` shows fewer endpoints than the GWB `model_deployments` table claims are active.
 
-**Recovery — DO NOT run `./deploy.sh <module>`** unless UC models are also gone. Module redeploy re-runs registration (15-30 min per module) and can create v2 of UC models for no reason. Instead, use GWB's internal `deploy_model_job`:
+**Recovery — DO NOT run `./deploy.sh <module>`** unless UC models are also gone. Module redeploy re-runs registration (15-30 min per module) and creates v2 of UC models for no reason.
+
+**Also do NOT use `bundle run deploy_model_job`** — its notebook (`modules/core/notebooks/deploy_model.py`) imports per-model adapter packages (e.g. `dbboltz` at `modules/protein_studies/boltz/boltz_1/dbboltz/`) that are bundled INTO MLflow model artifacts and only install on the serving container via the conda_env's `/model/artifacts/<package>` path. They are NOT installed in the deploy_model_job's serverless runtime, so its notebook fails at import-time with `ModuleNotFoundError`. The `./deploy.sh <module>` flow side-steps this by running `%pip install ../<dbpkg>` before invoking deploy_model.
+
+**Working pattern: hit `POST /api/2.0/serving-endpoints` directly.** The serving container handles per-model deps via conda_env automatically.
 
 ```bash
-# 1. Get the missing endpoints from GWB's tracking table
-SQL="SELECT m.model_id, m.model_name, m.model_uc_name, d.deployment_name,
-            d.deployment_description, d.model_endpoint_name
-     FROM mmt_gwb.genesis_workbench.models m
-     JOIN mmt_gwb.genesis_workbench.model_deployments d ON d.model_id = m.model_id
-     WHERE d.is_active = true"
-# (Run via api post /api/2.0/sql/statements)
+# 1. Get missing endpoints + UC model paths from GWB's tracking table
+databricks api post /api/2.0/sql/statements --profile $PROFILE --json '{
+  "warehouse_id": "<warehouse_id>",
+  "statement": "SELECT m.model_uc_name, d.deployment_name, d.model_endpoint_name FROM '"$CATALOG.$SCHEMA"'.models m JOIN '"$CATALOG.$SCHEMA"'.model_deployments d ON d.model_id = m.model_id WHERE d.is_active = true",
+  "wait_timeout": "20s"
+}'
 
-# 2. For each missing endpoint, run deploy_model_job
-# Per-endpoint workload params (record from memory or from prior deploy logs):
-#   scimilarity_search_nearest: workload_type=CPU, workload_size=Large
-#   scimilarity_get_embedding:  workload_type=GPU_SMALL, workload_size=Small
-#   scimilarity_gene_order:     workload_type=CPU, workload_size=Small
-#   default for others:         workload_type=GPU_SMALL, workload_size=Small
+# 2. For each missing endpoint, POST to serving-endpoints directly.
+#    workload_type + workload_size: read from the canonical
+#    modules/<module>/resources/register_*.job.yml — NOT from session memory.
+#    See feedback_gwb_register_yml_canonical for full pattern.
 
-for_each_missing_endpoint() {
-  databricks bundle run deploy_model_job --target prod_aws --profile $PROFILE \
-    --params "gwb_model_id=$MODEL_ID,deployment_name=$NAME,deployment_description=$DESC,workload_type=$WTYPE,workload_size=$WSIZE,deploy_user=$USER_EMAIL"
-}
+databricks api post /api/2.0/serving-endpoints --profile $PROFILE --json '{
+  "name": "<endpoint_name>",
+  "config": {
+    "served_entities": [{
+      "name": "<served_name>",
+      "entity_name": "<catalog>.<schema>.<uc_model_name>",
+      "entity_version": "1",
+      "workload_size": "<from register_*.job.yml>",
+      "workload_type": "<from register_*.job.yml — resolve ${var.gpu_*_setting} via aws.env>",
+      "scale_to_zero_enabled": true
+    }],
+    "traffic_config": {
+      "routes": [{"served_model_name": "<served_name>", "traffic_percentage": 100}]
+    }
+  },
+  "tags": [
+    {"key": "RemoveAfter", "value": "2027-12-31"},
+    {"key": "application", "value": "genesis_workbench"}
+  ]
+}'
 ```
 
-**Verify each endpoint reaches READY:** `databricks serving-endpoints get <name>` → `state.ready == "READY"`.
+**Canonical workload spec is in `register_*.job.yml`, NOT session memory.** Resolve `${var.gpu_*_setting}` via the cloud env file. As of 2026-04-26 on AWS:
+- `gpu_small_setting` → `GPU_SMALL` (1×T4, 16 GB)
+- `gpu_medium_setting` → `GPU_MEDIUM` (1×A10G, 24 GB)
+- `gpu_large_setting` → `MULTIGPU_MEDIUM` (4×A10G, 96 GB)
+
+`workload_size` is concurrency tier (Small=0-4, Medium=8-16, Large=16-64), NOT per-replica memory. To increase per-replica memory, change `workload_type`, not `workload_size`.
+
+**Not all type+size combos are valid.** The API rejects invalid pairs (e.g., `GPU_LARGE/Small` is not supported). Check the API error or look at currently-READY endpoints in the workspace for valid working combos before retrying.
+
+**Audit existing endpoints against canonical** (one-time post-recreation):
+```python
+# Compare each endpoint's live workload_type/size against its register YAML.
+# Common drift: scgpt + scgpt_perturbation (canonical MULTIGPU_MEDIUM/Small),
+# scimilarity get_embedding + search_nearest (canonical MULTIGPU_MEDIUM/Small,
+# explicit comment in YAML: "Keep Small (0-4 concurrency) — Medium OOMs").
+```
+
+**Verify each endpoint reaches READY:** `databricks serving-endpoints get <name>` → `state.ready == "READY"`. If `UPDATE_FAILED` with "Failed to load the model", first check workload_type matches canonical (sizing wrong = OOM at startup); if `update timed out`, the workload_type is undersized for the model's load time (CPU often fails this for GPU-friendly models with large reference data).
 
 ## Pattern 3: Mass-tag everything with RemoveAfter
 
