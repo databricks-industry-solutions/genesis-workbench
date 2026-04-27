@@ -233,7 +233,49 @@ In order — least to most destructive:
 
 1. `databricks apps delete gwb-mmt-demo --profile DEFAULT`
 2. `databricks apps delete gwb-mmt-probe --profile DEFAULT` (if still there)
-3. `databricks warehouses delete 1a9a54ac772b8798 --profile DEFAULT`
+3. `databricks warehouses delete 9b5370ee2ef1e248 --profile DEFAULT` (was `1a9a54ac772b8798` before 2026-04-26 sweep+recreate)
 4. `databricks catalogs delete mmt_gwb --force --profile DEFAULT`
 5. Leave `mmt` secret scope in place (has non-GWB keys). Optionally `databricks secrets delete-secret mmt gwb_<*>_docker_{user,token}` for the 4 GWB-added keys.
 6. `git checkout mmt/ver_pin_sandbox_setup` or restore `.bak`s to roll env files back.
+
+---
+
+## Reconstruction session 2026-04-26 — sweep + recovery
+
+**Incident:** Sun afternoon the app started 500'ing with `ResourceDoesNotExist: SQL warehouse 1a9a54ac772b8798 has been deleted`. Workspace sweeper removed the warehouse + 10 of 11 serving endpoints despite the warehouse description containing `RemoveAfter: 2027-12-31`. UC models, catalog, schema, volumes, all 14 jobs, parabricks_cluster, app, secret scope all SURVIVED.
+
+**Root cause:** Sweeper checks `custom_tags` (not description). Original warehouse + endpoints had `{application, created_by}` from the bundle's `common_resource_tags` default — no `RemoveAfter`. SCimilarity gene_order endpoint survived (the only one that did) for unclear reasons; same tag set but CPU/Small workload vs. GPU on the others.
+
+**Recovery sequence (1.5 hours wall clock):**
+
+1. Recreate warehouse via `databricks warehouses create --json '{...}'` — `--tags` is NOT a CLI flag (only via `--json`); also requires `min_num_clusters`/`max_num_clusters >= 1`. New ID: `9b5370ee2ef1e248`.
+2. Update `application.env` `sql_warehouse_id` (use `sed -i.preedit` for auto-backup; `set -e` doesn't catch empty-capture-then-sed corruption — always validate captured ID before passing to sed).
+3. `./deploy.sh core aws` — terraform reconciles app's `sql_warehouse` resource binding via `${var.sql_warehouse_id}`; app auto-restarts; `.deployed` marker correctly skips init.
+4. **Bake `RemoveAfter: "2027-12-31"`** into 21 modules' `variables.yml` `common_resource_tags.default` (commit `191db70`). Future bundle deploys auto-tag terraform-managed resources.
+5. **API mass-tag existing resources** with `RemoveAfter`+`application`:
+   - SQL `ALTER CATALOG/SCHEMA/VOLUME ... SET TAGS` for catalog/schema/15 volumes — works.
+   - Jobs API `/api/2.1/jobs/update` with `new_settings.tags` for 14 jobs — preserve existing via `{**existing, RemoveAfter, application}`.
+   - Clusters API `/api/2.0/clusters/edit` for parabricks_cluster — preserve `ResourceClass: SingleNode`.
+   - Serving-endpoints API `PATCH /api/2.0/serving-endpoints/<name>/tags` with `add_tags` for surviving endpoint.
+   - **UC registered models gap:** `ALTER MODEL ... SET TAGS` SQL fails with `PARSE_SYNTAX_ERROR`. MLflow `set-tag` API rejects dotted UC names ("Invalid name … cannot contain periods"). UC `securable-tag-assignments` endpoint not present on this workspace's Databricks version. Fallback: `PATCH /api/2.1/unity-catalog/models/<full_name>` with `comment: "RemoveAfter:2027-12-31 | application:..."`. Catalog/schema-level tags should inherit downward for sweep purposes; revisit on newer DBR.
+   - Secret scopes: not taggable (skip).
+6. Re-deploy core so `deploy_model_job` and the app pick up the new tag default for future endpoint creates.
+7. **Recreate 10 missing serving endpoints — DO NOT use `bundle run deploy_model_job`.** First attempt failed: 8 of 10 with `ModuleNotFoundError: No module named 'dbboltz'` (and analogous per-model). Root cause: `deploy_model.py`'s `process_model_with_adapters` imports per-model packages (`modules/protein_studies/boltz/boltz_1/dbboltz/`, etc.) at module-load time. These packages are bundled INTO the MLflow model artifacts (install on serving container via conda_env's `/model/artifacts/<package>`) but NOT installed in the deploy_model.py serverless runtime. The `./deploy.sh <module>` flow side-steps this via `%pip install ../<dbpkg>` before invoking deploy_model. Calling `deploy_model_job` out-of-context fails.
+   - **Working pattern:** direct `POST /api/2.0/serving-endpoints` with served entity pointing at existing UC model. Serving container installs per-model package from `/model/artifacts` automatically. No deploy_model_job needed.
+   - Per-endpoint workload sizing:
+     - `scimilarity_gene_order`: CPU/Small (already alive)
+     - `scimilarity_get_embedding`: GPU_SMALL/Small (notebook default was MULTIGPU_MEDIUM; downsized at memory-recommended GPU/Small)
+     - `scimilarity_search_nearest`: CPU/Large (was MULTIGPU_MEDIUM, OOM'd; per memory)
+     - **`esmfold`: `Medium` not `Small`** — first attempt with Small got `DEPLOYMENT_FAILED: Failed to load the model. Exit code 1`. Retry with Medium succeeded. **Update register notebook hardcoded `workload_size="Small"` to `Medium` for ESMFold.**
+8. Heartbeat hardening (commit `75986d3`): `scripts/heartbeat_app.py` now does Statement Execution `SELECT 1` against `mmt_gwb_warehouse` (resolved by NAME — resilient to ID changes from sweep+recreate) BEFORE the app description PATCH. Wrapped in try/except so warehouse-ping failure doesn't block app PATCH. Schedule unpaused (had been paused since 2026-04-22).
+9. Deployed previously-pending modules: `small_molecule` (chemprop, diffdock, proteina_complexa) + `disease_biology` (gwas, vcf_ingestion, variant_annotation). Bundle deploys ✓; per-model registration sub-jobs (15-30 min each) running async.
+
+**Skill captured:** `claude_skills/SKILL_GENESIS_WORKBENCH_RECONSTRUCTION.md` (commits `75986d3` + `4e30880`) — recovery-only playbook with sweep model, four recovery patterns, and anti-patterns table.
+
+**Still-open / nice-to-have (post-demo):**
+- `./deploy.sh bionemo / parabricks / protein_studies / single_cell aws` to refresh terraform state with new RemoveAfter from variables.yml (currently API-tagged; harmless drift)
+- Verify sweeper cadence: leave the new warehouse alone for ~5+ days, watch whether the new `RemoveAfter` tag actually protects it
+- When Databricks gets a UC `securable-tag-assignments` endpoint, replace the comment-field fallback with proper UC tags on registered models
+- Consider hoisting `common_resource_tags` to a single shared variables include — currently duplicated across 21 files
+- Update `register_esmfold.py` to hardcode `workload_size="Medium"` (currently "Small" → fails)
+- Push branch commits to origin (currently local-only on `mmt/e2fe_gwb_deploy`)
