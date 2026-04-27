@@ -251,5 +251,136 @@ AVOID:
 | If you want… | Use |
 |---|---|
 | Rehearsal artifact to derive slides + click-track | **v1** (default) |
-| Customer-direct podcast (microsite, pre-meeting send-ahead) | **v0** archive |
-| Both (rehearsal + customer-direct) | Run NotebookLM twice with different prompts |
+| Customer-direct podcast (microsite, pre-meeting send-ahead, asynchronous warm-up) | The polished script at [`podcast-script-customer-intro.md`](./podcast-script-customer-intro.md) — use directly (read aloud / TTS / written source-of-truth), no NotebookLM regen needed |
+| Customer-direct podcast generated fresh via NotebookLM (~10 min trim) | **v0** archive prompt above |
+| Both rehearsal + customer-direct | Use v1 prompt for the rehearsal podcast, plus the polished script for the customer-direct artifact |
+| See Gemini's original draft for comparison | Section "gemini's take" below — kept as reference for what the polished script was edited from |
+
+
+## gemini's take
+Drug Discovery with Databricks Workbench  
+Link: https://gemini.google.com/share/026aa7b70279  
+Created with Pro: April 25, 2026 at 01:48 PM  
+Published: April 25, 2026 at 01:58 PM  
+GitHub Reference: https://github.com/databricks-industry-solutions/genesis-workbench/tree/version_pinning
+
+Need to understand the drug R&D process based on the modules and models used in this accelerator.
+
+---
+
+**Prompt:**  
+Can you create a podcast-style explainer (e.g., via NotebookLM) to help me understand what the individual modules and their respective models do? Why are they useful, and why is implementing this via the solution accelerator beneficial?
+
+---
+
+## Podcast Breakdown
+
+### Title: *In Silico: Decoding the Databricks Genesis Workbench*  
+**Hosts:**  
+- Alex (Curious Tech & Biology Enthusiast)  
+- Sam (Data & AI Architect in Life Sciences)  
+
+*(Theme music fades in and out)*
+
+---
+
+**Alex:**  
+Welcome back to the podcast! Today, we’re diving into a massive bottleneck in human history: drug discovery. A listener wants to understand the Databricks Genesis Workbench — a cutting-edge open-source blueprint. Sam, you’ve studied the architecture and the Github repo. What are we looking at?
+
+---
+
+**Sam:**  
+Hey Alex. Simply put: Genesis Workbench is an AI engineer’s dream toolkit for life sciences.  
+Traditionally, drug discovery takes over a decade and billions of dollars, mostly in physical "wet labs." Genesis Workbench offers pre-packaged modules to move this process into the digital "in silico" world.
+
+---
+
+**Alex:**  
+Before we get into code, let’s visualize what we’re trying to solve. For listeners, imagine the drug R&D lifecycle.
+
+---
+
+**Sam:**  
+Right. The drug discovery pipeline generally follows this path:  
+1. Identifying the disease  
+2. Finding a target (e.g., a malfunctioning protein)  
+3. Designing a drug to hit that target  
+4. Preclinical testing  
+
+The Genesis Workbench modules map directly to these stages. Let’s walk through them.
+
+---
+
+### Module 1 & 2: Finding the Target (Disease Biology & Single Cell)
+
+**Alex:**  
+Let’s start with understanding the disease. I see Disease Biology and Single Cell modules in the repo.
+
+**Sam:**  
+Exactly. Finding a cure starts with finding the cause.  
+- **Disease Biology:** Handles heavy data like VCF (Variant Call Format) ingestion and GWAS (Genome-Wide Association Studies), so researchers can find genetic mutations linked to disease across huge populations.  
+- **Single Cell:**  
+  - Analyzes individual cells instead of tissue blends.  
+  - Models: scGPT, SCimilarity, Scanpy.  
+  - scGPT, for example, is a foundational AI model for single-cell biology, helping us understand gene expression at the microscopic level.
+
+*Why it’s useful:*  
+Pinpoint exactly which cells are misbehaving, to find your drug "target." These models help uncover the failing cellular pathways.
+
+---
+
+### Module 3: Understanding the Target (Protein Studies)
+
+**Alex:**  
+We’ve found our target — usually a protein. Now to Protein Studies. The repo lists AlphaFold2, ESMFold, RFDiffusion, Boltz, and ProteinMPNN.
+
+**Sam:**  
+This is where generative AI shines. Proteins are complex 3D biological machines.  
+- To block a malfunction, you need to know the exact physical shape.
+- **AlphaFold2** and **ESMFold**: Predict 3D protein structures from amino acid sequences in minutes.  
+- **RFDiffusion** and **ProteinMPNN**: Allow scientists to generate and design entirely new proteins from scratch.  
+- **Boltz**: (details specific to repo, if any)
+
+---
+
+### Module 4: Designing the Drug (Small Molecule)
+
+**Sam:**  
+Most traditional drugs are "small molecules" (think daily pills, like aspirin). Once you have your 3D protein target, you need to find a chemical compound that fits perfectly into its "pocket."
+
+- **DiffDock**: Diffusion model that predicts how a small molecule will physically bind (dock) with the target protein.  
+- **Chemprop**: Predicts properties of the molecule, like toxicity and absorption by the human body.
+
+*Why it’s useful:*  
+Virtual screening. Pharmaceutical companies can test millions of chemical compounds against a disease target *on the computer* before ever mixing a chemical in the lab.
+
+---
+
+## The Genesis Workbench Advantage
+
+**Alex:**  
+These open-source AI models are impressive. But why use the Databricks solution accelerator instead of just downloading and running these models yourself?
+
+**Sam:**  
+That’s the million-dollar question. Running these models in isolation is difficult — they require:  
+- Sizable GPU clusters  
+- Complex dependency management  
+- Strict data governance
+
+Genesis Workbench acts as an out-of-the-box blueprint that solves these headaches.  
+- **Automated Infrastructure:** Databricks provisions massive GPU clusters for models like AlphaFold and spins them down when not in use to save money.  
+- **Orchestration & Tracking:** MLflow tracks thousands of drug discovery experiments for reproducibility.  
+- **BioNeMo Integration:** Tight NVIDIA BioNeMo integration brings state-of-the-art biological models without container engineering.
+
+*Why it’s beneficial:*  
+Deploying this accelerator helps AI engineers and biologists avoid months of configuring servers, managing versions, and fixing software bugs. It delivers a unified, governed workspace for both proprietary data and open-source model weights.
+
+---
+
+**Alex:**  
+Faster time to science — ultimately faster time to life-saving treatments. Sam, thanks for breaking that down.
+
+**Sam:**  
+Anytime, Alex.
+
+*(Theme music fades out)*
