@@ -279,3 +279,35 @@ In order — least to most destructive:
 - Consider hoisting `common_resource_tags` to a single shared variables include — currently duplicated across 21 files
 - Update `register_esmfold.py` to hardcode `workload_size="Medium"` (currently "Small" → fails)
 - Push branch commits to origin (currently local-only on `mmt/e2fe_gwb_deploy`)
+
+---
+
+## Third sweep class found 2026-04-26 ~23:00 UTC — Vector Search
+
+While clickthrough-testing the Sequence Search workflow, "Search failed: Unity Catalog entity `mmt_gwb.genesis_workbench.sequence_embedding_index` does not exist."
+
+**Diagnosis:**
+- `mmt_gwb.genesis_workbench.sequence_embeddings` table: ALIVE (1,000,000 rows) — the upstream embedding pipeline ran successfully at some point
+- `gwb_sequence_search_vs_endpoint` Vector Search endpoint: GONE (sweeper)
+- `mmt_gwb.genesis_workbench.sequence_embedding_index` Delta Sync index: GONE (depends on endpoint)
+
+**Recovery (mirrors `04_create_vector_index.py` notebook logic):**
+1. `POST /api/2.0/vector-search/endpoints` → `gwb_sequence_search_vs_endpoint` (STANDARD type) — went ONLINE in seconds (e2fe has VS infra pre-warmed)
+2. SQL `ALTER TABLE mmt_gwb.genesis_workbench.sequence_embeddings SET TBLPROPERTIES (delta.enableChangeDataFeed = true)` — required for Delta Sync index
+3. `POST /api/2.0/vector-search/indexes` with primary_key=`seq_id`, embedding_dim=1280, pipeline_type=TRIGGERED, columns_to_sync=[`seq_id`]
+4. Initial sync of 1M rows takes ~30-60 min; search is partially queryable earlier
+
+**Sweep pattern is now confirmed across THREE resource classes:**
+| Class | Bundle-managed? | Swept? |
+|---|---|---|
+| SQL warehouse | NO | YES |
+| Serving endpoints | NO | YES (10/11) |
+| Vector Search endpoint + index | NO | YES |
+| Catalog / schema / volumes / app / jobs / parabricks_cluster / UC models | bundle or UC-managed | NO |
+
+The sweeper's pattern is clear: **non-bundle-managed, workspace-level lifecycle resources** are the targets. Bundle terraform state + UC-governance-protected resources all survived. This is the same pattern as the warehouse sweep earlier today.
+
+**Action items added:**
+- Add `gwb_sequence_search_vs_endpoint` + `sequence_embedding_index` to whatever post-demo resource-tagging sweep we do (VS endpoints support tags via separate API)
+- Update `claude_skills/SKILL_GENESIS_WORKBENCH_RECONSTRUCTION.md` to add **Pattern 3: Vector Search swept** with the recovery sequence above (next session)
+- Heartbeat enhancement candidate: include a `vector-search-indexes get` ping for known indexes to refresh activity timestamps (similar to the SELECT 1 warehouse ping pattern)

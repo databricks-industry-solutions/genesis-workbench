@@ -18,6 +18,10 @@ from datetime import datetime, timezone
 
 APP_NAME = "gwb-mmt-demo"
 WAREHOUSE_NAME = "mmt_gwb_warehouse"  # resolve by name so sweep+recreate doesn't break this
+VS_ENDPOINT_NAME = "gwb_sequence_search_vs_endpoint"
+VS_INDEXES = [
+    "mmt_gwb.genesis_workbench.sequence_embedding_index",
+]
 REMOVE_AFTER = "2027-12-31"
 
 w = WorkspaceClient()
@@ -41,6 +45,26 @@ except Exception as e:
     # Don't let warehouse ping failures block the app PATCH (which is the
     # critical sweep-protection for the app itself).
     print(f"WARN: warehouse ping failed: {e}")
+
+# Vector Search endpoint + index pings (sweep protection):
+# Same incident class as the warehouse sweep — VS endpoints are workspace-level
+# lifecycle resources with NO custom_tags API in this Databricks version, so
+# RemoveAfter tagging isn't an option. Ping with a get() to refresh activity.
+# Index is a UC entity and IS tagged with RemoveAfter, but ping it too for safety.
+try:
+    ep = w.vector_search_endpoints.get_endpoint(VS_ENDPOINT_NAME)
+    print(f"VS endpoint ping: {VS_ENDPOINT_NAME}  state={ep.endpoint_status}")
+except Exception as e:
+    print(f"WARN: VS endpoint ping failed: {e}")
+
+for idx_name in VS_INDEXES:
+    try:
+        idx = w.vector_search_indexes.get_index(idx_name)
+        # Get just the readiness flag — minimal touch
+        ready = bool(idx.status.ready) if idx.status else None
+        print(f"VS index ping: {idx_name}  ready={ready}")
+    except Exception as e:
+        print(f"WARN: VS index ping failed for {idx_name}: {e}")
 
 new_desc = (
     f"MMT Genesis Workbench demo | RemoveAfter: {REMOVE_AFTER} | "

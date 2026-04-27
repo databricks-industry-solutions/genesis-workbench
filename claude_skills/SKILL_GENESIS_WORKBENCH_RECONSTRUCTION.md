@@ -32,7 +32,7 @@ Genesis Workbench resources sit in three tiers, with different sweep behaviour:
 |---|---|---|---|
 | **A. UC catalog data** | Catalog, schema, volumes, registered UC models | Low (but possible) | No (created at init time) |
 | **B. Bundle-managed infra** | App, jobs, job clusters | Medium (managed by terraform; redeploy fixes drift) | Yes |
-| **C. Lifecycle-bound resources** | SQL warehouse, serving endpoints, standalone clusters | **HIGH** — most common sweep targets | No (created post-deploy) |
+| **C. Lifecycle-bound resources** | SQL warehouse, serving endpoints, standalone clusters, **Vector Search endpoints + indexes** | **HIGH** — most common sweep targets | No (created post-deploy) |
 
 When a sweep happens, **C is hit first**. UC models (A) usually survive. The bundle-managed jobs/app (B) survive but their state may diverge from terraform.
 
@@ -177,7 +177,89 @@ databricks api post /api/2.0/serving-endpoints --profile $PROFILE --json '{
 
 **Verify each endpoint reaches READY:** `databricks serving-endpoints get <name>` → `state.ready == "READY"`. If `UPDATE_FAILED` with "Failed to load the model", first check workload_type matches canonical (sizing wrong = OOM at startup); if `update timed out`, the workload_type is undersized for the model's load time (CPU often fails this for GPU-friendly models with large reference data).
 
-## Pattern 3: Mass-tag everything with RemoveAfter
+## Pattern 3: Vector Search endpoint + index swept
+
+**Symptom:** App's Sequence Search tab fails with `Search failed: Unity Catalog entity <catalog>.<schema>.sequence_embedding_index does not exist` (or similar). Source `sequence_embeddings` table still exists with rows, but the VS endpoint and/or index are gone.
+
+**Why this is its own pattern:** Vector Search endpoint+index are non-bundle-managed lifecycle resources, same class as the SQL warehouse and serving endpoints. Same sweeper, same recovery shape, but the APIs differ.
+
+**Recovery sequence (mirrors `04_create_vector_index.py` notebook logic):**
+
+```bash
+PROFILE=DEFAULT
+CATALOG=mmt_gwb
+SCHEMA=genesis_workbench
+WAREHOUSE_ID=<your-warehouse-id>
+VS_ENDPOINT=gwb_sequence_search_vs_endpoint
+INDEX_NAME=$CATALOG.$SCHEMA.sequence_embedding_index
+SOURCE_TABLE=$CATALOG.$SCHEMA.sequence_embeddings
+
+# 1. Confirm source table still has data (if it doesn't, you need to re-run
+#    the upstream embedding pipeline — that's a different recovery path)
+databricks api post /api/2.0/sql/statements --profile $PROFILE --json '{
+  "warehouse_id": "'"$WAREHOUSE_ID"'",
+  "statement": "SELECT COUNT(*) FROM '"$SOURCE_TABLE"'",
+  "wait_timeout": "20s"
+}'
+
+# 2. Create VS endpoint (STANDARD type)
+databricks api post /api/2.0/vector-search/endpoints --profile $PROFILE --json '{
+  "name": "'"$VS_ENDPOINT"'",
+  "endpoint_type": "STANDARD"
+}'
+# Note: on workspaces with VS infra pre-warmed, endpoint goes ONLINE within
+# seconds. On a cold workspace, allow 5-15 min for provisioning.
+
+# 3. Enable Change Data Feed on the source table (required for Delta Sync index)
+databricks api post /api/2.0/sql/statements --profile $PROFILE --json '{
+  "warehouse_id": "'"$WAREHOUSE_ID"'",
+  "statement": "ALTER TABLE '"$SOURCE_TABLE"' SET TBLPROPERTIES (delta.enableChangeDataFeed = true)",
+  "wait_timeout": "20s"
+}'
+
+# 4. Create Delta Sync index (replaces what notebook 04 does)
+#    Read register notebook for the embedding column name + dimension!
+#    For sequence_search: primary_key=seq_id, embedding=embedding (1280-dim).
+databricks api post /api/2.0/vector-search/indexes --profile $PROFILE --json '{
+  "name": "'"$INDEX_NAME"'",
+  "endpoint_name": "'"$VS_ENDPOINT"'",
+  "primary_key": "seq_id",
+  "index_type": "DELTA_SYNC",
+  "delta_sync_index_spec": {
+    "source_table": "'"$SOURCE_TABLE"'",
+    "embedding_vector_columns": [{"name": "embedding", "embedding_dimension": 1280}],
+    "pipeline_type": "TRIGGERED",
+    "columns_to_sync": ["seq_id"]
+  }
+}'
+
+# 5. Tag the index (UC entity, supports SET TAGS)
+databricks api post /api/2.0/sql/statements --profile $PROFILE --json '{
+  "warehouse_id": "'"$WAREHOUSE_ID"'",
+  "statement": "ALTER TABLE '"$INDEX_NAME"' SET TAGS (\"RemoveAfter\" = \"2027-12-31\", \"application\" = \"genesis_workbench\")",
+  "wait_timeout": "20s"
+}'
+```
+
+**Tagging caveat — VS endpoint is NOT taggable:** As of 2026-04-26, the Vector Search endpoint API does not expose a `tags` field or `/tags` sub-resource. Endpoint protection has to rely on heartbeat-style activity (Pattern 5: heartbeat hardening — extended below to add a VS get-endpoint ping).
+
+**ETA to fully queryable:**
+- Endpoint provisioning: 5-15 min cold, seconds if VS infra pre-warmed
+- Initial Delta Sync of source table: ~30-60 min for 1M rows × 1280-dim embeddings
+- Partial query may work earlier as the first shard syncs
+
+**Verify:**
+```bash
+# Index status
+databricks api get "/api/2.0/vector-search/indexes/$INDEX_NAME" --profile $PROFILE
+# Look for: status.ready == true, detailed_state == ONLINE_NO_PENDING_UPDATE
+
+# Smoke query (once ready) — embedding-vector input from a sample row
+```
+
+**Do NOT just re-run `./deploy.sh sequence_search aws`** — that triggers the entire 4-task workflow (download → create_delta_tables → batch_embed_sequences → create_vector_index). The first three tasks would re-do work that's already done (the table already has rows). The 4th task (create_vector_index) is what we actually need; running it standalone via the API as above is the surgical fix.
+
+## Pattern 4: Mass-tag everything with RemoveAfter
 
 After a sweep, the only durable protection is tags the workspace sweeper actually respects. RemoveAfter on a single resource (the warehouse) is NOT enough — the sweeper checks tags on each resource individually.
 
@@ -219,7 +301,7 @@ PYEOF
 
 The full mass-tagger script lives at `scripts/mass_tag_remove_after.py` (TODO if not yet present — author from this skill).
 
-## Pattern 4: Heartbeat hardening for warehouse sweep protection
+## Pattern 5: Heartbeat hardening for warehouse + VS sweep protection
 
 The default `scripts/heartbeat_app.py` only PATCHes the app description. That keeps the APP alive (the FE workspace's auto-stop is based on app `update_time`) but does NOT keep the warehouse alive. The warehouse gets swept based on its own activity timer.
 
@@ -244,6 +326,30 @@ else:
 ```
 
 Trade-off: if every GWB job is desired to refresh the warehouse, the cleaner pattern is for each job's *natural* work to query the warehouse (which happens organically for `deploy_model_job`, `initialize_core_job`, etc. — they read settings table). Only `gwb_mmt_demo_heartbeat` lacks a natural warehouse touch and needs explicit treatment.
+
+**Vector Search add-on (added 2026-04-26 after the third sweep class was found):** because the VS endpoint has NO tagging API at all, the only sweep-protection signal we can give it is activity. Add to the heartbeat:
+
+```python
+# After warehouse ping, before app PATCH:
+VS_ENDPOINT_NAME = "gwb_sequence_search_vs_endpoint"
+VS_INDEXES = ["mmt_gwb.genesis_workbench.sequence_embedding_index"]
+
+try:
+    ep = w.vector_search_endpoints.get_endpoint(VS_ENDPOINT_NAME)
+    print(f"VS endpoint ping: {VS_ENDPOINT_NAME}  state={ep.endpoint_status}")
+except Exception as e:
+    print(f"WARN: VS endpoint ping failed: {e}")
+
+for idx_name in VS_INDEXES:
+    try:
+        idx = w.vector_search_indexes.get_index(idx_name)
+        ready = bool(idx.status.ready) if idx.status else None
+        print(f"VS index ping: {idx_name}  ready={ready}")
+    except Exception as e:
+        print(f"WARN: VS index ping failed for {idx_name}: {e}")
+```
+
+`get_endpoint()` and `get_index()` are minimal-cost reads. They're enough to refresh "last accessed" telemetry if the sweeper uses that signal. If the sweeper uses something stricter (e.g. needing actual queries), upgrade to `query_index()` with a small probe vector — costs more compute but exercises the search path end-to-end.
 
 ## Anti-patterns (avoid)
 
