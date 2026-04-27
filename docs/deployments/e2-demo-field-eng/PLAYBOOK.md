@@ -1,11 +1,12 @@
-# Genesis Workbench — SA HUNTER Playbook (MVP)
+# Genesis Workbench — Playbook
 
-**Audience:** internal SA HUNTER team
-**Branch:** `version_pinning` (pending merge to main/development)
+**Audience:** Databricks SAs covering HLS / Life Sciences (primary); broadly applicable to any SA positioning or demoing GWB to customers.
+**Branch:** `version_pinning` — merged to `main` + `development` at PR #126 (2026-04-21); additional commits continue on the branch (Srijit + others).
 **Live demo targets:**
-- **New release (version_pinning):** https://genesis-workbench-1602460480284688.aws.databricksapps.com (fe-vm-hls-amer, deployed by Srijit 2026-04-20)
-- **Previous/basic demo:** https://gwb-mmt-app-1602460480284688.aws.databricksapps.com (fe-vm-hls-amer, unchanged)
-- **Alternate/public:** https://genesis-workbench-7474660003062283.aws.databricksapps.com
+- **e2-demo-field-eng (May, current — full stack):** https://gwb-mmt-demo-1444828305810485.aws.databricksapps.com — `gwb-mmt-demo`. Deployed 2026-04-21; reconstructed 2026-04-26 after a workspace-sweeper incident (warehouse + 10/11 endpoints recreated; small_molecule + disease_biology deployed same day). See `SESSION-NOTES.md` in this directory for full context.
+- **fe-vm-hls-amer (Srijit, parallel version_pinning deploy):** https://genesis-workbench-1602460480284688.aws.databricksapps.com — Srijit's deploy 2026-04-20.
+- **fe-vm-hls-amer (May, basic/legacy):** https://gwb-mmt-app-1602460480284688.aws.databricksapps.com — May's earlier deploy, unchanged (Peter Hawkins also uses).
+- **Public alternate:** https://genesis-workbench-7474660003062283.aws.databricksapps.com
 
 ---
 
@@ -129,7 +130,7 @@ See also: `docs/deployments/fevm-mmt-aws-usw2/UX-GAPS.md` for detailed improveme
 4. Or run `./deploy.sh core <cloud>` manually after filling in `application.env` + `modules/core/module.env`
 5. Deploy modules **one at a time**, waiting for each first-post-deploy job to reach `RUNNING` before launching the next (GPU quota serialization)
 
-Full deploy runbook lives at `docs/deployments/fevm-mmt-aws-usw2/SESSION-NOTES.md` (sandbox-specific but portable).
+Full deploy runbooks: `docs/deployments/e2-demo-field-eng/SESSION-NOTES.md` (current workspace + 2026-04-26 reconstruction context) and `docs/deployments/fevm-mmt-aws-usw2/SESSION-NOTES.md` (sandbox setup, post-pivot). Portable recovery patterns: `claude_skills/SKILL_GENESIS_WORKBENCH_RECONSTRUCTION.md`.
 
 ---
 
@@ -141,14 +142,17 @@ Full deploy runbook lives at `docs/deployments/fevm-mmt-aws-usw2/SESSION-NOTES.m
   - `claude_skills/SKILL_GENESIS_WORKBENCH_TROUBLESHOOTING.md` — failure recipes
   - `claude_skills/SKILL_GENESIS_WORKBENCH_DEPLOY_WIZARD.md` — interactive deploy guide
   - `claude_skills/SKILL_GENESIS_WORKBENCH_INSTALLATION.md` — reference install
+  - `claude_skills/SKILL_GENESIS_WORKBENCH_RECONSTRUCTION.md` — sweep recovery playbook (added 2026-04-26)
 - Local SA notes:
+  - `docs/deployments/e2-demo-field-eng/SESSION-NOTES.md` — current deploy + 2026-04-26 reconstruction
+  - `docs/deployments/e2-demo-field-eng/notebooklm-prompt.md` — NotebookLM prompt for demo-rehearsal podcast
   - `docs/deployments/fevm-mmt-aws-usw2/SESSION-NOTES.md` — sandbox deploy runbook
   - `docs/deployments/fevm-mmt-aws-usw2/UX-GAPS.md` — running UX + deploy gap log
-- Existing fe-vm-hls-amer deployment docs (prior release):
+- Existing fe-vm-hls-amer deployment docs (prior release, gitignored locally):
   - `docs/deployments/fe-vm-hls-amer/genesis-workbench-redeploy.md`
   - `docs/deployments/fe-vm-hls-amer/alphafold-debug-summary.md`
   - `docs/deployments/fe-vm-hls-amer/scanpy-gene-mapping-notes.md`
 
 ---
 
-*Last updated: 2026-04-21. MVP draft — review, edit, or expand as you walk through the live deployment.*
+*Last updated: 2026-04-26 (URL refresh, audience scope broadened from initial 2026-04-21 SA HUNTER MVP draft, sweep-recovery context added). Living document — review, edit, or expand as you walk through the live deployment.*
