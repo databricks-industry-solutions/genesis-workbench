@@ -17,6 +17,13 @@ Diagnose and rebuild a partially-swept GWB deployment without redoing model regi
 
 Do NOT use for: initial deployment setup (`genesis-workbench-deploy-wizard`), live deploy monitoring (`genesis-workbench-deploy-monitor`), or static error recipes (`genesis-workbench-troubleshooting`).
 
+## Related skills (when to switch)
+
+- **From-zero deploy on a new workspace** → `genesis-workbench-deploy-wizard` (or `SKILL_GENESIS_WORKBENCH_INSTALLATION.md`). That walks pre-flight (DCS toggle, secret scope, catalog create, Docker creds) → `./deploy.sh core <cloud>` → per-module deploys. This skill assumes core+modules already deployed at least once.
+- **A specific deploy step is failing right now** → `genesis-workbench-troubleshooting` for known error recipes (numpy/accelerate, scGPT dtype, SCimilarity request size, etc.).
+- **Watching a fresh deploy** → `genesis-workbench-deploy-monitor`.
+- **You think the workspace got swept and resources are missing** → stay here.
+
 ## The two-axis sweep model
 
 Genesis Workbench resources sit in three tiers, with different sweep behaviour:
