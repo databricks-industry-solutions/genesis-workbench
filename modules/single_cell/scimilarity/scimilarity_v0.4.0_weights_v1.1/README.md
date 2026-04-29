@@ -16,7 +16,6 @@ Cell search and annotation using [SCimilarity](https://genentech.github.io/scimi
 |---|---|---|---|---|
 | `gwb_mmt_scimilarity_gene_order_endpoint` | `scimilarity_gene_order` | Returns gene ordering for dataset alignment | CPU | Small |
 | `gwb_mmt_scimilarity_get_embedding_endpoint` | `scimilarity_get_embedding` | Neural network inference — generates cell embeddings from gene expression | GPU Medium (4xA10G) | Small |
-| `gwb_mmt_scimilarity_search_nearest_endpoint` | `scimilarity_search_nearest` | **DEPRECATED** — superseded by the Vector Search index; will be removed next release | GPU Medium (4xA10G) | Small |
 
 Nearest-neighbor cell search now runs against a **Databricks Vector Search index** (`scimilarity_cell_index`) that is Delta-synced from `scimilarity_cells`. The app-side `search_nearest_cells` in `modules/core/app/utils/scimilarity_tools.py` queries the index directly — no per-request model serving endpoint in the loop. This matches the pattern used by the Protein Sequence Search feature.
 
@@ -31,7 +30,6 @@ Workload type and size are configurable per endpoint via job parameters (see bel
 01_wget_scimilarity (download model + sample data)
     ├── 02_register_GeneOrder ─────────────────────┐
     ├── 03_register_GetEmbedding ──────────────────┤
-    ├── 04_register_SearchNearest (deprecated) ────┤
     │                                               └── 05_importNserve_model_gwb
     ├── 06a_extractNsave_DiseaseCellTypeSamples
     └── 06b_extract_reference_to_delta
@@ -55,8 +53,6 @@ All tasks run on `14.3.x-gpu-ml-scala2.12` A10 GPU clusters (ON_DEMAND).
 | `gene_order_workload_size` | `Small` | Endpoint workload size for gene_order |
 | `get_embedding_workload_type` | `MULTIGPU_MEDIUM` | Endpoint workload type for get_embedding |
 | `get_embedding_workload_size` | `Small` | Endpoint workload size for get_embedding |
-| `search_nearest_workload_type` | `MULTIGPU_MEDIUM` | Endpoint workload type for search_nearest |
-| `search_nearest_workload_size` | `Small` | Endpoint workload size for search_nearest |
 
 ## MLflow Experiments
 
@@ -69,7 +65,7 @@ Registration runs log to: `/Shared/dbx_genesis_workbench_models/gwb_modules_scim
 | `01_wget_scimilarity.py` | Download model weights + Adams et al. sample dataset to UC Volume |
 | `02_register_GeneOrder.py` | Register gene order pyfunc model |
 | `03_register_GetEmbedding.py` | Register cell embedding pyfunc model |
-| `04_register_SearchNearest.py` | **DEPRECATED** — register nearest-neighbor search pyfunc model (superseded by 06b + 06c) |
+| `04_register_SearchNearest.py` | **DEPRECATED** — no longer in the deploy DAG. Kept for reference; superseded by 06b + 06c. |
 | `05_importNserve_model_gwb.py` | Import models into GWB catalog + deploy serving endpoints |
 | `06a_extractNsave_DiseaseCellTypeSamples.py` | Extract IPF myofibroblast samples for testing |
 | `06b_extract_reference_to_delta.py` | Write the 23M-cell reference corpus to Delta table `scimilarity_cells` |

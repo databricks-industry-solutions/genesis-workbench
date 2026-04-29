@@ -29,19 +29,11 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/03_register_GetEmbedding.py 
         
-        - task_key: register_SearchNearest_task
-          depends_on: 
-            - task_key: wget_SCimilarity_task
-          job_cluster_key: job_cluster_search_nearest
-          notebook_task:
-            notebook_path: ../notebooks/04_register_SearchNearest.py 
-
         #this task can utilize serverless runtime with python 3.11
         - task_key: importNserve_scimilarity_models_task
           depends_on:
             - task_key: "register_GeneOrder_task"
             - task_key: "register_GetEmbedding_task"
-            - task_key: "register_SearchNearest_task"
           notebook_task:
             notebook_path: ../notebooks/05_importNserve_model_gwb.py
 
@@ -100,10 +92,6 @@ resources:
           default: MULTIGPU_MEDIUM
         - name: get_embedding_workload_size
           default: Small
-        - name: search_nearest_workload_type
-          default: MULTIGPU_MEDIUM
-        - name: search_nearest_workload_size
-          default: Small  # Keep Small (0-4 concurrency) — Medium OOMs loading ~23M cell reference
 
       job_clusters:
         # wget only downloads files — CPU node is sufficient and cheaper than GPU

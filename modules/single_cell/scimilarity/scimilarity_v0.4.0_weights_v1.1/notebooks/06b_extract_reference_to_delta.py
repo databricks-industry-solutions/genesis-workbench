@@ -30,24 +30,29 @@ print(f"Batch size   : {BATCH_SIZE:,}")
 
 # COMMAND ----------
 
-# DBTITLE 1,Load CellQuery (reference stays on driver)
+# DBTITLE 1,Load CellQuery (metadata eager; embeddings stay in TileDB)
+import numpy as np
 from scimilarity import CellQuery
 
-cq = CellQuery(model_path)
+# load_knn=False skips the HNSW index — we only need metadata + embedding access.
+cq = CellQuery(model_path, load_knn=False)
 
-# CellQuery exposes cell_embeddings (N, 128) and cell_metadata (DataFrame)
-cell_embeddings = cq.cell_embeddings
+# CellQuery only exposes cell_metadata as a DataFrame attribute.
+# Embeddings live in a TileDB array at cq.embedding_tiledb_uri and are read
+# on demand via cq.get_precomputed_embeddings(indices).
 cell_metadata = cq.cell_metadata
+n_cells = len(cell_metadata)
 
-n_cells, emb_dim = cell_embeddings.shape
+# Probe the embedding dimension by reading a single row.
+_probe = cq.get_precomputed_embeddings(np.array([0], dtype=np.int64))
+_probe = np.asarray(_probe).reshape(1, -1)
+emb_dim = _probe.shape[1]
+
 print(f"Reference cells    : {n_cells:,}")
 print(f"Embedding dim      : {emb_dim}")
 print(f"Metadata columns   : {list(cell_metadata.columns)}")
 print(f"Metadata row count : {len(cell_metadata):,}")
 
-assert len(cell_metadata) == n_cells, (
-    f"cell_embeddings rows ({n_cells}) and cell_metadata rows ({len(cell_metadata)}) differ"
-)
 assert emb_dim == 128, f"Expected embedding dim 128, got {emb_dim}"
 
 # COMMAND ----------
@@ -105,7 +110,9 @@ if not skip_build:
         end = min(start + BATCH_SIZE, n_cells)
         batch_num += 1
 
-        emb_batch = cell_embeddings[start:end].astype(np.float32)
+        emb_batch = np.asarray(
+            cq.get_precomputed_embeddings(np.arange(start, end, dtype=np.int64))
+        ).astype(np.float32).reshape(end - start, emb_dim)
         meta_batch = cell_metadata.iloc[start:end]
         ids_batch = cell_ids[start:end]
 

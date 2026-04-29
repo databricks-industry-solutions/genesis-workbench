@@ -14,7 +14,9 @@ from utils.single_cell_analysis import (start_scanpy_job,
                                         download_singlecell_markers_df,
                                         download_cluster_markers_mapping,
                                         get_mlflow_run_url,
-                                        search_singlecell_runs)
+                                        search_singlecell_runs,
+                                        save_singlecell_annotation,
+                                        download_singlecell_annotation)
 from utils.scimilarity_tools import annotate_clusters
 
 
@@ -372,6 +374,16 @@ def _display_results_viewer():
                 "The complete output AnnData object with all genes is available in the MLflow run.")
 
         annotation_cache_key = f"annotation_{run_id}"
+        annotation_loaded_key = f"annotation_loaded_{run_id}"
+
+        # Try loading a previously saved annotation from the MLflow run (once per run_id).
+        if annotation_cache_key not in st.session_state and annotation_loaded_key not in st.session_state:
+            st.session_state[annotation_loaded_key] = True
+            saved_results, saved_cluster_col = download_singlecell_annotation(run_id)
+            if saved_results is not None and not saved_results.empty:
+                st.session_state[annotation_cache_key] = saved_results
+                if saved_cluster_col:
+                    st.session_state[f"annotation_cluster_col_{run_id}"] = saved_cluster_col
 
         @st.fragment
         def _umap_fragment():
@@ -403,6 +415,13 @@ def _display_results_viewer():
                             )
                             st.session_state[annotation_cache_key] = results_df
                             st.session_state[f"annotation_cluster_col_{run_id}"] = cluster_col
+
+                            # Persist to the MLflow run so future viewers see annotations without re-running.
+                            try:
+                                save_singlecell_annotation(run_id, results_df, cluster_col)
+                                st.success("Annotation complete and saved to MLflow run.")
+                            except Exception as save_err:
+                                st.warning(f"Annotation computed but could not be saved to MLflow: {save_err}")
                         except Exception as e:
                             st.error(f"Annotation failed: {e}")
 
