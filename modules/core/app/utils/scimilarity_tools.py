@@ -171,10 +171,6 @@ def search_nearest_cells(embedding: list, k: int = 100,
 
     metadata_df = _fetch_cell_metadata(cell_ids, catalog, schema)
 
-    # annotate_clusters expects a `prediction` column (from the old SCimilarity PyFunc shape).
-    if not metadata_df.empty and "cell_type" in metadata_df.columns:
-        metadata_df = metadata_df.rename(columns={"cell_type": "prediction"})
-
     return {
         "nn_idxs": cell_ids,
         "nn_dists": dists,
@@ -191,8 +187,10 @@ def _fetch_cell_metadata(cell_ids: list, catalog: str, schema: str) -> pd.DataFr
         return pd.DataFrame()
 
     ids_str = ", ".join(f"'{cid}'" for cid in cell_ids)
+    # The Delta table built by 06b carries the cell-type label in `prediction`
+    # (the column name that scimilarity 0.4.0's `cq.cell_metadata` exposes).
     query = f"""
-        SELECT cell_id, cell_type, disease, tissue, study
+        SELECT cell_id, prediction, disease, tissue, study
         FROM {catalog}.{schema}.{SCIMILARITY_CELLS_TABLE}
         WHERE cell_id IN ({ids_str})
     """

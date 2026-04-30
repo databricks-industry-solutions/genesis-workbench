@@ -21,6 +21,23 @@ source module.env
 source ../../application.env
 
 echo ""
+echo "▶️ Creating a secret scope"
+echo ""
+
+
+echo "Scope name: $secret_scope_name"
+
+if databricks secrets list-scopes | grep -qw "$secret_scope_name"; then
+    echo "Scope $secret_scope_name already exists."
+else
+    databricks secrets create-scope "$secret_scope_name"
+    echo "Scope $secret_scope_name created."
+fi
+
+databricks secrets put-secret $secret_scope_name core_catalog_name --string-value $core_catalog_name
+databricks secrets put-secret $secret_scope_name core_schema_name --string-value $core_schema_name
+
+echo ""
 echo "▶️ Building libraries"
 echo ""
 

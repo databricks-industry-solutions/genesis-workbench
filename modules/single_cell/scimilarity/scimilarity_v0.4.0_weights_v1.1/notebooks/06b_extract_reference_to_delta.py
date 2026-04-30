@@ -113,7 +113,11 @@ if not skip_build:
         emb_batch = np.asarray(
             cq.get_precomputed_embeddings(np.arange(start, end, dtype=np.int64))
         ).astype(np.float32).reshape(end - start, emb_dim)
-        meta_batch = cell_metadata.iloc[start:end]
+        # reset_index(drop=True) is critical: cell_metadata's original index is preserved
+        # by .iloc, so for batches past the first one its values (start..end-1) don't match
+        # pdf's default 0..len-1 RangeIndex and pandas-aligned column assignment silently
+        # produces all-NaN. Resetting the index makes alignment by position.
+        meta_batch = cell_metadata.iloc[start:end].reset_index(drop=True)
         ids_batch = cell_ids[start:end]
 
         # Assemble a pandas DataFrame: cell_id, embedding as python list, metadata columns as strings

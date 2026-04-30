@@ -29,6 +29,7 @@ schema = dbutils.widgets.get("schema")
 # DBTITLE 1,Create Vector Search endpoint
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.vectorsearch import EndpointType
+from databricks.sdk.errors import NotFound, BadRequest
 import time
 
 w = WorkspaceClient()
@@ -69,12 +70,36 @@ index_name = f"{catalog}.{schema}.scimilarity_cell_index"
 # CDF is enabled in 06b, but re-assert to be safe in case the table was rebuilt.
 spark.sql(f"ALTER TABLE {source_table} SET TBLPROPERTIES (delta.enableChangeDataFeed = true)")
 
-try:
-    existing_index = w.vector_search_indexes.get_index(index_name)
+# Probe existence — retry transient errors so we don't fall through to create_index
+# (which then 409s with ResourceAlreadyExists) when the API has a momentary blip.
+existing_index = None
+for attempt in range(5):
+    try:
+        existing_index = w.vector_search_indexes.get_index(index_name)
+        break
+    except NotFound:
+        existing_index = None
+        break
+    except Exception as e:
+        print(f"  get_index transient error (attempt {attempt + 1}/5), retrying: {e}")
+        time.sleep(15)
+else:
+    raise RuntimeError(
+        f"Could not determine whether index '{index_name}' exists after 5 attempts. "
+        f"Refusing to create_index to avoid masking a transient backend error."
+    )
+
+if existing_index is not None:
     print(f"Index '{index_name}' already exists. Triggering sync...")
-    w.vector_search_indexes.sync_index(index_name=index_name)
-    print("Sync triggered.")
-except Exception:
+    try:
+        w.vector_search_indexes.sync_index(index_name=index_name)
+        print("Sync triggered.")
+    except BadRequest as e:
+        # If a sync is already in progress (pipeline INITIALIZING/RUNNING), the API
+        # rejects another trigger. That's fine — fall through to the polling loop
+        # which will track the in-flight sync to completion.
+        print(f"Sync not triggered (pipeline busy, will poll existing sync): {e}")
+else:
     print(f"Creating Delta Sync index '{index_name}'...")
     print(f"Source table: {source_table}")
 
@@ -98,8 +123,15 @@ except Exception:
 
 # DBTITLE 1,Wait for index to be ready
 # First sync over ~23M rows can take a while; give it a generous window.
+# Tolerate transient InternalError responses from get_index — a single flaky API
+# call shouldn't kill a 2-hour wait on an otherwise-healthy sync.
 for _ in range(240):
-    index_status = w.vector_search_indexes.get_index(index_name)
+    try:
+        index_status = w.vector_search_indexes.get_index(index_name)
+    except Exception as e:
+        print(f"  get_index transient error, retrying: {e}")
+        time.sleep(30)
+        continue
     status = index_status.status
     if status and status.ready:
         print(f"Index '{index_name}' is READY")
