@@ -759,15 +759,6 @@ def _display_results_viewer():
 def render():
     st.markdown("### Raw Single Cell Analysis")
 
-    st.markdown("""
-    <style>
-    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
-        font-size: 1.1rem;
-        font-weight: 500;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
     run_tab, view_tab = st.tabs(["Run New Analysis", "View Analysis Results"])
 
     with run_tab:
