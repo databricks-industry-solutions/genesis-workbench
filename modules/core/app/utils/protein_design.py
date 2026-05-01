@@ -6,6 +6,7 @@ import mlflow
 from dataclasses import dataclass, asdict
 
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.core import Config
 
 from Bio.PDB import PDBList
 from Bio.PDB import PDBParser
@@ -21,6 +22,10 @@ from .streamlit_helper import get_endpoint_name
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 workspace_client = WorkspaceClient()
+# Boltz diffusion can take 10-30+ min on GPU_SMALL for non-trivial sequences;
+# even on GPU_LARGE we want a generous client-side timeout so we don't trip the
+# SDK default (~5 min) and fail before the model returns.
+_boltz_workspace_client = WorkspaceClient(config=Config(http_timeout_seconds=1800))
 
 def hit_model_endpoint(display_name, inputs) -> str:
     """Query a model serving endpoint by display name."""
@@ -73,7 +78,7 @@ def hit_boltz(sequence, msa="no_msa", use_msa_server="True"):
     endpoint_name = get_endpoint_name("Boltz")
     try:
         logger.info(f"Sending request to Boltz endpoint: {endpoint_name}")
-        response = workspace_client.serving_endpoints.query(
+        response = _boltz_workspace_client.serving_endpoints.query(
             name=endpoint_name,
             inputs=payload,
         )

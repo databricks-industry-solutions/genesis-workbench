@@ -37,7 +37,7 @@ schema = dbutils.widgets.get("core_schema")
 
 # COMMAND ----------
 
-# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0 psutil==7.2.2 pynvml==11.0.0
+# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0 psutil pynvml
 
 # COMMAND ----------
 

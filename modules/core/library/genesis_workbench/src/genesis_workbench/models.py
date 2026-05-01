@@ -127,7 +127,7 @@ def set_mlflow_experiment(experiment_tag, user_email, host=None, token=None, sha
     if shared:
         mlflow_experiment_base_path = "Shared/dbx_genesis_workbench_models"
     else:
-        mlflow_experiment_base_path = f"Users/{user_email}/{user_settings['mlflow_experiment_folder']}"
+        mlflow_experiment_base_path = f"Users/{user_email}/{user_settings.get('mlflow_experiment_folder', 'mlflow_experiments')}"
     
     try:
         w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")

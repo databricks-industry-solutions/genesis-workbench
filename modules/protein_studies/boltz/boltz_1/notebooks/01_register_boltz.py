@@ -11,7 +11,7 @@ dbutils.widgets.text("experiment_name", "dbx_genesis_workbench_modules", "Experi
 dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
 dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
 dbutils.widgets.text("cache_dir", "boltz_cache_dir", "Cache dir")
-dbutils.widgets.text("workload_type", "GPU_SMALL", "Workload Type for endpoints")
+dbutils.widgets.text("workload_type", "GPU_LARGE", "Workload Type for endpoints")
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
@@ -364,7 +364,7 @@ run_id = deploy_model(user_email=USER_EMAIL,
                 sample_input_data_dict_as_json="none",
                 sample_params_as_json="none",
                 workload_type=WORKLOAD_TYPE,
-                workload_size="Small")
+                workload_size="Large")
 
 # COMMAND ----------
 

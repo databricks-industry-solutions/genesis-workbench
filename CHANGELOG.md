@@ -1,5 +1,35 @@
 # Genesis Workbench — Changelog
 
+## e2fe_gwb_deploy_fixes (2026-04-29/30)
+
+### Bug fixes — post-version_pinning regressions
+
+- **bionemo finetune notebook**: Dropped `psutil==7.2.2` and `pynvml==11.0.0` pins from the `version_pinning` branch. Both versions conflict with what the NVIDIA bionemo Docker base image already ships (`psutil 7.0.0`, `pynvml 12.0.0`). Plain pip resolver hung 81 min retrying the proxy; `--no-index` fast-failed `ResolutionImpossible`. Main's unpinned `psutil pynvml` is the working state.
+- **Boltz served-model conda_env.yml**: Bumped torch to `2.4.1+cu121` (transformers>=4.41 in dbboltz/pyproject.toml needs torch>=2.4 — without this, the served endpoint silently disabled PyTorch at startup and every inference request hung). Added `transformers<4.50` + `sentence-transformers<3` upper bounds + `setuptools<82` pin. Comment block restricted to ASCII (PyYAML reader chokes on UTF-8 multi-byte chars at MLflow register-time).
+- **Boltz dbboltz/pyproject.toml**: Matching `transformers<4.50` + `sentence-transformers<3` upper bounds.
+- **Boltz register notebook**: `workload_type=GPU_LARGE` + `workload_size=Large` so diffusion completes within Databricks Model Serving sync timeout.
+- **App `hit_boltz` timeout**: Dedicated `_boltz_workspace_client = WorkspaceClient(config=Config(http_timeout_seconds=1800))` in `modules/core/app/utils/protein_design.py`. Databricks SDK default ~5-min timeout was tripping Boltz inference mid-prediction. Per-call timeout isn't exposed on `serving_endpoints.query()`, so a separate client with extended config is the cleanest path. Other endpoints unchanged.
+- **`models.py:130` defensive default**: Switched from `user_settings['mlflow_experiment_folder']` to `user_settings.get('mlflow_experiment_folder', 'mlflow_experiments')`. Users with no settings row now get the documented default instead of an opaque `KeyError`.
+
+### Validation
+
+End-to-end on e2-demo-field-eng (mmt_gwb catalog):
+- bionemo finetune: 2026-04-29 04:57 UTC (run 720059965576396, ESM2-650M, val_loss 4.2M → 38K, 5 checkpoints saved)
+- Boltz: 2026-04-30 — direct endpoint returned multi-chain prediction (protein 215aa + RNA 19nt) AND GWB app UI rendering confirmed
+- ESMFold v5: 2026-04-30 — direct endpoint returned PDB structure in 5s + app UI rendering confirmed (serving with main's `transformers==4.41.2` deps)
+
+### Open issues — observed but not fixed in this cycle
+
+- **SCimilarity NaN in embeddings (Stage 2 Cell Type Annotation)**: Preprocessing format mismatch — Rapids/scanpy scaling produces values with negatives, `log1p` of negatives in `modules/core/app/utils/scimilarity_tools.py:54` produces NaN. Fix is `adata.raw` preservation in scanpy/rapids `analyze_single_h5ad.py` notebooks + read `.raw.X` in scimilarity_tools.py. Deferred to a focused session — needs careful data-flow trace.
+- **`a@b.com` placeholder defaults across job YAMLs** (bionemo, parabricks, gwas at minimum): Latent CLI-trigger gotcha. Only affects `databricks jobs run-now` from CLI without overriding the `user_email` param; the GWB app UI injects the logged-in user's email so it sidesteps. Deferred to a sweep PR.
+- **Warehouse `SECRET_CREATION_FAILURE` / `SERVICE_FAULT`**: Hit on BOTH e2-demo-field-eng AND fe-vm-hls-amer (the backup-app workspace) **during the demo** — not workspace-specific, was a Databricks-wide serverless platform issue. fe-vm-hls-amer recovered faster than e2fe. Bundle-managing the warehouse spec (Pro Classic + `auto_stop_mins=60`) across both workspaces would prevent drift back to the vulnerable serverless 10-min-auto-stop default. Deferred.
+
+### Workspace differential to investigate
+
+- **ESMFold v5 deployment behavior**: `transformers==4.57.3 + torch>2.0` (the 3962ee5 version) deploys cleanly on fe-vm-hls-amer Model Serving and serves there. Same dep set on e2-demo-field-eng causes the build container to install old versions despite the spec, model fails to load. Workspace-level package-repo or build-container differential — root cause not investigated. e2fe currently serves with the older `transformers==4.41.2` deps which match its package-repo.
+
+---
+
 ## development (2026-04-11/13)
 
 ### Protein Studies — New workflows
