@@ -16,37 +16,55 @@ Specific to the GWB Demo Playbook Google Doc. For generic playbook-creation patt
 - **Audience:** Internal Databricks SAs; pharma / drug-discovery customers; partners evaluating GWB as a reference architecture
 - **Source of truth for code grounding:** `version_pinning` branch + local `mmt/ver_pin_sandbox_setup` branch in this repo
 
-## Tab layout (as of 2026-04-21, v0.1.1)
+## Tab layout (as of 2026-04-21, v0.2)
 
-23 content-populated tabs + 5 empty reserve tabs. Order matches Google Doc UI display order.
+22 main tabs + 2 subtabs (nested). Disease Biology order: Variant Calling → GWAS → VCF+Annotation. FAQ comes before Setup & Caveats.
 
-| # | Tab title | Tab ID | H1 | Purpose |
+| # | Tab title | Tab ID | Parent | Notes |
 |---|---|---|---|---|
-| 1 | Contents | `t.0` | Contents | TOC + framing |
-| 2 | Pre-demo setup | `t.rd60sara42kn` | Pre-demo setup | Profile setup + endpoint warm-up + checklist |
-| 3 | Basic app v0 | `t.2vssmoj3i53o` | Basic app | gwb-mmt-app walkthrough (smaller surface) |
-| 4 | Home & AI Assistant | `t.r062dcvvatr5` | Home & AI Assistant | Home tab features |
-| 5 | Protein — Sequence Search | `t.no4iyhh0pxev` | Protein — Sequence Search | NEW workflow |
-| 6 | Protein — Structure | `t.uy50run19f8j` | Protein — Structure | ESMFold / AlphaFold2 / Boltz |
-| 7 | Protein — Design + Inverse Folding | `t.xt4nslf6da6c` | Protein — Design + Inverse Folding | RFDiffusion + ProteinMPNN |
-| 8 | Single Cell — Raw Processing | `t.x0v35rxip19z` | Single Cell — Raw Processing | Scanpy / Rapids pipeline |
-| 9 | Single Cell — Annotation | `t.q6ieezrpjztc` | Single Cell — Annotation | SCimilarity + NB 06b |
-| 10 | Single Cell — Perturbation | `t.h7xldefhmsv6` | Single Cell — Perturbation | NEW scGPT workflow |
-| 11 | Small Molecule — Docking | `t.oo73i4fsbbgu` | Small Molecule — Docking | NEW DiffDock |
-| 12 | Small Molecule — Binder Design | `t.51rn1d11y8t0` | Small Molecule — Binder Design | Proteina-Complexa family |
-| 13 | Small Molecule — ADMET | `t.jyrwbmbwl54z` | Small Molecule — ADMET | NEW Chemprop flow |
-| 14 | Disease Biology — GWAS | `t.23m4ovasjvaq` | Disease Biology — GWAS | NEW Glow pipeline |
-| 15 | Disease Biology — Variant Calling | `t.l5pdqsdh4s3p` | Disease Biology — Variant Calling | Parabricks |
-| 16 | Disease Biology — VCF + Annotation | `t.4yqr1b7xk68y` | Disease Biology — VCF + Annotation | NEW Glow + ClinVar |
-| 17 | NVIDIA — BioNeMo | `t.6pz3h0vmwi0g` | NVIDIA — BioNeMo | ESM2 finetune + inference |
-| 18 | NVIDIA — Parabricks | `t.laagocon1t44` | NVIDIA — Parabricks | GPU genomics |
-| 19 | Platform Pattern (Blueprint) | `t.36q45ptuj0lg` | Platform Pattern | Reusable reference architecture |
-| 20 | Setup & Caveats | `t.ghpm3jrikxfj` | Setup & Caveats | Install reference + UX gaps subset |
-| 21 | FAQ — know before you deploy | `t.2f9qced8aatt` | FAQ — know before you deploy | Pre-deploy user FAQ |
-| 22 | screenshots list | `t.nadlyjun15x3` | Good screenshots to grab... | Hero screenshot inventory |
-| 23 | Changelog | `t.e16fjl754bzq` | Changelog | Version history |
+| 1 | Overview | `t.0` | — | Renamed from "Contents". Quick overview + TOC. Demo URLs moved to Tab 2. |
+| 1a | Changelog | `t.e16fjl754bzq` | Overview | Moved here as subtab. Doc version history. |
+| 2 | Pre-demo setup | `t.rd60sara42kn` | — | Demo target workspaces (4-row table), Profile setup, endpoint warm-up, checklist |
+| 3 | Home & AI Assistant | `t.r062dcvvatr5` | — | — |
+| 4 | Protein — Sequence Search | `t.no4iyhh0pxev` | — | NEW workflow |
+| 5 | Protein — Structure | `t.uy50run19f8j` | — | ESMFold / AlphaFold2 / Boltz |
+| 6 | Protein — Design + Inverse Folding | `t.xt4nslf6da6c` | — | RFDiffusion + ProteinMPNN |
+| 7 | Single Cell — Raw Processing | `t.x0v35rxip19z` | — | Scanpy / Rapids pipeline |
+| 8 | Single Cell — Annotation | `t.q6ieezrpjztc` | — | SCimilarity + NB 06b |
+| 9 | Single Cell — Perturbation | `t.h7xldefhmsv6` | — | NEW scGPT workflow |
+| 10 | Small Molecule — Docking | `t.oo73i4fsbbgu` | — | NEW DiffDock |
+| 11 | Small Molecule — Binder Design | `t.51rn1d11y8t0` | — | Proteina-Complexa family |
+| 12 | Small Molecule — ADMET | `t.jyrwbmbwl54z` | — | NEW Chemprop flow |
+| 13 | Disease Biology — Variant Calling | `t.l5pdqsdh4s3p` | — | Parabricks |
+| 14 | Disease Biology — GWAS | `t.23m4ovasjvaq` | — | NEW Glow pipeline |
+| 15 | Disease Biology — VCF + Annotation | `t.4yqr1b7xk68y` | — | NEW Glow + ClinVar |
+| 16 | NVIDIA — BioNeMo | `t.6pz3h0vmwi0g` | — | ESM2 finetune + inference |
+| 17 | NVIDIA — Parabricks | `t.laagocon1t44` | — | GPU genomics |
+| 18 | Platform Pattern (Blueprint) | `t.36q45ptuj0lg` | — | Reusable reference architecture |
+| 19 | FAQ — know before you deploy | `t.2f9qced8aatt` | — | Pre-deploy user FAQ |
+| 20 | Setup & Caveats | `t.ghpm3jrikxfj` | — | Install reference + UX gaps summary (19+ entries) |
+| 21 | screenshots list | `t.nadlyjun15x3` | — | Hero screenshot inventory |
+| 22 | Ref/Legacy | `t.ewtgc7ypwqyc` | — | NEW parent tab for historical references |
+| 22a | Basic app | `t.2vssmoj3i53o` | Ref/Legacy | Simpler earlier version — moved here as subtab. Preamble notes legacy status (no mention of Peter dependency per May's request). |
 
-Tabs 24-28 (`t.ewtgc7ypwqyc`, `t.416pj86d0l3h`, `t.qjn9lfa5mdkl`, `t.uyc844yvf4rv`, `t.if0es5zqiq1`) are empty reserves.
+## Google Docs API limits (learned 2026-04-21)
+
+These operations are **UI-only** — `batchUpdate` does NOT support them:
+
+- **Tab title rename** (sidebar label) — `updateTabProperties` is not a valid batch request type. Can rename H1 (body content) but tab sidebar title must be right-click → Rename in the UI.
+- **Tab nesting** — creating subtabs, moving tabs, reordering — all UI-only. Drag indents in the sidebar.
+- **Tab creation/deletion** — also UI-only.
+
+Plan API edits around these limits. When the user requests a restructure (rename, nest, reorder), state that the UI action is required and tell them what to do.
+
+## Table editing gotchas (learned 2026-04-21)
+
+- **Cell insert index = cell.startIndex + 1** (inside the paragraph), NOT cell.startIndex (structural boundary → "insertion index must be inside bounds of existing paragraph" error).
+- **Process descending by index** when doing many inserts — lower-idx inserts shift higher-idx positions.
+- **Hyperlink ranges do NOT follow text shifts.** If you apply `updateTextStyle` with a range computed BEFORE subsequent inserts at lower indices, the range ends up on wrong characters. Either:
+  - Pair insert+style back-to-back for each cell (descending), so styles apply before subsequent shifts
+  - OR re-fetch the doc after all inserts, find current cell text ranges, then apply styles
+- **`replaceAllText` is greedy.** Renaming "Contents" → "Overview" also hit "Table of Contents" → "Table of Overview". Use distinctive strings or follow up with a targeted fix.
 
 ## Maintenance operations
 

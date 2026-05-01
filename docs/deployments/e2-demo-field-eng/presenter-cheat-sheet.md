@@ -145,6 +145,136 @@ Don't close with "any questions?" — leave them with a thought:
 
 ---
 
+## Quick definitions — if asked mid-demo
+
+**VCF — Variant Call Format**
+- Standard text-based file storing DNA variants (SNPs, small indels) called from sequencing data.
+- One row per variant: chromosome, position, reference allele, alternate allele(s), quality, per-sample genotypes (`0|0`, `0|1`, `1|1`).
+- Output of variant calling (e.g., Parabricks Germline → VCF). Input to GWAS, variant annotation against ClinVar.
+- File: `.vcf` or compressed `.vcf.gz` (with `.tbi` Tabix index).
+- In GWB: ingested by Disease Biology, read by Glow for GWAS.
+
+**Ligand — anything that binds**
+- Molecule that binds (usually non-covalently) to a target — typically a protein. The protein is the *receptor*; the ligand is the *key*.
+- In drug discovery, "ligand" almost always means a **small-molecule drug candidate** — represented as a SMILES string. Aspirin is a ligand of cyclooxygenase. Caffeine is a ligand of adenosine receptors.
+- Can also be peptides, antibodies, ions, or other proteins, but in the GWB Small Molecule context = candidate drug compound.
+- DiffDock: predicts 3D pose of ligand docked into protein pocket. Proteina-Complexa: folds the protein-ligand complex. Chemprop: predicts ADMET of the ligand.
+
+**Speaker shortcut:**
+> *"VCF is the spreadsheet of mutations. A ligand is the drug molecule looking for a pocket on the target protein to fit into."*
+
+---
+
+## Quick model intros — what each tool actually does
+
+### Phase 1 — heavy core (deploy these first)
+
+**scGPT** (Single Cell)
+Transformer pretrained on 33M cells → predicts how knocking out a gene cascades through single-cell expression.
+*Powers in-silico CRISPR screens, target validation, mechanism hypotheses — without touching a pipette.*
+
+**SCimilarity** (Single Cell)
+Turns cell data → vector embeddings → similarity search across 23M reference cells.
+*Powers cell-type identification, disease classification, drug target ID.*
+
+**ESMFold** (Protein Studies)
+Meta's ESM-2 protein language model → 3D atomic structure from amino-acid sequence, ~5 seconds.
+*Powers real-time druggability assessment, target hypothesis testing, demo-friendly structure preview.*
+
+**AlphaFold2** (Protein Studies)
+DeepMind's MSA + structural-template deep net → high-accuracy 3D structures (batch, hours per protein).
+*Powers production-grade structure databases, structure-guided drug design, complex modeling.*
+
+**ESM2 inference + fine-tune** (BioNeMo)
+650M-parameter protein LM, NVIDIA-accelerated — embeddings out of the box, fine-tuneable on your proprietary sequences.
+*Powers in-perimeter custom predictors, rare-disease modeling, antibody/enzyme engineering on private IP.*
+
+**Germline GPU** (Parabricks)
+NVIDIA GPU-accelerated genomics pipeline (BWA-MEM + DeepVariant) → variant calls (VCF) from raw reads (FASTQ).
+*Powers clinical-grade genomics at scale — 4–6× faster than CPU, sub-hour per genome on a single A100.*
+
+### Phase 2 — newer additions (deploy after Phase 1 is in flight)
+
+**Chemprop** (Small Molecule)
+Graph neural network on molecular structure → ADMET properties (toxicity, BBB penetration, clinical liability).
+*Powers virtual safety screening of millions of compounds, fail-fast triage before wet-lab spend.*
+
+**DiffDock** (Small Molecule)
+Diffusion model on 3D protein-ligand pose space → ranked binding poses with confidence scores.
+*Powers virtual docking screens, hit-to-lead optimization, target-engagement hypothesis testing.*
+
+**VCF Ingestion → Variant Annotation → GWAS** (Disease Biology)
+Raw variant files → governed Delta tables → ClinVar/pathogenicity overlay → population-scale association testing (Glow on Spark).
+*Powers cohort-genomics studies, novel target discovery, variant-disease evidence assembly (Manhattan plots).*
+
+---
+
+## End-to-end example — EGFR-driven NSCLC
+
+Use this when the customer asks *"OK but how does this all stitch together for one real disease?"* — concrete walkthrough showing the 4 stages flowing into each other, with specific models triggered at each.
+
+**Premise to set the scene** (~10 sec):
+> *"Pharma R&D team has a 10,000-patient lung-cancer cohort with whole-genome sequencing + tumor scRNA-seq. Goal: identify the driver mutation, understand its molecular consequences, design a candidate inhibitor — without sending proprietary patient data to any external API."*
+
+### Stage 1 — Disease (find the driver gene)
+
+**Input:** Raw NGS reads (`.fastq.gz`) from 5,000 NSCLC cases + 5,000 controls.
+
+**Models triggered:**
+- **Parabricks Germline** (NVIDIA) — FASTQ → VCF, GPU-accelerated (4–6× faster than CPU)
+- **VCF Ingestion** → governed Delta tables in Unity Catalog
+- **Variant Annotation** → ClinVar overlay flags pathogenicity
+- **GWAS (Glow on Spark)** → population-scale association test
+
+**Output:** Manhattan plot — chromosome-7 skyscraper at the EGFR locus, p < 5×10⁻⁸. T790M and L858R variants flagged as pathogenic gain-of-function.
+
+> → **EGFR identified as the driver gene; mutation hotspots known.**
+
+### Stage 2 — Target (which cells, what cascade)
+
+**Input:** Tumor scRNA-seq (`.h5ad`) + EGFR mutation status from Stage 1.
+
+**Models triggered:**
+- **SCimilarity** — vector search across 23M reference cells; finds similar diseased populations
+- **scGPT** — zero-shot EGFR-knockout simulation; predicts cascading expression changes
+
+**Output:** Alveolar type-2 cells confirmed as primary EGFR-mutant population. Knockout cascade predicted across MAPK/AKT pathway.
+
+> → **Cell type + downstream cascade mapped — biology is clear.**
+
+### Stage 3 — Structure (3D shape of the mutant target)
+
+**Input:** EGFR kinase-domain amino-acid sequence with T790M gatekeeper mutation (Thr → Met at residue 790).
+
+**Models triggered:**
+- **ESMFold** — live, ~5-second 3D fold for hypothesis preview *(this is where you click View in the demo)*
+- **AlphaFold2** — batch run for higher-accuracy gatekeeper-residue detail *(show via Past Runs — never live, "career-ending click")*
+- **BioNeMo ESM2 fine-tune** (NVIDIA) — embeddings on the company's proprietary cohort sequences for a custom predictor
+
+**Output:** 3D structure of mutant kinase. Altered ATP-binding pocket; T790M sterically clashes with first-gen TKIs (gefitinib, erlotinib).
+
+> → **The lock has changed shape — old keys won't fit; need new geometry.**
+
+### Stage 4 — Drug (design + safety screen)
+
+**Input:** Mutant EGFR structure (Stage 3) + 10K candidate molecules (SMILES) — internal compound library + osimertinib analogs.
+
+**Models triggered:**
+- **DiffDock** — diffusion model on 3D pose space → ranked binding poses with confidence scores
+- **Chemprop ADMET** — BBB penetration, ClinTox, hepatotoxicity, full ADMET profile
+
+**Output:** Top-3 candidates with high docking confidence + clean ADMET profile. Lead compound selected; team commits to wet-lab validation.
+
+> → **Lead candidate identified + safety-screened — wet lab triggered with a high prior.**
+
+### Closer
+
+> *"One platform. One Unity Catalog perimeter. ~8 models orchestrated across 4 stages. Patient data never left the workspace. Researcher never wrote DevOps. Lead compound in hand with mathematical evidence — not five years of guess-and-check. **~5 weeks vs. ~5 years traditionally.**"*
+
+**Companion visual:** `arch_or_imgs/10-end-to-end-example.html` — drop the rendered PNG into the slide deck if you want the audience to see all 4 stages laid out at once.
+
+---
+
 ## Rapid recap (memorize this sequence)
 
 1. **Open** — 10-15 yr bottleneck → "hidden toil" → Unity Catalog solves the proprietary-meets-public-data governance issue

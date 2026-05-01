@@ -85,7 +85,13 @@ databricks jobs run-now \
 
 **Cause:** Workspace-admin setting blocks custom-container clusters. Parabricks hits this at bundle-deploy (standalone cluster); BioNeMo finetune/inference would hit it at runtime. See UX-GAPS entry #12.
 
-**Fix:** Workspace admin must enable Databricks Container Services at Admin Settings → Compute → Container Services. After the toggle:
+**Fix:** Workspace admin enables Databricks Container Services. Two equivalent paths (docs: https://docs.databricks.com/aws/en/compute/custom-containers#enable-container-services):
+- **UI:** Admin Settings → Compute → Container Services → toggle on
+- **CLI** (faster for SA workflows): `databricks api patch "/api/2.0/workspace-conf" --json '{"enableDcs":"true"}' --profile <profile>`
+  - Verify: `databricks api get "/api/2.0/workspace-conf?keys=enableDcs" --profile <profile>` should return `{"enableDcs":"true"}`
+  - Requires `admins` workspace group membership
+
+After the toggle:
 ```bash
 rm modules/parabricks/.deployed
 ./deploy.sh parabricks <cloud>
@@ -132,6 +138,74 @@ If an error doesn't match the known patterns above:
 1. Fetch the full trace: `databricks jobs get-run-output <task-run-id> --profile <profile>`
 2. Add a new UX-GAPS entry in `docs/deployments/<workspace>/UX-GAPS.md` with discovery context, root cause (when known), and a proposed fix
 3. Link to the GitHub issue or commit that introduces the root cause if it's identifiable
+
+## Cross-workspace state hygiene (CRITICAL — learned 2026-04-21)
+
+When the same local repo is pointed at a new workspace (e.g., switching from `fevm-mmt-aws-usw2` sandbox to `e2-demo-field-eng`), **two kinds of local state must be cleared** or deploys silently misbehave:
+
+### (A) Stale `modules/*/.deployed` markers
+
+- Symptom: `initialize_module_job` fails with `[TABLE_OR_VIEW_NOT_FOUND] <catalog>.<schema>.settings`.
+- Cause: `modules/core/deploy.sh` skips `initialize_core_job` if `.deployed` exists, so the `settings` / `batch_models` / `user_settings` / etc. tables are never created on the new workspace.
+- Fix (before re-running `./deploy.sh core`):
+  ```bash
+  for f in $(find modules -name ".deployed" -not -path "*/node_modules/*"); do
+    mv "$f" "${f}.<prior-workspace-suffix>"
+  done
+  ```
+
+### (B) Stale `modules/*/.databricks/bundle/prod_aws/` dirs
+
+- Symptom: `Error: failed to get dashboard "genesis_workbench"` or similar "resource not found" at terraform apply time.
+- Cause: Terraform state from a previous workspace's deploy points at resource IDs that don't exist on the new workspace. DAB reuses the `prod_aws` target name.
+- Fix (before re-running):
+  ```bash
+  for d in $(find modules -name "prod_aws" -type d -path "*/.databricks/bundle/*"); do
+    mv "$d" "${d}.<prior-workspace-suffix>"
+  done
+  ```
+
+### Durable backup (tarball)
+
+`.databricks/` is gitignored, so in-place renames can be lost on `git clean`. Tarball the state:
+```bash
+tar czf docs/deployments/<prior-ws>/bundle-state-backup-$(date +%Y%m%d-%H%M).tar.gz \
+  --exclude='.terraform' --exclude='.terraform.lock.hcl' --exclude='plan' \
+  $(find modules -name "prod_aws.<prior-ws>" -type d)
+```
+(A 100k-ish tarball of actual state, excluding the ~450MB of terraform provider caches.)
+
+## Async registration job pattern (learned 2026-04-21)
+
+Some module registration jobs fire as **async backend tasks** via `bundle run --no-wait`-style semantics, and deploy.sh prints `✅ SUCCESS` BEFORE they complete. Known examples:
+
+- `single_cell/scgpt/.../deploy.sh` → scGPT registration job (register_scgpt + register_scgpt_perturbation + import + update_model_catalog — chained tasks, ~15-20 min)
+- `single_cell/scimilarity/.../deploy.sh` → SCimilarity registration job (wget_SCimilarity + extract_sample + register_GetEmbedding/GeneOrder/SearchNearest + importNserve — ~20-30 min)
+
+**Implication:** `deploy.sh single_cell aws` returns success after ~5 min, but the SCimilarity / scGPT UI workflows are NOT usable until the async registration finishes. Users clicking "Run Cell Type Annotation" before then get workflow errors.
+
+**How to check after a module deploy:**
+```bash
+# Find async job runs that were kicked off
+grep -E "Run URL.*job/[0-9]+" <deploy-log>
+
+# Poll each run for state
+databricks jobs get-run <run_id> --profile <profile> --output json | jq '.state, .tasks[].state'
+```
+
+Tied to UX-GAPS #25 (deploy.sh post-deploy success check + job-run summary).
+
+## Stale vs current failures in monitoring UI
+
+The app's Settings → Monitoring tab lists historical job runs including long-past failures. When a user says "X failed," always check the **timestamp** of the failing run against the current session — UI prominence != recency. A failed run from 4 hours ago is not a current problem.
+
+## 300-app workspace cap (shared workspaces)
+
+Shared workspaces like `e2-demo-field-eng` cap at 300 apps total. Deploy fails at terraform's `create app` step if the cap is hit. Strategy:
+
+- Keep a placeholder app alive (e.g., a probe app) UNTIL the real `gwb-<...>` app is created successfully
+- Delete the placeholder AFTER confirming the real app is ACTIVE
+- Don't delete preemptively — if the new app fails for a different reason, you've lost the slot
 
 ## Pairs with
 

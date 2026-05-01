@@ -236,9 +236,56 @@ Offer the user the next module to deploy, or stop.
 - User is developing a new module — use `genesis-workbench-development` instead.
 - User is troubleshooting a UI workflow — use `genesis-workbench-workflows` or `_troubleshooting`.
 
+## Cross-workspace state hygiene (required pre-step when switching workspaces)
+
+**When pointing the same local repo at a new workspace** (e.g., switching from sandbox to a new deploy target), clear these two kinds of local state or `./deploy.sh core` will silently skip `initialize_core_job` and the deploy fails downstream with `TABLE_OR_VIEW_NOT_FOUND`:
+
+```bash
+# Backup + clear .deployed markers
+for f in $(find modules -name ".deployed" -not -path "*/node_modules/*"); do
+  mv "$f" "${f}.<prior-workspace-suffix>"
+done
+
+# Backup + clear bundle state dirs (per-target terraform state)
+for d in $(find modules -name "prod_aws" -type d -path "*/.databricks/bundle/*"); do
+  mv "$d" "${d}.<prior-workspace-suffix>"
+done
+
+# Optional durable backup (since .databricks/ is gitignored)
+tar czf docs/deployments/<prior-ws>/bundle-state-backup-$(date +%Y%m%d-%H%M).tar.gz \
+  --exclude='.terraform' --exclude='.terraform.lock.hcl' --exclude='plan' \
+  $(find modules -name "prod_aws.<prior-ws>" -type d)
+```
+
+Also back up the env files themselves (they're gitignored, so branch switching doesn't swap them):
+```bash
+cp application.env                   application.env.<prior-ws>.bak
+cp modules/core/module.env          modules/core/module.env.<prior-ws>.bak
+cp modules/bionemo/module.env       modules/bionemo/module.env.<prior-ws>.bak
+cp modules/parabricks/module.env    modules/parabricks/module.env.<prior-ws>.bak
+cp modules/disease_biology/module.env  modules/disease_biology/module.env.<prior-ws>.bak
+```
+
+## Shared-workspace caveats (e.g., e2-demo-field-eng)
+
+- **300-app workspace cap.** Deploy fails at terraform's `create app` step if workspace is near the cap. Keep a placeholder app alive UNTIL the real app lands, then delete placeholder.
+- **App-name uniqueness.** `genesis-workbench` may be taken — prefix (e.g., `gwb-<owner>-<target>`).
+- **`enableDcs` toggle.** Confirm Container Services is on before deploying bionemo/parabricks/disease_biology:
+  ```bash
+  # Check (expect {"enableDcs":"true"}; null or "false" means off)
+  databricks api get "/api/2.0/workspace-conf?keys=enableDcs" --profile <profile>
+
+  # If off AND you're in the `admins` workspace group, enable via CLI:
+  databricks api patch "/api/2.0/workspace-conf" --json '{"enableDcs":"true"}' --profile <profile>
+  ```
+  Docs: https://docs.databricks.com/aws/en/compute/custom-containers#enable-container-services
+- **Catalog create permission.** Test by creating a throwaway catalog (then delete with `--force` — catalogs auto-create a default schema so need force). Most admins group members can.
+- **Async registration jobs (scGPT / SCimilarity).** `./deploy.sh single_cell` returns ✅ SUCCESS before scGPT + SCimilarity registration sub-jobs complete (15-30 min each). UI workflows on those tabs aren't usable until async jobs finish. See DEPLOY_MONITOR skill for how to check.
+
 ## Related skills
 
 - `genesis-workbench` — overview of modules and workflows.
 - `genesis-workbench-installation` — reference documentation for the deployment process.
 - `genesis-workbench-troubleshooting` — recipes for common post-deploy failures.
+- `genesis-workbench-deploy-monitor` — for watching jobs + diagnosing failures during/after deploy (includes cross-workspace state hygiene details).
 - `databricks-authentication` — use this if the `DEFAULT` profile needs to be reset.
