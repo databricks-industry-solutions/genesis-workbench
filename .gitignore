@@ -26,3 +26,7 @@ lightning_logs
 _dev
 local/*
 !local/README.md
+docs/architecture/
+*.bak
+.deployed.*
+*.preedit
