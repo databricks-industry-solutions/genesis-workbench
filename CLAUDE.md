@@ -7,6 +7,7 @@ When a user in this repo asks for help with deployment, installation, developmen
 | User intent | Skill file |
 |---|---|
 | "deploy Genesis Workbench", "install GWB", "set up on new workspace", "run deploy.sh" | [`claude_skills/SKILL_GENESIS_WORKBENCH_DEPLOY_WIZARD.md`](claude_skills/SKILL_GENESIS_WORKBENCH_DEPLOY_WIZARD.md) |
+| "destroy GWB", "tear down genesis workbench", "uninstall GWB", "remove all modules" | [`claude_skills/SKILL_GENESIS_WORKBENCH_DESTROY_WIZARD.md`](claude_skills/SKILL_GENESIS_WORKBENCH_DESTROY_WIZARD.md) |
 | Reference docs for installation / config / deployment mechanics | [`claude_skills/SKILL_GENESIS_WORKBENCH_INSTALLATION.md`](claude_skills/SKILL_GENESIS_WORKBENCH_INSTALLATION.md) |
 | Overview of GWB — modules, capabilities, architecture | [`claude_skills/SKILL_GENESIS_WORKBENCH.md`](claude_skills/SKILL_GENESIS_WORKBENCH.md) |
 | Deploy failures, registration errors, endpoint issues, runtime errors | [`claude_skills/SKILL_GENESIS_WORKBENCH_TROUBLESHOOTING.md`](claude_skills/SKILL_GENESIS_WORKBENCH_TROUBLESHOOTING.md) |
