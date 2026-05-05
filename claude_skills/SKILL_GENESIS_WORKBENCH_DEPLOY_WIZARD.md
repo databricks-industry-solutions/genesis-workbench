@@ -50,10 +50,7 @@ Run `databricks catalogs list` and show the user the `MANAGED_CATALOG` rows. Ask
 Default: `genesis_workbench`. Remind the user it must be *dedicated* to GWB (the deploy process writes many tables there). Don't validate its existence — `deploy.sh` creates it.
 
 ### 5. SQL warehouse
-Run `databricks warehouses list` and show warehouses — it's fine if they're `STOPPED`, they start on demand.
-
-**Always re-validate** `sql_warehouse_id` even if `application.env` already exists. Warehouse IDs go stale between sessions (deleted, recreated, workspace swapped). Run `databricks warehouses get <id>` before trusting the file; if it 404s, prompt the user to pick a fresh one.
-
+Run `databricks warehouses list` and show `HEALTHY` warehouses. Ask: pick one, or the user will create a new 2X-Small.
 - If they need to create one, link them to https://docs.databricks.com/aws/en/compute/sql-warehouse/create and wait.
 - Capture the warehouse ID, validate with `databricks warehouses get <id>`.
 
@@ -64,17 +61,13 @@ Read current `modules/core/module.env` (if present) and offer each field with th
 - `secret_scope_name` — e.g. `genesis_workbench_secret_scope`. Created by the deploy if missing.
 - `llm_endpoint_name` — default `databricks-claude-sonnet-4-6`. Validate it exists: `databricks serving-endpoints get <name>`.
 
-### 7. Docker-backed modules (BioNeMo, Parabricks, disease_biology) — creds required
-**`bionemo`, `parabricks`, AND `disease_biology`** all require docker-registry creds in a `module.env`. The bundle YAML declares these as required vars (see `modules/bionemo/variables.yml`, `modules/parabricks/variables.yml`, and each of `modules/disease_biology/{gwas,variant_annotation,vcf_ingestion}/*/variables.yml`). Missing them → `bundle validate` fails with `no value assigned to required variable parabricks_docker_userid` (or equivalent).
+### 7. BioNeMo module (optional)
+Ask: deploy the `bionemo` module? If yes, collect:
+- `bionemo_docker_userid`
+- `bionemo_docker_token` (secret — handle with care, don't echo back)
+- `bionemo_docker_image` (tag)
 
-**disease_biology reuses the parabricks creds** — its GWAS pipeline uses parabricks for alignment, and all three sub-bundles (gwas, variant_annotation, vcf_ingestion) import the same var set. Write the same three values to BOTH `modules/parabricks/module.env` AND `modules/disease_biology/module.env`.
-
-For each module the user opts into, collect:
-- `<module>_docker_userid` (for disease_biology, use `parabricks_docker_userid`)
-- `<module>_docker_token` (secret — handle with care, don't echo back)
-- `<module>_docker_image` — can be Docker Hub (`<user>/<image>:<tag>`), NGC (`nvcr.io/...`), or any other registry. Must be pre-built and pushed (see `modules/<module>/docker/build_docker.sh` where present).
-
-If user is pushing to Docker Hub, the token is usually a Docker Hub PAT (`dckr_pat_*`). If NGC, the userid is typically `$oauthtoken` and the token is the NGC API key.
+Remind the user: the BioNeMo container must be pre-built and pushed (see `modules/bionemo/docker/build_docker.sh`).
 
 ### 8. Which additional modules to deploy
 After `core`, ask the user to pick from: `protein_studies`, `single_cell`, `small_molecule`, `disease_biology`, `parabricks`, `bionemo`. Deploy one at a time; each triggers long-running background jobs.
