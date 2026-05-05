@@ -77,6 +77,56 @@ for index, row in deployed_models[["model_id", "deployment_id", "model_endpoint_
 
 # COMMAND ----------
 
+# TEMPORARILY DISABLED — re-enable after testing the rest of the destroy flow.
+# Per-module Vector Search resources created at runtime by submodule notebooks
+# (06c for scimilarity, 04 for sequence_search). The bundle doesn't own these,
+# so they have to be cleaned up explicitly here. Source Delta tables are
+# intentionally left in place — storage is cheap and the data is reusable.
+#
+# MODULE_VS_RESOURCES = {
+#     "single_cell": [
+#         {
+#             "endpoint": "gwb_scimilarity_vs_endpoint",
+#             "index": f"{catalog}.{schema}.scimilarity_cell_index",
+#         },
+#     ],
+#     "protein_studies": [
+#         {
+#             "endpoint": "gwb_sequence_search_vs_endpoint",
+#             "index": f"{catalog}.{schema}.sequence_embedding_index",
+#         },
+#     ],
+# }
+#
+# from databricks.sdk import WorkspaceClient
+# from databricks.sdk.errors import NotFound
+#
+# w = WorkspaceClient()
+#
+# for entry in MODULE_VS_RESOURCES.get(module, []):
+#     index_name = entry["index"]
+#     endpoint_name = entry["endpoint"]
+#
+#     print(f"⏩️ Deleting Vector Search index {index_name}")
+#     try:
+#         w.vector_search_indexes.delete_index(index_name=index_name)
+#         print(f"  Deleted index {index_name}")
+#     except NotFound:
+#         print(f"  Index {index_name} does not exist — skipping")
+#     except Exception as e:
+#         print(f"  Error deleting index {index_name}: {e}. Delete it manually")
+#
+#     print(f"⏩️ Deleting Vector Search endpoint {endpoint_name}")
+#     try:
+#         w.vector_search_endpoints.delete_endpoint(name=endpoint_name)
+#         print(f"  Deleted endpoint {endpoint_name}")
+#     except NotFound:
+#         print(f"  Endpoint {endpoint_name} does not exist — skipping")
+#     except Exception as e:
+#         print(f"  Error deleting endpoint {endpoint_name}: {e}. Delete it manually")
+
+# COMMAND ----------
+
 #lets deactivate all the models registered in Genesis Workbench
 spark.sql(f"""
      UPDATE {catalog}.{schema}.models SET

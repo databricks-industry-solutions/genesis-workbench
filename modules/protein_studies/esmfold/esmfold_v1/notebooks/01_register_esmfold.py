@@ -19,7 +19,7 @@ schema = dbutils.widgets.get("schema")
 # COMMAND ----------
 
 #requirements for genesis workbench library
-%pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.2 #mlflow==2.22.0
+%pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 #mlflow==2.22.0
 #requirements for current library
 #%pip install -r ../requirements.txt
 
@@ -264,4 +264,4 @@ run_id = deploy_model(user_email=user_email,
 
 # COMMAND ----------
 
-result = wait_for_job_run_completion(run_id, timeout = 3600)
+result = wait_for_job_run_completion(run_id, timeout = 7200)

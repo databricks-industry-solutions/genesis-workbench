@@ -10,8 +10,32 @@ fi
 
 CLOUD=$1
 
+case "$CLOUD" in
+  aws)   TARGET=prod_aws ;;
+  azure) TARGET=prod_azure ;;
+  gcp)   TARGET=prod_gcp ;;
+  *) echo "Usage: $0 <aws|azure|gcp>"; exit 1 ;;
+esac
+
 source module.env
 source ../../application.env
+
+echo ""
+echo "▶️ Creating a secret scope"
+echo ""
+
+
+echo "Scope name: $secret_scope_name"
+
+if databricks secrets list-scopes | grep -qw "$secret_scope_name"; then
+    echo "Scope $secret_scope_name already exists."
+else
+    databricks secrets create-scope "$secret_scope_name"
+    echo "Scope $secret_scope_name created."
+fi
+
+databricks secrets put-secret $secret_scope_name core_catalog_name --string-value $core_catalog_name
+databricks secrets put-secret $secret_scope_name core_schema_name --string-value $core_schema_name
 
 echo ""
 echo "▶️ Building libraries"
@@ -66,19 +90,19 @@ echo ""
 echo "▶️ Validating bundle"
 echo ""
 
-databricks bundle validate --var="$EXTRA_PARAMS"
+databricks bundle validate --target $TARGET --var="$EXTRA_PARAMS"
 
 echo ""
-echo "▶️ Deploying bundle"
+echo "▶️ Deploying bundle (target=$TARGET)"
 echo ""
 
-databricks bundle deploy --var="$EXTRA_PARAMS"
+databricks bundle deploy --target $TARGET --var="$EXTRA_PARAMS"
 
 echo ""
 echo "▶️ Deploying UI Application"
 echo ""
 
-databricks bundle run genesis_workbench_app --var="$EXTRA_PARAMS"
+databricks bundle run --target $TARGET genesis_workbench_app --var="$EXTRA_PARAMS"
 
 echo ""
 echo "▶️ Granting app service principal access to catalog"
@@ -96,7 +120,7 @@ echo ""
 echo "▶️ Granting app permissions for endpoints and jobs"
 echo ""
 
-databricks bundle run grant_app_permissions_job --var="$EXTRA_PARAMS" 
+databricks bundle run --target $TARGET grant_app_permissions_job --var="$EXTRA_PARAMS"
 
 echo ""
 echo "▶️ Copying libraries to UC Volume"

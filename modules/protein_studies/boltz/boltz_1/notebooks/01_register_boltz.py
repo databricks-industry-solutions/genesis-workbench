@@ -21,7 +21,7 @@ SCHEMA = dbutils.widgets.get("schema")
 
 # MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0
 # MAGIC %pip install ../dbboltz[gpu]
-# MAGIC %pip install py3Dmol
+# MAGIC %pip install py3Dmol==2.5.4
 
 # COMMAND ----------
 
@@ -368,4 +368,4 @@ run_id = deploy_model(user_email=USER_EMAIL,
 
 # COMMAND ----------
 
-result = wait_for_job_run_completion(run_id, timeout = 3600)
+result = wait_for_job_run_completion(run_id, timeout = 7200)

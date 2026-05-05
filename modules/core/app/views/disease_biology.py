@@ -886,11 +886,7 @@ with annotation_tab:
             annot_gene_regions = '[{"name":"BRCA1","contig":"chr17","start":43044292,"end":43170327},{"name":"BRCA2","contig":"chr13","start":32315086,"end":32400268}]'
             st.caption("Using BRCA1 (chr17:43,044,292-43,170,327) and BRCA2 (chr13:32,315,086-32,400,268)")
 
-        annot_pathogenic_vcf = st.text_input(
-            "Pathogenic VCF path (optional, for demo spiking):",
-            placeholder="/Volumes/catalog/schema/variant_annotation_data/demo/brca_pathogenic_corrected.vcf",
-            help="Optional: path to a VCF with known pathogenic variants to add to the dataset"
-        )
+        annot_pathogenic_vcf = ""
 
         st.markdown("**MLflow Tracking:**")
         ac1, ac2 = st.columns(2)

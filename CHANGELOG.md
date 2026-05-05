@@ -1,5 +1,32 @@
 # Genesis Workbench — Changelog
 
+## version_pinning (2026-04-20 → 2026-05-05)
+
+### Version pinning across modules
+- Exact-pinned every pip dependency in registration notebooks (`pkg==X.Y.Z`); removed `latest`/range specifiers. Includes torch, torchvision, tensorflow, transformers, scimilarity, and others.
+- Removed hardcoded `aws_attributes` from submodule bundles; now driven entirely by per-target overrides in each module's `databricks.yml`.
+
+### SCimilarity refactor — VS-backed similarity search
+- Externalized the 23M-cell reference from the in-memory MLflow `SearchNearest` PyFunc into a Delta table (`scimilarity_cells`) + Databricks Vector Search index (`scimilarity_cell_index`). The deprecated `register_SearchNearest_task` is removed from the job graph.
+- New notebooks: `06b_extract_reference_to_delta.py` (writes embeddings + metadata in 1M-row batches) and `06c_create_cell_vector_index.py` (creates VS endpoint + Delta Sync index, polls until ready).
+- App-side `search_nearest_cells()` queries the VS index and joins back to the Delta table for `prediction`/`disease`/`tissue`/`study`. No per-request PyFunc endpoint in the loop.
+- Bugfixes from end-to-end testing: `06b` per-batch `reset_index(drop=True)` (without it, only the first 1M rows had populated metadata); `06c` distinguishes `NotFound` vs transient API errors and tolerates `sync_index` 400 when a sync is already running.
+- SCimilarity cache volume created out-of-band in `deploy.sh` (alphafold pattern); removed from `volumes.yml` so `bundle destroy` doesn't blow away the 12 GB Zenodo download.
+
+### Deploy / destroy ergonomics
+- New `--only-submodule <path>` flag on root and aggregator `deploy.sh` / `destroy.sh` for surgical per-submodule operations (e.g. redeploy only `scimilarity` without touching `scanpy`/`scgpt`/`rapidssinglecell`). Atomic modules reject the flag with a clear error.
+- New skill files: `claude_skills/SKILL_GENESIS_WORKBENCH_DEPLOY_WIZARD.md` and `SKILL_GENESIS_WORKBENCH_DESTROY_WIZARD.md`. Destroy wizard codifies "core last" ordering and the new policy: do **not** delete VS endpoints/indexes by default — preserving them turns a 5+ hour re-sync into a fast incremental on the next deploy.
+- `update.sh` now bootstraps the `genesis_workbench_secret_scope` and the two app-required secrets (`core_catalog_name`, `core_schema_name`) the same way `deploy.sh` does, so app deploys don't fail with `Invalid secret resource ...`.
+- `destroy_module.py` gained an optional VS cleanup block (currently commented out, for opt-in only when a fully clean slate is wanted).
+
+### Reliability
+- `register_boltz` and `register_esmfold` raised from 1 h → 2 h on both the task `timeout_seconds` and the inner `wait_for_job_run_completion(...)` poll, so weight downloads + endpoint provisioning don't false-fail.
+
+### UI
+- Removed page-level CSS injection in `single_cell_workflows/processing.py` that bumped *all* tabs on the Single Cell page to `1.1rem / 500` — the parent tab strip now matches the other modules' default Streamlit tab styling.
+
+---
+
 ## development (2026-04-11/13)
 
 ### Protein Studies — New workflows

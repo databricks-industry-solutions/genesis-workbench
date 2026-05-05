@@ -12,7 +12,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install pybiomart
+# MAGIC %pip install pybiomart==0.2.0
 # MAGIC %restart_python
 
 # COMMAND ----------

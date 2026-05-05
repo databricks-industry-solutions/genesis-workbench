@@ -10,7 +10,7 @@
 
 # DBTITLE 1,[gwb] pip install from requirements list
 #install all dependencies
-%pip install -q scimilarity==0.4.0 typing_extensions>=4.14.0 scanpy==1.11.2 numcodecs==0.13.1 numpy==1.26.4 pandas==1.5.3 mlflow==2.22.0 cloudpickle==2.0.0 tbb>=2021.6.0 uv 
+%pip install -q scimilarity==0.4.0 typing_extensions==4.15.0 scanpy==1.11.2 numcodecs==0.13.1 numpy==1.26.4 pandas==1.5.3 mlflow==2.22.0 cloudpickle==2.0.0 tbb==2021.13.0 uv
 
 dbutils.library.restartPython()
 

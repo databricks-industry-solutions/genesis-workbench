@@ -43,8 +43,8 @@ schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
-# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.2
-# MAGIC %pip install chemprop>=2.0.0 rdkit torch>=2.0 lightning
+# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3
+# MAGIC %pip install chemprop==2.2.3 rdkit==2025.3.6 torch==2.7.1 lightning==2.6.1
 
 # COMMAND ----------
 
@@ -309,13 +309,13 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
             "checkpoint": checkpoint_path,
         },
         pip_requirements=[
-            "mlflow>=2.15",
-            "chemprop>=2.0.0",
-            "rdkit",
-            "torch>=2.0",
-            "lightning",
-            "numpy",
-            "pandas",
+            "chemprop==2.2.3",
+            "rdkit==2026.3.1",
+            "torch==2.11.0",
+            "lightning==2.6.1",
+            "scikit-learn==1.8.0",
+            "numpy==2.4.4",
+            "pandas==2.3.3",
         ],
         input_example=test_smiles,
         signature=signature,

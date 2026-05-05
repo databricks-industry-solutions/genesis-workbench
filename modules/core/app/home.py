@@ -138,11 +138,11 @@ bionemo_esm_page = st.Page(
     icon=":material/genetics:"
 )
 
-parabricks_page = st.Page(
-    page="views/nvidia/parabricks.py",
-    title="NVIDIA Parabricks©",
-    icon=":material/genetics:"
-)
+# parabricks_page = st.Page(
+#     page="views/nvidia/parabricks.py",
+#     title="NVIDIA Parabricks©",
+#     icon=":material/genetics:"
+# )
 
 disease_biology_page = st.Page(
     page="views/disease_biology.py",
@@ -167,8 +167,8 @@ if "disease_biology" in "disease_biology": #deployed_modules:
     workbench_pages.append(disease_biology_page)
 if "bionemo" in deployed_modules:
     workbench_pages.append(bionemo_esm_page)
-if "parabricks" in deployed_modules:
-    workbench_pages.append(parabricks_page)
+# if "parabricks" in deployed_modules:
+#     workbench_pages.append(parabricks_page)
 
 
 menu_pages = {

@@ -22,7 +22,7 @@ hwe_cutoff = dbutils.widgets.get("hwe_cutoff")
 
 # COMMAND ----------
 
-# MAGIC %pip install mlflow>=2.15
+# MAGIC %pip install mlflow==2.22.0
 
 # COMMAND ----------
 

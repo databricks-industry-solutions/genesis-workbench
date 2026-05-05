@@ -149,6 +149,47 @@ def download_singlecell_markers_df(run_id: str) -> pd.DataFrame:
     return df
 
 
+ANNOTATION_ARTIFACT_NAME = "scimilarity_annotation.json"
+
+
+def save_singlecell_annotation(run_id: str, results_df: pd.DataFrame, cluster_col: str) -> None:
+    """Log SCimilarity cluster annotation results as an artifact on an MLflow run.
+
+    Writes ANNOTATION_ARTIFACT_NAME into the run so subsequent viewers can
+    render annotations without re-running `annotate_clusters`.
+    """
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+
+    payload = {
+        "cluster_col": cluster_col,
+        "results": results_df.to_dict(orient="list"),
+    }
+    with mlflow.start_run(run_id=run_id):
+        mlflow.log_dict(payload, ANNOTATION_ARTIFACT_NAME)
+
+
+def download_singlecell_annotation(run_id: str):
+    """Return (results_df, cluster_col) if the run has a saved annotation, else (None, None)."""
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+    client = MlflowClient()
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            local_file = client.download_artifacts(run_id, ANNOTATION_ARTIFACT_NAME, dst_path=tmpdir)
+            import json as _json
+            with open(local_file, "r") as f:
+                payload = _json.load(f)
+    except Exception:
+        return None, None
+
+    results = payload.get("results")
+    if not results:
+        return None, None
+    return pd.DataFrame(results), payload.get("cluster_col")
+
+
 def download_cluster_markers_mapping(run_id: str) -> pd.DataFrame:
     """
     Download the top_markers_per_cluster.csv from an MLflow run.

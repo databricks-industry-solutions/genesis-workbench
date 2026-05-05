@@ -45,9 +45,11 @@ schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
-# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.2
-# MAGIC %pip install 'chemprop>=2.0.0' rdkit 'torch>=2.0' lightning PyTDC 'scikit-learn>=1.3'
-# MAGIC %pip install 'mlflow[databricks]'
+# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3
+# MAGIC %pip install chemprop==2.2.3 rdkit==2025.3.6 torch==2.7.1 torchvision==0.22.1 lightning==2.6.1
+# MAGIC %pip install --no-deps PyTDC==1.1.15
+# MAGIC %pip install fuzzywuzzy seaborn tqdm requests
+# MAGIC %pip install mlflow[databricks]==2.22.0
 
 # COMMAND ----------
 
@@ -480,11 +482,11 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
             "output_scaler": scaler_path,
         },
         pip_requirements=[
-            "mlflow>=2.15",
-            "chemprop>=2.0.0",
-            "rdkit",
-            "torch>=2.0",
-            "lightning",
+            "chemprop==2.2.3",
+            "rdkit==2025.3.6",
+            "torch==2.7.1",
+            "torchvision==0.22.1",
+            "lightning==2.6.1",
             "numpy",
             "pandas",
         ],

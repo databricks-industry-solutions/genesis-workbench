@@ -33,8 +33,6 @@ resources:
               spark.master: local[*, 4]
             custom_tags:
               ResourceClass: SingleNode
-            aws_attributes:
-              availability: ON_DEMAND
 
       parameters:
         - name: catalog

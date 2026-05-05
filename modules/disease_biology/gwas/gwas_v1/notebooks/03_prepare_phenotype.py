@@ -83,7 +83,7 @@ print(f"Phenotype table written: {catalog}.{schema}.{phenotype_table}")
 
 # COMMAND ----------
 
-# MAGIC %pip install mlflow>=2.15
+# MAGIC %pip install mlflow==2.22.0
 
 # COMMAND ----------
 
