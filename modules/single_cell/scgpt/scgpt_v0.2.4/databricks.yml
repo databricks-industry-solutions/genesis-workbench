@@ -5,16 +5,59 @@ bundle:
 include:
   - variables.yml
   - resources/*.yml
-    
+
 targets:
-  prod:
+  prod_aws:
     mode: production
     default: true
     workspace:
       root_path: ${var.current_working_directory}
-       #host: this will be read by DATABRICKS_HOST env variable
     permissions:
       - user_name: ${var.current_user}
         level: CAN_MANAGE
     run_as:
-      user_name: ${var.current_user} #sp name should be used instead later.
+      user_name: ${var.current_user}
+    resources:
+      jobs:
+        register_scgpt:
+          job_clusters:
+            - job_cluster_key: job_cluster_get_embedding
+              new_cluster:
+                aws_attributes:
+                  availability: ON_DEMAND
+
+  prod_azure:
+    mode: production
+    workspace:
+      root_path: ${var.current_working_directory}
+    permissions:
+      - user_name: ${var.current_user}
+        level: CAN_MANAGE
+    run_as:
+      user_name: ${var.current_user}
+    resources:
+      jobs:
+        register_scgpt:
+          job_clusters:
+            - job_cluster_key: job_cluster_get_embedding
+              new_cluster:
+                azure_attributes:
+                  availability: ON_DEMAND_AZURE
+
+  prod_gcp:
+    mode: production
+    workspace:
+      root_path: ${var.current_working_directory}
+    permissions:
+      - user_name: ${var.current_user}
+        level: CAN_MANAGE
+    run_as:
+      user_name: ${var.current_user}
+    resources:
+      jobs:
+        register_scgpt:
+          job_clusters:
+            - job_cluster_key: job_cluster_get_embedding
+              new_cluster:
+                gcp_attributes:
+                  availability: ON_DEMAND_GCP

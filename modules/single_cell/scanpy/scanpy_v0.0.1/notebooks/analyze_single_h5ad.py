@@ -7,7 +7,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install 'numpy<2' scanpy==1.11.4 anndata scikit-network
+# MAGIC %pip install numpy==1.26.4 scanpy==1.11.4 anndata==0.12.10 scikit-network
 # MAGIC %restart_python
 
 # COMMAND ----------

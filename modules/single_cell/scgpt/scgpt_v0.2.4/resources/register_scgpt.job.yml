@@ -77,8 +77,6 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
-            aws_attributes:
-              availability: ON_DEMAND
 
         ## critical for model training
         ## singleNode GPU options: ## Standard_NV36ads_A10_v5 #440gigs #'Standard_NC16as_T4_v3' #110gigs #'Standard_NC4as_T4_v3'

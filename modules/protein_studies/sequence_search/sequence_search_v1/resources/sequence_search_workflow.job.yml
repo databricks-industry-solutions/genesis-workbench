@@ -65,8 +65,6 @@ resources:
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             num_workers: 0
-            aws_attributes:
-              availability: ON_DEMAND
 
         - job_cluster_key: multi_gpu_cluster
           new_cluster:
@@ -80,8 +78,6 @@ resources:
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD
             num_workers: 4
-            aws_attributes:
-              availability: ON_DEMAND
 
       tags: ${var.common_resource_tags}
 

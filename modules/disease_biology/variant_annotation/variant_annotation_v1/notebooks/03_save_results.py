@@ -18,7 +18,7 @@ schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
-# MAGIC %pip install databricks-sdk>=0.50.0 databricks-sql-connector>=4.0.2 mlflow>=2.15
+# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0
 
 # COMMAND ----------
 

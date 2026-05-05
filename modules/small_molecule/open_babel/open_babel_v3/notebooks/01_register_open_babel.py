@@ -38,8 +38,8 @@ schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
-# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.2
-# MAGIC %pip install openbabel-wheel>=3.1.1 rdkit mlflow>=2.15
+# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3
+# MAGIC %pip install openbabel-wheel==3.1.1.23 rdkit==2025.3.6 mlflow==2.22.0
 
 # COMMAND ----------
 
@@ -321,8 +321,7 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
         artifact_path="open_babel_converter",
         python_model=converter,
         pip_requirements=[
-            "mlflow>=2.15",
-            "openbabel-wheel>=3.1.1",
+            "openbabel-wheel==3.1.1.23",
             "numpy",
             "pandas",
         ],

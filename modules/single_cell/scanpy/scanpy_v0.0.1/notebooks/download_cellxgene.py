@@ -11,7 +11,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install 'gget>=0.25.7' cellxgene-census 'numpy<2' pybiomart scanpy
+# MAGIC %pip install gget==0.28.6 cellxgene-census==1.17.0 numpy==1.26.4 pybiomart==0.2.0 scanpy==1.11.4
 # MAGIC %restart_python
 
 # COMMAND ----------

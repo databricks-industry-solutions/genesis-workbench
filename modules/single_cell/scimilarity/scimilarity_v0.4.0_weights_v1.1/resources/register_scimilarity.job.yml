@@ -29,19 +29,11 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/03_register_GetEmbedding.py 
         
-        - task_key: register_SearchNearest_task
-          depends_on: 
-            - task_key: wget_SCimilarity_task
-          job_cluster_key: job_cluster_search_nearest
-          notebook_task:
-            notebook_path: ../notebooks/04_register_SearchNearest.py 
-
         #this task can utilize serverless runtime with python 3.11
         - task_key: importNserve_scimilarity_models_task
           depends_on:
             - task_key: "register_GeneOrder_task"
             - task_key: "register_GetEmbedding_task"
-            - task_key: "register_SearchNearest_task"
           notebook_task:
             notebook_path: ../notebooks/05_importNserve_model_gwb.py
 
@@ -53,6 +45,24 @@ resources:
           job_cluster_key: job_cluster_search_nearest
           notebook_task:
             notebook_path: ../notebooks/06a_extractNsave_DiseaseCellTypeSamples.py
+
+        # Externalize the 23M-cell reference to a Delta table for Vector Search.
+        # Needs a memory-sized single-node cluster — CellQuery loads ~12 GB into RAM.
+        # Runs in parallel with register_* tasks after wget completes.
+        - task_key: extract_reference_to_delta_task
+          depends_on:
+            - task_key: wget_SCimilarity_task
+          job_cluster_key: job_cluster_search_nearest
+          notebook_task:
+            notebook_path: ../notebooks/06b_extract_reference_to_delta.py
+
+        # Create the Databricks Vector Search endpoint and Delta Sync index.
+        # Lightweight — runs on serverless once the source Delta table exists.
+        - task_key: create_cell_vector_index_task
+          depends_on:
+            - task_key: extract_reference_to_delta_task
+          notebook_task:
+            notebook_path: ../notebooks/06c_create_cell_vector_index.py
 
       environments: ## serverless
         - environment_key: default
@@ -67,7 +77,7 @@ resources:
         - name: model_name
           default: SCimilarity
         - name: cache_dir
-          default: ${resources.volumes.scimilarity.name} 
+          default: ${var.cache_dir}
         - name: experiment_name
           default: ${var.module_registration_experiment_name} 
         - name: sql_warehouse_id
@@ -82,10 +92,6 @@ resources:
           default: MULTIGPU_MEDIUM
         - name: get_embedding_workload_size
           default: Small
-        - name: search_nearest_workload_type
-          default: MULTIGPU_MEDIUM
-        - name: search_nearest_workload_size
-          default: Small  # Keep Small (0-4 concurrency) — Medium OOMs loading ~23M cell reference
 
       job_clusters:
         # wget only downloads files — CPU node is sufficient and cheaper than GPU
@@ -103,15 +109,14 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
-            aws_attributes:
-              availability: ON_DEMAND
 
-        # GeneOrder registration is lightweight (50KB TSV) — CPU node is sufficient
+        # GeneOrder registration runs utils.py which loads the ~23M cell reference DB (20-40 GB RAM)
+        # via CellQuery(model_path); needs a high-memory node, not just the 50KB TSV it logs.
         - job_cluster_key: job_cluster_gene_order
           new_cluster:
             num_workers: 0
-            node_type_id: ${var.cpu_node_type}
-            driver_node_type_id: ${var.cpu_node_type}
+            node_type_id: ${var.cpu_xlarge_node_type}
+            driver_node_type_id: ${var.cpu_xlarge_node_type}
             spark_version: '14.3.x-cpu-ml-scala2.12'
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
@@ -121,8 +126,6 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
-            aws_attributes:
-              availability: ON_DEMAND
 
         - job_cluster_key: job_cluster_get_embedding
           new_cluster:
@@ -139,8 +142,6 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
-            aws_attributes:
-              availability: ON_DEMAND
 
         - job_cluster_key: job_cluster_search_nearest
           new_cluster:
@@ -157,8 +158,6 @@ resources:
               spark.master: local[*]
             custom_tags:
               ResourceClass: SingleNode
-            aws_attributes:
-              availability: ON_DEMAND
 
         ## critical for model training
         ## singleNode GPU options: ## Standard_NV36ads_A10_v5 #440gigs #'Standard_NC16as_T4_v3' #110gigs #'Standard_NC4as_T4_v3'  

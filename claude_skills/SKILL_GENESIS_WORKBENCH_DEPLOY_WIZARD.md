@@ -72,6 +72,8 @@ Remind the user: the BioNeMo container must be pre-built and pushed (see `module
 ### 8. Which additional modules to deploy
 After `core`, ask the user to pick from: `protein_studies`, `single_cell`, `small_molecule`, `disease_biology`, `parabricks`, `bionemo`. Deploy one at a time; each triggers long-running background jobs.
 
+**Treat the approved module order as a contract.** Once the user confirms the list in step 8, deploy in exactly that order. If a module is blocked (e.g., waiting on docker creds from step 7) do NOT jump over it to a later unblocked module without first asking the user to explicitly re-approve the swap. Past user feedback: silent reordering has been rejected.
+
 ## Writing the env files
 
 Use the `Write` tool — **no comments, no blank lines** (the `paste -sd,` used in `deploy.sh:44-45` flattens comments into the bundle variable string and breaks).
@@ -99,6 +101,13 @@ bionemo_docker_token=<token>
 bionemo_docker_image=<image>
 ```
 
+**`modules/parabricks/module.env`** (only if deploying Parabricks — **also required**, not just BioNeMo):
+```
+parabricks_docker_userid=<userid>
+parabricks_docker_token=<token>
+parabricks_docker_image=<image>
+```
+
 `aws.env` / `azure.env` have sensible defaults; only overwrite if the user asks for non-default node types.
 
 ## Auto-patch for expired Terraform PGP key
@@ -118,6 +127,8 @@ export DATABRICKS_TF_VERSION=$(terraform version -json | jq -r .terraform_versio
 
 (Use the user's actual locally-installed Terraform binary + version, not hardcoded paths.) This tells the Databricks CLI to use the local Terraform and skip the signed download.
 
+**If the exports already exist but with hardcoded paths** (e.g., `DATABRICKS_TF_EXEC_PATH=/opt/homebrew/bin/terraform`), verify the hardcoded path actually exists on the current machine: `[ -x /opt/homebrew/bin/terraform ]`. If not, rewrite the lines to use `$(which terraform)` / `$(terraform version -json | jq -r .terraform_version)`.
+
 ## Running the deploy
 
 Always run `core` first:
@@ -130,12 +141,26 @@ After it completes, verify the lock file:
 ls modules/core/.deployed
 ```
 
-Then loop through the modules the user chose in step 8:
+Then loop through the modules the user chose in step 8, **in the exact order the user approved**:
 ```bash
 ./deploy.sh <module> <cloud>
 ```
 
-Wait for each to complete before starting the next — each kicks off background model-registration jobs that can run for hours. Watch the Jobs UI at `<workspace_url>/jobs`.
+Wait for each `deploy.sh` to return (it drives `databricks bundle deploy` + an `initialize_module_job` run). That's fast (minutes). What runs *after* is module-specific:
+
+- `small_molecule`, `protein_studies`, `single_cell`, `disease_biology` — spawn multiple `register_*` jobs against GPU clusters. These are the ones that can hit quota at cluster-create time.
+- `bionemo` — spawns `dbx_bionemo_initial_setup`, then registers on-demand finetune/inference jobs (no `register_*` jobs).
+- `parabricks` — primarily builds a docker-backed cluster template; actual compute runs on-demand from the app.
+
+**Between modules, poll until the first post-deploy job run spawned by the module reaches `RUNNING` or a terminal state** (not just `PENDING`). This is the quota gate. Use:
+```bash
+databricks jobs list --limit 50 | grep -iE "<module-keyword>"
+databricks jobs list-runs --job-id <id> --limit 1
+databricks jobs get-run <run-id> | jq '.state'
+```
+Only advance to the next module once the predecessor's first job is past `PENDING`. This serializes GPU cluster-create and surfaces quota issues one module at a time.
+
+Watch the Jobs UI at `<workspace_url>/jobs` throughout.
 
 ## Error auto-handlers
 

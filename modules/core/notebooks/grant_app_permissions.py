@@ -22,7 +22,7 @@ sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
 
 # COMMAND ----------
 
-# MAGIC %pip install databricks-sdk>=0.50.0 databricks-sql-connector>=4.0.2
+# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3
 
 # COMMAND ----------
 

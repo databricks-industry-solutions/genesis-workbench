@@ -7,9 +7,29 @@ include:
   - resources/*.yml
 
 targets:
-  prod:
+  prod_aws:
     mode: production
     default: true
+    workspace:
+      root_path: ${var.current_working_directory}
+    permissions:
+      - user_name: ${var.current_user}
+        level: CAN_MANAGE
+    run_as:
+      user_name: ${var.current_user}
+
+  prod_azure:
+    mode: production
+    workspace:
+      root_path: ${var.current_working_directory}
+    permissions:
+      - user_name: ${var.current_user}
+        level: CAN_MANAGE
+    run_as:
+      user_name: ${var.current_user}
+
+  prod_gcp:
+    mode: production
     workspace:
       root_path: ${var.current_working_directory}
     permissions:

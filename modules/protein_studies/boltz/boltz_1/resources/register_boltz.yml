@@ -11,6 +11,7 @@ resources:
         #this task need serverless runtime with python 3.11
         - task_key: register_boltz_task
           job_cluster_key: job_cluster
+          timeout_seconds: 7200
           notebook_task:
             notebook_path: ../notebooks/01_register_boltz.py
             
@@ -39,8 +40,6 @@ resources:
             node_type_id: ${var.t4_node_type}
             driver_node_type_id: ${var.t4_node_type}
             spark_version: '15.4.x-gpu-ml-scala2.12'
-            aws_attributes:
-              availability: ON_DEMAND
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             single_user_name: ${workspace.current_user.userName}

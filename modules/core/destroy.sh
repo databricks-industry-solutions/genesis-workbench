@@ -9,6 +9,13 @@ fi
 
 CLOUD=$1
 
+case "$CLOUD" in
+  aws)   TARGET=prod_aws ;;
+  azure) TARGET=prod_azure ;;
+  gcp)   TARGET=prod_gcp ;;
+  *) echo "Usage: $0 <aws|azure|gcp>"; exit 1 ;;
+esac
+
 EXTRA_PARAMS_CLOUD=$(paste -sd, "../../$CLOUD.env")
 EXTRA_PARAMS_GENERAL=$(paste -sd, "../../application.env")
 
@@ -25,7 +32,7 @@ echo "=========================================================="
 echo "⚙️ Preparing to destroy module core "
 echo "=========================================================="
 
-databricks bundle destroy --var="$EXTRA_PARAMS" --auto-approve
+databricks bundle destroy --target $TARGET --var="$EXTRA_PARAMS" --auto-approve
 
 rm -f .deployed
 

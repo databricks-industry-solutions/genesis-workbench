@@ -8,8 +8,6 @@ dbutils.widgets.text("gene_order_workload_type", "CPU", "Workload Type for gene_
 dbutils.widgets.text("gene_order_workload_size", "Small", "Workload Size for gene_order")
 dbutils.widgets.text("get_embedding_workload_type", "MULTIGPU_MEDIUM", "Workload Type for get_embedding")
 dbutils.widgets.text("get_embedding_workload_size", "Small", "Workload Size for get_embedding")
-dbutils.widgets.text("search_nearest_workload_type", "MULTIGPU_MEDIUM", "Workload Type for search_nearest")
-dbutils.widgets.text("search_nearest_workload_size", "Small", "Workload Size for search_nearest")
 
 
 catalog = dbutils.widgets.get("catalog")
@@ -54,8 +52,6 @@ gene_order_workload_type = dbutils.widgets.get("gene_order_workload_type")
 gene_order_workload_size = dbutils.widgets.get("gene_order_workload_size")
 get_embedding_workload_type = dbutils.widgets.get("get_embedding_workload_type")
 get_embedding_workload_size = dbutils.widgets.get("get_embedding_workload_size")
-search_nearest_workload_type = dbutils.widgets.get("search_nearest_workload_type")
-search_nearest_workload_size = dbutils.widgets.get("search_nearest_workload_size")
 
 # COMMAND ----------
 
@@ -146,48 +142,8 @@ run_id_get_embedding = deploy_model(user_email=user_email,
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC #####  Import Search Nearest
-
-# COMMAND ----------
-
-# DBTITLE 1,scimilarity_search_nearest
-model_uc_name_search=f"{catalog}.{schema}.scimilarity_search_nearest"
-model_version_search = get_latest_model_version(model_uc_name_search)
-
-gwb_model_id_search = import_model_from_uc(user_email=user_email,
-                    model_category=ModelCategory.SINGLE_CELL,
-                    model_uc_name=model_uc_name_search,
-                    model_uc_version=model_version_search,
-                    model_name="SCimilarity_Search_Nearest",
-                    model_display_name="SCimilarity:SearchNearest",
-                    model_source_version="v0.4.0_weights_v1.1",
-                    model_description_url="https://genentech.github.io/scimilarity/index.html")
-
-# COMMAND ----------
-
-# search_nearest is CPU-bound (FAISS vector search on ~23M cell reference).
-# Uses separate workload params — defaults to CPU + Large for sufficient RAM.
-run_id_search = deploy_model(user_email=user_email,
-                gwb_model_id=gwb_model_id_search,
-                deployment_name=f"Scimilarity_Search_Nearest",
-                deployment_description="Initial deployment",
-                input_adapter_str="none",
-                output_adapter_str="none",
-                sample_input_data_dict_as_json="none",
-                sample_params_as_json="none",
-                workload_type=search_nearest_workload_type,
-                workload_size=search_nearest_workload_size)
-
-# COMMAND ----------
-
 result1 = wait_for_job_run_completion(run_id_gene_order, timeout = 3600)
 
 # COMMAND ----------
 
 result2 = wait_for_job_run_completion(run_id_get_embedding, timeout = 3600)
-
-
-# COMMAND ----------
-
-result3 = wait_for_job_run_completion(run_id_search, timeout = 3600)

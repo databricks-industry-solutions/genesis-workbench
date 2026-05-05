@@ -9,6 +9,21 @@ Diagnose and fix common issues when deploying, registering models, or running wo
 
 ## Model Registration Failures
 
+### Any module: `AttributeError: module 'numpy._core' has no attribute 'multiarray'` during `log_model`
+**Symptom:** Register job fails inside `mlflow.pyfunc.log_model(...)` → `load_context` → `import lightning` / `import transformers`, with a stack trace ending in either `accelerate/utils/other.py:225` or `accelerate/utils/bnb.py:29` → `np._core.multiarray._reconstruct`.
+**Root cause:** Older `transformers` versions transitively import `accelerate` during module import. DBR 15.x ships `accelerate==1.5.2`, which hits a numpy 2.x API mismatch on `np._core.multiarray._reconstruct`.
+**Wrong fix (do NOT do this):** Pinning a newer `accelerate` (e.g. `accelerate==1.8.1`). The crash still happens, just from a different line in the newer `accelerate/utils/bnb.py` import chain — any `import accelerate` keeps triggering the bug under DBR's numpy.
+**Correct fix:** Pin `transformers>=5.5.0` and do NOT install `accelerate` at all. `transformers==5.5.0` does not transitively import `accelerate` during import, so the crash path is never entered.
+```python
+# in %pip install:
+%pip install -q ... transformers==5.5.0 ...   # NO accelerate
+
+# in conda_env:
+"pip": [..., "transformers==5.5.0", ...]      # NO accelerate
+```
+Cross-check by asking the user for the docker build pip-install log from a known-working serving endpoint of the same model — the `Successfully installed ...` line is the ground-truth version set. That line notably lacks `accelerate` when transformers 5.5.0 is in play.
+Confirmed on 2026-04-20 for `modules/small_molecule/proteina_complexa/proteina_complexa_v1/notebooks/01_register_proteina_complexa.py`. Grep other register notebooks importing `lightning`/`transformers` and apply the same pattern.
+
 ### scGPT: RuntimeError mat1 and mat2 must have the same dtype
 **Symptom:** `predict()` fails with `RuntimeError: mat1 and mat2 must have the same dtype` in `F.linear`.
 **Root cause:** Model checkpoint has float16 weights (from GPU training), but `nn.Embedding` outputs float32. The `ContinuousValueEncoder` has `nn.Linear` layers that reject mixed dtypes.
