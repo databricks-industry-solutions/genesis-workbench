@@ -98,8 +98,8 @@ After the last non-core module is gone, kick off `./destroy.sh core <cloud>`. Th
 | MLflow serving endpoints registered in GWB `models` table | runtime, by `register_*` notebooks | Deleted by `destroy_module.py` calling `delete_endpoint(...)` |
 | GWB `models` rows | catalog | Soft-only: `is_active='false'`, registry rows kept |
 | GWB `settings` rows for the module | catalog | Hard-deleted by `destroy_module.py` |
-| **Vector Search endpoints** (`gwb_scimilarity_vs_endpoint`, `gwb_sequence_search_vs_endpoint`) | runtime, 06c / 04 notebooks | **Conditional** — deleted only when the cleanup block in `destroy_module.py:80-124` is uncommented. **Currently commented out** — they linger and continue to bill. |
-| **Vector Search indexes** (`<catalog>.<schema>.scimilarity_cell_index`, `sequence_embedding_index`) | runtime, 06c / 04 | Same conditional behavior |
+| **Vector Search endpoints** (`gwb_scimilarity_vs_endpoint`, `gwb_sequence_search_vs_endpoint`) | runtime, 06c / 04 notebooks | **Preserved by default.** Deletion only happens when the cleanup block in `destroy_module.py:80-124` is uncommented. Currently commented out — endpoints linger across destroy/redeploy cycles. **This is intentional**: the next deploy reuses them, avoiding hours of re-sync. |
+| **Vector Search indexes** (`<catalog>.<schema>.scimilarity_cell_index`, `sequence_embedding_index`) | runtime, 06c / 04 | Same — preserved by default. The next register run's `06c` / `04` takes the "index already exists, trigger sync" branch instead of recreating. |
 | Source Delta tables holding embeddings (`scimilarity_cells`, `sequence_db`, `sequence_embeddings`) | runtime, 06b / 02-03 | **Never deleted** by destroy (intentional — storage is cheap and rebuilds are expensive) |
 | Registered MLflow model versions in UC (`models:/SCimilarity_*`, etc.) | runtime, `register_*` | **Never deleted** (only soft-flagged inactive in GWB `models`) |
 | Secret scope `genesis_workbench_secret_scope` | `deploy.sh` / `update.sh` (not the bundle) | **Never deleted** — survives destroy. Drop manually with `databricks secrets delete-scope <name>` if you want a clean slate. |
@@ -109,7 +109,9 @@ Before triggering destroy, surface the conditional row to the user: tell them wh
 
 ## Manual cleanup of survivors (after destroy completes)
 
-If VS cleanup was disabled and the user wants a fully clean slate:
+**Default policy: do NOT delete the Vector Search endpoints or indexes as part of the wizard flow.** Re-syncing the scimilarity 23M-row index alone takes 5+ hours and dominates redeploy time — keeping the index lets the next deploy take the cheap "trigger sync" branch instead of "create + initial sync from scratch". Leave them.
+
+Only delete VS resources if the user **explicitly** asks for a fully clean slate (e.g., to free up the dedicated endpoint slot, to recover from a corrupt index, or because they're decommissioning the workspace). Confirm before running:
 
 ```bash
 # Indexes first, then endpoints — endpoint deletion fails while it has live indexes
@@ -119,7 +121,7 @@ databricks vector-search-endpoints delete-endpoint gwb_scimilarity_vs_endpoint
 databricks vector-search-endpoints delete-endpoint gwb_sequence_search_vs_endpoint
 ```
 
-Other optional clean-slate steps:
+Other optional clean-slate steps (also confirm before running):
 
 ```bash
 # Drop the secret scope (only if no other GWB redeploy is planned soon)
@@ -153,9 +155,10 @@ Always confirm with the user before any of these — they're not part of the sta
 
 Print:
 - Which modules are now gone (`.deployed` markers absent).
-- Which resources survived intentionally (Delta tables, MLflow registry rows, secret scope, catalog).
-- Which resources need manual cleanup (VS endpoints/indexes if the cleanup block is disabled).
+- Which resources survived intentionally (Delta tables, MLflow registry rows, secret scope, catalog, **Vector Search endpoints + indexes**).
 - Pointer to the **deploy wizard** (`SKILL_GENESIS_WORKBENCH_DEPLOY_WIZARD.md`) for redeploying.
+
+Do **not** propose deleting VS resources as a "next step" by default — that turns a 30-minute redeploy into a multi-hour wait the next time. Only mention the manual VS deletion commands if the user has separately asked for a fully clean slate.
 
 ## When to use this skill
 

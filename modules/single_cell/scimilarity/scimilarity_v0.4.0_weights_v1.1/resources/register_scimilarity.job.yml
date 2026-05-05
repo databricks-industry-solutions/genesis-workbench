@@ -77,7 +77,7 @@ resources:
         - name: model_name
           default: SCimilarity
         - name: cache_dir
-          default: ${resources.volumes.scimilarity.name} 
+          default: ${var.cache_dir}
         - name: experiment_name
           default: ${var.module_registration_experiment_name} 
         - name: sql_warehouse_id

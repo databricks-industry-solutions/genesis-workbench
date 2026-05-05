@@ -12,6 +12,36 @@ case "$CLOUD" in
 esac
 
 echo ""
+echo "▶️ [SCimilarity] Creating cache Volume if not exists (target=$TARGET)"
+echo ""
+
+pairs=${EXTRA_PARAMS#--var=}
+pairs=${pairs%\"}
+pairs=${pairs#\"}
+
+IFS=',' read -ra items <<< "$pairs"
+for item in "${items[@]}"; do
+    key=${item%%=*}
+    val=${item#*=}
+    printf -v "$key" '%s' "$val"
+done
+
+: "${cache_dir:=scimilarity}"
+
+echo "Catalog: $core_catalog_name"
+echo "Schema:  $core_schema_name"
+echo "Volume:  $cache_dir"
+
+set +e
+databricks volumes create "$core_catalog_name" "$core_schema_name" "$cache_dir" MANAGED
+if [ "$?" -eq "0" ]; then
+  echo "Created volume $core_catalog_name.$core_schema_name.$cache_dir"
+else
+  echo "Volume $core_catalog_name.$core_schema_name.$cache_dir already exists"
+fi
+set -e
+
+echo ""
 echo "▶️ [SCimilarity] Validating bundle (target=$TARGET)"
 echo ""
 
