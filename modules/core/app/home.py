@@ -66,6 +66,20 @@ try:
             st.session_state["user_settings"] = user_settings
 
         user_settings = st.session_state["user_settings"]
+except KeyError as e:
+    missing_var = str(e).strip("'\"")
+    st.error(
+        f"**Initialization Failed: Missing Environment Variable `{missing_var}`**\n\n"
+        f"The app started but its environment doesn't have `{missing_var}` set. "
+        f"This means the app's resource bindings (defined in `modules/core/resources/app.yml`) "
+        f"failed to resolve at startup.\n\n"
+        f"Common causes:\n"
+        f"- The SQL warehouse referenced by `application.env`'s `sql_warehouse_id` was deleted (sweeper)\n"
+        f"- The secret scope referenced for `core_catalog_name` / `core_schema_name` is missing the key\n"
+        f"- The bundle needs to be redeployed (`./deploy.sh core <cloud>`) to refresh bindings\n\n"
+        f"Check the warehouse + secret scope state, then run `./deploy.sh core <cloud>` to reconcile."
+    )
+    st.stop()
 except ServerOperationError as e:
     error_msg = str(e)
     if "INSUFFICIENT_PERMISSIONS" in error_msg:
