@@ -47,11 +47,16 @@ Genesis Workbench simplifies deploying GPU-accelerated biological AI models on D
 - **Chemprop** — Molecular property prediction (BBBP, ClinTox, ADMET)
 - **DiffDock** — Molecular docking via diffusion
 - **Proteina-Complexa** — Protein binder design (protein-protein, ligand, motif scaffolding)
+- **NetSolP-1.0** — Protein solubility prediction in *E. coli* (BSD-3-Clause, ONNX Runtime, CPU endpoint)
+- **PLTNUM-ESM2** — Protein half-life relative stability ranker (MIT, ESM-2 650M backbone, GPU_SMALL endpoint)
+- **DeepSTABp** — Protein melting temperature regression in °C (MIT, ProtT5-XL backbone, GPU_SMALL endpoint)
+- **MHCflurry 2.x** — MHC-I immunogenic burden prediction (Apache-2.0, peptide-MHC presentation, CPU endpoint)
 
 **UI Workflows:**
 - **Binder Design** — Proteina-Complexa protein binder generation with ESMFold validation
 - **Ligand Binder Design** — Small-molecule binder design with DiffDock docking validation
 - **Motif Scaffolding** — Scaffold generation with ProteinMPNN sequence optimization
+- **Guided Enzyme Optimization** — Reward-weighted optimization loop around Proteina-Complexa-AME + ProteinMPNN + ESMFold. Scores each candidate on motif RMSD, pLDDT, optional Boltz substrate confidence, and four developability axes (solubility, half-life anchored vs reference enzyme, thermostability, immunogenicity). Form has a **Generation mode** toggle: **Fast** (default, ~30 min) — endpoint-based AME with parent resampling between iterations; **Accurate** (~30-60 min, ~$22 GPU) — in-process AME on an A10 with Feynman-Kac steering during diffusion (reward biases sampling, not just selection).
 - **ADMET & Safety** — Multi-model property profiling (BBB penetration, toxicity, ADMET)
 
 ### Disease Biology Module

@@ -7,6 +7,103 @@ description: How to add new models, workflows, and UI tabs to Genesis Workbench 
 
 Add new biological AI models, serving endpoints, and UI workflows to Genesis Workbench following established patterns.
 
+## Dependency hygiene (hard rule)
+
+Every pip dependency introduced anywhere in this repo — registration notebook
+`%pip install` lines, DAB `environments.spec.dependencies`, PyFunc
+`pip_requirements` / `conda_env`, orchestrator job notebooks — **must use
+exact version pins** (`pkg==X.Y.Z`). No `latest`, no `>=`, no unpinned bare
+package names. This includes transitively-important deps the upstream
+might leave loose (torch, transformers, numpy, pandas, scikit-learn, mlflow,
+cloudpickle, biopython).
+
+**Reason:** unpinned installs broke prior deploys silently — the same
+upstream package would resolve to different versions across deploys depending
+on PyPI release timing, and PyFunc artifacts logged with one resolved version
+would fail to load on a serving endpoint that resolved a different one. The
+repo lives on the `version_pinning` branch precisely as a response to that
+incident.
+
+**Pattern to mirror:** `modules/single_cell/scimilarity/scimilarity_v0.4.0_weights_v1.1/notebooks/utils.py:11-15`
+— every dep pinned including `numpy==1.26.4`, `pandas==1.5.3`, `mlflow==2.22.0`,
+`numcodecs[crc32c]==0.13.1`, `cloudpickle==2.0.0`. The four new predictor
+submodules under `modules/small_molecule/` (`netsolp_v1`, `pltnum_v1`,
+`deepstabp_v1`, `mhcflurry_v2`) and the orchestrator (`enzyme_optimization_v1`)
+follow the same exact-pin convention; copy from any of them when adding the
+next predictor.
+
+When the README's per-module dependency table is updated, every new pip dep
+gets its own row with the exact pin and license verified at the upstream
+source (not from package summary). License-disqualified deps (academic-only,
+CC-BY-NC, "research-only", `git+...` non-pinnable installs) are blockers,
+not workaround-able.
+
+---
+
+## On-demand compute (hard rule)
+
+Every workflow job in this repo runs on **on-demand** compute on every cloud,
+not spot. Spot instances get reclaimed mid-run when the cloud provider takes
+the capacity back, and GWB workflow jobs are typically minutes-to-hours long
+(predictor registration, optimization loops, batch scoring) — the spot
+reclamation rate exceeds the run completion rate often enough that spot is
+not viable for production workflows.
+
+**Pattern:** the cluster spec in `resources/<job>.yml` declares
+`node_type_id`, `spark_version`, etc. but does NOT declare `availability`.
+The per-cloud `targets:` block in `databricks.yml` overlays the right
+`<cloud>_attributes.availability` per environment:
+
+```yaml
+# databricks.yml
+targets:
+  prod_aws:
+    resources:
+      jobs:
+        my_workflow:
+          job_clusters:
+            - job_cluster_key: my_cluster
+              new_cluster:
+                aws_attributes:
+                  availability: ON_DEMAND
+
+  prod_azure:
+    resources:
+      jobs:
+        my_workflow:
+          job_clusters:
+            - job_cluster_key: my_cluster
+              new_cluster:
+                azure_attributes:
+                  availability: ON_DEMAND_AZURE
+
+  prod_gcp:
+    resources:
+      jobs:
+        my_workflow:
+          job_clusters:
+            - job_cluster_key: my_cluster
+              new_cluster:
+                gcp_attributes:
+                  availability: ON_DEMAND_GCP
+```
+
+**Reason:** A10 spot instances were reclaimed mid-run twice consecutively
+during the Phase 1.5 enzyme-optimization Accurate-path verification (~13 min
+and ~35 min into the runs). Each Accurate run is ~1-6 hours wall-clock,
+much longer than typical spot reclamation intervals. The ~30% cost premium
+of on-demand is paid only for the duration of the run and is far cheaper
+than re-running an interrupted multi-hour job.
+
+**Pattern to mirror:** `modules/protein_studies/boltz/boltz_1/databricks.yml`
+— it overlays on-demand per cloud for `register_boltz`. Every new workflow
+must do the same for every job it adds. When a submodule defines multiple
+jobs (e.g. `enzyme_optimization_v1` has both Fast and Accurate jobs), each
+job needs its own block under each cloud target — see
+`modules/small_molecule/enzyme_optimization/enzyme_optimization_v1/databricks.yml`.
+
+---
+
 ## Architecture Overview
 
 ```

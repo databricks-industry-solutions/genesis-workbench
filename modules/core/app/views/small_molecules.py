@@ -25,7 +25,7 @@ from utils.small_molecule_tools import (hit_diffdock,
                                         _get_example_pdb,
                                         EXAMPLE_SMILES)
 
-from views.small_molecule_workflows import binder_design, ligand_binder_design, motif_scaffolding, admet_safety
+from views.small_molecule_workflows import binder_design, ligand_binder_design, motif_scaffolding, enzyme_optimization, admet_safety
 
 st.title(":material/science: Small Molecules")
 
@@ -68,12 +68,13 @@ with st.spinner("Loading data"):
 
 user_info = get_user_info()
 
-settings_tab, diffdock_tab, binder_tab, ligand_binder_tab, motif_tab, admet_tab = st.tabs([
+settings_tab, diffdock_tab, binder_tab, ligand_binder_tab, motif_tab, enzyme_opt_tab, admet_tab = st.tabs([
     "Deployed Models",
     "Molecular Docking",
     "Protein Binder Design",
     "Ligand Binder Design",
     "Motif Scaffolding",
+    "Guided Enzyme Optimization",
     "ADMET & Safety",
 ])
 
@@ -244,6 +245,10 @@ with ligand_binder_tab:
 # ── Motif Scaffolding Tab ──
 with motif_tab:
     motif_scaffolding.render()
+
+# ── Guided Enzyme Optimization Tab ──
+with enzyme_opt_tab:
+    enzyme_optimization.render()
 
 # ── ADMET & Safety Tab ──
 with admet_tab:

@@ -1,0 +1,63 @@
+bundle:
+  name: genesis_workbench_pltnum
+  databricks_cli_version: ">=0.295.*"
+
+include:
+  - variables.yml
+  - resources/*.yml
+
+targets:
+  prod_aws:
+    mode: production
+    default: true
+    workspace:
+      root_path: ${var.current_working_directory}
+    permissions:
+      - user_name: ${var.current_user}
+        level: CAN_MANAGE
+    run_as:
+      user_name: ${var.current_user}
+    resources:
+      jobs:
+        register_pltnum:
+          job_clusters:
+            - job_cluster_key: pltnum_gpu_cluster
+              new_cluster:
+                aws_attributes:
+                  availability: ON_DEMAND
+
+  prod_azure:
+    mode: production
+    workspace:
+      root_path: ${var.current_working_directory}
+    permissions:
+      - user_name: ${var.current_user}
+        level: CAN_MANAGE
+    run_as:
+      user_name: ${var.current_user}
+    resources:
+      jobs:
+        register_pltnum:
+          job_clusters:
+            - job_cluster_key: pltnum_gpu_cluster
+              new_cluster:
+                azure_attributes:
+                  availability: ON_DEMAND_AZURE
+
+  prod_gcp:
+    mode: production
+    workspace:
+      root_path: ${var.current_working_directory}
+    permissions:
+      - user_name: ${var.current_user}
+        level: CAN_MANAGE
+    run_as:
+      user_name: ${var.current_user}
+    resources:
+      jobs:
+        register_pltnum:
+          job_clusters:
+            - job_cluster_key: pltnum_gpu_cluster
+              new_cluster:
+                gcp_attributes:
+                  availability: ON_DEMAND_GCP

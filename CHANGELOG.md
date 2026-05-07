@@ -1,5 +1,102 @@
 # Genesis Workbench — Changelog
 
+## guided_enzyme_creation (2026-05-06) — Phase 1.5: Generation-mode toggle (Fast / Accurate)
+
+### New: Fast vs Accurate generation modes for Guided Enzyme Optimization
+
+The Guided Enzyme Optimization form gained a **Generation mode** radio (Fast / Accurate, default Fast). The toggle picks where the reward signal is applied: between iterations (Fast) or *during* the diffusion process (Accurate).
+
+- **Fast (~30 min, no GPU cost)** — unchanged from Phase 1.4. AME runs as a Databricks Model Serving endpoint, the loop scores K candidates after generation, parents are resampled by reward for the next iteration. Job: `run_enzyme_optimization_gwb` on a CPU cluster.
+- **Accurate (~30-60 min, ~$22 GPU cost)** — new. AME loads on an A10 GPU cluster (checkpoints pulled from the registered UC model `{catalog}.{schema}.proteina_complexa_ame`, version resolved from the GWB `models` table). Uses Proteina-Complexa's Feynman-Kac steering: at intermediate denoising steps, partial structures are scored via our `DevelopabilityCompositeReward(BaseRewardModel)` and trajectories are importance-sampled, so losing branches get pruned early and surviving compute lands on developability-promising candidates. Job: `run_enzyme_optimization_gwb_inprocess_ame` on an A10 GPU cluster.
+
+Verified end-to-end on K=4, N=2, all-axes-weight-1.0 with the catalytic-triad smoke motif: Fast `iter_mean=0.449`, Accurate **`iter_mean=0.506`** — first signal that FK-steering's importance-weighted resampling concentrates reward more uniformly across the batch. iter_max is in the same range across both modes.
+
+### Architecture
+
+Both jobs share the same orchestrator notebook (`01_run_optimization.py`); the dispatcher (`enzyme_optimization_tools.py:_resolve_orchestrator_job_id(use_inprocess_ame)`) picks the right job by name based on the toggle. The notebook reads `use_inprocess_ame` at top, runs `install_proteinfoundation_if_needed()` + `dbutils.library.restartPython()` *before* any torch-touching imports (the Databricks runtime ships its own torch — installing torch 2.7.0 alongside leaves torch_scatter referencing the wrong C++ symbols and crashing on first use), then either calls `call_ame()` (Fast) or `run_ame_with_rewards()` (Accurate) per iteration.
+
+`DevelopabilityCompositeReward` inherits from `proteinfoundation.rewards.base_reward.BaseRewardModel`. Its `score(pdb_path, requires_grad=False, **kwargs)` extracts the AA sequence from the candidate PDB and calls our four developability endpoints (NetSolP / PLTNUM / DeepSTABp / MHCflurry) in series, applying the half-life anchor sigmoid to PLTNUM. Per-axis fallback: any failed endpoint contributes 0 instead of crashing the search. The reward is attached via `model.reward_model = reward` directly (not via `inf_cfg.reward_model` / Hydra) — `Proteina.configure_inference()` only takes `(inf_cfg, nn_ag)`.
+
+### AME checkpoints from UC, not NGC
+
+The Accurate path pulls AME checkpoints from the registered UC model `{catalog}.{schema}.proteina_complexa_ame` (whichever version is `is_active=true` in the GWB `models` table). No NGC fallback — if the proteina_complexa submodule isn't deployed in this workspace, `_fetch_ame_checkpoints_from_uc(...)` raises with a clear "deploy proteina_complexa first" message. Re-deploys are bit-reproducible because the UC version is the same .ckpt blob the proteina_complexa registration baked.
+
+### Endpoint warmup at job start (both paths)
+
+The orchestrator pre-warms NetSolP / PLTNUM / DeepSTABp / MHCflurry (`warmup_developability_endpoints`) and AME / ESMFold / ProteinMPNN (`warmup_generation_endpoints`) with one dummy call each before the loop starts. Without it, scale-to-zero cold starts of 5-20 min mid-loop bust the request timeout. The Fast-path AME call's `_query` timeout was also raised: 600s → **1800s** (AME cold start observed at >20 min); default `_query` timeout for the developability endpoints raised 600s → **1200s**.
+
+### Phase 1.4 motif chain bug, fixed
+
+A latent bug in the Phase 1.4 ProteinMPNN call: orchestrator passed `fixed_positions={target_chain: motif_residues}` where `target_chain` was the input motif's chain (typically "B"), but AME emits scaffolds on chain **"A"**. Upstream's `tied_featurize` KeyError'd on the chain mismatch; the orchestrator's broad `except` swallowed the error; motif preservation silently no-op'd every iteration. Fixed by hardcoding `AME_OUTPUT_CHAIN="A"` and making the fall-through warning loud (`⚠️ MOTIF PRESERVATION DID NOT RUN for this candidate.`).
+
+### Pinning + on-demand compute pattern alignment
+
+- All proteinfoundation transitive deps are now exact-pinned in a versioned `enzyme_optimization_v1/notebooks/proteinfoundation_requirements.txt` (35 packages — torch==2.7.0 to align with PyG cu126 wheels, accelerate==0.34.2 for transformers 5.5.0 compat, biotite==1.4.0 because atomworks 2.2.0 hard-pins it, plus 30 more). The proteinfoundation upstream itself is pinned via `git clone --branch dev` with the resolved SHA logged at install time.
+- Both enzyme_optimization jobs (Fast + Accurate) are configured for **on-demand** compute on every cloud — `availability: ON_DEMAND` / `ON_DEMAND_AZURE` / `ON_DEMAND_GCP` overlaid via per-cloud `targets:` in `databricks.yml`, matching the canonical pattern in `boltz/boltz_1/databricks.yml`. Spot-instance reclamation killed two consecutive verification runs at 13 and 35 min; the rule is now codified in `claude_skills/SKILL_GENESIS_WORKBENCH_DEVELOPMENT.md` (new "On-demand compute (hard rule)" section).
+
+### Files added / modified
+
+| Path | Change |
+|---|---|
+| `modules/small_molecule/enzyme_optimization/enzyme_optimization_v1/resources/run_optimization.yml` | New `run_enzyme_optimization_inprocess_ame` job resource (A10 GPU). Both jobs gained `use_inprocess_ame`, `fk_n_branch`, `fk_beam_width`, `fk_temperature`, `fk_step_checkpoints` job params. |
+| `…/databricks.yml` | Per-cloud on-demand overlays for both jobs across `prod_aws` / `prod_azure` / `prod_gcp`. |
+| `…/notebooks/utils.py` | New: `DevelopabilityCompositeReward` (lazy factory, inherits from upstream `BaseRewardModel`), `load_ame_model()`, `_fetch_ame_checkpoints_from_uc`, `_resolve_ame_uc_version`, `install_proteinfoundation_if_needed()`, `_build_motif_atom_spec_from_pdb`, `warmup_developability_endpoints`, `warmup_generation_endpoints`, `run_ame_with_rewards`. AME `call_ame` timeout 600s → 1800s. Default `_query` timeout 600s → 1200s. |
+| `…/notebooks/01_run_optimization.py` | Early-install cell at the top reads `use_inprocess_ame`; if true, installs proteinfoundation deps and `dbutils.library.restartPython()` before any torch-touching code. Job-start warmup of all 8 endpoints on both paths. `AME_OUTPUT_CHAIN="A"` for ProteinMPNN motif preservation. |
+| `…/notebooks/proteinfoundation_requirements.txt` *(new)* | All 35 Accurate-path pip pins, exact-pinned per the GWB rule. |
+| `modules/core/app/utils/enzyme_optimization_tools.py` | `_resolve_orchestrator_job_id(use_inprocess_ame)` picks job by name. New `use_inprocess_ame` kwarg on `start_enzyme_optimization_job`. |
+| `modules/core/app/views/small_molecule_workflows/enzyme_optimization.py` | Generation-mode radio (Fast / Accurate, default Fast) with cost/time/mechanism help-text. |
+| `claude_skills/SKILL_GENESIS_WORKBENCH_DEVELOPMENT.md` | New "On-demand compute (hard rule)" section codifying the per-cloud overlay pattern. |
+| `claude_skills/SKILL_GENESIS_WORKBENCH_WORKFLOWS.md` | Generation-mode toggle + Fast/Accurate behavior described under Guided Enzyme Optimization. |
+| `claude_skills/SKILL_GENESIS_WORKBENCH.md` | "Inside Genesis Workbench" updated with the dual-mode toggle. |
+
+---
+
+## guided_enzyme_creation (2026-05-05)
+
+### New: Guided Enzyme Optimization workflow
+
+A new "Guided Enzyme Optimization" tab under Small Molecules — a reward-weighted resampling loop around the Motif Scaffolding stack (Proteina-Complexa-AME + ProteinMPNN + ESMFold). Each iteration scores K candidates on motif backbone RMSD, ESMFold pLDDT, optional Boltz substrate complex confidence, and four developability axes (solubility, half-life, thermostability, immunogenicity), composes a weighted composite reward, logs everything to MLflow, then biases the next iteration toward high-reward parents.
+
+The half-life axis is **anchor-based**: the user supplies one or more reference enzymes with measured half-life; the loop sigmoids each candidate's PLTNUM relative-stability score against `min(reference) + margin`, turning a relative ranker into a defensible "predicted at least as long-lived as your reference, with margin" signal.
+
+A **strategy interface** is shipped now so Phase 2 can drop in `EvolutionaryStrategy` (mutate top-K with ProteinMPNN's fixed-positions mode) without touching the orchestrator core. Phase 1 implements `ResampleFromAMEStrategy` (default) and `NoOpStrategy` (verification).
+
+### New predictor submodules under `modules/small_molecule/`
+
+- `netsolp/netsolp_v1/` — NetSolP-1.0 distilled, BSD-3-Clause. ONNX Runtime CPU endpoint. Tiny dep tree (`onnxruntime`, `fair-esm`). Weights bundled in `weights/` (extracted once via `weights/extract_weights.sh` from the upstream tarball; ~30 MB, BSD attribution preserved alongside).
+- `pltnum/pltnum_v1/` — PLTNUM-ESM2, MIT. Half-life relative-stability ranker on ESM-2 650M. GPU_SMALL endpoint. Weights auto-pull from HuggingFace `sagawa/PLTNUM-ESM2-NIH3T3`. The `PLTNUM_PreTrainedModel` class is vendored inline in the registration notebook with attribution.
+- `deepstabp/deepstabp_v1/` — DeepSTABp, MIT. Tm regression in °C. ProtT5-XL backbone (~3 GB, MIT verified at parent ProtTrans repo) auto-pulls from HuggingFace; the 80 MB MLP head pulls from the upstream GitHub raw URL. GPU_SMALL endpoint.
+- `mhcflurry/mhcflurry_v2/` — MHCflurry 2.2.1, Apache-2.0. MHC-I peptide-presentation predictor wrapped as a sliding-9-mer scan with a default 6-allele HLA panel (~95% global coverage), aggregated to a per-residue "immunogenic burden" score. CPU endpoint. Weights via `mhcflurry-downloads fetch` at registration time.
+
+### New orchestrator submodule
+
+- `enzyme_optimization/enzyme_optimization_v1/` — Databricks job that runs the loop on a CPU cluster (all heavy work delegated to endpoints). 24h timeout cap. Parameters mirror `start_scanpy_job`. The job is dispatched on demand by the Streamlit page, not auto-run at deploy time.
+
+### Boltz SDK timeout fix
+
+`modules/core/app/utils/protein_design.py:hit_boltz` now uses a long-timeout `WorkspaceClient(config=Config(http_timeout_seconds=600))` and accepts a `timeout_seconds` kwarg (the optimization loop passes 900s for ligand complexes). Same incident pattern that bit SCimilarity earlier — the Databricks SDK's 60s default was killing Boltz cold starts on `GPU_SMALL`.
+
+### Motif RMSD utility
+
+`modules/core/app/utils/structure_utils.py` gained `motif_backbone_rmsd(input_pdb_str, designed_pdb_str, motif_residues, ...)` — thin Bio.PDB.Superimposer wrapper for the optimization loop's structural fidelity axis. Uses the existing `select_and_align` helpers; no new file.
+
+### App side
+
+- New `modules/core/app/utils/enzyme_optimization_tools.py` — `start_enzyme_optimization_job` (mirrors `start_scanpy_job` shape, dynamic job-ID lookup by name since `RUN_*_JOB_ID` env vars aren't actually wired up in this repo), `predict_enzyme_properties` (single-sequence smoke test across all four developability endpoints, used by the form's "Test on T4 lysozyme" button), `load_optimization_trajectory` / `load_top_k_pdbs` / `get_run_status` for the polling view.
+- `modules/core/app/utils/streamlit_helper.py:_MODEL_ENDPOINT_MAP` updated with the four new display-name → UC-name mappings (`netsolp_v1`, `pltnum_v1`, `deepstabp_v1`, `mhcflurry_v2`).
+- `modules/core/app/views/small_molecules.py` — new `enzyme_opt_tab` between Motif Scaffolding and ADMET; renders `enzyme_optimization.render()`.
+
+### Documentation
+
+- README per-module dependency table extended with NetSolP, PLTNUM, DeepSTABp, MHCflurry rows (every pin + license + upstream source); "Inside Genesis Workbench" line lists all four developability predictors.
+- New in-app help: `modules/core/app/documentation/enzyme_optimization.md` with full inputs/outputs/pipeline + the honest caveats (half-life is anchor-relative, not hours; first iteration is uniform; etc.).
+- `claude_skills/SKILL_GENESIS_WORKBENCH.md`, `SKILL_GENESIS_WORKBENCH_WORKFLOWS.md` updated with the new workflow.
+- `claude_skills/SKILL_GENESIS_WORKBENCH_DEPLOY_WIZARD.md` documents the new per-submodule deploy order and the one-time NetSolP weight-population step.
+- `claude_skills/SKILL_GENESIS_WORKBENCH_DESTROY_WIZARD.md` adds a note on the new `small_molecule` submodule list and on NetSolP's git-bundled weights surviving destroy.
+- `claude_skills/SKILL_GENESIS_WORKBENCH_DEVELOPMENT.md` gains a top-level **Dependency hygiene** section codifying the exact-pin rule applied to every new pip dep introduced in this branch.
+
+---
+
 ## version_pinning (2026-04-20 → 2026-05-05)
 
 ### Version pinning across modules

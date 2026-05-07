@@ -43,7 +43,7 @@ Despite their expertise in biology, many highly talented life science scientists
 - Scripts to deploy below modules:
 	- Single Cell module that deploys and uses scGPT, SCimilarity, Scanpy and Rapids-SingleCell
 	- Protein Studies module that deploys and uses ESMFold, ESM2 Embeddings, Alphafold2, ProteinMPNN, RFDiffusion and Boltz
-	- Small Molecule module that deploys and uses Chemprop, DiffDock and Proteina-Complexa
+	- Small Molecule module that deploys and uses Chemprop, DiffDock, Proteina-Complexa, NetSolP-1.0 (protein solubility prediction), PLTNUM-ESM2 (protein half-life relative stability ranking), DeepSTABp (protein melting temperature regression) and MHCflurry 2.x (MHC-I immunogenic burden prediction)
 	- Disease Biology module for VCF ingestion, variant annotation and GWAS analysis
 	- BioNeMo container definitions and workflows
 	- Parabricks container definitions and workflows
@@ -215,6 +215,57 @@ Proteina-Complexa | loralib==0.1.2 | MIT | https://github.com/microsoft/LoRA
 Proteina-Complexa | einops==0.8.2 | MIT | https://github.com/arogozhnikov/einops
 Proteina-Complexa | transformers==5.5.0 | Apache2.0 | https://github.com/huggingface/transformers
 Proteina-Complexa | jaxtyping | MIT | https://github.com/patrick-kidger/jaxtyping
+NetSolP | NetSolP-1.0 | BSD-3-Clause | https://github.com/tvinet/NetSolP-1.0
+NetSolP | onnxruntime==1.20.1 | MIT | https://github.com/microsoft/onnxruntime
+NetSolP | fair-esm==2.0.0 | MIT | https://github.com/facebookresearch/esm
+NetSolP | torch==2.7.1 | BSD-3 | https://github.com/pytorch/pytorch
+NetSolP | numpy==1.26.4 | BSD-3 | https://github.com/numpy/numpy
+NetSolP | pandas==1.5.3 | BSD-3 | https://github.com/pandas-dev/pandas
+NetSolP | mlflow==2.22.0 | Apache2.0 | https://github.com/mlflow/mlflow
+NetSolP | cloudpickle==2.0.0 | BSD-3 | https://github.com/cloudpipe/cloudpickle
+NetSolP | databricks-sdk==0.50.0 | Apache2.0 | https://pypi.org/project/databricks-sdk/
+NetSolP | databricks-sql-connector==4.0.2 | Apache2.0 | https://github.com/databricks/databricks-sql-python
+NetSolP | MODEL WEIGHTS — Solubility_ESM12_0_quantized.onnx (~85 MB, split 0 of the upstream 5-fold ESM-12 ensemble) + ESM12_alphabet.pkl, committed under modules/small_molecule/netsolp/netsolp_v1/weights/ | BSD-3-Clause | https://services.healthtech.dtu.dk/services/NetSolP-1.0/
+PLTNUM | PLTNUM (vendored PLTNUM_PreTrainedModel class) | MIT | https://github.com/sagawatatsuya/PLTNUM
+PLTNUM | torch==2.7.1 | BSD-3 | https://github.com/pytorch/pytorch
+PLTNUM | transformers==4.46.3 | Apache2.0 | https://github.com/huggingface/transformers
+PLTNUM | safetensors==0.4.5 | Apache2.0 | https://github.com/huggingface/safetensors
+PLTNUM | huggingface-hub==0.26.2 | Apache2.0 | https://github.com/huggingface/huggingface_hub
+PLTNUM | numpy==1.26.4 | BSD-3 | https://github.com/numpy/numpy
+PLTNUM | pandas==1.5.3 | BSD-3 | https://github.com/pandas-dev/pandas
+PLTNUM | mlflow==2.22.0 | Apache2.0 | https://github.com/mlflow/mlflow
+PLTNUM | cloudpickle==2.0.0 | BSD-3 | https://github.com/cloudpipe/cloudpickle
+PLTNUM | databricks-sdk==0.50.0 | Apache2.0 | https://pypi.org/project/databricks-sdk/
+PLTNUM | databricks-sql-connector==4.0.2 | Apache2.0 | https://github.com/databricks/databricks-sql-python
+PLTNUM | MODEL WEIGHTS (HuggingFace sagawa/PLTNUM-ESM2-NIH3T3) | MIT | https://huggingface.co/sagawa/PLTNUM-ESM2-NIH3T3
+PLTNUM | ESM-2 650M backbone (facebook/esm2_t33_650M_UR50D) | MIT | https://github.com/facebookresearch/esm
+DeepSTABp | DeepSTABp (vendored deepSTAPpMLP class) | MIT | https://github.com/CSBiology/deepStabP
+DeepSTABp | torch==2.7.1 | BSD-3 | https://github.com/pytorch/pytorch
+DeepSTABp | transformers==4.46.3 | Apache2.0 | https://github.com/huggingface/transformers
+DeepSTABp | safetensors==0.4.5 | Apache2.0 | https://github.com/huggingface/safetensors
+DeepSTABp | huggingface-hub==0.26.2 | Apache2.0 | https://github.com/huggingface/huggingface_hub
+DeepSTABp | pytorch-lightning==2.5.5 | Apache2.0 | https://github.com/Lightning-AI/pytorch-lightning
+DeepSTABp | sentencepiece==0.2.0 | Apache2.0 | https://github.com/google/sentencepiece
+DeepSTABp | biopython==1.84 | [BioPython License Agreement](https://github.com/biopython/biopython/blob/master/LICENSE.rst) | https://github.com/biopython/biopython
+DeepSTABp | numpy==1.26.4 | BSD-3 | https://github.com/numpy/numpy
+DeepSTABp | pandas==1.5.3 | BSD-3 | https://github.com/pandas-dev/pandas
+DeepSTABp | mlflow==2.22.0 | Apache2.0 | https://github.com/mlflow/mlflow
+DeepSTABp | cloudpickle==2.0.0 | BSD-3 | https://github.com/cloudpipe/cloudpickle
+DeepSTABp | databricks-sdk==0.50.0 | Apache2.0 | https://pypi.org/project/databricks-sdk/
+DeepSTABp | databricks-sql-connector==4.0.2 | Apache2.0 | https://github.com/databricks/databricks-sql-python
+DeepSTABp | MODEL WEIGHTS — MLP head (~80 MB, fetched from upstream raw URL at registration time) | MIT | https://github.com/CSBiology/deepStabP/raw/main/src/Api/trained_model/b25_sampled_10k_tuned_2_d01/checkpoints/
+DeepSTABp | ProtT5-XL backbone (Rostlab/prot_t5_xl_uniref50) | MIT (verified at parent ProtTrans repo) | https://github.com/agemagician/ProtTrans
+MHCflurry | mhcflurry==2.2.1 | Apache2.0 | https://github.com/openvax/mhcflurry
+MHCflurry | torch==2.7.1 | BSD-3 | https://github.com/pytorch/pytorch
+MHCflurry | numpy==1.26.4 | BSD-3 | https://github.com/numpy/numpy
+MHCflurry | pandas==2.2.3 | BSD-3 | https://github.com/pandas-dev/pandas
+MHCflurry | scikit-learn==1.5.2 | BSD-3 | https://github.com/scikit-learn/scikit-learn
+MHCflurry | biopython==1.84 | [BioPython License Agreement](https://github.com/biopython/biopython/blob/master/LICENSE.rst) | https://github.com/biopython/biopython
+MHCflurry | mlflow==2.22.0 | Apache2.0 | https://github.com/mlflow/mlflow
+MHCflurry | cloudpickle==2.0.0 | BSD-3 | https://github.com/cloudpipe/cloudpickle
+MHCflurry | databricks-sdk==0.50.0 | Apache2.0 | https://pypi.org/project/databricks-sdk/
+MHCflurry | databricks-sql-connector==4.0.2 | Apache2.0 | https://github.com/databricks/databricks-sql-python
+MHCflurry | MODEL WEIGHTS (auto-fetched via `mhcflurry-downloads fetch models_class1_presentation`, ~150 MB) | Apache2.0 | https://github.com/openvax/mhcflurry
 Disease Biology | glow | Apache2.0 | https://github.com/projectglow/glow
 Disease Biology | pyspark | Apache2.0 | https://github.com/apache/spark
 BioNeMo | six==1.16.0 | MIT | https://github.com/benjaminp/six

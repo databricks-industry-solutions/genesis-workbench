@@ -126,6 +126,46 @@ Three models available via pills selector:
 - Pipeline: Proteina-Complexa-AME → ProteinMPNN optimization → ESMFold validation
 - Output: Design selector with Mol* viewer
 
+### Guided Enzyme Optimization
+**Tab:** Small Molecules → Guided Enzyme Optimization
+
+A reward-weighted resampling loop on top of Motif Scaffolding's stack — instead of accepting whatever AME produces, it iterates and biases each round toward higher-reward parents. The form exposes a **Generation mode** toggle (Fast / Accurate, default Fast) that picks where the reward signal applies.
+
+- **Generation mode (Fast vs Accurate):**
+  - **Fast (~30 min, no GPU cost)** — AME runs as the deployed Model Serving endpoint; the loop scores K candidates after generation and resamples parents by reward for the next iteration. Reward signal applies *between* iterations only. Job: `run_enzyme_optimization_gwb` on a CPU cluster.
+  - **Accurate (~30-60 min, ~$22 GPU cost)** — AME loads on an A10 GPU cluster (checkpoints pulled from the registered UC model `{catalog}.{schema}.proteina_complexa_ame`, version resolved from the `models` table) and uses Feynman-Kac steering during sampling: at intermediate denoising steps, partial structures are scored and trajectories are importance-sampled so losing branches get pruned early. Reward signal applies *during* diffusion. Job: `run_enzyme_optimization_gwb_inprocess_ame` on an A10 GPU cluster. Both jobs share the same notebook; the toggle drives the dispatcher to pick the right job by name.
+  - Verified side-by-side on K=4, N=2, all-axes-weight-1.0: Fast `iter_mean=0.449`, Accurate `iter_mean=0.506` — first signal that FK-steering's importance-weighted resampling concentrates reward more uniformly across the batch.
+
+- **Inputs:**
+  - Motif PDB + chain id + motif residue numbers (CSV) — same as Motif Scaffolding
+  - Scaffold length range, K (candidates per iteration), N (iterations)
+  - Substrate SMILES (optional — gates the Boltz axis)
+  - Reference enzymes (1+ rows in a `data_editor`): sequence + measured half-life in hours + cell system. Used to anchor the half-life axis.
+  - Half-life margin (default 0.05) — how far above `min(reference PLTNUM)` a candidate must score for positive half-life reward
+  - Per-axis weight sliders: `motif_rmsd`, `plddt`, `boltz`, `solubility`, `half_life`, `thermostab`, `immuno` (0–5; weight 0 disables that axis)
+  - **Generation mode** radio (Fast / Accurate, default Fast)
+  - Strategy radio: `resample` (default) or `noop` (verification)
+  - Resampling temperature, ProteinMPNN checkbox, MLflow experiment + run name
+- **Pipeline (per iteration):**
+  1. AME → K scaffolds. **Fast**: SDK call to `gwb_*_proteina_complexa_ame_endpoint`. **Accurate**: in-process `Proteina.load_from_checkpoint(...)` + FK-steering search with `DevelopabilityCompositeReward` attached via `model.reward_model = reward`.
+  2. (Optional) ProteinMPNN redesign with `fixed_positions={"A": motif_residues}` to preserve catalytic motif identity → ESMFold re-fold
+  3. Score each candidate via the predictor registry (motif backbone RMSD, ESMFold pLDDT, Boltz substrate confidence, NetSolP solubility, PLTNUM anchor-relative half-life, DeepSTABp Tm, MHCflurry immuno burden)
+  4. Compose a weighted reward (z-score+min-max within batch; half-life is pre-normalized via the anchor sigmoid)
+  5. Log per-candidate metrics + PDBs to MLflow; resample parents for the next iteration
+- **Endpoint warmup at job start (both paths):** the orchestrator pre-warms NetSolP, PLTNUM, DeepSTABp, MHCflurry (via `warmup_developability_endpoints`) and AME / ESMFold / ProteinMPNN (via `warmup_generation_endpoints`) with a 1-call dummy hit each. Without it, scale-to-zero cold starts of 5-20 min mid-loop bust the request timeout.
+- **Outputs:**
+  - Live `iter_max_reward` / `iter_mean_reward` line chart while the loop runs
+  - Top-25 candidates table with all per-axis scores
+  - PDB selector + Mol* viewer overlaying the input motif on the chosen designed scaffold
+  - Top-K PDBs and a full reward trajectory CSV in MLflow
+  - MLflow params include `generation_mode` (Fast/Accurate) + `use_inprocess_ame` (bool) + the FK-steering knobs when Accurate, so two runs can be diffed against each other
+- **Honest caveats:**
+  - Half-life reward is *anchor-relative*, not in hours. Top candidates are predicted to be at least as long-lived as your reference enzyme + margin. With no reference, the axis falls back to a neutral 0.5 contribution.
+  - The Boltz axis only activates if a substrate SMILES is supplied.
+  - First-iteration AME generation in **Fast** isn't bias-influenced; the reward signal kicks in from iteration 2. **Accurate** mode applies the reward inside iteration 1's AME generation via FK-steering.
+  - **Accurate** depends on `proteina_complexa/proteina_complexa_v1` being deployed first — its UC model is the only source for the AME checkpoints. If not deployed, `_fetch_ame_checkpoints_from_uc` raises with a clear "deploy proteina_complexa first" message (no NGC fallback).
+- **Smoke test:** an "Test predictors on T4 lysozyme" expander on the form runs a single sequence through all four developability endpoints — useful to sanity-check the deployment before kicking off a full loop.
+
 ### ADMET & Safety
 **Tab:** Small Molecules → ADMET & Safety
 

@@ -1,0 +1,50 @@
+resources:
+  jobs:
+    register_mhcflurry:
+      name: register_mhcflurry_gwb
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      job_clusters:
+        - job_cluster_key: mhcflurry_cpu_cluster
+          new_cluster:
+            num_workers: 0
+            node_type_id: ${var.cpu_node_type}
+            driver_node_type_id: ${var.cpu_node_type}
+            spark_version: '15.4.x-scala2.12'
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+
+      tasks:
+        - task_key: register_mhcflurry_immunogenicity
+          job_cluster_key: mhcflurry_cpu_cluster
+          notebook_task:
+            notebook_path: ../notebooks/01_register_mhcflurry.py
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: model_name
+          default: mhcflurry_v2
+        - name: cache_dir
+          default: ${resources.volumes.mhcflurry_cache_dir.name}
+        - name: experiment_name
+          default: ${var.module_registration_experiment_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: user_email
+          default: ${var.current_user}
+        - name: workload_type
+          default: CPU
+
+      tags: ${var.common_resource_tags}

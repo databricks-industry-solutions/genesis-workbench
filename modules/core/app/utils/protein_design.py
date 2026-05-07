@@ -6,6 +6,7 @@ import mlflow
 from dataclasses import dataclass, asdict
 
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.core import Config
 
 from Bio.PDB import PDBList
 from Bio.PDB import PDBParser
@@ -21,6 +22,14 @@ from .streamlit_helper import get_endpoint_name
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 workspace_client = WorkspaceClient()
+
+# Boltz cold starts on GPU_SMALL routinely exceed the SDK's 60s default — same
+# pattern that bit SCimilarity. Use a 600s client by default for Boltz; allow
+# per-call override via hit_boltz(..., timeout_seconds=...).
+_BOLTZ_DEFAULT_TIMEOUT_SECONDS = 600
+_boltz_long_timeout_client = WorkspaceClient(
+    config=Config(http_timeout_seconds=_BOLTZ_DEFAULT_TIMEOUT_SECONDS)
+)
 
 def hit_model_endpoint(display_name, inputs) -> str:
     """Query a model serving endpoint by display name."""
@@ -46,7 +55,7 @@ def hit_rfdiffusion(input_dict):
     return hit_model_endpoint('RFDiffusion', [input_dict])[0]
 
 @mlflow.trace(span_type="LLM")
-def hit_boltz(sequence, msa="no_msa", use_msa_server="True"):
+def hit_boltz(sequence, msa="no_msa", use_msa_server="True", timeout_seconds=None):
     """Call Boltz endpoint for structure prediction.
 
     Args:
@@ -54,6 +63,9 @@ def hit_boltz(sequence, msa="no_msa", use_msa_server="True"):
                   "protein_A:SEQ;rna_B:SEQ" for multi-chain complexes.
         msa: MSA option - "no_msa" for fast prediction, or path to MSA file.
         use_msa_server: "True" to use MSA server, "False" to skip.
+        timeout_seconds: Optional per-call HTTP timeout override. Defaults to
+                         the module-level _BOLTZ_DEFAULT_TIMEOUT_SECONDS (600s).
+                         The optimization loop passes 900s for ligand complexes.
 
     Returns:
         PDB string of the predicted structure.
@@ -70,10 +82,15 @@ def hit_boltz(sequence, msa="no_msa", use_msa_server="True"):
         "use_msa_server": use_msa_server,
     }]
 
+    if timeout_seconds is not None and timeout_seconds != _BOLTZ_DEFAULT_TIMEOUT_SECONDS:
+        client = WorkspaceClient(config=Config(http_timeout_seconds=timeout_seconds))
+    else:
+        client = _boltz_long_timeout_client
+
     endpoint_name = get_endpoint_name("Boltz")
     try:
         logger.info(f"Sending request to Boltz endpoint: {endpoint_name}")
-        response = workspace_client.serving_endpoints.query(
+        response = client.serving_endpoints.query(
             name=endpoint_name,
             inputs=payload,
         )

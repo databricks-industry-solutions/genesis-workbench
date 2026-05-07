@@ -1,0 +1,215 @@
+resources:
+  jobs:
+    run_enzyme_optimization:
+      name: run_enzyme_optimization_gwb
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      job_clusters:
+        - job_cluster_key: enzyme_optimization_cpu_cluster
+          new_cluster:
+            num_workers: 0
+            node_type_id: ${var.cpu_node_type}
+            driver_node_type_id: ${var.cpu_node_type}
+            spark_version: '15.4.x-scala2.12'
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+
+      tasks:
+        - task_key: run_loop
+          job_cluster_key: enzyme_optimization_cpu_cluster
+          notebook_task:
+            notebook_path: ../notebooks/01_run_optimization.py
+
+      timeout_seconds: 86400  # 24h hard cap; typical loop is 30-90 min.
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: cache_dir
+          default: ${resources.volumes.enzyme_optimization_cache_dir.name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: user_email
+          default: ${var.current_user}
+
+        # Per-run parameters (populated by start_enzyme_optimization_job)
+        - name: mlflow_experiment
+          default: ""
+        - name: mlflow_run_name
+          default: ""
+        - name: motif_pdb_path
+          default: ""
+        - name: motif_residues_csv
+          default: ""
+        - name: target_chain
+          default: "A"
+        - name: scaffold_length_min
+          default: "80"
+        - name: scaffold_length_max
+          default: "120"
+        - name: num_samples
+          default: "8"
+        - name: num_iterations
+          default: "10"
+        - name: substrate_smiles
+          default: ""
+        - name: references_json
+          default: "[]"
+        - name: half_life_margin
+          default: "0.05"
+        - name: weights_json
+          default: '{"motif_rmsd":1.0,"plddt":1.0,"boltz":0.5,"solubility":1.0,"half_life":1.0,"thermostab":1.0,"immuno":1.0}'
+        - name: resampling_temperature
+          default: "0.1"
+        - name: strategy
+          default: "resample"
+        - name: run_proteinmpnn
+          default: "true"
+        - name: dev_user_prefix
+          default: ""
+
+        # Stopping criteria — convergence ON by default; reward-threshold and best-K
+        # are opt-in (empty string parsed as None by the notebook).
+        - name: convergence_threshold
+          default: "0.01"
+        - name: convergence_window
+          default: "2"
+        - name: target_reward
+          default: ""
+        - name: best_k_target
+          default: ""
+        - name: best_k_threshold
+          default: ""
+
+        # Generation-mode toggle. The CPU job is the Fast path — leaves AME on
+        # the serving endpoint, applies reward signal between iterations only.
+        # The Accurate sibling job below has use_inprocess_ame=true.
+        # The dispatcher always passes the toggle as a runtime param too, so
+        # mismatches fail fast in the notebook rather than silently mis-running.
+        - name: use_inprocess_ame
+          default: "false"
+        - name: fk_n_branch
+          default: "4"
+        - name: fk_beam_width
+          default: "4"
+        - name: fk_temperature
+          default: "1.0"
+        - name: fk_step_checkpoints
+          default: "0,25,50,75,100"
+
+      tags: ${var.common_resource_tags}
+
+    run_enzyme_optimization_inprocess_ame:
+      name: run_enzyme_optimization_gwb_inprocess_ame
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      job_clusters:
+        - job_cluster_key: enzyme_optimization_a10_gpu_cluster
+          new_cluster:
+            num_workers: 0
+            node_type_id: ${var.a10_node_type}
+            driver_node_type_id: ${var.a10_node_type}
+            spark_version: '16.4.x-gpu-ml-scala2.12'
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+            # availability (on-demand vs spot) is set per-cloud in
+            # databricks.yml — see the prod_aws / prod_azure / prod_gcp targets.
+
+      tasks:
+        - task_key: run_loop
+          job_cluster_key: enzyme_optimization_a10_gpu_cluster
+          notebook_task:
+            notebook_path: ../notebooks/01_run_optimization.py
+
+      timeout_seconds: 86400  # 24h hard cap; FK-steering loop is typically 1-6h.
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: cache_dir
+          default: ${resources.volumes.enzyme_optimization_cache_dir.name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: user_email
+          default: ${var.current_user}
+
+        - name: mlflow_experiment
+          default: ""
+        - name: mlflow_run_name
+          default: ""
+        - name: motif_pdb_path
+          default: ""
+        - name: motif_residues_csv
+          default: ""
+        - name: target_chain
+          default: "A"
+        - name: scaffold_length_min
+          default: "80"
+        - name: scaffold_length_max
+          default: "120"
+        - name: num_samples
+          default: "8"
+        - name: num_iterations
+          default: "10"
+        - name: substrate_smiles
+          default: ""
+        - name: references_json
+          default: "[]"
+        - name: half_life_margin
+          default: "0.05"
+        - name: weights_json
+          default: '{"motif_rmsd":1.0,"plddt":1.0,"boltz":0.5,"solubility":1.0,"half_life":1.0,"thermostab":1.0,"immuno":1.0}'
+        - name: resampling_temperature
+          default: "0.1"
+        - name: strategy
+          default: "resample"
+        - name: run_proteinmpnn
+          default: "true"
+        - name: dev_user_prefix
+          default: ""
+
+        - name: convergence_threshold
+          default: "0.01"
+        - name: convergence_window
+          default: "2"
+        - name: target_reward
+          default: ""
+        - name: best_k_target
+          default: ""
+        - name: best_k_threshold
+          default: ""
+
+        - name: use_inprocess_ame
+          default: "true"
+        - name: fk_n_branch
+          default: "4"
+        - name: fk_beam_width
+          default: "4"
+        - name: fk_temperature
+          default: "1.0"
+        - name: fk_step_checkpoints
+          default: "0,25,50,75,100"
+
+      tags: ${var.common_resource_tags}

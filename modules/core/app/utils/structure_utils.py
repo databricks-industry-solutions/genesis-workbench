@@ -87,6 +87,76 @@ def pdb_to_str(fpath):
         lines = f.readlines()
     return ''.join(lines)
 
+def motif_backbone_rmsd(
+    input_pdb_str,
+    designed_pdb_str,
+    motif_residues,
+    input_chain="A",
+    designed_chain="A",
+):
+    """Backbone RMSD (N, CA, C) of the catalytic motif between the input
+    template and a designed/refolded structure.
+
+    Used by the enzyme optimization loop as the "motif fidelity" reward axis:
+    after ProteinMPNN redesign + ESMFold, did the catalytic motif stay put?
+
+    Args:
+        input_pdb_str: PDB string of the original motif template.
+        designed_pdb_str: PDB string of the designed/refolded structure.
+        motif_residues: List of residue numbers (ints) defining the motif in
+                        the input. Same numbering is used for the designed
+                        structure (Proteina-Complexa-AME preserves motif
+                        residue indices in its output).
+        input_chain: Chain id of the motif in the input PDB.
+        designed_chain: Chain id of the motif in the designed PDB.
+
+    Returns:
+        RMSD in angstroms (float). Lower is better motif preservation.
+
+    Raises:
+        ValueError: if the motif backbone atom counts do not match between
+                    the two structures.
+    """
+    pdb_parser = bp.PDBParser(QUIET=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        in_path = os.path.join(tmp, "input.pdb")
+        de_path = os.path.join(tmp, "designed.pdb")
+        with open(in_path, "w") as f:
+            f.write(input_pdb_str)
+        with open(de_path, "w") as f:
+            f.write(designed_pdb_str)
+        in_struct = pdb_parser.get_structure("input", in_path)
+        de_struct = pdb_parser.get_structure("designed", de_path)
+
+    motif_set = set(motif_residues)
+
+    def _motif_backbone(structure, chain_id):
+        atoms = []
+        chain = structure[0][chain_id]
+        for residue in chain:
+            if residue.id[0] != " ":
+                continue
+            if residue.id[1] not in motif_set:
+                continue
+            for name in ("N", "CA", "C"):
+                if name in residue:
+                    atoms.append(residue[name])
+        return atoms
+
+    in_atoms = _motif_backbone(in_struct, input_chain)
+    de_atoms = _motif_backbone(de_struct, designed_chain)
+
+    if len(in_atoms) != len(de_atoms) or len(in_atoms) == 0:
+        raise ValueError(
+            f"motif backbone atom mismatch: input={len(in_atoms)}, "
+            f"designed={len(de_atoms)} (motif_residues={motif_residues})"
+        )
+
+    imposer = bp.Superimposer()
+    imposer.set_atoms(in_atoms, de_atoms)
+    return float(imposer.rms)
+
+
 def select_and_align(true_structure,af_structure):
     mmcif_parser = bp.MMCIFParser()
     pdb_parser = bp.PDBParser()
