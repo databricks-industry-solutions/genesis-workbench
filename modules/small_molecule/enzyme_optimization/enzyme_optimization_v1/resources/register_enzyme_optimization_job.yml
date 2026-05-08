@@ -1,0 +1,48 @@
+resources:
+  jobs:
+    register_enzyme_optimization_job:
+      name: register_enzyme_optimization_gwb
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      job_clusters:
+        - job_cluster_key: enzyme_optimization_register_cluster
+          new_cluster:
+            num_workers: 0
+            node_type_id: ${var.cpu_node_type}
+            driver_node_type_id: ${var.cpu_node_type}
+            spark_version: '15.4.x-scala2.12'
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+
+      tasks:
+        - task_key: register_orchestrator_jobs
+          job_cluster_key: enzyme_optimization_register_cluster
+          notebook_task:
+            notebook_path: ../notebooks/register_enzyme_optimization_job.py
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: run_enzyme_optimization_job_id
+          default: ${resources.jobs.run_enzyme_optimization.id}
+        - name: run_enzyme_optimization_inprocess_ame_job_id
+          default: ${resources.jobs.run_enzyme_optimization_inprocess_ame.id}
+        - name: user_email
+          default: ${var.current_user}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: databricks_app_name
+          default: ${var.app_name}
+
+      tags: ${var.common_resource_tags}

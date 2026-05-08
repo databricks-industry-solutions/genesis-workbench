@@ -66,6 +66,20 @@ Single canonical entry point:
 
 Aggregator modules (`single_cell`, `protein_studies`, `small_molecule`, `disease_biology`) loop through their submodules in their own `destroy.sh` and call each leaf submodule's `destroy.sh` in turn. Atomic modules (`bionemo`, `parabricks`, `core`) destroy directly.
 
+`small_molecule` is the most fragmented (8 submodules as of `guided_enzyme_creation`):
+`open_babel_v3`, `diffdock_v1`, `chemprop_v2`, `proteina_complexa_v1`,
+`netsolp_v1`, `pltnum_v1`, `deepstabp_v1`, `mhcflurry_v2`, `enzyme_optimization_v1`.
+All eight destroy via the same aggregator path. Use `--only-submodule <path>`
+on `destroy.sh` if surgical removal of a single predictor is needed (e.g. swapping
+PLTNUM for a different half-life model later). The `enzyme_optimization_v1`
+orchestrator has no registered model or endpoint of its own — destroying it
+removes both the `run_enzyme_optimization_gwb` job (Fast path, CPU) and the
+`run_enzyme_optimization_gwb_inprocess_ame` job (Accurate path, A10 GPU).
+Cached AME checkpoints under `/Volumes/{catalog}/{schema}/enzyme_optimization/ame_checkpoints/`
+are reclaimed when the volume is dropped.
+
+**NetSolP weights** are committed to git under `modules/small_molecule/netsolp/netsolp_v1/weights/`. The destroy flow does not (and cannot) remove them; they live in the repo and get pulled along with future clones. Removing the volume `netsolp_cache_dir` is a no-op for weights, since NetSolP reads from the bundled path.
+
 ## Conversational flow
 
 Before destroying anything, present the inventory and confirm scope using `AskUserQuestion`. Phrase questions in singular-future ("Destroy parabricks now?") so each step is its own decision.

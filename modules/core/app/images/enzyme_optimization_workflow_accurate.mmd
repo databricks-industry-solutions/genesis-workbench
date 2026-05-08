@@ -1,0 +1,145 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#dbeafe",
+    "primaryTextColor": "#1e3a5f",
+    "primaryBorderColor": "#3b82f6",
+    "lineColor": "#475569",
+    "secondaryColor": "#fef9c3",
+    "tertiaryColor": "#dcfce7",
+    "fontSize": "13px"
+  },
+  "flowchart": {"curve": "basis", "padding": 12}
+}}%%
+flowchart LR
+
+  TITLE["Guided Enzyme Optimization — ACCURATE Flow | A10 GPU + In-Process AME + FK Steering"]
+  style TITLE fill:#1e3a5f,stroke:#1e3a5f,color:#ffffff,font-size:14px
+
+  subgraph SG1["USER INPUTS (Streamlit UI)"]
+    direction TB
+    style SG1 fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+
+    A1["Motif + Ligand PDB\n(uploaded file)"]
+    A2["Motif residue list\n+ chain"]
+    A3["Substrate SMILES\n(optional)"]
+    A4["Scaffold length range\nK samples · N iterations"]
+    A5["Reward weights\nrmsd · plddt · boltz\nsolubility · half_life\nthermostab · immuno"]
+    A6["Half-life reference\nenzymes (PLTNUM)"]
+    A7{{"Mode = ACCURATE\nA10 GPU + In-Process AME"}}
+    style A7 fill:#bfdbfe,stroke:#2563eb,color:#1e3a5f,font-weight:bold
+    A8["FK steering knobs\nfk_n_branch=4 · fk_beam_width=4\nfk_temperature=1.0\ncheckpoints: 0,25,50,75,100"]
+    style A8 fill:#c7d2fe,stroke:#4f46e5,color:#1e1b4b
+  end
+
+  subgraph SG2["DISPATCHER"]
+    direction TB
+    style SG2 fill:#fef9c3,stroke:#ca8a04,color:#713f12
+
+    B1["Write motif PDB\nto UC Volume"]
+    B2["Resolve job:\nrun_enzyme_optimization_gwb\n_inprocess_ame  (A10 GPU cluster)"]
+    style B2 fill:#fef08a,stroke:#ca8a04,color:#713f12,font-weight:bold
+    B3["w.jobs.run_now\nuse_inprocess_ame=true\nfk_n_branch · fk_beam_width\nfk_temperature · fk_checkpoints\nscaffold · K · N · weights"]
+    B4["Pre-create MLflow run\ntag: job_status=submitted"]
+
+    B1 --> B2 --> B3 --> B4
+  end
+
+  subgraph SG3["ORCHESTRATOR JOB  (A10 GPU cluster notebook)"]
+    direction TB
+    style SG3 fill:#dcfce7,stroke:#16a34a,color:#14532d
+
+    C0["Bootstrap (Accurate path)\npip: proteinfoundation + torch==2.7.0\n+ PyG cu126 ABI + graphein==1.7.7\nrestartPython() — fresh kernel"]
+    style C0 fill:#fef3c7,stroke:#d97706,color:#78350f,font-weight:bold
+
+    C1["Load AME IN-PROCESS\nProteinaComplexaAME.from_pretrained()\nkept on A10 GPU — no endpoint call\nBuild DevelopabilityCompositeReward"]
+    style C1 fill:#a7f3d0,stroke:#059669,color:#064e3b,font-weight:bold
+
+    C2["Init MLflow run\ngeneration_mode=Accurate\nfk_n_branch · fk_beam_width\nfk_temperature · fk_checkpoints"]
+
+    C0 --> C1 --> C2
+
+    subgraph FK["FK STEERING INNER LOOP  (at each diffusion checkpoint: 0, 25, 50, 75, 100)"]
+      direction LR
+      style FK fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e,stroke-dasharray:5 5
+
+      FK1["Branch each beam\n×fk_n_branch=4\nspawn parallel partial\ndiffusion paths"]
+      FK2["Score each branch\nDevelopabilityCompositeReward\n(7 axes) in-process on A10\nreward guides diffusion itself"]
+      FK3["Importance-sample\nkeep top fk_beam_width=4\ntemp=fk_temperature=1.0\nlow-reward beams pruned early"]
+
+      FK1 --> FK2 --> FK3
+    end
+
+    C2 --> FK
+
+    subgraph LOOP["ITERATION LOOP  (converge / target reward / best-K / max iter N)"]
+      direction TB
+      style LOOP fill:#bbf7d0,stroke:#15803d,color:#14532d
+
+      L1["1. Generate scaffolds\nrun_ame_with_rewards()\nAME diffusion + FK Feynman-Kac steering\nIN-PROCESS on this job's A10 GPU"]
+      style L1 fill:#a7f3d0,stroke:#059669,color:#064e3b,font-weight:bold
+
+      L2["2. Redesign sequences\nProteinMPNN endpoint\nfixed motif positions preserved"]
+
+      L3["3. Structure prediction\nESMFold endpoint\nPDB output + mean pLDDT"]
+
+      L4["4. Substrate complex\nBoltz endpoint · ipTM score\n(only if SMILES supplied)"]
+
+      subgraph DEV["5. Developability predictors  (parallel batch calls)"]
+        direction LR
+        style DEV fill:#d1fae5,stroke:#059669,color:#064e3b
+        D1["NetSolP\nsolubility\nE.coli prob"]
+        D2["PLTNUM\nrelative\nhalf-life"]
+        D3["DeepSTABp\nTm °C\nthermostab"]
+        D4["MHCflurry\nimmunogenic\nHLA panel"]
+      end
+
+      L5["6. Composite reward\nweighted sum of 7 axes\nz-score + min-max norm per batch\nrmsd · plddt · boltz · solubility · half_life · thermostab · immuno"]
+
+      L6["7. Resample / accept top-K\nsoftmax-weighted, temperature-controlled\nloop back to step 1 with reward-biased parents"]
+      style L6 fill:#86efac,stroke:#15803d,color:#14532d
+
+      L1 --> L2 --> L3 --> L4 --> DEV --> L5 --> L6
+    end
+
+    FK --> LOOP
+
+    C3["Log artifacts to MLflow\nreward_trajectory.csv · topK_pdbs/*.pdb\niter_max_reward · iter_mean_reward"]
+    C4["Update job_status tag\nsubmitted → iter_N_generating\n→ iter_N_scoring → complete"]
+    style C4 fill:#bbf7d0,stroke:#15803d,color:#14532d
+
+    LOOP --> C3 --> C4
+  end
+
+  subgraph SG4["RESULTS  (Streamlit UI)"]
+    direction TB
+    style SG4 fill:#ede9fe,stroke:#7c3aed,color:#3b0764
+
+    R1["Search past runs\nby name / experiment"]
+    R2["Live progress chart\nmax/mean reward per iter"]
+    R3["Result dialog\nmetrics · Mol* 3D viewer\nDownload PDB button"]
+    R4["View in MLflow"]
+  end
+
+  TITLE --> SG1
+  SG1 --> SG2
+  SG2 --> SG3
+  SG3 --> SG4
+
+  subgraph LEGEND["Legend"]
+    direction LR
+    style LEGEND fill:#f8fafc,stroke:#94a3b8,color:#334155
+    LEG1["User Inputs"]
+    style LEG1 fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+    LEG2["Dispatcher"]
+    style LEG2 fill:#fef9c3,stroke:#ca8a04,color:#713f12
+    LEG3["Orchestrator"]
+    style LEG3 fill:#dcfce7,stroke:#16a34a,color:#14532d
+    LEG4["Iter Loop"]
+    style LEG4 fill:#bbf7d0,stroke:#15803d,color:#14532d
+    LEG5["FK Steering"]
+    style LEG5 fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
+    LEG6["Results"]
+    style LEG6 fill:#ede9fe,stroke:#7c3aed,color:#3b0764
+    LEG1 --- LEG2 --- LEG3 --- LEG4 --- LEG5 --- LEG6
+  end

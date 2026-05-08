@@ -1,0 +1,126 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#dbeafe",
+    "primaryTextColor": "#1e3a5f",
+    "primaryBorderColor": "#3b82f6",
+    "lineColor": "#475569",
+    "secondaryColor": "#fef9c3",
+    "tertiaryColor": "#dcfce7",
+    "fontSize": "13px"
+  },
+  "flowchart": {"curve": "basis", "padding": 12}
+}}%%
+flowchart LR
+
+  TITLE["Guided Enzyme Optimization — FAST Flow | CPU Cluster + Endpoint AME"]
+  style TITLE fill:#1e3a5f,stroke:#1e3a5f,color:#ffffff,font-size:14px
+
+  subgraph SG1["USER INPUTS (Streamlit UI)"]
+    direction TB
+    style SG1 fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+
+    A1["Motif + Ligand PDB\n(uploaded file)"]
+    A2["Motif residue list\n+ chain"]
+    A3["Substrate SMILES\n(optional)"]
+    A4["Scaffold length range\nK samples · N iterations"]
+    A5["Reward weights\nrmsd · plddt · boltz\nsolubility · half_life\nthermostab · immuno"]
+    A6["Half-life reference\nenzymes (PLTNUM)"]
+    A7{{"Mode = FAST\nCPU + Endpoint AME"}}
+    style A7 fill:#bfdbfe,stroke:#2563eb,color:#1e3a5f,font-weight:bold
+  end
+
+  subgraph SG2["DISPATCHER"]
+    direction TB
+    style SG2 fill:#fef9c3,stroke:#ca8a04,color:#713f12
+
+    B1["Write motif PDB\nto UC Volume"]
+    B2["Resolve job:\nrun_enzyme_optimization_gwb\n(CPU cluster)"]
+    style B2 fill:#fef08a,stroke:#ca8a04,color:#713f12,font-weight:bold
+    B3["w.jobs.run_now\nuse_inprocess_ame=false\nscaffold · K · N · weights\nstop conditions"]
+    B4["Pre-create MLflow run\ntag: job_status=submitted"]
+
+    B1 --> B2 --> B3 --> B4
+  end
+
+  subgraph SG3["ORCHESTRATOR JOB  (CPU cluster notebook)"]
+    direction TB
+    style SG3 fill:#dcfce7,stroke:#16a34a,color:#14532d
+
+    C0["Bootstrap\ndatabricks-sdk · mlflow\nnumpy · biopython"]
+    style C0 fill:#d1fae5,stroke:#16a34a,color:#14532d
+    C1["Init MLflow run\ngeneration_mode=Fast\nfeature=enzyme_optimization"]
+    C_NOTE["AME runs on GPU endpoint\nThis job orchestrates only"]
+    style C_NOTE fill:#fefce8,stroke:#ca8a04,color:#713f12,font-style:italic
+
+    C0 --> C1 --> C_NOTE
+
+    subgraph LOOP["ITERATION LOOP  (converge / target reward / best-K / max iter N)"]
+      direction TB
+      style LOOP fill:#bbf7d0,stroke:#15803d,color:#14532d
+
+      L1["1. Generate scaffolds\ncall_ame()\ngwb_proteina_complexa_ame_endpoint\n(GPU-backed Model Serving)"]
+      style L1 fill:#a7f3d0,stroke:#059669,color:#064e3b,font-weight:bold
+
+      L2["2. Redesign sequences\nProteinMPNN endpoint\nfixed motif positions preserved"]
+
+      L3["3. Structure prediction\nESMFold endpoint\nPDB output + mean pLDDT"]
+
+      L4["4. Substrate complex\nBoltz endpoint · ipTM score\n(only if SMILES supplied)"]
+
+      subgraph DEV["5. Developability predictors  (parallel batch calls)"]
+        direction LR
+        style DEV fill:#d1fae5,stroke:#059669,color:#064e3b
+        D1["NetSolP\nsolubility\nE.coli prob"]
+        D2["PLTNUM\nrelative\nhalf-life"]
+        D3["DeepSTABp\nTm °C\nthermostab"]
+        D4["MHCflurry\nimmunogenic\nHLA panel"]
+      end
+
+      L5["6. Composite reward\nweighted sum of 7 axes\nz-score + min-max norm per batch\nrmsd · plddt · boltz · solubility · half_life · thermostab · immuno"]
+
+      L6["7. Resample / accept top-K\nsoftmax-weighted, temperature-controlled\nloop back to step 1 with reward-biased parents"]
+      style L6 fill:#86efac,stroke:#15803d,color:#14532d
+
+      L1 --> L2 --> L3 --> L4 --> DEV --> L5 --> L6
+    end
+
+    C_NOTE --> LOOP
+
+    C2["Log artifacts to MLflow\nreward_trajectory.csv · topK_pdbs/*.pdb\niter_max_reward · iter_mean_reward"]
+    C3["Update job_status tag\nsubmitted → iter_N_generating\n→ iter_N_scoring → complete"]
+    style C3 fill:#bbf7d0,stroke:#15803d,color:#14532d
+
+    LOOP --> C2 --> C3
+  end
+
+  subgraph SG4["RESULTS  (Streamlit UI)"]
+    direction TB
+    style SG4 fill:#ede9fe,stroke:#7c3aed,color:#3b0764
+
+    R1["Search past runs\nby name / experiment"]
+    R2["Live progress chart\nmax/mean reward per iter"]
+    R3["Result dialog\nmetrics · Mol* 3D viewer\nDownload PDB button"]
+    R4["View in MLflow"]
+  end
+
+  TITLE --> SG1
+  SG1 --> SG2
+  SG2 --> SG3
+  SG3 --> SG4
+
+  subgraph LEGEND["Legend"]
+    direction LR
+    style LEGEND fill:#f8fafc,stroke:#94a3b8,color:#334155
+    LEG1["User Inputs"]
+    style LEG1 fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+    LEG2["Dispatcher"]
+    style LEG2 fill:#fef9c3,stroke:#ca8a04,color:#713f12
+    LEG3["Orchestrator"]
+    style LEG3 fill:#dcfce7,stroke:#16a34a,color:#14532d
+    LEG4["Iter Loop"]
+    style LEG4 fill:#bbf7d0,stroke:#15803d,color:#14532d
+    LEG5["Results"]
+    style LEG5 fill:#ede9fe,stroke:#7c3aed,color:#3b0764
+    LEG1 --- LEG2 --- LEG3 --- LEG4 --- LEG5
+  end

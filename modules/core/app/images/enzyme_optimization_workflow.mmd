@@ -1,0 +1,103 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#dbeafe",
+    "primaryTextColor": "#1e3a5f",
+    "primaryBorderColor": "#3b82f6",
+    "lineColor": "#475569",
+    "secondaryColor": "#fef9c3",
+    "tertiaryColor": "#dcfce7",
+    "fontSize": "14px"
+  },
+  "flowchart": {"curve": "basis", "padding": 20}
+}}%%
+flowchart TD
+
+  subgraph SG1["🧪 USER INPUTS  (Streamlit UI — Small Molecules → Enzyme Optimization tab)"]
+    direction TB
+    style SG1 fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+
+    A1["Motif + Ligand PDB\n(uploaded file)"]
+    A2["Motif residue list + chain"]
+    A3["Substrate SMILES"]
+    A4["Scaffold length range\nNum samples · Num iterations"]
+    A5["Reward weights\n(motif_rmsd · plddt · boltz\nsolubility · half_life\nthermostab · immuno)"]
+    A6["Half-life reference enzymes\n(PLTNUM anchor)"]
+    A7{{"Generation mode toggle\nFast = CPU + endpoint AME\nAccurate = A10 GPU + in-process AME"}}
+  end
+
+  subgraph SG2["⚙️ DISPATCHER  (start_enzyme_optimization_job — app/utils/enzyme_optimization_tools.py)"]
+    direction TB
+    style SG2 fill:#fef9c3,stroke:#ca8a04,color:#713f12
+
+    B1["Write motif PDB\nto UC Volume"]
+    B2["Resolve orchestrator job by name\nrun_enzyme_optimization_gwb\nor _inprocess_ame"]
+    B3["w.jobs.run_now\n(job_id, job_parameters=…)"]
+  end
+
+  subgraph SG3["🔬 ORCHESTRATOR JOB  (Databricks notebook on job cluster)"]
+    direction TB
+    style SG3 fill:#dcfce7,stroke:#16a34a,color:#14532d
+
+    C1["Init MLflow run\ntags: feature=enzyme_optimization\norigin=genesis_workbench\ncreated_by=email"]
+
+    subgraph LOOP["↻ ITERATION LOOP  (until converge / target reward / best-K hit / max iter)"]
+      direction TB
+      style LOOP fill:#bbf7d0,stroke:#15803d,color:#14532d
+
+      L1["1. Generate scaffolds\nRFdiffusion or Proteina-Complexa-AME"]
+      L2["2. Redesign sequences\nProteinMPNN (optional)"]
+      L3["3. Structure prediction\nESMFold → pLDDT score"]
+      L4["4. Substrate complex\nBoltz → binding confidence"]
+
+      subgraph DEV["5. Developability predictors (parallel)"]
+        direction LR
+        style DEV fill:#d1fae5,stroke:#059669,color:#064e3b
+        D1["NetSolP\n→ solubility"]
+        D2["PLTNUM\n→ relative half-life\nvs reference"]
+        D3["DeepSTABp\n→ Tm (°C)"]
+        D4["MHCflurry\n→ immunogenic burden\n(6-allele HLA panel)"]
+      end
+
+      L5["6. Composite reward\n= weighted sum of 7 axes\n(motif_rmsd · plddt · boltz · solubility\nhalf_life · thermostab · immuno)"]
+      L6["7. Resample / accept top-K\n→ next iteration"]
+    end
+
+    C2["Log artifacts\nreward_trajectory.csv\ntopK_pdbs/*.pdb"]
+    C3["Tag job_status\nstarted → iter_N_generating\n→ iter_N_redesigning → iter_N_scoring\n→ iter_N_complete → complete"]
+  end
+
+  subgraph SG4["📊 RESULTS  (back in Streamlit UI)"]
+    direction TB
+    style SG4 fill:#ede9fe,stroke:#7c3aed,color:#3b0764
+
+    R1["Search past runs\nby run name / experiment name"]
+    R2["Live progress chart\n(iter_max_reward · iter_mean_reward)"]
+    R3["Result dialog\nPer-candidate metrics table\nMol* 3D viewer · Download PDB"]
+    R4["View in MLflow button"]
+  end
+
+  %% Inter-subgraph flow
+  SG1 --> SG2
+  SG2 --> SG3
+  SG3 --> SG4
+
+  %% Intra-SG1
+  A1 & A2 & A3 & A4 & A5 & A6 & A7 --> SG2
+
+  %% Intra-SG2
+  B1 --> B2 --> B3
+
+  %% Intra-SG3
+  C1 --> LOOP
+  L1 --> L2 --> L3 --> L4 --> DEV --> L5 --> L6
+  L6 -->|"next iteration"| L1
+  LOOP --> C2 --> C3
+
+  %% Intra-SG4
+  R1 & R2 & R3 & R4 --> SG4
+
+  %% Styling
+  style A7 fill:#bfdbfe,stroke:#2563eb,color:#1e3a5f
+  style L6 fill:#86efac,stroke:#15803d,color:#14532d
+  style C1 fill:#bbf7d0,stroke:#15803d,color:#14532d

@@ -208,8 +208,9 @@ class ProteinMPNN(mlflow.pyfunc.PythonModel):
             pdb_main(args)
         return None
 
-    def _run_proteinmpnn(self,input_path, output_dir):
+    def _run_proteinmpnn(self, input_path, output_dir, fixed_positions_jsonl=None):
         from proteinmpnn.run import main, get_argparser
+        import os, json
 
         parser = get_argparser()
         arg_list = []
@@ -221,26 +222,119 @@ class ProteinMPNN(mlflow.pyfunc.PythonModel):
         arg_list.extend(['--sampling_temp', "0.1"])
         arg_list.extend(['--batch_size', "1"])
         arg_list.extend(['--path_to_model_weights', self.model_dir])
-        args = parser.parse_args(arg_list)
+        if fixed_positions_jsonl is not None:
+            arg_list.extend(['--fixed_positions_jsonl', fixed_positions_jsonl])
 
+        # ─── Debug: surface what we're about to feed ProteinMPNN ─────────────
+        print(f"[DEBUG] arg_list passed to ProteinMPNN: {arg_list}")
+        if os.path.isfile(input_path):
+            with open(input_path) as f:
+                print(f"[DEBUG] inputs.jsonl ({os.path.getsize(input_path)} bytes):")
+                for i, line in enumerate(f):
+                    obj = json.loads(line)
+                    obj_summary = {k: (v[:80] + "..." if isinstance(v, str) and len(v) > 80 else v)
+                                   for k, v in obj.items()}
+                    print(f"[DEBUG]   line {i}: {obj_summary}")
+        if fixed_positions_jsonl is not None and os.path.isfile(fixed_positions_jsonl):
+            with open(fixed_positions_jsonl) as f:
+                print(f"[DEBUG] fixed_positions.jsonl: {f.read().strip()}")
+
+        args = parser.parse_args(arg_list)
         main(args)
+
+        # Surface the FASTA output so we can see what MPNN actually wrote.
+        fa_path = os.path.join(output_dir, "seqs", "my_pdb.fa")
+        if os.path.isfile(fa_path):
+            with open(fa_path) as f:
+                print(f"[DEBUG] output FASTA contents:\n{f.read()}")
         return None
 
 
-    def predict(self, context, inputs : List[str], params=None) -> List[str]:
+    def predict(self, context, inputs, params=None) -> List[str]:
         """
-        parameters: 
-        -----------
-        inputs: single entry list (currently) of pdb string for a PDB with only backbone atoms
+        Parameters
+        ----------
+        inputs : single-entry DataFrame / list. Accepted column shapes:
+            1. one-column ``pdb`` string — legacy: redesign every residue.
+            2. two-column ``pdb`` + ``fixed_positions`` — ``fixed_positions`` is
+               a JSON-encoded ``{chain_id: [residue_numbers]}`` dict (1-indexed
+               within the chain). Listed positions keep their input AA identity;
+               everything else is redesigned. Empty string / null = no fix.
+
+        ``fixed_positions`` is sent as a JSON string (not a nested dict) because
+        MLflow's ColSpec schema enforcement is the only shape that survives
+        Databricks Model Serving's input projection — nested dicts in unnamed
+        columns get silently dropped by ``_enforce_schema``.
         """
-        import tempfile
-        if len(inputs)!= 1:
-            raise ValueError("Expected exactly one input")
-        pdb_str= inputs[0]
+        import tempfile, json, os
+        import pandas as pd
+
+        pdb_str = None
+        fixed_positions = None  # parsed dict {chain: [residues]}, or None
+
+        def _parse_fp(fp):
+            """Accept dict (already parsed), JSON string, None, NaN, or empty string."""
+            if fp is None:
+                return None
+            if isinstance(fp, float) and pd.isna(fp):
+                return None
+            if isinstance(fp, str):
+                fp = fp.strip()
+                if not fp:
+                    return None
+                return json.loads(fp)
+            if isinstance(fp, dict):
+                return fp
+            raise TypeError(f"Unexpected fixed_positions type: {type(fp).__name__}")
+
+        if isinstance(inputs, pd.DataFrame):
+            if len(inputs) != 1:
+                raise ValueError(f"Expected exactly one input row; got {len(inputs)}")
+            row = inputs.iloc[0]
+            if "pdb" in inputs.columns:
+                pdb_str = str(row["pdb"])
+                if "fixed_positions" in inputs.columns:
+                    fixed_positions = _parse_fp(row["fixed_positions"])
+            elif inputs.shape[1] == 1:
+                pdb_str = str(row.iloc[0])
+            else:
+                raise ValueError(
+                    f"DataFrame input missing 'pdb' column; got columns {list(inputs.columns)}"
+                )
+        elif isinstance(inputs, list):
+            if len(inputs) != 1:
+                raise ValueError(f"Expected exactly one input; got {len(inputs)}")
+            first = inputs[0]
+            if isinstance(first, dict):
+                pdb_str = first.get("pdb") or first.get("pdb_str")
+                fixed_positions = _parse_fp(first.get("fixed_positions"))
+            else:
+                pdb_str = str(first)
+        else:
+            raise TypeError(f"Unexpected inputs type: {type(inputs).__name__}")
+
+        if not pdb_str:
+            raise ValueError("Could not extract a 'pdb' string from inputs")
+
         with tempfile.TemporaryDirectory() as tmpdir:
-            self._prepare_pdb_input(pdb_str,tmpdir)
+            self._prepare_pdb_input(pdb_str, tmpdir)
+
+            # Build the upstream-format JSONL: {"my_pdb": {chain_id: [residues]}}
+            fixed_positions_jsonl = None
+            if fixed_positions:
+                fp_dict = {
+                    "my_pdb": {str(chain): list(residues)
+                               for chain, residues in fixed_positions.items()}
+                }
+                fixed_positions_jsonl = os.path.join(tmpdir, "fixed_positions.jsonl")
+                with open(fixed_positions_jsonl, "w") as f:
+                    f.write(json.dumps(fp_dict) + "\n")
+
             with tempfile.TemporaryDirectory() as outdir:
-                self._run_proteinmpnn(tmpdir+'/inputs.jsonl', outdir)
+                self._run_proteinmpnn(
+                    tmpdir + '/inputs.jsonl', outdir,
+                    fixed_positions_jsonl=fixed_positions_jsonl,
+                )
                 with open(outdir+'/seqs/my_pdb.fa', 'r') as f:
                     lines = f.readlines()
                 seqs = lines[3::2]
@@ -297,10 +391,16 @@ seqs
 from databricks.sdk import WorkspaceClient
 
 signature = mlflow.models.signature.ModelSignature(
-    inputs = Schema([ColSpec(type="string")]),
+    inputs = Schema([
+        ColSpec(type="string", name="pdb"),
+        ColSpec(type="string", name="fixed_positions", required=False),
+    ]),
     outputs = Schema([ColSpec(type="string")]),
     params = None
 )
+
+import pandas as _pd_for_example
+_input_example_df = _pd_for_example.DataFrame([{"pdb": in_pdb_str, "fixed_positions": ""}])
 
 def set_mlflow_experiment(experiment_tag, user_email):    
     w = WorkspaceClient()
@@ -321,7 +421,7 @@ with mlflow.start_run(run_name='protein_mpnn',experiment_id=experiment.experimen
             "model_dir" : f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}/vanilla_model_weights/",
             "repo_path": "/proteinmpnn/package"
         },
-        input_example=[in_pdb_str],
+        input_example=_input_example_df,
         signature=signature,
         conda_env="conda_env.yaml",
         registered_model_name=f"{CATALOG}.{SCHEMA}.proteinmpnn"

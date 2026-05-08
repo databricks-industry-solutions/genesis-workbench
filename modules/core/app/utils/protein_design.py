@@ -6,6 +6,7 @@ import mlflow
 from dataclasses import dataclass, asdict
 
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.core import Config
 
 from Bio.PDB import PDBList
 from Bio.PDB import PDBParser
@@ -21,6 +22,14 @@ from .streamlit_helper import get_endpoint_name
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 workspace_client = WorkspaceClient()
+
+# Boltz cold starts on GPU_SMALL routinely exceed the SDK's 60s default — same
+# pattern that bit SCimilarity. Use a 600s client by default for Boltz; allow
+# per-call override via hit_boltz(..., timeout_seconds=...).
+_BOLTZ_DEFAULT_TIMEOUT_SECONDS = 600
+_boltz_long_timeout_client = WorkspaceClient(
+    config=Config(http_timeout_seconds=_BOLTZ_DEFAULT_TIMEOUT_SECONDS)
+)
 
 def hit_model_endpoint(display_name, inputs) -> str:
     """Query a model serving endpoint by display name."""
@@ -46,7 +55,7 @@ def hit_rfdiffusion(input_dict):
     return hit_model_endpoint('RFDiffusion', [input_dict])[0]
 
 @mlflow.trace(span_type="LLM")
-def hit_boltz(sequence, msa="no_msa", use_msa_server="True"):
+def hit_boltz(sequence, msa="no_msa", use_msa_server="True", timeout_seconds=None):
     """Call Boltz endpoint for structure prediction.
 
     Args:
@@ -54,6 +63,9 @@ def hit_boltz(sequence, msa="no_msa", use_msa_server="True"):
                   "protein_A:SEQ;rna_B:SEQ" for multi-chain complexes.
         msa: MSA option - "no_msa" for fast prediction, or path to MSA file.
         use_msa_server: "True" to use MSA server, "False" to skip.
+        timeout_seconds: Optional per-call HTTP timeout override. Defaults to
+                         the module-level _BOLTZ_DEFAULT_TIMEOUT_SECONDS (600s).
+                         The optimization loop passes 900s for ligand complexes.
 
     Returns:
         PDB string of the predicted structure.
@@ -70,10 +82,15 @@ def hit_boltz(sequence, msa="no_msa", use_msa_server="True"):
         "use_msa_server": use_msa_server,
     }]
 
+    if timeout_seconds is not None and timeout_seconds != _BOLTZ_DEFAULT_TIMEOUT_SECONDS:
+        client = WorkspaceClient(config=Config(http_timeout_seconds=timeout_seconds))
+    else:
+        client = _boltz_long_timeout_client
+
     endpoint_name = get_endpoint_name("Boltz")
     try:
         logger.info(f"Sending request to Boltz endpoint: {endpoint_name}")
-        response = workspace_client.serving_endpoints.query(
+        response = client.serving_endpoints.query(
             name=endpoint_name,
             inputs=payload,
         )
@@ -91,7 +108,32 @@ def hit_boltz(sequence, msa="no_msa", use_msa_server="True"):
 
 @mlflow.trace(span_type="TOOL")
 def hit_proteinmpnn(pdb_str):
-    return hit_model_endpoint('ProteinMPNN', [pdb_str])
+    """Call the ProteinMPNN endpoint with the V8 named-column schema.
+
+    V8's MLflow signature has two columns: ``pdb`` (string, required) and
+    ``fixed_positions`` (string, JSON-encoded ``{chain: [res, ...]}`` or
+    empty for "redesign every residue"). Sending the legacy
+    ``inputs=[pdb_str]`` shape gets rejected by MLflow's schema enforcement
+    (silently — the orchestrator's broad ``except`` masks it as
+    "ProteinMPNN optimization failed for N/N scaffold(s)").
+
+    For callers that need to preserve a motif, use the orchestrator's
+    ``call_proteinmpnn(pdb_str, fixed_positions={chain: [...]})`` in
+    ``modules/small_molecule/enzyme_optimization/enzyme_optimization_v1/notebooks/utils.py``
+    — that one JSON-encodes the dict before sending.
+    """
+    endpoint_name = get_endpoint_name('ProteinMPNN')
+    try:
+        logger.info(f"Sending request to model endpoint: {endpoint_name}")
+        response = workspace_client.serving_endpoints.query(
+            name=endpoint_name,
+            dataframe_records=[{"pdb": pdb_str, "fixed_positions": ""}],
+        )
+        logger.info("Received response from model endpoint")
+        return response.predictions
+    except Exception as e:
+        logger.error(f"Error querying ProteinMPNN: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
 
 @mlflow.trace(span_type="TOOL")
 def extract_chain_reindex(structure, chain_id='A'):

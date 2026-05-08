@@ -278,26 +278,49 @@ else:
 
 # COMMAND ----------
 
+def _sql_escape(val):
+    """Escape a Python string for safe interpolation into a SQL string
+    literal. Doubles internal single quotes; leaves None/numeric values
+    alone. Mirrors the ``_sql_val`` helper in
+    ``genesis_workbench/models.py:196-201`` — copy-pasted here because
+    deploy_model.py runs before the ``genesis_workbench`` library is
+    available on this cluster.
+
+    Necessary because some register notebooks (e.g. DeepSTABp) include
+    apostrophes in their ``deployment_description`` (e.g. "mt_mode
+    ('Cell' or 'Lysate', default 'Cell')") which break the MERGE INTO
+    SQL with PARSE_SYNTAX_ERROR if interpolated raw.
+    """
+    if val is None:
+        return ""
+    return str(val).replace("'", "''")
+
+
 if model_deployed:
     hostname = spark.conf.get("spark.databricks.workspaceUrl")
 
-    # Upsert deployment using MERGE INTO keyed on deploy_model_uc_name
+    # Upsert deployment using MERGE INTO keyed on deploy_model_uc_name.
+    # Every Python-string interpolation is wrapped in _sql_escape(...) so
+    # apostrophes in descriptions don't break the SQL string literals.
+    # Numeric / identifier interpolations ({catalog}, {schema}, {is_adapter},
+    # {model_uc_version}, {gwb_model_id}, {deploy_id}, {hostname}) stay raw —
+    # they're trusted bundle vars or Python ints/bools.
     spark.sql(f"""
         MERGE INTO {catalog}.{schema}.model_deployments AS target
-        USING (SELECT '{model_uc_name}' AS deploy_model_uc_name) AS source
+        USING (SELECT '{_sql_escape(model_uc_name)}' AS deploy_model_uc_name) AS source
         ON target.deploy_model_uc_name = source.deploy_model_uc_name AND target.is_active = true
         WHEN MATCHED THEN UPDATE SET
-            target.deployment_name = '{deployment_name}',
-            target.deployment_description = '{deployment_description}',
-            target.input_adapter = '{input_adapter_str}',
-            target.output_adapter = '{output_adapter_str}',
+            target.deployment_name = '{_sql_escape(deployment_name)}',
+            target.deployment_description = '{_sql_escape(deployment_description)}',
+            target.input_adapter = '{_sql_escape(input_adapter_str)}',
+            target.output_adapter = '{_sql_escape(output_adapter_str)}',
             target.is_adapter = {is_adapter},
-            target.deploy_model_uc_name = '{model_uc_name}',
+            target.deploy_model_uc_name = '{_sql_escape(model_uc_name)}',
             target.deploy_model_uc_version = {model_uc_version},
             target.model_deployed_date = CURRENT_TIMESTAMP(),
-            target.model_deployed_by = '{deploy_user}',
-            target.model_endpoint_name = '{deploy_result.name}',
-            target.model_invoke_url = 'https://{hostname}/serving-endpoints/{deploy_result.name}/invocations'
+            target.model_deployed_by = '{_sql_escape(deploy_user)}',
+            target.model_endpoint_name = '{_sql_escape(deploy_result.name)}',
+            target.model_invoke_url = 'https://{hostname}/serving-endpoints/{_sql_escape(deploy_result.name)}/invocations'
         WHEN NOT MATCHED THEN INSERT
             (deployment_id, deployment_name, deployment_description, model_id,
              input_adapter, output_adapter, is_adapter, deploy_model_uc_name,
@@ -305,18 +328,20 @@ if model_deployed:
              model_deploy_platform, model_endpoint_name, model_invoke_url,
              is_active, deactivated_timestamp)
         VALUES
-            ({deploy_id}, '{deployment_name}', '{deployment_description}', {gwb_model_id},
-             '{input_adapter_str}', '{output_adapter_str}', {is_adapter},
-             '{model_uc_name}', {model_uc_version}, CURRENT_TIMESTAMP(), '{deploy_user}',
-             'model_serving', '{deploy_result.name}',
-             'https://{hostname}/serving-endpoints/{deploy_result.name}/invocations',
+            ({deploy_id}, '{_sql_escape(deployment_name)}',
+             '{_sql_escape(deployment_description)}', {gwb_model_id},
+             '{_sql_escape(input_adapter_str)}', '{_sql_escape(output_adapter_str)}',
+             {is_adapter}, '{_sql_escape(model_uc_name)}', {model_uc_version},
+             CURRENT_TIMESTAMP(), '{_sql_escape(deploy_user)}',
+             'model_serving', '{_sql_escape(deploy_result.name)}',
+             'https://{hostname}/serving-endpoints/{_sql_escape(deploy_result.name)}/invocations',
              true, NULL)
     """)
 
     # Retrieve the actual deployment_id (may be existing if MERGE matched)
     actual_deployment = spark.sql(f"""
         SELECT deployment_id FROM {catalog}.{schema}.model_deployments
-        WHERE deploy_model_uc_name = '{model_uc_name}' AND is_active = true
+        WHERE deploy_model_uc_name = '{_sql_escape(model_uc_name)}' AND is_active = true
         LIMIT 1
     """).toPandas()
     deploy_id = int(actual_deployment.iloc[0]["deployment_id"])
@@ -332,7 +357,7 @@ if model_deployed:
     spark.sql(f"""
             UPDATE {catalog}.{schema}.models SET
                 is_model_deployed = true,
-                deployment_ids = '{deploy_id}'
+                deployment_ids = '{_sql_escape(str(deploy_id))}'
             WHERE model_id = {gwb_model_id}
     """)
 

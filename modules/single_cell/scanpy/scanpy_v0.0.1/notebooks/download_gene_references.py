@@ -19,6 +19,7 @@
 
 from pybiomart import Dataset
 import os
+import time
 
 # COMMAND ----------
 
@@ -61,6 +62,22 @@ def get_gene_table(species='hsapiens'):
     print(f"Retrieved {len(gene_table)} genes for {species}")
     return gene_table
 
+
+def _download_with_retry(species, max_attempts=3):
+    """BioMart (esp. the hsapiens dataset) is intermittently flaky. Retry with
+    5s/15s/45s exponential backoff before propagating the last error."""
+    last_err = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return get_gene_table(species)
+        except Exception as e:
+            last_err = e
+            if attempt < max_attempts:
+                wait = 5 * (3 ** (attempt - 1))
+                print(f"  attempt {attempt}/{max_attempts} failed: {e}; retrying in {wait}s")
+                time.sleep(wait)
+    raise last_err
+
 # COMMAND ----------
 
 # Define reference volume path (created by DBAB deployment)
@@ -88,7 +105,7 @@ for species_id, species_name in species_list:
     else:
         try:
             print(f"\n⏳ {species_name}: Downloading from Ensembl...")
-            gene_table = get_gene_table(species_id)
+            gene_table = _download_with_retry(species_id)
             gene_table.to_csv(output_path, index=False)
             print(f"✓ {species_name}: Successfully downloaded and saved")
             results.append((species_id, "downloaded", output_path))
@@ -119,5 +136,10 @@ all_success = all(status in ["exists", "downloaded"] for _, status, _ in results
 if all_success:
     print("\n✓ All reference tables are ready!")
 else:
-    print("\n✗ Some reference tables failed to download. Please check the errors above.")
+    failed = [sid for sid, status, _ in results if status == "failed"]
+    raise RuntimeError(
+        f"Failed to download reference tables for: {failed}. "
+        f"See per-species errors above. Re-run this job once BioMart is "
+        f"reachable; species already on the volume will be skipped."
+    )
 

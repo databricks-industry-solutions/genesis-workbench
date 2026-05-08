@@ -129,11 +129,31 @@ export DATABRICKS_TF_VERSION=$(terraform version -json | jq -r .terraform_versio
 
 **If the exports already exist but with hardcoded paths** (e.g., `DATABRICKS_TF_EXEC_PATH=/opt/homebrew/bin/terraform`), verify the hardcoded path actually exists on the current machine: `[ -x /opt/homebrew/bin/terraform ]`. If not, rewrite the lines to use `$(which terraform)` / `$(terraform version -json | jq -r .terraform_version)`.
 
+## ⚠️ Hard rule: never run `./deploy.sh core` on a workspace with a live install
+
+`./deploy.sh core <cloud>` re-runs `initialize_module_job` after the bundle deploy.
+That job **re-creates the GWB schema's tables** — including the `settings` and
+`user_profiles` state-bearing tables — wiping anything the user has configured
+in the running app. Confirmed user-reported regression.
+
+For app/library refreshes on an existing install, use:
+
+```bash
+cd modules/core
+./update.sh <cloud>          # aws | azure | gcp
+```
+
+`update.sh` does the same bundle deploy + library wheel + app SP grants without
+running `initialize_module_job`. The `.deployed` lock is still re-touched.
+
+`./deploy.sh core <cloud>` is appropriate **only on a brand-new workspace** where
+there's no existing GWB state to lose.
+
 ## Running the deploy
 
-Always run `core` first:
+Always run `core` first **on a fresh workspace**:
 ```bash
-./deploy.sh core <cloud>
+./deploy.sh core <cloud>     # FIRST-TIME ONLY — see warning above
 ```
 
 After it completes, verify the lock file:
@@ -161,6 +181,26 @@ databricks jobs get-run <run-id> | jq '.state'
 Only advance to the next module once the predecessor's first job is past `PENDING`. This serializes GPU cluster-create and surfaces quota issues one module at a time.
 
 Watch the Jobs UI at `<workspace_url>/jobs` throughout.
+
+### `small_molecule` per-submodule deploy order
+
+The `small_molecule` module is the most fragmented (now 8 submodules). Use `--only-submodule <path>` to deploy them one at a time, in this order, when iterating on the Guided Enzyme Optimization workflow on a fresh workspace:
+
+```bash
+./deploy.sh small_molecule aws --only-submodule open_babel/open_babel_v3
+./deploy.sh small_molecule aws --only-submodule diffdock/diffdock_v1
+./deploy.sh small_molecule aws --only-submodule chemprop/chemprop_v2
+./deploy.sh small_molecule aws --only-submodule proteina_complexa/proteina_complexa_v1
+./deploy.sh small_molecule aws --only-submodule netsolp/netsolp_v1            # CPU, BSD-3-Clause; weights bundled in weights/
+./deploy.sh small_molecule aws --only-submodule pltnum/pltnum_v1              # GPU_SMALL, MIT; weights from HuggingFace
+./deploy.sh small_molecule aws --only-submodule deepstabp/deepstabp_v1        # GPU_SMALL, MIT; ProtT5 from HF + 80 MB head from upstream raw URL
+./deploy.sh small_molecule aws --only-submodule mhcflurry/mhcflurry_v2        # CPU, Apache-2.0; weights via mhcflurry-downloads fetch
+./deploy.sh small_molecule aws --only-submodule enzyme_optimization/enzyme_optimization_v1  # CPU + A10 GPU; orchestrator jobs, no auto-run
+```
+
+**NetSolP one-time setup:** before the first deploy of `netsolp/netsolp_v1`, the upstream weight tarball must be extracted into `modules/small_molecule/netsolp/netsolp_v1/weights/` and committed (BSD-3-Clause, see the `weights/README.md` for the helper script). Subsequent clones of the repo deploy without any manual step.
+
+**Orchestrator deploy** does NOT auto-run a registration job — it just installs the bundle. It creates **two** jobs: `run_enzyme_optimization_gwb` (Fast path, CPU cluster) and `run_enzyme_optimization_gwb_inprocess_ame` (Accurate path, A10 GPU cluster). Both are dispatched on demand by the Streamlit page based on the **Generation mode** toggle. The Accurate path also requires `proteina_complexa/proteina_complexa_v1` to be deployed first — its registered UC model is the source of truth for the AME checkpoints (no NGC fallback). If you skip proteina_complexa, the Accurate path fails fast at job start with a clear "deploy proteina_complexa first" message.
 
 ## Error auto-handlers
 

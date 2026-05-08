@@ -19,6 +19,7 @@
 - [Protein Binder Design](protein_binder_design.md) — Design proteins that bind a target protein using Proteina-Complexa
 - [Ligand Binder Design](ligand_binder_design.md) — Design proteins that bind a small molecule using Proteina-Complexa-Ligand
 - [Motif Scaffolding](motif_scaffolding.md) — Transplant functional motifs into new protein scaffolds
+- [Guided Enzyme Optimization](enzyme_optimization.md) — Reward-weighted optimization loop on top of motif scaffolding; scores each candidate on motif fidelity, fold confidence, optional substrate complex, and four developability axes (solubility, anchor-relative half-life, melting temperature, immunogenic burden). Two generation modes: **Fast** (default, ~30 min, no GPU cost — endpoint-based AME with parent resampling between iterations) and **Accurate** (~30-60 min, ~$22 GPU — in-process AME with Feynman-Kac steering biasing diffusion toward developability)
 - [ADMET & Safety](admet_safety.md) — Profile molecules for drug-like properties and toxicity using ChemProp
 
 ## Single Cell

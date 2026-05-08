@@ -151,7 +151,7 @@ for row in job_ids_df:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC #### Grant READ VOLUME on all volumes in the schema
+# MAGIC #### Grant READ VOLUME and WRITE VOLUME on all volumes in the schema
 
 # COMMAND ----------
 
@@ -160,6 +160,16 @@ try:
     print(f"Granted READ VOLUME on schema {catalog}.{schema}")
 except Exception as e:
     print(f"Warning: Could not grant READ VOLUME on schema: {e}")
+
+# WRITE VOLUME is required so the app can upload per-run inputs (e.g. the
+# motif PDB the Guided Enzyme Optimization form persists to UC before
+# dispatching the orchestrator job — otherwise the form errors with
+# "Failed to dispatch job: [Errno 13] Permission denied: '/Volumes'").
+try:
+    spark.sql(f"GRANT WRITE VOLUME ON SCHEMA {catalog}.{schema} TO `{app_sp_id}`")
+    print(f"Granted WRITE VOLUME on schema {catalog}.{schema}")
+except Exception as e:
+    print(f"Warning: Could not grant WRITE VOLUME on schema: {e}")
 
 # COMMAND ----------
 

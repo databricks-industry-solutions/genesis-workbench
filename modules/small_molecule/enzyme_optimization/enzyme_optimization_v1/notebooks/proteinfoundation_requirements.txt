@@ -1,0 +1,77 @@
+# Pinned dep list for the Accurate-path's in-process AME load.
+#
+# Used only when use_inprocess_ame=true (the orchestrator's GPU-cluster job).
+# install_proteinfoundation_if_needed() in utils.py reads this file and pip-
+# installs every line with --find-links on the PyG cu126 wheel index.
+#
+# All pins are exact (==), per the GWB project rule. If a pin falls out of
+# PyPI in the future, update the line and re-run the Accurate-path E2E to
+# verify nothing else broke. Don't loosen pins — install reproducibility is
+# the whole point.
+
+# ── Core PyTorch + Lightning stack ─────────────────────────────────────────
+# torch==2.7.0 (NOT 2.7.1) so its C++ ABI matches the PyG cu126 wheels at
+# data.pyg.org/whl/torch-2.7.0+cu126.html. Mismatching torch (2.7.1) and
+# torch_scatter (compiled against 2.7.0) produces an undefined-symbol
+# OSError on first import — bit us in Accurate-path E2E run #2.
+torch==2.7.0
+lightning==2.6.1
+
+# ── Hydra + OmegaConf for inf_cfg construction ─────────────────────────────
+hydra-core==1.3.1
+omegaconf==2.3.0
+
+# ── PyG (CUDA-12.6 wheels via --find-links) ────────────────────────────────
+torch_geometric==2.7.0
+torch_scatter==2.1.2
+torch_sparse==0.6.18
+torch_cluster==1.6.3
+
+# ── Structural + biology stack ─────────────────────────────────────────────
+biotite==1.4.0    # locked by atomworks 2.2.0 (it pins biotite==1.4.0 transitively)
+biopython==1.84
+biopandas==0.5.1
+mdtraj==1.10.3
+prody==2.6.1
+
+# ── Loralib + einops + jaxtyping (Proteina internals) ──────────────────────
+loralib==0.1.2
+einops==0.8.2
+jaxtyping==0.2.36
+
+# ── Transformers — pin accelerate to last 0.x; transformers 5.5.0 imports
+# AlignDevicesHook which accelerate >= 1.0 removed.
+transformers==5.5.0
+accelerate==0.34.2
+
+# ── JAX (CPU build is fine; AME is on torch, jax is only a soft dep) ───────
+jax==0.4.35
+
+# ── Databricks SDK + SQL connector (needed by genesis_workbench.workbench
+# to query the models table — basic deps the Fast-path %pip cell normally
+# handles. Accurate path skips that cell so we install them here.)
+databricks-sdk==0.50.0
+databricks-sql-connector==4.0.2
+
+# ── Misc / utility (these come up in proteinfoundation's import chain) ─────
+atomworks==2.2.0
+colabdesign==1.1.1
+loguru==0.7.3
+cpdb-protein==0.2.1
+deepdiff==7.0.1
+dm-tree==0.1.8
+h5py==3.12.1
+ml-collections==0.1.1
+modin==0.32.0
+multipledispatch==1.0.0
+plotly==5.24.1
+pydantic==2.10.4
+python-dotenv==1.0.1
+rich==13.9.4
+rich-click==1.8.5
+seaborn==0.13.2
+wandb==0.18.7
+wget==3.2
+xarray==2024.11.0
+toolz==1.0.0
+openbabel-wheel==3.1.1.20

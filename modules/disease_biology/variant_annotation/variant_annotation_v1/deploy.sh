@@ -34,6 +34,13 @@ databricks fs mkdirs "dbfs:/Volumes/$core_catalog_name/$core_schema_name/variant
 databricks fs cp data/ACMG_SFv3.2_GRCh38.bed "dbfs:/Volumes/$core_catalog_name/$core_schema_name/variant_annotation_reference/acmg/ACMG_SFv3.2_GRCh38.bed" --overwrite
 
 echo ""
+echo "▶️ [Variant Annotation] Uploading sample pathogenic VCF to data volume"
+echo ""
+
+databricks fs mkdirs "dbfs:/Volumes/$core_catalog_name/$core_schema_name/variant_annotation_data/sample"
+databricks fs cp data/brca_pathogenic_corrected.vcf "dbfs:/Volumes/$core_catalog_name/$core_schema_name/variant_annotation_data/sample/brca_pathogenic_corrected.vcf" --overwrite
+
+echo ""
 echo "▶️ [Variant Annotation] Running initial setup job"
 echo "🚨 This job will download ClinVar and set up reference data. See Jobs & Pipeline tab for status"
 echo ""

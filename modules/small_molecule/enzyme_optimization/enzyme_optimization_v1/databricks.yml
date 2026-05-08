@@ -1,0 +1,81 @@
+bundle:
+  name: genesis_workbench_enzyme_optimization
+  databricks_cli_version: ">=0.295.*"
+
+include:
+  - variables.yml
+  - resources/*.yml
+
+targets:
+  prod_aws:
+    mode: production
+    default: true
+    workspace:
+      root_path: ${var.current_working_directory}
+    permissions:
+      - user_name: ${var.current_user}
+        level: CAN_MANAGE
+    run_as:
+      user_name: ${var.current_user}
+    resources:
+      jobs:
+        run_enzyme_optimization:
+          job_clusters:
+            - job_cluster_key: enzyme_optimization_cpu_cluster
+              new_cluster:
+                aws_attributes:
+                  availability: ON_DEMAND
+        run_enzyme_optimization_inprocess_ame:
+          job_clusters:
+            - job_cluster_key: enzyme_optimization_a10_gpu_cluster
+              new_cluster:
+                aws_attributes:
+                  availability: ON_DEMAND
+
+  prod_azure:
+    mode: production
+    workspace:
+      root_path: ${var.current_working_directory}
+    permissions:
+      - user_name: ${var.current_user}
+        level: CAN_MANAGE
+    run_as:
+      user_name: ${var.current_user}
+    resources:
+      jobs:
+        run_enzyme_optimization:
+          job_clusters:
+            - job_cluster_key: enzyme_optimization_cpu_cluster
+              new_cluster:
+                azure_attributes:
+                  availability: ON_DEMAND_AZURE
+        run_enzyme_optimization_inprocess_ame:
+          job_clusters:
+            - job_cluster_key: enzyme_optimization_a10_gpu_cluster
+              new_cluster:
+                azure_attributes:
+                  availability: ON_DEMAND_AZURE
+
+  prod_gcp:
+    mode: production
+    workspace:
+      root_path: ${var.current_working_directory}
+    permissions:
+      - user_name: ${var.current_user}
+        level: CAN_MANAGE
+    run_as:
+      user_name: ${var.current_user}
+    resources:
+      jobs:
+        run_enzyme_optimization:
+          job_clusters:
+            - job_cluster_key: enzyme_optimization_cpu_cluster
+              new_cluster:
+                gcp_attributes:
+                  availability: ON_DEMAND_GCP
+        run_enzyme_optimization_inprocess_ame:
+          job_clusters:
+            - job_cluster_key: enzyme_optimization_a10_gpu_cluster
+              new_cluster:
+                gcp_attributes:
+                  availability: ON_DEMAND_GCP

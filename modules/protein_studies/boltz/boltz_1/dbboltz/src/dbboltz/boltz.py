@@ -57,7 +57,10 @@ DEFAULT_PARAMS = {
     'l2_distance_threshold':2.0,
     'diffusion_samples': 1,
     'recycling_steps': 3,
-    'sampling_steps': 200,
+    # 200 → 100: Boltz paper's "fast" preset; ~50% wall-clock reduction,
+    # < 1 Å RMSD impact on protein-protein + protein-ligand. Per-call override
+    # via model_input dict still works (config-merge is below in run_boltz).
+    'sampling_steps': 100,
 }
 
 
