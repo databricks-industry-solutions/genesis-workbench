@@ -605,12 +605,24 @@ with ingestion_tab:
                 ingest_vcf_resolved = ingest_vc_runs_df.iloc[picker_rows[0]]["output_vcf"]
                 st.caption(f"Selected VCF: `{ingest_vcf_resolved}`")
 
+    _default_ingest_vcf = (
+        f"/Volumes/{os.getenv('CORE_CATALOG_NAME', 'catalog')}"
+        f"/{os.getenv('CORE_SCHEMA_NAME', 'schema')}"
+        f"/variant_annotation_data/sample/brca_pathogenic_corrected.vcf"
+    )
+
     with st.form("ingestion_form", enter_to_submit=False):
         if ingest_vcf_source == "Enter Path":
             ingest_vcf_input = st.text_input(
                 "VCF file path (UC Volume):",
+                value=_default_ingest_vcf,
                 placeholder="/Volumes/catalog/schema/volume/variants.vcf",
-                help="Path to VCF file in a UC Volume"
+                help=(
+                    "Path to VCF file in a UC Volume. The default points at a "
+                    "small BRCA1/BRCA2 pathogenic sample shipped with the "
+                    "deploy — useful for a one-click demo. Replace with your "
+                    "own VCF for real work."
+                ),
             )
         else:
             ingest_vcf_input = st.text_input(

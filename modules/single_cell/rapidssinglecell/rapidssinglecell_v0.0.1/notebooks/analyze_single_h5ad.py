@@ -9,14 +9,14 @@
 # COMMAND ----------
 
 # MAGIC %pip install --extra-index-url=https://pypi.nvidia.com \
-# MAGIC   cudf-cu12==25.10.* dask-cudf-cu12==25.10.* cuml-cu12==25.10.* \
-# MAGIC   cugraph-cu12==25.10.* nx-cugraph-cu12==25.10.* cuxfilter-cu12==25.10.* \
-# MAGIC   cucim-cu12==25.10.* pylibraft-cu12==25.10.* raft-dask-cu12==25.10.* \
-# MAGIC   cuvs-cu12==25.10.* nx-cugraph-cu12==25.10.*
+# MAGIC   cudf-cu12==25.10.00 dask-cudf-cu12==25.10.00 cuml-cu12==25.10.00 \
+# MAGIC   cugraph-cu12==25.10.00 nx-cugraph-cu12==25.10.00 cuxfilter-cu12==25.10.00 \
+# MAGIC   cucim-cu12==25.10.00 pylibraft-cu12==25.10.00 raft-dask-cu12==25.10.00 \
+# MAGIC   cuvs-cu12==25.10.00
 
-# MAGIC %pip install cupy-cuda12x
+# MAGIC %pip install cupy-cuda12x==13.6.0
 
-# MAGIC %pip install 'rapids-singlecell[rapids12]' scikit-learn==1.5.2 numpy==1.26.4 --extra-index-url=https://pypi.nvidia.com #CUDA12
+# MAGIC %pip install rapids-singlecell==0.14.1 scikit-learn==1.5.2 numpy==1.26.4
 
 # MAGIC %restart_python
 

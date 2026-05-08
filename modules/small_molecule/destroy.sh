@@ -34,7 +34,7 @@ echo "Extra Params: $EXTRA_PARAMS"
 
 echo "⚙️ Starting destroy of module Small Molecule"
 
-ALL_SUBMODULES=(chemprop/chemprop_v2 diffdock/diffdock_v1 proteina_complexa/proteina_complexa_v1)
+ALL_SUBMODULES=(chemprop/chemprop_v2 diffdock/diffdock_v1 proteina_complexa/proteina_complexa_v1 netsolp/netsolp_v1 pltnum/pltnum_v1 deepstabp/deepstabp_v1 mhcflurry/mhcflurry_v2 enzyme_optimization/enzyme_optimization_v1)
 
 if [[ -n "$ONLY_SUBMODULE" ]]; then
     found=false

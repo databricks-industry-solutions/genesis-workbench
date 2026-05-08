@@ -50,11 +50,22 @@ WORKFLOW_DESCRIPTION = (
 
 
 def _hit_proteinmpnn(pdb_str: str) -> list:
-    """Call ProteinMPNN endpoint."""
+    """Call ProteinMPNN endpoint.
+
+    The V8 ProteinMPNN PyFunc has a two-column signature (`pdb` required +
+    `fixed_positions` optional, JSON-encoded). Sending the legacy
+    ``inputs=[pdb_str]`` shape gets rejected by MLflow's schema enforcement.
+    Use ``dataframe_records`` with the named columns; ``fixed_positions=""``
+    means "no motif preservation" — the default for the Motif Scaffolding tab,
+    which lets ProteinMPNN redesign every residue.
+    """
     from utils.streamlit_helper import get_endpoint_name
     from utils.small_molecule_tools import _query_endpoint
     endpoint_name = get_endpoint_name("ProteinMPNN")
-    result = _query_endpoint(endpoint_name, {"inputs": [pdb_str]})
+    result = _query_endpoint(
+        endpoint_name,
+        {"dataframe_records": [{"pdb": pdb_str, "fixed_positions": ""}]},
+    )
     return result.get("predictions", result)
 
 
