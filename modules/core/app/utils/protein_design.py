@@ -108,7 +108,32 @@ def hit_boltz(sequence, msa="no_msa", use_msa_server="True", timeout_seconds=Non
 
 @mlflow.trace(span_type="TOOL")
 def hit_proteinmpnn(pdb_str):
-    return hit_model_endpoint('ProteinMPNN', [pdb_str])
+    """Call the ProteinMPNN endpoint with the V8 named-column schema.
+
+    V8's MLflow signature has two columns: ``pdb`` (string, required) and
+    ``fixed_positions`` (string, JSON-encoded ``{chain: [res, ...]}`` or
+    empty for "redesign every residue"). Sending the legacy
+    ``inputs=[pdb_str]`` shape gets rejected by MLflow's schema enforcement
+    (silently — the orchestrator's broad ``except`` masks it as
+    "ProteinMPNN optimization failed for N/N scaffold(s)").
+
+    For callers that need to preserve a motif, use the orchestrator's
+    ``call_proteinmpnn(pdb_str, fixed_positions={chain: [...]})`` in
+    ``modules/small_molecule/enzyme_optimization/enzyme_optimization_v1/notebooks/utils.py``
+    — that one JSON-encodes the dict before sending.
+    """
+    endpoint_name = get_endpoint_name('ProteinMPNN')
+    try:
+        logger.info(f"Sending request to model endpoint: {endpoint_name}")
+        response = workspace_client.serving_endpoints.query(
+            name=endpoint_name,
+            dataframe_records=[{"pdb": pdb_str, "fixed_positions": ""}],
+        )
+        logger.info("Received response from model endpoint")
+        return response.predictions
+    except Exception as e:
+        logger.error(f"Error querying ProteinMPNN: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
 
 @mlflow.trace(span_type="TOOL")
 def extract_chain_reindex(structure, chain_id='A'):

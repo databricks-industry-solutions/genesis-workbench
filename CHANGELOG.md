@@ -1,5 +1,90 @@
 # Genesis Workbench — Changelog
 
+## guided_enzyme_creation (2026-05-07) — Phase 1.6: Batch-workflow pattern + Variant Annotation per-run tables
+
+### Batch-workflow pattern, formalized
+
+The "form → job → MLflow → search past runs → result dialog" shape that AlphaFold, Disease Biology (GWAS / Variant Annotation), and Scanpy already used is now an explicit, named pattern — and Guided Enzyme Optimization has been retrofitted onto it. New skill file `claude_skills/SKILL_GENESIS_WORKBENCH_BATCH_WORKFLOW_PATTERN.md` codifies the five layers (orchestrator job, registration, dispatcher, search past runs, result dialog) with the canonical reference being the enzyme-optimization stack. `CLAUDE.md` adds a row pointing to it.
+
+This is the third pass on this pattern. Each retrofit fixed a real bug from the prior shape:
+
+- **MLflow run is pre-created from the dispatcher** (Disease-Biology pattern, now adopted by enzyme_optimization). Without it, cluster cold-start + `pip install` (3–5 min on the Accurate path) leaves *Search Past Runs* empty even though the job is in flight. The dispatcher tags `origin=genesis_workbench`, `feature=enzyme_optimization`, `created_by=<user>`, `job_status=submitted`, logs `generation_mode` + scaffold/sample/iteration params, then passes the new `mlflow_run_id` job parameter so the orchestrator attaches via `mlflow.start_run(run_id=...)` instead of creating its own.
+- **Dispatcher returns `(job_id, job_run_id)` not `(job_id, run_id)`.** They are different things — the int job-run id versus the hex MLflow run id — and conflating them is what broke MLflow artifact retrieval in earlier passes. The launch view now shows the `job_run_id` and a "View Run" button; *Search Past Runs* discovers the MLflow run via tags.
+- **Inline auto-polling result pane is gone.** Replaced with the AlphaFold-style success-message + *Search Past Runs* dialog. The dialog renders a live composite-reward chart, top-K candidates table, per-candidate Mol* viewer, eight-metric grid, and PDB download. New module-level helpers (`_is_viewable_status`, `_set_selected_enzyme_opt_run_status`, `_display_enzyme_opt_result_dialog`) keep the dialog decorator usable; the search helpers (`search_enzyme_optimization_runs_by_experiment_name`, `search_enzyme_optimization_runs_by_run_name`) live in `enzyme_optimization_tools.py`.
+- **New `register_enzyme_optimization_job` notebook + DAB resource.** Without it the app SP doesn't have `CAN_MANAGE_RUN` and `WorkspaceClient().jobs.list(name=...)` returns empty from the app context — the dispatcher errored with "Orchestrator job '...' not found." Pattern matches the existing `register_*` notebooks.
+
+### Apps-sandbox-safe UC volume writes
+
+`_write_motif_pdb_to_volume` (the helper that persists the user's motif PDB before dispatching the job) used to do `os.makedirs(...) ; open(path, "w")`. That works in a Databricks notebook, but Databricks Apps run in a sandboxed container that does **not** have POSIX access to `/Volumes/...` — `open(...)` raises `PermissionError: [Errno 13] Permission denied: '/Volumes'`. Switched to the SDK's Files API (`WorkspaceClient().files.upload(...)`) which uploads via the workspace's UC backend with the app SP's auth and auto-creates intermediate directories. Same pattern is now the canonical "write to a volume from a Databricks App" recipe.
+
+`grant_app_permissions.py` correspondingly grants `WRITE VOLUME` (in addition to `READ VOLUME`) on the schema to the app SP — without it the SDK upload still 403s.
+
+### `dataframe_records` everywhere for serving endpoints
+
+All four developability endpoints (NetSolP / PLTNUM / DeepSTABp / MHCflurry) and ProteinMPNN V8 require the `dataframe_records=[{...}]` payload shape. The legacy `inputs=...` shape gets rejected by MLflow's schema enforcement as either "extra inputs: ['index', 'columns', 'data']" (when split-orient) or as a tensor mismatch. Updates:
+
+- `enzyme_optimization_tools.py:_query_predictor` switched to `dataframe_records` and now passes a list of named-column records explicitly.
+- `protein_design.py:hit_proteinmpnn` rewritten to V8's two-column schema (`pdb` + `fixed_positions`, JSON-encoded). The orchestrator's broad `except` was masking the schema-mismatch as "ProteinMPNN optimization failed for N/N scaffold(s)."
+- `motif_scaffolding.py:_hit_proteinmpnn` updated for the same V8 schema with `fixed_positions=""` (no motif preservation — that tab redesigns every residue).
+
+### Default 6-allele HLA panel centralized in app
+
+`enzyme_optimization_tools.py` now exports `_DEFAULT_MHC_ALLELES = "HLA-A*02:01,HLA-A*01:01,HLA-B*07:02,HLA-B*44:02,HLA-C*07:01,HLA-C*04:01"` (the Sette-style 6-allele panel covering ~95% of the global population), matching the default in the orchestrator's `utils.py:call_mhcflurry`. Single source of truth.
+
+### Variant Annotation — per-run tables refactor
+
+The variant_annotation flow used to write to global tables (`*_variants_with_pathogenic`, `*_pathogenic`, `*_annotated`) with a `run_name` discriminator column, deduped via `MERGE INTO ... WHERE run_name = ...`. Two problems: (a) Glow's VCF-INFO struct shape can drift between runs (different variants → different INFO fields), causing `MERGE INTO` schema-evolution failures, and (b) the `run_name`-only key doesn't disambiguate concurrent runs with the same name from different users.
+
+Notebooks `01_spike_pathogenic_variants.py`, `02_filter_and_annotate.py`, and `03_save_results.py` rewritten to write to **deterministic per-run table names**: `<base>__<sanitized_run_name>_<mlflow_run_id_prefix>`. The sanitizer lowercases + collapses non-alphanumeric to `_`, caps at 40 chars; the run-id prefix is the first 8 chars of the MLflow run id. Each run owns its own three tables — Glow's struct drift can't collide across runs, concurrent runs are disjoint, and `DROP TABLE` is the cleanup story instead of `DELETE WHERE`.
+
+App-side, `pull_annotation_results(run_id, run_name)` in `disease_biology.py` reads the new `pathogenic_table` MLflow tag/param set by `03_save_results.py` and falls back to reconstructing the name from `(run_name, run_id)` if the tag is absent (older runs).
+
+`deploy.sh` updated; new `data/brca_pathogenic_corrected.vcf` checked in for spike-step testing.
+
+### `deploy_model.py` — apostrophes in deployment_description
+
+`MERGE INTO {catalog}.{schema}.model_deployments` was breaking with `PARSE_SYNTAX_ERROR` whenever a model's `deployment_description` contained an apostrophe — DeepSTABp's `"mt_mode ('Cell' or 'Lysate', default 'Cell')"` was the trigger. Added a local `_sql_escape()` helper that doubles internal single quotes; mirrors the `_sql_val` helper in `genesis_workbench/models.py`. Copy-pasted rather than imported because `deploy_model.py` runs before the `genesis_workbench` library is on the cluster's path. Numeric / identifier interpolations stay raw (trusted bundle vars or Python ints/bools).
+
+### Single-cell processing — annotation cache UX
+
+`processing.py:_display_results_viewer`: when loading a saved SCimilarity annotation from MLflow, real exceptions (auth, network, malformed JSON) are now stashed in `annotation_load_error_<run_id>` and surfaced as a yellow `st.warning(...)` so the user knows whether to retry or annotate fresh. The "artifact absent" case stays silent — the *Annotate Clusters* button is the right action.
+
+Bigger fix: when overlaying annotation labels onto the UMAP, the original cluster column is no longer mutated. Mutating it fed back into a subsequent `annotate_clusters` call (which reads `df[cluster_col].unique()`) and compounded the label, e.g. `"0 - classical monocyte"` → `"0 - classical monocyte - classical monocyte"` on the second annotation pass. The annotated labels now live in a sibling column `<cluster_col> (annotated)`.
+
+### Workflow diagrams
+
+New rendered workflow images for the in-app `documentation/enzyme_optimization.md` page: `enzyme_optimization_workflow_fast.{mmd,png,svg}` and `enzyme_optimization_workflow_accurate.{mmd,png,svg}` (plus a generic `enzyme_optimization_workflow.{mmd,png,svg}`). The .md doc embeds the PNGs at the top of each mode's section so the help-page reader can see the topology before reading the prose.
+
+### Files added / modified
+
+| Path | Change |
+|---|---|
+| `claude_skills/SKILL_GENESIS_WORKBENCH_BATCH_WORKFLOW_PATTERN.md` *(new)* | Five-layer batch-workflow pattern with anti-patterns from real bugs and copy-paste-ready references. |
+| `CLAUDE.md` | New row pointing to the batch-workflow-pattern skill. |
+| `modules/core/app/utils/enzyme_optimization_tools.py` | Pre-create MLflow run from dispatcher; SDK Files API for volume writes; `dataframe_records` payload; return `(job_id, job_run_id)`; default HLA panel; `search_*_runs_by_*` helpers. |
+| `modules/core/app/views/small_molecule_workflows/enzyme_optimization.py` | Replaced inline auto-polling pane with success-message + Search-Past-Runs dialog; live progress chart + top-K table + per-candidate Mol* viewer + 8-metric grid + PDB download. |
+| `modules/small_molecule/enzyme_optimization/enzyme_optimization_v1/notebooks/register_enzyme_optimization_job.py` *(new)* | Registration notebook so the app SP gets `CAN_MANAGE_RUN` on the orchestrator. |
+| `…/resources/register_enzyme_optimization_job.yml` *(new)* | DAB resource for the registration job. |
+| `…/notebooks/01_run_optimization.py` | Reads new `mlflow_run_id` widget; attaches via `start_run(run_id=...)` when set, else creates new; emits progressive `job_status` tags. |
+| `…/resources/run_optimization.yml`, `…/variables.yml`, `…/deploy.sh` | New `mlflow_run_id` job parameter; supporting bundle wiring. |
+| `modules/core/notebooks/grant_app_permissions.py` | Grants `WRITE VOLUME` on the schema to the app SP (was only `READ VOLUME`). |
+| `modules/core/notebooks/deploy_model.py` | New `_sql_escape()` for apostrophe-safe `MERGE INTO model_deployments`. |
+| `modules/core/app/utils/disease_biology.py` | `pull_annotation_results` reads `pathogenic_table` tag, reconstructs deterministic per-run name as fallback. |
+| `modules/core/app/utils/protein_design.py` | `hit_proteinmpnn` rewritten to ProteinMPNN V8's `dataframe_records` two-column schema. |
+| `modules/core/app/utils/single_cell_analysis.py` | Annotation save/load tightened with explicit error path. |
+| `modules/core/app/views/single_cell_workflows/processing.py` | Annotation load error surfaced; annotated cluster labels written to sibling column to prevent compound-on-rerun. |
+| `modules/core/app/views/small_molecule_workflows/motif_scaffolding.py` | ProteinMPNN call updated to V8 `dataframe_records` schema. |
+| `modules/core/app/views/disease_biology.py` | Variant-annotation results dialog reads from per-run table. |
+| `modules/disease_biology/variant_annotation/variant_annotation_v1/notebooks/{01_spike_pathogenic_variants,02_filter_and_annotate,03_save_results}.py` | Per-run tables; `pathogenic_table` tag set by `03`. |
+| `…/variant_annotation_v1/deploy.sh` | Per-run-tables bundle wiring. |
+| `…/variant_annotation_v1/data/brca_pathogenic_corrected.vcf` *(new)* | Spike-step test fixture. |
+| `modules/core/app/documentation/enzyme_optimization.md` | Embeds the new Fast / Accurate workflow PNGs at the top of each mode's section. |
+| `modules/core/app/images/enzyme_optimization_workflow{,_fast,_accurate}.{mmd,png,svg}` *(new)* | Rendered workflow diagrams. |
+| `docs/streamlit-to-react-migration-analysis.md` *(new)* | Feasibility analysis for a future React+FastAPI rewrite of the Streamlit app. Scoping document, not a planned deliverable. |
+| `modules/single_cell/{rapidssinglecell,scanpy}/.../notebooks/*.py` | Minor in-line fixes supporting the per-run / cache-busting work above. |
+
+---
+
 ## guided_enzyme_creation (2026-05-06) — Phase 1.5: Generation-mode toggle (Fast / Accurate)
 
 ### New: Fast vs Accurate generation modes for Guided Enzyme Optimization

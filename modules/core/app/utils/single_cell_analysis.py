@@ -153,24 +153,43 @@ ANNOTATION_ARTIFACT_NAME = "scimilarity_annotation.json"
 
 
 def save_singlecell_annotation(run_id: str, results_df: pd.DataFrame, cluster_col: str) -> None:
-    """Log SCimilarity cluster annotation results as an artifact on an MLflow run.
+    """Log SCimilarity cluster annotation as ``ANNOTATION_ARTIFACT_NAME`` on the run.
 
-    Writes ANNOTATION_ARTIFACT_NAME into the run so subsequent viewers can
-    render annotations without re-running `annotate_clusters`.
+    Uses ``MlflowClient.log_artifact`` directly. ``mlflow.start_run(run_id=...)``
+    raises "Cannot start run with ID X because active run ID does not match
+    environment run ID" inside the Databricks Apps runtime, which injects
+    ``MLFLOW_RUN_ID`` into the process so its own fluent calls work; the
+    MlflowClient API ignores that env var and accepts run_id as an explicit
+    argument. Re-running with the same artifact name overwrites the previous
+    artifact on the run.
     """
+    import json
+
     mlflow.set_registry_uri("databricks-uc")
     mlflow.set_tracking_uri("databricks")
 
+    client = MlflowClient()
     payload = {
         "cluster_col": cluster_col,
         "results": results_df.to_dict(orient="list"),
     }
-    with mlflow.start_run(run_id=run_id):
-        mlflow.log_dict(payload, ANNOTATION_ARTIFACT_NAME)
+    with tempfile.TemporaryDirectory() as tmp:
+        local = os.path.join(tmp, ANNOTATION_ARTIFACT_NAME)
+        with open(local, "w") as f:
+            json.dump(payload, f)
+        client.log_artifact(run_id=run_id, local_path=local)
 
 
 def download_singlecell_annotation(run_id: str):
-    """Return (results_df, cluster_col) if the run has a saved annotation, else (None, None)."""
+    """Return (results_df, cluster_col) if the run has a saved annotation, else (None, None).
+
+    Distinguishes "no annotation present" (artifact missing) from real failures
+    (auth, network, malformed JSON) — the former returns (None, None); the
+    latter re-raises so the UI can surface a meaningful error instead of
+    silently dropping the user's annotation.
+    """
+    from mlflow.exceptions import MlflowException
+
     mlflow.set_registry_uri("databricks-uc")
     mlflow.set_tracking_uri("databricks")
     client = MlflowClient()
@@ -181,7 +200,17 @@ def download_singlecell_annotation(run_id: str):
             import json as _json
             with open(local_file, "r") as f:
                 payload = _json.load(f)
-    except Exception:
+    except MlflowException as e:
+        # MLflow's client raises this for both "artifact does not exist" and
+        # other server errors. Treat the not-found case as "no annotation",
+        # but re-raise everything else so the UI can show a real error.
+        msg = str(e).lower()
+        if "does not exist" in msg or "not found" in msg or "resource_does_not_exist" in msg:
+            return None, None
+        raise
+    except FileNotFoundError:
+        # download_artifacts() can also surface as a plain FileNotFoundError
+        # when the artifact path is absent in the run's artifact tree.
         return None, None
 
     results = payload.get("results")

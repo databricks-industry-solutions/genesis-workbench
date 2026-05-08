@@ -304,7 +304,10 @@ def _display_results_viewer():
     prev_run_id = st.session_state.get('singlecell_run_id')
     if prev_run_id and prev_run_id != run_id:
         for key in ['singlecell_df', 'singlecell_run_id', 'singlecell_mlflow_url',
-                     f'annotation_{prev_run_id}', f'annotation_cluster_col_{prev_run_id}']:
+                     f'annotation_{prev_run_id}',
+                     f'annotation_cluster_col_{prev_run_id}',
+                     f'annotation_loaded_{prev_run_id}',
+                     f'annotation_load_error_{prev_run_id}']:
             st.session_state.pop(key, None)
 
     if load_button:
@@ -375,15 +378,36 @@ def _display_results_viewer():
 
         annotation_cache_key = f"annotation_{run_id}"
         annotation_loaded_key = f"annotation_loaded_{run_id}"
+        annotation_load_error_key = f"annotation_load_error_{run_id}"
 
         # Try loading a previously saved annotation from the MLflow run (once per run_id).
+        # Real errors (auth, network, malformed JSON) are stashed in session state so
+        # the user sees a meaningful error message instead of "annotate again from
+        # scratch". The "not found" case (artifact absent) is silent — the UI's
+        # "Annotate Clusters" button is the right action in that case.
         if annotation_cache_key not in st.session_state and annotation_loaded_key not in st.session_state:
             st.session_state[annotation_loaded_key] = True
-            saved_results, saved_cluster_col = download_singlecell_annotation(run_id)
+            try:
+                saved_results, saved_cluster_col = download_singlecell_annotation(run_id)
+            except Exception as load_err:
+                saved_results, saved_cluster_col = None, None
+                st.session_state[annotation_load_error_key] = str(load_err)
             if saved_results is not None and not saved_results.empty:
                 st.session_state[annotation_cache_key] = saved_results
                 if saved_cluster_col:
                     st.session_state[f"annotation_cluster_col_{run_id}"] = saved_cluster_col
+
+        # Surface load outcome so the user knows what happened.
+        if annotation_cache_key in st.session_state:
+            st.caption(
+                "ℹ️ Loaded saved cell-type annotation from this MLflow run. "
+                "Re-run the annotation below to overwrite, or skip it to keep this one."
+            )
+        elif st.session_state.get(annotation_load_error_key):
+            st.warning(
+                f"Could not load saved annotation from MLflow: "
+                f"{st.session_state[annotation_load_error_key]}"
+            )
 
         @st.fragment
         def _umap_fragment():
@@ -433,15 +457,21 @@ def _display_results_viewer():
 
             # --- Prepare annotation overlay if available ---
             has_annotation = annotation_cache_key in st.session_state
+            annotated_cluster_col = None
             if has_annotation:
                 anno_results = st.session_state[annotation_cache_key]
                 anno_cluster_col = st.session_state.get(f"annotation_cluster_col_{run_id}", _get_cluster_column(df))
                 if anno_cluster_col:
                     cluster_to_type = dict(zip(anno_results["Cluster"].astype(str), anno_results["Predicted Cell Type"]))
                     df["Predicted Cell Type"] = df[anno_cluster_col].astype(str).map(cluster_to_type).fillna("Unknown")
-                    # Rename cluster labels to "<id> - <Predicted Type>"
+                    # Build a side-by-side labeled column. Mutating the original
+                    # cluster column would feed back into a subsequent
+                    # annotate_clusters call (which reads df[cluster_col].unique())
+                    # and compound the label, e.g. "0 - classical monocyte" →
+                    # "0 - classical monocyte - classical monocyte".
                     cluster_to_label = {k: f"{k} - {v}" for k, v in cluster_to_type.items()}
-                    df[anno_cluster_col] = df[anno_cluster_col].astype(str).map(cluster_to_label).fillna(df[anno_cluster_col].astype(str))
+                    annotated_cluster_col = f"{anno_cluster_col} (annotated)"
+                    df[annotated_cluster_col] = df[anno_cluster_col].astype(str).map(cluster_to_label).fillna(df[anno_cluster_col].astype(str))
 
             # --- UMAP color controls ---
             color_options = ["Cluster", "Marker Gene", "QC Metric"]
@@ -456,8 +486,15 @@ def _display_results_viewer():
                     color_col = "Predicted Cell Type"
                     st.selectbox("Column:", ["Predicted Cell Type"], disabled=True)
                 elif color_type == "Cluster":
-                    cluster_options = [c for c in obs_categorical if c in ['leiden', 'louvain', 'cluster']]
-                    if not cluster_options: cluster_options = obs_categorical
+                    if annotated_cluster_col:
+                        # Default to the annotated label so the legend shows
+                        # "0 - classical monocyte" while the underlying raw
+                        # cluster column stays clean for re-annotation.
+                        cluster_options = [annotated_cluster_col]
+                    else:
+                        cluster_options = [c for c in obs_categorical if c in ['leiden', 'louvain', 'cluster']]
+                        if not cluster_options:
+                            cluster_options = obs_categorical
                     color_col = st.selectbox("Select cluster column:", cluster_options if cluster_options else ['leiden'])
                 elif color_type == "Marker Gene":
                     cluster_col = _get_cluster_column(df)

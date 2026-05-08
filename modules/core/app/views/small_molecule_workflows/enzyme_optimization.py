@@ -12,7 +12,6 @@ Form → `start_enzyme_optimization_job` → MLflow run → polling results view
 from __future__ import annotations
 
 import json
-import time
 from datetime import datetime
 from typing import Any, Dict, List
 
@@ -20,7 +19,11 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-from utils.streamlit_helper import get_user_info, open_mlflow_experiment_window
+from utils.streamlit_helper import (
+    get_user_info,
+    open_mlflow_experiment_window,
+    open_run_window,
+)
 from utils.small_molecule_tools import molstar_html_multi_pdb
 from utils.enzyme_optimization_tools import (
     DEFAULT_AXIS_WEIGHTS,
@@ -29,6 +32,8 @@ from utils.enzyme_optimization_tools import (
     load_optimization_trajectory,
     load_top_k_pdbs,
     predict_enzyme_properties,
+    search_enzyme_optimization_runs_by_experiment_name,
+    search_enzyme_optimization_runs_by_run_name,
     start_enzyme_optimization_job,
 )
 from views.small_molecule_workflows.motif_scaffolding import EXAMPLE_MOTIF_PDB
@@ -118,6 +123,137 @@ def _live_progress_chart(status: Dict[str, Any]):
         return
     df = pd.DataFrame(rows).pivot(index="iteration", columns="metric", values="reward")
     st.line_chart(df, height=200, y_label="composite reward")
+
+
+# ---------------------------------------------------------------------------
+# Search-past-runs helpers (module level so the dialog decorator works)
+# ---------------------------------------------------------------------------
+
+# Stages at which the dialog has something useful to show. `started`,
+# `warming_up`, `loading_ame`, and `iter_<N>_(generating|redesigning|scoring)`
+# are excluded — at those stages no candidate has been logged yet so the
+# trajectory + top-K artifacts don't exist.
+def _is_viewable_status(status: str) -> bool:
+    if not status:
+        return False
+    if status in ("complete", "failed"):
+        return True
+    return status.startswith("iter_") and status.endswith("_complete")
+
+
+def _set_selected_enzyme_opt_run_status():
+    selection = st.session_state["enzyme_opt_search_display_df"].selection
+    if len(selection["rows"]) > 0:
+        idx = selection["rows"][0]
+        df = st.session_state["enzyme_opt_search_result_df"]
+        st.session_state["selected_enzyme_opt_run_status"] = (
+            df.iloc[idx].get("job_status", "") if "job_status" in df.columns else ""
+        )
+    else:
+        st.session_state.pop("selected_enzyme_opt_run_status", None)
+
+
+@st.dialog("Optimization Results", width="large")
+def _display_enzyme_opt_result_dialog(selected_row_for_view):
+    from utils.enzyme_optimization_tools import (
+        get_run_status,
+        load_optimization_trajectory,
+        load_top_k_pdbs,
+    )
+
+    idx = selected_row_for_view[0]
+    row = st.session_state["enzyme_opt_search_result_df"].iloc[idx]
+    run_id = row["run_id"]
+    run_name = row.get("run_name", run_id[:12])
+    st.markdown(f"##### Run Name: {run_name}")
+
+    with st.spinner("Loading run results..."):
+        try:
+            status = get_run_status(run_id)
+        except Exception as e:
+            st.error(f"Could not load run status: {e}")
+            return
+
+        st.markdown(
+            f"**Status:** `{status.get('status', 'UNKNOWN')}` "
+            f"• stage: `{row.get('job_status', 'unknown')}`"
+        )
+
+        if status.get("experiment_id"):
+            if st.button("View in MLflow", key=f"enzyme_opt_dialog_mlflow_{run_id}"):
+                open_mlflow_experiment_window(status["experiment_id"])
+
+        _live_progress_chart(status)
+
+        try:
+            traj_df = load_optimization_trajectory(run_id)
+        except Exception as e:
+            st.warning(f"Trajectory not yet available: {e}")
+            traj_df = pd.DataFrame()
+
+        if not traj_df.empty:
+            shown = [c for c in (
+                "candidate_id", "iteration", "composite_reward",
+                "motif_rmsd", "plddt", "boltz",
+                "solubility", "half_life", "thermostab", "immuno",
+                "designed_sequence",
+            ) if c in traj_df.columns]
+            with st.expander("Top candidates (sorted by composite reward)", expanded=False):
+                st.dataframe(traj_df[shown].head(25), use_container_width=True, hide_index=True)
+
+            try:
+                top_pdbs = load_top_k_pdbs(run_id)
+            except Exception:
+                top_pdbs = {}
+            if top_pdbs:
+                cand_id = st.selectbox(
+                    "Inspect candidate:", options=list(top_pdbs.keys()),
+                    key=f"enzyme_opt_dialog_pdb_{run_id}",
+                )
+
+                # Metrics for the selected candidate, displayed above the
+                # Mol* viewer. Pulled from the same trajectory dataframe.
+                cand_rows = traj_df[traj_df["candidate_id"] == cand_id] \
+                    if "candidate_id" in traj_df.columns else pd.DataFrame()
+                if not cand_rows.empty:
+                    cand_row = cand_rows.iloc[0]
+
+                    def _fmt(val, fmt="{:.3f}"):
+                        if val is None or pd.isna(val):
+                            return "—"
+                        try:
+                            return fmt.format(float(val))
+                        except (ValueError, TypeError):
+                            return str(val)
+
+                    metrics_row1 = [
+                        ("Composite Reward", _fmt(cand_row.get("composite_reward"))),
+                        ("Motif RMSD (Å)",   _fmt(cand_row.get("motif_rmsd"))),
+                        ("pLDDT",            _fmt(cand_row.get("plddt"), "{:.1f}")),
+                        ("Boltz",            _fmt(cand_row.get("boltz"))),
+                    ]
+                    metrics_row2 = [
+                        ("Solubility",       _fmt(cand_row.get("solubility"))),
+                        ("Half-Life",        _fmt(cand_row.get("half_life"))),
+                        ("Thermostab (°C)",  _fmt(cand_row.get("thermostab"), "{:.1f}")),
+                        ("Immunogenicity",   _fmt(cand_row.get("immuno"))),
+                    ]
+                    for row in (metrics_row1, metrics_row2):
+                        cols = st.columns(len(row))
+                        for col, (label, val) in zip(cols, row):
+                            col.metric(label, val)
+
+                html = molstar_html_multi_pdb([top_pdbs[cand_id]])
+                components.html(html, height=480)
+                st.download_button(
+                    "Download candidate PDB",
+                    data=top_pdbs[cand_id],
+                    file_name=f"{cand_id}.pdb",
+                    mime="chemical/x-pdb",
+                    key=f"enzyme_opt_dialog_dl_{run_id}",
+                )
+        else:
+            st.info("No completed candidates were logged for this run.")
 
 
 # ---------------------------------------------------------------------------
@@ -339,7 +475,7 @@ def render():
         user_info = get_user_info()
         with st.spinner("Dispatching enzyme optimization job..."):
             try:
-                job_id, run_id = start_enzyme_optimization_job(
+                job_id, job_run_id = start_enzyme_optimization_job(
                     motif_pdb_str=motif_pdb,
                     motif_residues=motif_residues,
                     target_chain=target_chain,
@@ -368,73 +504,92 @@ def render():
                 st.error(f"Failed to dispatch job: {e}")
                 return
 
-        st.session_state["enzyme_opt_active_run"] = {
-            "job_id": job_id,
-            "run_id": run_id,
-            "motif_pdb": motif_pdb,
-        }
-        st.rerun()
-
-    # ─── RESULTS / POLLING VIEW (full width, below the form) ─────────────────
-    st.divider()
-    st.markdown("### Results")
-
-    active = st.session_state.get("enzyme_opt_active_run")
-    if not active:
-        st.info("Submit the form above to launch a guided enzyme optimization job. Results will appear here.")
-        return
-
-    run_id = active["run_id"]
-    job_id = active["job_id"]
-
-    try:
-        status = get_run_status(run_id)
-    except Exception as e:
-        st.warning(f"Run status not yet available (the orchestrator may still be initializing): {e}")
-        status = {"status": "PENDING", "iter_max_reward_history": [],
-                  "iter_mean_reward_history": [], "experiment_id": None}
-
-    c_status, c_btn = st.columns([3, 1])
-    with c_status:
-        st.markdown(f"**Job {job_id}** \u2022 Run **{run_id[:12]}\u2026** \u2022 Status: `{status.get('status', 'UNKNOWN')}`")
-    with c_btn:
-        if status.get("experiment_id"):
-            if st.button("View in MLflow", key="enzyme_opt_mlflow_btn"):
-                open_mlflow_experiment_window(status["experiment_id"])
-
-    _live_progress_chart(status)
-
-    traj_df = load_optimization_trajectory(run_id)
-    if not traj_df.empty:
-        st.markdown("**Top candidates (sorted by composite reward)**")
-        shown_cols = [c for c in (
-            "candidate_id", "iteration", "composite_reward",
-            "motif_rmsd", "plddt", "boltz",
-            "solubility", "half_life", "thermostab", "immuno",
-            "designed_sequence",
-        ) if c in traj_df.columns]
-        st.dataframe(
-            traj_df[shown_cols].head(25),
-            use_container_width=True, hide_index=True,
+        st.success(f"Job started with run id: {job_run_id}.")
+        st.button(
+            "View Run",
+            on_click=lambda: open_run_window(job_id, job_run_id),
+            key="enzyme_opt_view_run_btn",
         )
 
-        top_pdbs = load_top_k_pdbs(run_id)
-        if top_pdbs:
-            cand_id = st.selectbox(
-                "Inspect candidate:", options=list(top_pdbs.keys()),
-                key="enzyme_opt_pdb_selector",
-            )
-            html = molstar_html_multi_pdb([active["motif_pdb"], top_pdbs[cand_id]])
-            components.html(html, height=520)
-            st.caption(f"Showing input motif + designed scaffold {cand_id}")
+    # ─── SEARCH PAST RUNS ────────────────────────────────────────────────────
+    st.divider()
+    st.markdown("###### Search Past Runs:")
+    user_info = get_user_info()
+    s_c1, s_c2, s_c3 = st.columns([1, 1, 1], vertical_alignment="bottom")
+    with s_c1:
+        search_mode = st.pills(
+            "Search By:", ["Experiment Name", "Run Name"],
+            selection_mode="single", default="Run Name",
+            key="enzyme_opt_search_mode",
+        )
+    with s_c2:
+        search_text = st.text_input(
+            f"{search_mode} contains:", value="enzyme_opt",
+            key="enzyme_opt_search_text",
+        )
+    with s_c3:
+        search_btn = st.button("Search", key="enzyme_opt_search_btn")
 
-            st.download_button(
-                "Download candidate PDB",
-                data=top_pdbs[cand_id],
-                file_name=f"{cand_id}.pdb",
-                mime="chemical/x-pdb",
+    if search_btn:
+        with st.spinner("Searching"):
+            st.session_state.pop("enzyme_opt_search_result_df", None)
+            st.session_state.pop("selected_enzyme_opt_run_status", None)
+
+            if search_text.strip() != "":
+                if search_mode == "Experiment Name":
+                    df = search_enzyme_optimization_runs_by_experiment_name(
+                        user_email=user_info.user_email,
+                        experiment_name=search_text,
+                    )
+                else:
+                    df = search_enzyme_optimization_runs_by_run_name(
+                        user_email=user_info.user_email,
+                        run_name=search_text,
+                    )
+                if not df.empty:
+                    st.session_state["enzyme_opt_search_result_df"] = df
+                else:
+                    st.error("No results found")
+            else:
+                st.error("Provide a search text")
+
+    if "enzyme_opt_search_result_df" in st.session_state:
+        view_enabled = _is_viewable_status(
+            st.session_state.get("selected_enzyme_opt_run_status", "")
+        )
+        v_c1, v_c2, v_c3 = st.columns([1, 1, 1], vertical_alignment="bottom")
+        with v_c1:
+            view_btn = st.button(
+                "View", disabled=not view_enabled,
+                key="enzyme_opt_search_view_btn",
+                help=("Select a row first. View is enabled only for runs with at "
+                      "least one completed iteration (iter_<N>_complete, complete, "
+                      "or failed)."),
             )
 
-    if status.get("status") in (None, "PENDING", "RUNNING", "SCHEDULED", "UNKNOWN"):
-        time.sleep(8)
-        st.rerun()
+        selected_event = st.dataframe(
+            st.session_state["enzyme_opt_search_result_df"],
+            column_config={
+                "run_id": None,
+                "run_name":              st.column_config.TextColumn("Run Name"),
+                "experiment_name":       st.column_config.TextColumn("Experiment"),
+                "generation_mode":       st.column_config.TextColumn("Mode"),
+                "iter_max_reward":       st.column_config.NumberColumn(
+                    "Max Reward", format="%.3f"),
+                "iterations_completed":  st.column_config.NumberColumn(
+                    "Iterations", format="%d",
+                ),
+                "start_time":            st.column_config.DatetimeColumn("Started"),
+                "job_status":            st.column_config.TextColumn("Stage"),
+                "progress":              st.column_config.TextColumn("Progress"),
+            },
+            use_container_width=True,
+            hide_index=True,
+            on_select=_set_selected_enzyme_opt_run_status,
+            selection_mode="single-row",
+            key="enzyme_opt_search_display_df",
+        )
+
+        selected_rows = selected_event.selection.rows
+        if len(selected_rows) > 0 and view_btn:
+            _display_enzyme_opt_result_dialog(selected_rows)

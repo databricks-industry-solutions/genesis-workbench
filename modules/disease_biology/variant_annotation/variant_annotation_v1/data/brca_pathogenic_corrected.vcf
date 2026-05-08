@@ -1,0 +1,11 @@
+##fileformat=VCFv4.2
+##FILTER=<ID=PASS,Description="All filters passed">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read depth">
+##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths">
+##INFO=<ID=CLINVAR,Number=0,Type=Flag,Description="From ClinVar pathogenic">
+##contig=<ID=chr13,length=114364328>
+##contig=<ID=chr17,length=83257441>
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	NA24385
+chr17	43045709	.	AG	A	999	PASS	CLINVAR	GT:DP:AD	0/1:50:25,25
+chr13	32316462	.	TG	T	999	PASS	CLINVAR	GT:DP:AD	0/1:48:24,24

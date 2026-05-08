@@ -66,43 +66,31 @@ initialize(core_catalog_name=catalog, core_schema_name=schema, sql_warehouse_id=
 
 import mlflow
 import pyspark.sql.functions as F
+import re
 
 mlflow.set_registry_uri("databricks-uc")
 mlflow.set_tracking_uri("databricks")
 
 
-def merge_by_run_name(df, table, run_name, key_cols=("contigName", "start", "referenceAllele")):
-    """MERGE INTO table using run_name + key_cols. Same run_name updates, new inserts."""
-    df = df.withColumn("run_name", F.lit(run_name))
-    temp_view = f"_tmp_{table.split('.')[-1]}"
-    df.createOrReplaceTempView(temp_view)
+def _sanitize_run_name(name: str) -> str:
+    safe = re.sub(r"[^a-z0-9_]", "_", (name or "").lower())
+    safe = re.sub(r"_+", "_", safe).strip("_")
+    return safe[:40] if safe else "unnamed"
 
-    if not spark.catalog.tableExists(table):
-        df.write.option("overwriteSchema", "true").saveAsTable(table)
-        return
 
-    merge_on = " AND ".join([f"target.`{c}` = source.`{c}`" for c in key_cols])
-    cols = df.columns
-    update_set = ", ".join([f"target.`{c}` = source.`{c}`" for c in cols if c != "run_name"])
-    insert_cols = ", ".join([f"`{c}`" for c in cols])
-    insert_vals = ", ".join([f"source.`{c}`" for c in cols])
+def per_run_table(base: str, run_name: str, mlflow_run_id: str) -> str:
+    """Build a deterministic per-run table name. Each run gets its own
+    isolated table — eliminates the cross-run schema-drift issue Glow's
+    VCF reader caused (`INFO_CLINVAR` inferred as different struct shapes
+    on different VCFs). Suffix combines a sanitized run_name (readable
+    in UC) with the first 8 hex of mlflow_run_id (uniqueness)."""
+    return f"{base}__{_sanitize_run_name(run_name)}_{(mlflow_run_id or 'norun')[:8]}"
 
-    spark.sql(f"""
-        MERGE INTO {table} AS target
-        USING {temp_view} AS source
-        ON target.run_name = source.run_name AND {merge_on}
-        WHEN MATCHED THEN UPDATE SET {update_set}
-        WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({insert_vals})
-    """)
 
-    delete_on = " AND ".join([f"source.`{c}` = target.`{c}`" for c in key_cols])
-    spark.sql(f"""
-        DELETE FROM {table} AS target WHERE target.run_name = '{run_name}'
-        AND NOT EXISTS (
-            SELECT 1 FROM {temp_view} AS source
-            WHERE source.run_name = target.run_name AND {delete_on}
-        )
-    """)
+def write_per_run_table(df, table):
+    """Write to a per-run table; overwrites each invocation since the
+    table is exclusive to this MLflow run."""
+    df.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(table)
 
 # COMMAND ----------
 
@@ -114,10 +102,14 @@ def merge_by_run_name(df, table, run_name, key_cols=("contigName", "start", "ref
 existing_variants = spark.table(variants_table)
 original_count = existing_variants.count()
 
-output_table = f"{catalog}.{schema}.variant_annotation_variants_with_pathogenic"
+output_table = per_run_table(
+    f"{catalog}.{schema}.variant_annotation_variants_with_pathogenic",
+    run_name, mlflow_run_id,
+)
 
 with mlflow.start_run(run_id=mlflow_run_id) as run:
     mlflow.log_param("source_variants_table", variants_table)
+    mlflow.log_param("variants_with_pathogenic_table", output_table)
     mlflow.log_metric("original_variant_count", original_count)
 
     if pathogenic_vcf_path and pathogenic_vcf_path.strip():
@@ -132,9 +124,9 @@ with mlflow.start_run(run_id=mlflow_run_id) as run:
             allowMissingColumns=True
         )
 
-        merge_by_run_name(enhanced_variants, output_table, run_name)
+        write_per_run_table(enhanced_variants, output_table)
 
-        final_count = spark.table(output_table).where(F.col("run_name") == run_name).count()
+        final_count = spark.table(output_table).count()
         mlflow.log_param("pathogenic_vcf_path", pathogenic_vcf_path)
         mlflow.log_metric("pathogenic_variants_added", pathogenic_count)
         mlflow.log_metric("enhanced_variant_count", final_count)
@@ -144,9 +136,10 @@ with mlflow.start_run(run_id=mlflow_run_id) as run:
         print(f"Spiked {pathogenic_count} pathogenic variants. Total: {final_count}")
     else:
         # No spiking — pass through the source table
-        merge_by_run_name(existing_variants, output_table, run_name)
+        write_per_run_table(existing_variants, output_table)
         mlflow.set_tag("spike_status", "passthrough")
         mlflow.set_tag("run_name", run_name)
         print(f"No pathogenic VCF provided. Passed through {original_count} variants.")
 
     mlflow.set_tag("output_table", output_table)
+    mlflow.set_tag("variants_with_pathogenic_table", output_table)

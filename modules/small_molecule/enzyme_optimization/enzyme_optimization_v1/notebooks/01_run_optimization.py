@@ -27,6 +27,7 @@ dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
 
 dbutils.widgets.text("mlflow_experiment", "", "MLflow experiment path")
 dbutils.widgets.text("mlflow_run_name", "", "MLflow run name")
+dbutils.widgets.text("mlflow_run_id", "", "Pre-created MLflow run id (set by dispatcher; empty = create new)")
 dbutils.widgets.text("motif_pdb_path", "", "UC volume path to the motif PDB")
 dbutils.widgets.text("motif_residues_csv", "", "Motif residue numbers (CSV ints)")
 dbutils.widgets.text("target_chain", "A", "Motif chain id in the input PDB")
@@ -191,6 +192,7 @@ user_email = dbutils.widgets.get("user_email")
 
 mlflow_experiment = dbutils.widgets.get("mlflow_experiment")
 mlflow_run_name = dbutils.widgets.get("mlflow_run_name")
+mlflow_run_id = dbutils.widgets.get("mlflow_run_id") or None
 motif_pdb_path = dbutils.widgets.get("motif_pdb_path")
 motif_residues_csv = dbutils.widgets.get("motif_residues_csv")
 target_chain = dbutils.widgets.get("target_chain")
@@ -531,214 +533,270 @@ def generate_candidates(num: int, length_min: int, length_max: int,
 trajectory_rows: List[Dict[str, Any]] = []
 all_candidates: List[Dict[str, Any]] = []
 
-with mlflow.start_run(run_name=mlflow_run_name or "enzyme_optimization",
-                      experiment_id=experiment.experiment_id) as run:
-    mlflow.log_params({
-        "scaffold_length_min": scaffold_length_min,
-        "scaffold_length_max": scaffold_length_max,
-        "num_samples": num_samples,
-        "num_iterations": num_iterations,
-        "substrate_smiles": substrate_smiles,
-        "half_life_margin": half_life_margin,
-        "resampling_temperature": resampling_temperature,
-        "strategy": strategy_name,
-        "run_proteinmpnn": run_proteinmpnn_flag,
-        "weights": weights_json,
-        "n_references": len(references),
-        "anchor_threshold": (None if math.isinf(anchor_threshold) else anchor_threshold),
-        "use_inprocess_ame": use_inprocess_ame,
-        "generation_mode": "Accurate" if use_inprocess_ame else "Fast",
-        **(
-            {"fk_n_branch": fk_n_branch, "fk_beam_width": fk_beam_width,
-             "fk_temperature": fk_temperature,
-             "fk_step_checkpoints": ",".join(str(s) for s in fk_step_checkpoints)}
-            if use_inprocess_ame else {}
-        ),
-    })
+# When the dispatcher pre-creates the MLflow run (Disease-Biology pattern),
+# attach to it via run_id; otherwise create a new run. Using
+# `with mlflow.start_run(...)` + a try/except wrapper lets us flip the
+# `job_status` tag to `failed` on exception — the `with`'s exit handler
+# closes the run lifecycle as FAILED, but doesn't touch our progressive
+# stage tag.
+from mlflow.tracking import MlflowClient as _MlflowClient
+_active_run_id = mlflow_run_id
 
-    parents: List[Dict[str, Any]] = []
-    gen_args = {
-        "length_min": scaffold_length_min,
-        "length_max": scaffold_length_max,
-        "num_samples": num_samples,
-        "hotspot_residues": "",
-    }
+if mlflow_run_id:
+    _run_ctx = mlflow.start_run(run_id=mlflow_run_id)
+else:
+    _run_ctx = mlflow.start_run(
+        run_name=mlflow_run_name or "enzyme_optimization",
+        experiment_id=experiment.experiment_id,
+    )
 
-    # Stop-criteria state — accumulated across iterations.
-    iter_max_history: List[float] = []
-    cumulative_above_threshold: int = 0
-    stop_reason: Optional[str] = None
+try:
+    with _run_ctx as run:
+        _active_run_id = run.info.run_id
+        mlflow.log_params({
+            "scaffold_length_min": scaffold_length_min,
+            "scaffold_length_max": scaffold_length_max,
+            "num_samples": num_samples,
+            "num_iterations": num_iterations,
+            "substrate_smiles": substrate_smiles,
+            "half_life_margin": half_life_margin,
+            "resampling_temperature": resampling_temperature,
+            "strategy": strategy_name,
+            "run_proteinmpnn": run_proteinmpnn_flag,
+            "weights": weights_json,
+            "n_references": len(references),
+            "anchor_threshold": (None if math.isinf(anchor_threshold) else anchor_threshold),
+            "use_inprocess_ame": use_inprocess_ame,
+            "generation_mode": "Accurate" if use_inprocess_ame else "Fast",
+            **(
+                {"fk_n_branch": fk_n_branch, "fk_beam_width": fk_beam_width,
+                 "fk_temperature": fk_temperature,
+                 "fk_step_checkpoints": ",".join(str(s) for s in fk_step_checkpoints)}
+                if use_inprocess_ame else {}
+            ),
+        })
 
-    for it in range(num_iterations):
-        print(f"\n=== Iteration {it+1}/{num_iterations} ===")
+        # Discovery tags so the in-app "Search Past Runs" UI on the Guided Enzyme
+        # Optimization page can find this run via the same mlflow.search_runs
+        # filter pattern AlphaFold + Disease Biology already use:
+        #   tags.feature='enzyme_optimization' AND tags.origin='genesis_workbench'
+        #   AND tags.created_by=<email>
+        # The `job_status` tag is updated progressively at each loop stage
+        # (iter_<N>_generating / _redesigning / _scoring / _complete / complete
+        # / failed) so the search-results column shows the *current pipeline
+        # stage*, not the raw MLflow run lifecycle.
+        mlflow.set_tag("origin", "genesis_workbench")
+        mlflow.set_tag("feature", "enzyme_optimization")
+        mlflow.set_tag("created_by", user_email)
+        mlflow.set_tag("job_status", "started")
 
-        if it > 0:
-            proposed = strategy.propose(
-                parents, [p["composite_reward"] for p in parents],
-                length_min=scaffold_length_min,
-                length_max=scaffold_length_max,
-                num_samples_next=num_samples,
+        parents: List[Dict[str, Any]] = []
+        gen_args = {
+            "length_min": scaffold_length_min,
+            "length_max": scaffold_length_max,
+            "num_samples": num_samples,
+            "hotspot_residues": "",
+        }
+
+        # Stop-criteria state — accumulated across iterations.
+        iter_max_history: List[float] = []
+        cumulative_above_threshold: int = 0
+        stop_reason: Optional[str] = None
+
+        for it in range(num_iterations):
+            print(f"\n=== Iteration {it+1}/{num_iterations} ===")
+
+            if it > 0:
+                proposed = strategy.propose(
+                    parents, [p["composite_reward"] for p in parents],
+                    length_min=scaffold_length_min,
+                    length_max=scaffold_length_max,
+                    num_samples_next=num_samples,
+                )
+                if proposed is None:
+                    print("Strategy.propose() returned None — skipping further generation (NoOpStrategy).")
+                    break
+                gen_args.update(proposed)
+
+            # Progressive job_status: surfaces the current pipeline stage in the
+            # in-app search results column. Mirrors AlphaFold's set_tag("job_status",
+            # ...) pattern at each major checkpoint.
+            mlflow.set_tag("job_status", f"iter_{it+1}_generating")
+            ame_df = generate_candidates(
+                gen_args["num_samples"], gen_args["length_min"], gen_args["length_max"],
+                hotspots=gen_args.get("hotspot_residues", ""),
             )
-            if proposed is None:
-                print("Strategy.propose() returned None — skipping further generation (NoOpStrategy).")
-                break
-            gen_args.update(proposed)
+            seqs = list(ame_df["designed_sequence"])
+            pdbs = list(ame_df["designed_pdb"])
 
-        ame_df = generate_candidates(
-            gen_args["num_samples"], gen_args["length_min"], gen_args["length_max"],
-            hotspots=gen_args.get("hotspot_residues", ""),
-        )
-        seqs = list(ame_df["designed_sequence"])
-        pdbs = list(ame_df["designed_pdb"])
+            # Optional ProteinMPNN redesign: replace each AME sequence with the
+            # MPNN-redesigned one, then re-fold. The motif residues stay fixed via
+            # ProteinMPNN's --fixed_positions_jsonl path so the catalytic identities
+            # (e.g. His-Asp-Ser) survive the redesign.
+            #
+            # IMPORTANT: `target_chain` refers to the chain in the user's *input*
+            # motif PDB (typically "B"). AME always emits its generated scaffolds
+            # on chain "A". ProteinMPNN is being asked to redesign the AME output,
+            # so fixed_positions must use the AME output's chain ("A"), not
+            # target_chain. Using target_chain here was a Phase 1.4 bug: the
+            # upstream tied_featurize KeyError'd on `fixed_position_dict["my_pdb"]["A"]`
+            # because only "B" was in the dict, the orchestrator's broad except
+            # clause swallowed the error, and motif preservation silently no-op'd.
+            AME_OUTPUT_CHAIN = "A"
+            mpnn_fixed_positions = (
+                {AME_OUTPUT_CHAIN: motif_residues} if motif_residues else None
+            )
+            if run_proteinmpnn_flag:
+                mlflow.set_tag("job_status", f"iter_{it+1}_redesigning")
+                print(f"Running ProteinMPNN redesign on {len(seqs)} scaffolds (fixed_positions={mpnn_fixed_positions})...")
+                new_seqs = []
+                for pdb in pdbs:
+                    try:
+                        redesigned = call_proteinmpnn(
+                            pdb,
+                            fixed_positions=mpnn_fixed_positions,
+                            dev_user_prefix=dev_user_prefix,
+                        )
+                        new_seqs.append(redesigned[0] if redesigned else "")
+                    except Exception as e:
+                        # The fallback to the AME sequence is a soft-degrade —
+                        # but motif preservation is precisely what fixed_positions
+                        # is for. Make the warning loud so a silent regression
+                        # doesn't hide behind "the run completed".
+                        print(f"  ⚠️  ProteinMPNN failed: {e}")
+                        print(f"  ⚠️  Falling back to AME sequence — MOTIF PRESERVATION DID NOT RUN for this candidate.")
+                        print(f"  ⚠️  fixed_positions={mpnn_fixed_positions}; AME PDB chain may differ from the key. Check earlier logs.")
+                        new_seqs.append("")
+                seqs = [ns or s for ns, s in zip(new_seqs, seqs)]
 
-        # Optional ProteinMPNN redesign: replace each AME sequence with the
-        # MPNN-redesigned one, then re-fold. The motif residues stay fixed via
-        # ProteinMPNN's --fixed_positions_jsonl path so the catalytic identities
-        # (e.g. His-Asp-Ser) survive the redesign.
-        #
-        # IMPORTANT: `target_chain` refers to the chain in the user's *input*
-        # motif PDB (typically "B"). AME always emits its generated scaffolds
-        # on chain "A". ProteinMPNN is being asked to redesign the AME output,
-        # so fixed_positions must use the AME output's chain ("A"), not
-        # target_chain. Using target_chain here was a Phase 1.4 bug: the
-        # upstream tied_featurize KeyError'd on `fixed_position_dict["my_pdb"]["A"]`
-        # because only "B" was in the dict, the orchestrator's broad except
-        # clause swallowed the error, and motif preservation silently no-op'd.
-        AME_OUTPUT_CHAIN = "A"
-        mpnn_fixed_positions = (
-            {AME_OUTPUT_CHAIN: motif_residues} if motif_residues else None
-        )
-        if run_proteinmpnn_flag:
-            print(f"Running ProteinMPNN redesign on {len(seqs)} scaffolds (fixed_positions={mpnn_fixed_positions})...")
-            new_seqs = []
-            for pdb in pdbs:
-                try:
-                    redesigned = call_proteinmpnn(
-                        pdb,
-                        fixed_positions=mpnn_fixed_positions,
-                        dev_user_prefix=dev_user_prefix,
+                # Re-fold with ESMFold for accurate post-redesign structures + pLDDT.
+                print(f"ESMFolding {len(seqs)} redesigned sequences...")
+                new_pdbs, new_plddts = [], []
+                for s in seqs:
+                    try:
+                        out = call_esmfold(s, dev_user_prefix=dev_user_prefix)
+                        new_pdbs.append(out["pdb"])
+                        new_plddts.append(out["mean_plddt"])
+                    except Exception as e:
+                        print(f"  ESMFold failed: {e}")
+                        new_pdbs.append("")
+                        new_plddts.append(0.0)
+                pdbs = new_pdbs
+
+            # Score the batch on every enabled axis.
+            mlflow.set_tag("job_status", f"iter_{it+1}_scoring")
+            per_axis = score_iteration(seqs, pdbs, anchor_threshold)
+            rewards = compose_rewards(per_axis, AXES)
+
+            for k in range(len(seqs)):
+                cand_id = f"iter{it+1}_cand{k+1}"
+                row = {
+                    "iteration": it + 1,
+                    "candidate_id": cand_id,
+                    "designed_sequence": seqs[k],
+                    "composite_reward": float(rewards[k]),
+                }
+                for axis_name, vals in per_axis.items():
+                    row[axis_name] = float(vals[k]) if not (isinstance(vals[k], float) and math.isnan(vals[k])) else None
+                trajectory_rows.append(row)
+                all_candidates.append({**row, "designed_pdb": pdbs[k]})
+
+                for k_axis, val in row.items():
+                    if k_axis in ("iteration", "candidate_id", "designed_sequence"):
+                        continue
+                    if isinstance(val, (int, float)) and val is not None and not math.isnan(val):
+                        mlflow.log_metric(f"{cand_id}/{k_axis}", float(val), step=it + 1)
+
+                # Persist the designed PDB as an MLflow artifact.
+                with tempfile.NamedTemporaryFile("w", suffix=".pdb", delete=False) as f:
+                    f.write(pdbs[k])
+                    pdb_local = f.name
+                mlflow.log_artifact(pdb_local, artifact_path=f"pdbs/iter_{it+1}")
+
+            parents = [
+                {**c, "designed_pdb": pdbs[i]}
+                for i, c in enumerate(trajectory_rows[-len(seqs):])
+            ]
+            # Iteration-level summary metrics.
+            iter_max = float(max(rewards))
+            iter_mean = float(np.mean(rewards))
+            mlflow.log_metric("iter_max_reward", iter_max, step=it + 1)
+            mlflow.log_metric("iter_mean_reward", iter_mean, step=it + 1)
+            mlflow.set_tag("job_status", f"iter_{it+1}_complete")
+            iter_max_history.append(iter_max)
+
+            # ── Stopping criteria (any can short-circuit; first to fire wins) ──
+
+            # 1. Reward threshold: any candidate >= target_reward
+            if target_reward is not None and iter_max >= target_reward:
+                stop_reason = (
+                    f"target_reward (iter_max={iter_max:.4f} >= target={target_reward:.4f})"
+                )
+
+            # 2. Best-K cap: cumulative count of candidates above threshold reaches target
+            elif best_k_target is not None and best_k_threshold is not None:
+                cumulative_above_threshold += sum(1 for r in rewards if r >= best_k_threshold)
+                mlflow.log_metric("cumulative_above_threshold", cumulative_above_threshold, step=it + 1)
+                if cumulative_above_threshold >= best_k_target:
+                    stop_reason = (
+                        f"best_k (cumulative={cumulative_above_threshold} >= "
+                        f"target={best_k_target} above threshold={best_k_threshold:.4f})"
                     )
-                    new_seqs.append(redesigned[0] if redesigned else "")
-                except Exception as e:
-                    # The fallback to the AME sequence is a soft-degrade —
-                    # but motif preservation is precisely what fixed_positions
-                    # is for. Make the warning loud so a silent regression
-                    # doesn't hide behind "the run completed".
-                    print(f"  ⚠️  ProteinMPNN failed: {e}")
-                    print(f"  ⚠️  Falling back to AME sequence — MOTIF PRESERVATION DID NOT RUN for this candidate.")
-                    print(f"  ⚠️  fixed_positions={mpnn_fixed_positions}; AME PDB chain may differ from the key. Check earlier logs.")
-                    new_seqs.append("")
-            seqs = [ns or s for ns, s in zip(new_seqs, seqs)]
 
-            # Re-fold with ESMFold for accurate post-redesign structures + pLDDT.
-            print(f"ESMFolding {len(seqs)} redesigned sequences...")
-            new_pdbs, new_plddts = [], []
-            for s in seqs:
-                try:
-                    out = call_esmfold(s, dev_user_prefix=dev_user_prefix)
-                    new_pdbs.append(out["pdb"])
-                    new_plddts.append(out["mean_plddt"])
-                except Exception as e:
-                    print(f"  ESMFold failed: {e}")
-                    new_pdbs.append("")
-                    new_plddts.append(0.0)
-            pdbs = new_pdbs
+            # 3. Convergence: iter_max_reward improvement < threshold over the last
+            #    convergence_window iterations. Negative threshold disables.
+            if (stop_reason is None and convergence_threshold >= 0
+                    and len(iter_max_history) > convergence_window):
+                window = iter_max_history[-(convergence_window + 1):]
+                improvement = window[-1] - window[0]
+                if improvement < convergence_threshold:
+                    stop_reason = (
+                        f"convergence (improvement {improvement:.4f} over last "
+                        f"{convergence_window} iters < threshold {convergence_threshold:.4f})"
+                    )
 
-        # Score the batch on every enabled axis.
-        per_axis = score_iteration(seqs, pdbs, anchor_threshold)
-        rewards = compose_rewards(per_axis, AXES)
+            if stop_reason is not None:
+                print(f"\nEarly exit at iteration {it+1}: {stop_reason}")
+                mlflow.set_tag("stop_reason", stop_reason)
+                mlflow.log_metric("iterations_completed", it + 1)
+                break
+        else:
+            # Loop ran to num_iterations without any stop trigger.
+            mlflow.set_tag("stop_reason", "n_ceiling")
+            mlflow.log_metric("iterations_completed", num_iterations)
 
-        for k in range(len(seqs)):
-            cand_id = f"iter{it+1}_cand{k+1}"
-            row = {
-                "iteration": it + 1,
-                "candidate_id": cand_id,
-                "designed_sequence": seqs[k],
-                "composite_reward": float(rewards[k]),
-            }
-            for axis_name, vals in per_axis.items():
-                row[axis_name] = float(vals[k]) if not (isinstance(vals[k], float) and math.isnan(vals[k])) else None
-            trajectory_rows.append(row)
-            all_candidates.append({**row, "designed_pdb": pdbs[k]})
+        # Final artifacts: ranked CSV + top-K consolidated PDBs.
+        traj_df = pd.DataFrame(trajectory_rows).sort_values("composite_reward", ascending=False)
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = os.path.join(tmp, "reward_trajectory.csv")
+            traj_df.to_csv(csv_path, index=False)
+            mlflow.log_artifact(csv_path, artifact_path="results")
 
-            for k_axis, val in row.items():
-                if k_axis in ("iteration", "candidate_id", "designed_sequence"):
-                    continue
-                if isinstance(val, (int, float)) and val is not None and not math.isnan(val):
-                    mlflow.log_metric(f"{cand_id}/{k_axis}", float(val), step=it + 1)
+            topk = sorted(all_candidates, key=lambda r: r["composite_reward"], reverse=True)[:max(num_samples, 8)]
+            topk_dir = os.path.join(tmp, "topK_pdbs")
+            os.makedirs(topk_dir, exist_ok=True)
+            for r in topk:
+                with open(os.path.join(topk_dir, r["candidate_id"] + ".pdb"), "w") as f:
+                    f.write(r["designed_pdb"])
+            mlflow.log_artifacts(topk_dir, artifact_path="results/topK_pdbs")
 
-            # Persist the designed PDB as an MLflow artifact.
-            with tempfile.NamedTemporaryFile("w", suffix=".pdb", delete=False) as f:
-                f.write(pdbs[k])
-                pdb_local = f.name
-            mlflow.log_artifact(pdb_local, artifact_path=f"pdbs/iter_{it+1}")
+        # Final progressive tag — search-results column flips from
+        # `iter_<N>_complete` to `complete` once the final artifacts land.
+        # Failures mid-loop leave the tag at the last stage that fired
+        # (e.g. `iter_2_scoring`), which is informative on its own; MLflow
+        # marks the run lifecycle as FAILED via the `with` block's exception
+        # handling regardless.
+        mlflow.set_tag("job_status", "complete")
 
-        parents = [
-            {**c, "designed_pdb": pdbs[i]}
-            for i, c in enumerate(trajectory_rows[-len(seqs):])
-        ]
-        # Iteration-level summary metrics.
-        iter_max = float(max(rewards))
-        iter_mean = float(np.mean(rewards))
-        mlflow.log_metric("iter_max_reward", iter_max, step=it + 1)
-        mlflow.log_metric("iter_mean_reward", iter_mean, step=it + 1)
-        iter_max_history.append(iter_max)
+        print(f"\nDone. MLflow run id: {run.info.run_id}")
+        print(f"Top candidate: {traj_df.iloc[0]['candidate_id']}  "
+              f"(composite_reward={traj_df.iloc[0]['composite_reward']:.4f})")
 
-        # ── Stopping criteria (any can short-circuit; first to fire wins) ──
-
-        # 1. Reward threshold: any candidate >= target_reward
-        if target_reward is not None and iter_max >= target_reward:
-            stop_reason = (
-                f"target_reward (iter_max={iter_max:.4f} >= target={target_reward:.4f})"
-            )
-
-        # 2. Best-K cap: cumulative count of candidates above threshold reaches target
-        elif best_k_target is not None and best_k_threshold is not None:
-            cumulative_above_threshold += sum(1 for r in rewards if r >= best_k_threshold)
-            mlflow.log_metric("cumulative_above_threshold", cumulative_above_threshold, step=it + 1)
-            if cumulative_above_threshold >= best_k_target:
-                stop_reason = (
-                    f"best_k (cumulative={cumulative_above_threshold} >= "
-                    f"target={best_k_target} above threshold={best_k_threshold:.4f})"
-                )
-
-        # 3. Convergence: iter_max_reward improvement < threshold over the last
-        #    convergence_window iterations. Negative threshold disables.
-        if (stop_reason is None and convergence_threshold >= 0
-                and len(iter_max_history) > convergence_window):
-            window = iter_max_history[-(convergence_window + 1):]
-            improvement = window[-1] - window[0]
-            if improvement < convergence_threshold:
-                stop_reason = (
-                    f"convergence (improvement {improvement:.4f} over last "
-                    f"{convergence_window} iters < threshold {convergence_threshold:.4f})"
-                )
-
-        if stop_reason is not None:
-            print(f"\nEarly exit at iteration {it+1}: {stop_reason}")
-            mlflow.set_tag("stop_reason", stop_reason)
-            mlflow.log_metric("iterations_completed", it + 1)
-            break
-    else:
-        # Loop ran to num_iterations without any stop trigger.
-        mlflow.set_tag("stop_reason", "n_ceiling")
-        mlflow.log_metric("iterations_completed", num_iterations)
-
-    # Final artifacts: ranked CSV + top-K consolidated PDBs.
-    traj_df = pd.DataFrame(trajectory_rows).sort_values("composite_reward", ascending=False)
-    with tempfile.TemporaryDirectory() as tmp:
-        csv_path = os.path.join(tmp, "reward_trajectory.csv")
-        traj_df.to_csv(csv_path, index=False)
-        mlflow.log_artifact(csv_path, artifact_path="results")
-
-        topk = sorted(all_candidates, key=lambda r: r["composite_reward"], reverse=True)[:max(num_samples, 8)]
-        topk_dir = os.path.join(tmp, "topK_pdbs")
-        os.makedirs(topk_dir, exist_ok=True)
-        for r in topk:
-            with open(os.path.join(topk_dir, r["candidate_id"] + ".pdb"), "w") as f:
-                f.write(r["designed_pdb"])
-        mlflow.log_artifacts(topk_dir, artifact_path="results/topK_pdbs")
-
-    print(f"\nDone. MLflow run id: {run.info.run_id}")
-    print(f"Top candidate: {traj_df.iloc[0]['candidate_id']}  "
-          f"(composite_reward={traj_df.iloc[0]['composite_reward']:.4f})")
+except Exception as _exc:
+    if _active_run_id:
+        try:
+            _MlflowClient().set_tag(_active_run_id, "job_status", "failed")
+            _MlflowClient().set_tag(_active_run_id, "failure_reason", str(_exc)[:500])
+        except Exception:
+            pass
+    raise

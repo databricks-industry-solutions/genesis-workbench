@@ -61,43 +61,26 @@ import json
 import mlflow
 import pyspark.sql.functions as F
 from functools import reduce
+import re
 
 mlflow.set_registry_uri("databricks-uc")
 mlflow.set_tracking_uri("databricks")
 
 
-def merge_by_run_name(df, table, run_name, key_cols=("chromosome", "start", "ref", "alt")):
-    """MERGE INTO table using run_name + key_cols. Same run_name updates, new inserts."""
-    df = df.withColumn("run_name", F.lit(run_name))
-    temp_view = f"_tmp_{table.split('.')[-1]}"
-    df.createOrReplaceTempView(temp_view)
+def _sanitize_run_name(name: str) -> str:
+    safe = re.sub(r"[^a-z0-9_]", "_", (name or "").lower())
+    safe = re.sub(r"_+", "_", safe).strip("_")
+    return safe[:40] if safe else "unnamed"
 
-    if not spark.catalog.tableExists(table):
-        df.write.option("overwriteSchema", "true").saveAsTable(table)
-        return
 
-    merge_on = " AND ".join([f"target.`{c}` = source.`{c}`" for c in key_cols])
-    cols = df.columns
-    update_set = ", ".join([f"target.`{c}` = source.`{c}`" for c in cols if c != "run_name"])
-    insert_cols = ", ".join([f"`{c}`" for c in cols])
-    insert_vals = ", ".join([f"source.`{c}`" for c in cols])
+def per_run_table(base: str, run_name: str, mlflow_run_id: str) -> str:
+    """Deterministic per-run table name. Each run owns its own tables, so
+    Glow's VCF-INFO struct-shape drift can never collide across runs."""
+    return f"{base}__{_sanitize_run_name(run_name)}_{(mlflow_run_id or 'norun')[:8]}"
 
-    spark.sql(f"""
-        MERGE INTO {table} AS target
-        USING {temp_view} AS source
-        ON target.run_name = source.run_name AND {merge_on}
-        WHEN MATCHED THEN UPDATE SET {update_set}
-        WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({insert_vals})
-    """)
 
-    delete_on = " AND ".join([f"source.`{c}` = target.`{c}`" for c in key_cols])
-    spark.sql(f"""
-        DELETE FROM {table} AS target WHERE target.run_name = '{run_name}'
-        AND NOT EXISTS (
-            SELECT 1 FROM {temp_view} AS source
-            WHERE source.run_name = target.run_name AND {delete_on}
-        )
-    """)
+def write_per_run_table(df, table):
+    df.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(table)
 
 # COMMAND ----------
 
@@ -106,9 +89,12 @@ def merge_by_run_name(df, table, run_name, key_cols=("chromosome", "start", "ref
 
 # COMMAND ----------
 
-# Use the output from the spike step, filtered to this run
-source_table = f"{catalog}.{schema}.variant_annotation_variants_with_pathogenic"
-vcf_df = spark.table(source_table).where(F.col("run_name") == run_name)
+# Per-run input from notebook 01.
+source_table = per_run_table(
+    f"{catalog}.{schema}.variant_annotation_variants_with_pathogenic",
+    run_name, mlflow_run_id,
+)
+vcf_df = spark.table(source_table)
 
 use_acmg = gene_panel_mode.strip().lower() == "acmg"
 
@@ -228,8 +214,11 @@ annotated = joined.select(*select_cols)
 
 # COMMAND ----------
 
-clinical_annotated_table = f"{catalog}.{schema}.variant_annotation_clinical_annotated"
-merge_by_run_name(annotated, clinical_annotated_table, run_name)
+clinical_annotated_table = per_run_table(
+    f"{catalog}.{schema}.variant_annotation_clinical_annotated",
+    run_name, mlflow_run_id,
+)
+write_per_run_table(annotated, clinical_annotated_table)
 
 # Filter pathogenic variants
 pathogenic = annotated.where(
@@ -237,11 +226,14 @@ pathogenic = annotated.where(
     F.array_contains(F.col("clinical_significance"), "Likely_pathogenic")
 )
 
-pathogenic_table = f"{catalog}.{schema}.variant_annotation_pathogenic"
-merge_by_run_name(pathogenic, pathogenic_table, run_name)
+pathogenic_table = per_run_table(
+    f"{catalog}.{schema}.variant_annotation_pathogenic",
+    run_name, mlflow_run_id,
+)
+write_per_run_table(pathogenic, pathogenic_table)
 
-pathogenic_count = spark.table(pathogenic_table).where(F.col("run_name") == run_name).count()
-annotated_count = spark.table(clinical_annotated_table).where(F.col("run_name") == run_name).count()
+pathogenic_count = spark.table(pathogenic_table).count()
+annotated_count = spark.table(clinical_annotated_table).count()
 
 # COMMAND ----------
 
@@ -252,6 +244,8 @@ with mlflow.start_run(run_id=mlflow_run_id) as run:
     else:
         mlflow.log_param("gene_regions", gene_regions_json)
     mlflow.log_param("clinvar_table", clinvar_table)
+    mlflow.log_param("annotated_table", clinical_annotated_table)
+    mlflow.log_param("pathogenic_table", pathogenic_table)
     mlflow.log_metric("gene_region_variants", annotated_count)
     mlflow.log_metric("pathogenic_variants", pathogenic_count)
     mlflow.set_tag("run_name", run_name)

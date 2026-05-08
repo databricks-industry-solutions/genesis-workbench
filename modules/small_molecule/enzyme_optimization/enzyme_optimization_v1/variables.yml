@@ -48,6 +48,10 @@ variables:
     description: The experiment to which all registered modules are logged
     default: dbx_genesis_workbench_modules
 
+  app_name:
+    description: Name of the Databricks App service principal that should be granted CAN_MANAGE_RUN on the orchestrator jobs.
+    default: genesis-workbench
+
   cache_dir:
     description: The cache directory for enzyme optimization run artifacts (motif PDBs uploaded by the app, intermediate results).
     default: enzyme_optimization

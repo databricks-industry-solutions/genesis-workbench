@@ -734,16 +734,29 @@ def search_variant_annotation_runs_by_experiment_name(user_email: str, experimen
 
 
 def pull_annotation_results(run_id: str, run_name: str = "") -> pd.DataFrame:
-    """Pull pathogenic variant results for a given annotation run."""
+    """Pull pathogenic variant results for a given annotation run.
+
+    Each variant_annotation run owns its own per-run pathogenic table
+    (named `<base>__<sanitized_run_name>_<run_id_prefix>`). Prefer the
+    `pathogenic_table` MLflow tag/param set by `03_save_results.py` —
+    falls back to reconstructing the name from `(run_name, run_id)` if
+    the tag is missing on older runs.
+    """
+    import re
     catalog = os.environ["CORE_CATALOG_NAME"]
     schema = os.environ["CORE_SCHEMA_NAME"]
 
-    # Use provided run_name, fall back to MLflow tag
+    run = mlflow.get_run(run_id)
     if not run_name:
-        run = mlflow.get_run(run_id)
         run_name = run.data.tags.get("run_name", "")
 
-    table = f"{catalog}.{schema}.variant_annotation_pathogenic"
+    # Trust the orchestrator-logged table name first; reconstruct only if missing.
+    table = run.data.tags.get("pathogenic_table") or run.data.params.get("pathogenic_table")
+    if not table:
+        safe = re.sub(r"[^a-z0-9_]", "_", (run_name or "").lower())
+        safe = re.sub(r"_+", "_", safe).strip("_")[:40] or "unnamed"
+        suffix = f"{safe}_{(run_id or 'norun')[:8]}"
+        table = f"{catalog}.{schema}.variant_annotation_pathogenic__{suffix}"
 
     # Check if ACMG columns (category, condition) exist in the table
     try:
@@ -756,14 +769,11 @@ def pull_annotation_results(run_id: str, run_name: str = "") -> pd.DataFrame:
     if "category" in available_cols:
         extra_cols = "category, condition, "
 
-    run_name_filter = f"WHERE run_name = '{run_name}'" if run_name else ""
-
     query = f"""
         SELECT gene, {extra_cols}chromosome, start as position, ref, alt, zygosity,
                array_join(clinical_significance, ', ') as clinical_significance,
                array_join(disease_name, ', ') as disease_name
         FROM {table}
-        {run_name_filter}
         ORDER BY gene, position
     """
     return execute_select_query(query)

@@ -52,9 +52,20 @@ initialize(core_catalog_name=catalog, core_schema_name=schema, sql_warehouse_id=
 
 import mlflow
 import pyspark.sql.functions as F
+import re
 
 mlflow.set_registry_uri("databricks-uc")
 mlflow.set_tracking_uri("databricks")
+
+
+def _sanitize_run_name(name: str) -> str:
+    safe = re.sub(r"[^a-z0-9_]", "_", (name or "").lower())
+    safe = re.sub(r"_+", "_", safe).strip("_")
+    return safe[:40] if safe else "unnamed"
+
+
+def per_run_table(base: str, run_name: str, mlflow_run_id: str) -> str:
+    return f"{base}__{_sanitize_run_name(run_name)}_{(mlflow_run_id or 'norun')[:8]}"
 
 # COMMAND ----------
 
@@ -63,11 +74,17 @@ mlflow.set_tracking_uri("databricks")
 
 # COMMAND ----------
 
-pathogenic_table = f"{catalog}.{schema}.variant_annotation_pathogenic"
-clinical_annotated_table = f"{catalog}.{schema}.variant_annotation_clinical_annotated"
+pathogenic_table = per_run_table(
+    f"{catalog}.{schema}.variant_annotation_pathogenic",
+    run_name, mlflow_run_id,
+)
+clinical_annotated_table = per_run_table(
+    f"{catalog}.{schema}.variant_annotation_clinical_annotated",
+    run_name, mlflow_run_id,
+)
 
-pathogenic_df = spark.table(pathogenic_table).where(F.col("run_name") == run_name)
-annotated_df = spark.table(clinical_annotated_table).where(F.col("run_name") == run_name)
+pathogenic_df = spark.table(pathogenic_table)
+annotated_df = spark.table(clinical_annotated_table)
 
 # COMMAND ----------
 
@@ -106,6 +123,8 @@ with mlflow.start_run(run_id=mlflow_run_id) as run:
         for category, count in category_summary.items():
             mlflow.log_metric(f"variants_category_{category.lower()}", count)
 
+    mlflow.log_param("annotated_table", clinical_annotated_table)
+    mlflow.log_param("pathogenic_table", pathogenic_table)
     mlflow.set_tag("genes_analyzed", ",".join(gene_names))
     mlflow.set_tag("job_status", "annotation_complete")
     mlflow.set_tag("annotated_table", clinical_annotated_table)

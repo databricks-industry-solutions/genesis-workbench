@@ -75,6 +75,8 @@ Both modes share the same scoring axes, the same UI form, the same MLflow output
 
 ### Fast mode (default)
 
+![Fast flow diagram](https://raw.githubusercontent.com/databricks-industry-solutions/genesis-workbench/main/modules/core/app/images/enzyme_optimization_workflow_fast.png)
+
 Runs as the **`run_enzyme_optimization_gwb`** Databricks job on a CPU cluster. AME stays on its serving endpoint (`gwb_*_proteina_complexa_ame_endpoint`); the orchestrator notebook calls it via the SDK each iteration.
 
 ```
@@ -100,6 +102,8 @@ The selection pressure shows up *between* iterations: the next round's AME draws
 **Wall-clock:** ~7-30 min depending on K, N, and endpoint warm/cold state.
 
 ### Accurate mode
+
+![Accurate flow diagram](https://raw.githubusercontent.com/databricks-industry-solutions/genesis-workbench/main/modules/core/app/images/enzyme_optimization_workflow_accurate.png)
 
 Runs as the **`run_enzyme_optimization_gwb_inprocess_ame`** Databricks job on an A10 GPU cluster. AME is **loaded into the orchestrator's own Python process** rather than called as an endpoint. This unlocks Proteina-Complexa's **Feynman-Kac steering** search algorithm, which biases the diffusion process *during* generation.
 

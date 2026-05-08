@@ -24,6 +24,7 @@ import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
+import mlflow
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.core import Config
 from mlflow.tracking import MlflowClient
@@ -108,13 +109,26 @@ def _resolve_orchestrator_job_id(use_inprocess_ame: bool = False,
 def _write_motif_pdb_to_volume(motif_pdb_str: str, catalog: str, schema: str) -> str:
     """Write the motif PDB into the orchestrator's UC volume under a
     per-run directory. Returns the absolute volume path that the job will read.
+
+    Databricks Apps run in a sandboxed container that does NOT have POSIX
+    access to ``/Volumes/...`` — ``open(volume_path, "w")`` raises
+    ``PermissionError: [Errno 13] Permission denied: '/Volumes'``. The
+    Databricks SDK's Files API is the supported channel: it uploads the
+    bytes via the workspace's UC volume backend using the app SP's auth
+    context, and auto-creates intermediate directories.
     """
+    import io
+
     run_uuid = uuid.uuid4().hex[:12]
     volume_dir = f"/Volumes/{catalog}/{schema}/{ORCHESTRATOR_VOLUME_DIR_NAME}/{run_uuid}"
-    os.makedirs(volume_dir, exist_ok=True)
-    motif_path = os.path.join(volume_dir, "motif.pdb")
-    with open(motif_path, "w") as f:
-        f.write(motif_pdb_str)
+    motif_path = f"{volume_dir}/motif.pdb"
+
+    w = WorkspaceClient()
+    w.files.upload(
+        file_path=motif_path,
+        contents=io.BytesIO(motif_pdb_str.encode("utf-8")),
+        overwrite=True,
+    )
     return motif_path
 
 
@@ -142,12 +156,14 @@ def start_enzyme_optimization_job(
     best_k_target: Optional[int] = None,
     best_k_threshold: Optional[float] = None,
     use_inprocess_ame: bool = False,
-) -> Tuple[int, str]:
-    """Dispatch the orchestrator job and return (job_id, run_id).
+) -> Tuple[int, int]:
+    """Dispatch the orchestrator job and return (job_id, job_run_id).
 
     The motif PDB is written to a UC volume; everything else is passed via
     job parameters. The orchestrator notebook creates its own MLflow run
-    inside `mlflow_experiment` named `mlflow_run_name`.
+    inside `mlflow_experiment` named `mlflow_run_name`. Past results are
+    discoverable via `search_enzyme_optimization_runs_by_*` once the run
+    has logged at least one iteration.
 
     `use_inprocess_ame` toggles the dispatcher between the two job specs:
     False → CPU job + endpoint-based AME (Fast); True → A10 GPU job + in-process
@@ -168,47 +184,72 @@ def start_enzyme_optimization_job(
     job_id = _resolve_orchestrator_job_id(use_inprocess_ame=use_inprocess_ame,
                                           workspace_client=w)
 
-    job_run = w.jobs.run_now(
-        job_id=job_id,
-        job_parameters={
-            "catalog": catalog,
-            "schema": schema,
-            "cache_dir": ORCHESTRATOR_VOLUME_DIR_NAME,
-            "sql_warehouse_id": os.environ["SQL_WAREHOUSE"],
-            "user_email": user_info.user_email,
+    # Pre-create the MLflow run from the app so the row shows up in
+    # "Search Past Runs" the moment the user clicks Launch — same pattern as
+    # disease_biology.start_parabricks_alignment / start_gwas_analysis.
+    # The orchestrator re-attaches via `mlflow.start_run(run_id=...)` once
+    # its cluster is ready.
+    with mlflow.start_run(
+        run_name=mlflow_run_name,
+        experiment_id=experiment.experiment_id,
+    ) as pre_run:
+        mlflow_run_id = pre_run.info.run_id
 
-            "mlflow_experiment": experiment.name,
-            "mlflow_run_name": mlflow_run_name,
-            "motif_pdb_path": motif_pdb_path,
-            "motif_residues_csv": ",".join(str(r) for r in motif_residues),
-            "target_chain": target_chain,
-            "scaffold_length_min": str(scaffold_length_min),
-            "scaffold_length_max": str(scaffold_length_max),
-            "num_samples": str(num_samples),
-            "num_iterations": str(num_iterations),
-            "substrate_smiles": substrate_smiles or "",
-            "references_json": json.dumps(references or []),
-            "half_life_margin": str(half_life_margin),
-            "weights_json": json.dumps({**DEFAULT_AXIS_WEIGHTS, **(weights or {})}),
-            "resampling_temperature": str(resampling_temperature),
-            "strategy": strategy,
-            "run_proteinmpnn": str(run_proteinmpnn).lower(),
-            "dev_user_prefix": os.environ.get("DEV_USER_PREFIX", "") or "",
+        mlflow.set_tag("origin", "genesis_workbench")
+        mlflow.set_tag("feature", "enzyme_optimization")
+        mlflow.set_tag("created_by", user_info.user_email)
+        mlflow.set_tag("job_status", "submitted")
 
-            # Stopping criteria. Empty strings disable the opt-in modes; the
-            # convergence mode defaults to ON via the job-spec default values.
-            "convergence_threshold": str(convergence_threshold)
-                if convergence_threshold is not None else "0.01",
-            "convergence_window": str(int(convergence_window)),
-            "target_reward": str(target_reward) if target_reward is not None else "",
-            "best_k_target": str(int(best_k_target)) if best_k_target is not None else "",
-            "best_k_threshold": str(best_k_threshold) if best_k_threshold is not None else "",
+        mlflow.log_param("generation_mode", "Accurate" if use_inprocess_ame else "Fast")
+        mlflow.log_param("scaffold_length_min", scaffold_length_min)
+        mlflow.log_param("scaffold_length_max", scaffold_length_max)
+        mlflow.log_param("num_samples", num_samples)
+        mlflow.log_param("num_iterations", num_iterations)
 
-            # Generation-mode toggle. The cluster-bound default is also set,
-            # but we forward at the param level so a misdispatch fails loud.
-            "use_inprocess_ame": "true" if use_inprocess_ame else "false",
-        },
-    )
+        job_run = w.jobs.run_now(
+            job_id=job_id,
+            job_parameters={
+                "catalog": catalog,
+                "schema": schema,
+                "cache_dir": ORCHESTRATOR_VOLUME_DIR_NAME,
+                "sql_warehouse_id": os.environ["SQL_WAREHOUSE"],
+                "user_email": user_info.user_email,
+
+                "mlflow_experiment": mlflow_experiment,
+                "mlflow_run_name": mlflow_run_name,
+                "mlflow_run_id": mlflow_run_id,
+                "motif_pdb_path": motif_pdb_path,
+                "motif_residues_csv": ",".join(str(r) for r in motif_residues),
+                "target_chain": target_chain,
+                "scaffold_length_min": str(scaffold_length_min),
+                "scaffold_length_max": str(scaffold_length_max),
+                "num_samples": str(num_samples),
+                "num_iterations": str(num_iterations),
+                "substrate_smiles": substrate_smiles or "",
+                "references_json": json.dumps(references or []),
+                "half_life_margin": str(half_life_margin),
+                "weights_json": json.dumps({**DEFAULT_AXIS_WEIGHTS, **(weights or {})}),
+                "resampling_temperature": str(resampling_temperature),
+                "strategy": strategy,
+                "run_proteinmpnn": str(run_proteinmpnn).lower(),
+                "dev_user_prefix": os.environ.get("DEV_USER_PREFIX", "") or "",
+
+                # Stopping criteria. Empty strings disable the opt-in modes; the
+                # convergence mode defaults to ON via the job-spec default values.
+                "convergence_threshold": str(convergence_threshold)
+                    if convergence_threshold is not None else "0.01",
+                "convergence_window": str(int(convergence_window)),
+                "target_reward": str(target_reward) if target_reward is not None else "",
+                "best_k_target": str(int(best_k_target)) if best_k_target is not None else "",
+                "best_k_threshold": str(best_k_threshold) if best_k_threshold is not None else "",
+
+                # Generation-mode toggle. The cluster-bound default is also set,
+                # but we forward at the param level so a misdispatch fails loud.
+                "use_inprocess_ame": "true" if use_inprocess_ame else "false",
+            },
+        )
+        mlflow.set_tag("job_run_id", str(job_run.run_id))
+
     return job_id, job_run.run_id
 
 
@@ -229,9 +270,26 @@ _AXIS_DISPLAY_NAMES = {
 }
 
 
-def _query_predictor(display_name: str, payload: Any) -> Any:
+def _query_predictor(display_name: str, records: list) -> Any:
+    """Send a list-of-records (named columns) payload to a serving endpoint.
+
+    `dataframe_records` is the only payload shape the four developability
+    endpoints accept reliably — `inputs=` with `df.to_dict(orient="split")`
+    gets rejected by MLflow's schema enforcement as "extra inputs:
+    ['index', 'columns', 'data']" because it's interpreted as raw tensor
+    input rather than a DataFrame.
+    """
     name = get_endpoint_name(display_name)
-    return _predictor_client.serving_endpoints.query(name=name, inputs=payload)
+    return _predictor_client.serving_endpoints.query(
+        name=name, dataframe_records=records,
+    )
+
+
+# 6-allele Sette-style HLA panel — matches the orchestrator default in
+# `enzyme_optimization_v1/notebooks/utils.py:call_mhcflurry`.
+_DEFAULT_MHC_ALLELES = (
+    "HLA-A*02:01,HLA-A*01:01,HLA-B*07:02,HLA-B*44:02,HLA-C*07:01,HLA-C*04:01"
+)
 
 
 def predict_enzyme_properties(sequence: str) -> Dict[str, Optional[float]]:
@@ -242,25 +300,35 @@ def predict_enzyme_properties(sequence: str) -> Dict[str, Optional[float]]:
     a partial row).
     """
     out: Dict[str, Optional[float]] = {}
-    df = pd.DataFrame({"sequence": [sequence]}).to_dict(orient="split")
 
     for axis, display_name in _AXIS_DISPLAY_NAMES.items():
         try:
-            resp = _query_predictor(display_name, df)
+            # Build the per-axis payload. Each endpoint declares its own
+            # required columns in its MLflow signature; sending the same
+            # naked `[{"sequence": s}]` to all of them gets rejected by
+            # MHCflurry (needs `alleles`) and DeepSTABp (needs growth_temp +
+            # mt_mode).
+            if axis == "thermostab":
+                records = [{
+                    "sequence": sequence,
+                    "growth_temp": 37.0,
+                    "mt_mode": "Cell",
+                }]
+            elif axis == "immuno":
+                records = [{
+                    "sequence": sequence,
+                    "alleles": _DEFAULT_MHC_ALLELES,
+                }]
+            else:  # solubility, half_life
+                records = [{"sequence": sequence}]
+
+            resp = _query_predictor(display_name, records)
             preds = pd.DataFrame(resp.predictions)
             if axis == "solubility":
                 out[axis] = float(preds["predicted_solubility"].iloc[0])
             elif axis == "half_life":
                 out[axis] = float(preds["predicted_stability"].iloc[0])
             elif axis == "thermostab":
-                # DeepSTABp expects extra columns; supply defaults.
-                payload = pd.DataFrame({
-                    "sequence": [sequence],
-                    "growth_temp": [37.0],
-                    "mt_mode": ["Cell"],
-                }).to_dict(orient="split")
-                resp = _query_predictor(display_name, payload)
-                preds = pd.DataFrame(resp.predictions)
                 out[axis] = float(preds["predicted_tm_celsius"].iloc[0])
             elif axis == "immuno":
                 out[axis] = float(preds["predicted_immuno_burden"].iloc[0])
@@ -335,3 +403,149 @@ def wait_for_completion(run_id: str, poll_interval_sec: float = 10.0,
             return status
         time.sleep(poll_interval_sec)
     return "TIMEOUT"
+
+
+# ---------------------------------------------------------------------------
+# Past-run search (mirrors the AlphaFold + Disease Biology pattern)
+# ---------------------------------------------------------------------------
+#
+# Filter convention (matches `protein_structure.search_alphafold_runs_*`):
+#   * experiments with `tags.used_by_genesis_workbench='yes'`
+#   * runs with `tags.feature='enzyme_optimization' AND
+#               tags.origin='genesis_workbench' AND
+#               tags.created_by=<email>`
+# Surface columns (run_id is hidden in the UI's data_editor):
+#   run_id, run_name, experiment_name, generation_mode (Fast/Accurate),
+#   iter_max_reward, iterations_completed, start_time,
+#   job_status (orchestrator-set progressive stage:
+#               started → iter_<N>_generating → iter_<N>_redesigning →
+#               iter_<N>_scoring → iter_<N>_complete → complete).
+
+_SEARCH_COLUMNS = [
+    "run_id",
+    "tags.mlflow.runName",
+    "experiment_name",
+    "params.generation_mode",
+    "metrics.iter_max_reward",
+    "metrics.iterations_completed",
+    "start_time",
+    "tags.job_status",
+]
+
+
+# 4-stage progress mapping. Per-iteration sub-stages (`iter_<N>_*`) all collapse
+# to the same dot pattern because N is variable (1-30) and we want a fixed-width
+# visual. Mirrors `disease_biology._PROGRESS_MAP`.
+_ENZYME_PROGRESS_MAP = {
+    "submitted": "🟩⬜⬜⬜",
+    "started":   "🟩🟩⬜⬜",
+    "complete":  "🟩🟩🟩🟩",
+    "failed":    "🟥",
+    "unknown":   "⬜⬜⬜⬜",
+}
+
+
+def _enzyme_progress(status: str) -> str:
+    if not status:
+        return _ENZYME_PROGRESS_MAP["unknown"]
+    if status in _ENZYME_PROGRESS_MAP:
+        return _ENZYME_PROGRESS_MAP[status]
+    if status.startswith("iter_"):
+        return "🟩🟩🟩⬜"
+    return _ENZYME_PROGRESS_MAP["unknown"]
+
+
+def _add_progress_column(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty or "job_status" not in df.columns:
+        return df
+    df = df.copy()
+    df["progress"] = df["job_status"].map(_enzyme_progress)
+    cols = list(df.columns)
+    cols.remove("progress")
+    idx = cols.index("job_status") + 1
+    cols.insert(idx, "progress")
+    return df[cols]
+
+
+def _format_search_runs(runs: pd.DataFrame, exp_map: Dict[str, str]) -> pd.DataFrame:
+    """Common formatter — projects the columns we surface and renames them
+    to short forms (drop `tags.` / `params.` / `metrics.` prefixes).
+
+    The orchestrator's `stop_reason` tag is intentionally NOT surfaced here;
+    users who care about why a run exited early can read it from the MLflow
+    run's tags via the View dialog's "View in MLflow" link.
+    """
+    runs = runs.copy()
+    runs["experiment_name"] = runs["experiment_id"].map(exp_map)
+    cols = [c for c in _SEARCH_COLUMNS if c in runs.columns]
+    out = runs[cols].copy()
+    out.columns = [c.split(".")[-1] for c in out.columns]
+    out = out.rename(columns={"runName": "run_name"})
+    return _add_progress_column(out)
+
+
+def search_enzyme_optimization_runs_by_run_name(user_email: str, run_name: str) -> pd.DataFrame:
+    """Returns runs whose `tags.mlflow.runName` contains `run_name` (case-
+    insensitive) and were tagged by the orchestrator as
+    `feature=enzyme_optimization`. Empty DataFrame if no match.
+    """
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+
+    experiment_list = mlflow.search_experiments(
+        filter_string="tags.used_by_genesis_workbench='yes'"
+    )
+    if not experiment_list:
+        return pd.DataFrame()
+    exp_map = {e.experiment_id: e.name.split("/")[-1] for e in experiment_list}
+
+    runs = mlflow.search_runs(
+        filter_string=(
+            f"tags.feature='enzyme_optimization' AND "
+            f"tags.created_by='{user_email}' AND "
+            f"tags.origin='genesis_workbench'"
+        ),
+        experiment_ids=list(exp_map.keys()),
+    )
+    if runs.empty:
+        return pd.DataFrame()
+    runs = runs[runs["tags.mlflow.runName"].str.contains(run_name, case=False, na=False)]
+    if runs.empty:
+        return pd.DataFrame()
+    return _format_search_runs(runs, exp_map)
+
+
+def search_enzyme_optimization_runs_by_experiment_name(user_email: str, experiment_name: str) -> pd.DataFrame:
+    """Returns runs in any experiment whose name (last path segment) contains
+    `experiment_name` case-insensitively, restricted to this user's
+    enzyme_optimization runs. Empty DataFrame if no match.
+    """
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+
+    all_experiments = mlflow.search_experiments(
+        filter_string="tags.used_by_genesis_workbench='yes'"
+    )
+    if not all_experiments:
+        return pd.DataFrame()
+
+    needle = experiment_name.upper()
+    exp_map = {
+        e.experiment_id: e.name.split("/")[-1]
+        for e in all_experiments
+        if needle in e.name.split("/")[-1].upper()
+    }
+    if not exp_map:
+        return pd.DataFrame()
+
+    runs = mlflow.search_runs(
+        filter_string=(
+            f"tags.feature='enzyme_optimization' AND "
+            f"tags.created_by='{user_email}' AND "
+            f"tags.origin='genesis_workbench'"
+        ),
+        experiment_ids=list(exp_map.keys()),
+    )
+    if runs.empty:
+        return pd.DataFrame()
+    return _format_search_runs(runs, exp_map)

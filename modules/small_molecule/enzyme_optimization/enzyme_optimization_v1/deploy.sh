@@ -25,7 +25,13 @@ echo ""
 databricks bundle deploy --target $TARGET $EXTRA_PARAMS
 
 echo ""
+echo "▶️ [Enzyme Optimization Orchestrator] Running registration job"
+echo "    (writes orchestrator job IDs to settings + grants the app SP CAN_MANAGE_RUN)"
+echo ""
+
+databricks bundle run --target $TARGET register_enzyme_optimization_job $EXTRA_PARAMS
+
+echo ""
 echo "▶️ [Enzyme Optimization Orchestrator] Bundle deployed."
-echo "    The Streamlit app dispatches the run_enzyme_optimization job on demand;"
-echo "    this submodule does NOT auto-run a registration job."
+echo "    The Streamlit app dispatches the run_enzyme_optimization job on demand."
 echo ""

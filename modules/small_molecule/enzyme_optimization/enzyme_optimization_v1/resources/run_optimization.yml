@@ -48,6 +48,8 @@ resources:
           default: ""
         - name: mlflow_run_name
           default: ""
+        - name: mlflow_run_id
+          default: ""
         - name: motif_pdb_path
           default: ""
         - name: motif_residues_csv
@@ -158,6 +160,8 @@ resources:
         - name: mlflow_experiment
           default: ""
         - name: mlflow_run_name
+          default: ""
+        - name: mlflow_run_id
           default: ""
         - name: motif_pdb_path
           default: ""
