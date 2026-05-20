@@ -104,6 +104,55 @@ job needs its own block under each cloud target — see
 
 ---
 
+## Documentation (hard rule)
+
+Every new feature (UI workflow, model, batch pipeline) ships **with three docs
+artifacts in the same PR as the code**. A feature that lands without these is
+considered incomplete and should not be merged.
+
+### 1. Per-feature doc page in `modules/core/app/docs/`
+
+One markdown file named `<module>_<feature>.md` (snake_case). Required
+sections — see [`modules/core/app/docs/README.md`](../modules/core/app/docs/README.md)
+for the canonical template:
+
+- **What it does** (one paragraph: input, output, problem solved)
+- **How to use** (UI walkthrough — tab, form fields, expected wait, where
+  results appear)
+- **Inputs** (schema: file formats, column names, parameter ranges)
+- **Outputs** (MLflow run name + artifacts + tags, Delta tables, result dialog
+  contents)
+- **Underlying models / endpoints** (which serving endpoints, UC models, VS
+  indexes the feature depends on; link to the submodule README)
+- **Limitations and known issues**
+
+### 2. Bullet under the matching module in the root `README.md`
+
+The "Inside Genesis Workbench" section
+(`README.md#inside-genesis-workbench`) has one bullet per module listing the
+features under it. Add a bullet for the new feature linking to the doc page
+created in step 1.
+
+### 3. Dated entry in the root `CHANGELOG.md`
+
+Follow the existing pattern: a feature-name + date header
+(`## <feature-or-module> (YYYY-MM-DD) — <one-line tagline>`) followed by `###`
+subsections that explain (a) what changed and why, (b) anti-patterns avoided
+and the bug they were caused by, (c) reference implementations or files to
+mirror. Don't write a generic "added X" line — the CHANGELOG is meant to be
+read by future contributors as a record of *decisions*, not a release log.
+
+**Reference implementations** (mirror these — most recent entries are most
+representative): `guided_enzyme_creation (2026-05-07)`, `version_pinning
+(2026-04-…)` in [`CHANGELOG.md`](../CHANGELOG.md).
+
+**Order of operations:** write the docs **before** declaring the feature
+shipped. Specifically: the user-facing doc in `/docs` is what proves the
+feature is actually usable end-to-end — if the doc can't be written without
+hand-waving, the UI / inputs / outputs / errors aren't done yet.
+
+---
+
 ## Architecture Overview
 
 ```

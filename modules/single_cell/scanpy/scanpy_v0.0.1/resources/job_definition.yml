@@ -8,6 +8,11 @@ resources:
           - ${var.current_user}
 
       tasks:
+        # File-size probe + branching ladder. These six tasks are tiny — they
+        # only read `dbutils.fs.ls(path)[0].size` or compare a number — so
+        # they stay on serverless. Only the analyze_single_h5ad run needs a
+        # real cluster (scanpy peak memory is ~10-15× the on-disk h5ad size
+        # after densification + intermediates).
         - task_key: check_file_size
           environment_key: default
           notebook_task:
@@ -42,24 +47,20 @@ resources:
             left: "{{tasks.check_file_size.values.file_size_gb}}"
             right: "14"
 
-        - task_key: run_gt_large
+        # The four analyze paths. Each one runs the SAME notebook, but on a
+        # progressively larger memory-optimized node. Rough sizing:
+        #   ≤ 4 GiB  → r5.4xlarge   (128 GiB RAM)  — covers most CELLxGENE PBMC sets
+        #   4-7 GiB  → r5.8xlarge   (256 GiB RAM)
+        #   7-14 GiB → r5.12xlarge  (384 GiB RAM)
+        #   > 14 GiB → r5.24xlarge  (768 GiB RAM)  — last resort; >14 GiB
+        #              jobs should probably switch to rapids-singlecell on GPU.
+        # All clusters auto-terminate (single-node + new_cluster, no
+        # autoscale → terminate-on-finish per Databricks default).
+        - task_key: run_lt_small
           depends_on:
-            - task_key: check_large
-              outcome: "true"
-          environment_key: default
-          notebook_task:
-            notebook_path: ../notebooks/analyze_single_h5ad.py
-            base_parameters:
-              data_path: ""
-              gene_name_column: ""
-              species: hsapiens
-            source: WORKSPACE
-
-        - task_key: run_lt_large
-          depends_on:
-            - task_key: check_large
+            - task_key: check_small
               outcome: "false"
-          environment_key: default
+          job_cluster_key: scanpy_small
           notebook_task:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
@@ -72,7 +73,7 @@ resources:
           depends_on:
             - task_key: check_medium
               outcome: "false"
-          environment_key: default
+          job_cluster_key: scanpy_medium
           notebook_task:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
@@ -81,23 +82,118 @@ resources:
               species: hsapiens
             source: WORKSPACE
 
-        - task_key: run_lt_small
+        - task_key: run_lt_large
           depends_on:
-            - task_key: check_small
+            - task_key: check_large
               outcome: "false"
-          environment_key: default
+          job_cluster_key: scanpy_large
           notebook_task:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
               data_path: ""
               gene_name_column: ""
               species: hsapiens
+            source: WORKSPACE
+
+        - task_key: run_gt_large
+          depends_on:
+            - task_key: check_large
+              outcome: "true"
+          job_cluster_key: scanpy_xlarge
+          notebook_task:
+            notebook_path: ../notebooks/analyze_single_h5ad.py
+            base_parameters:
+              data_path: ""
+              gene_name_column: ""
+              species: hsapiens
+            source: WORKSPACE
+
+        # Failure-finalize. Fires when ANY analyze task fails. Sets the
+        # pre-created MLflow run's `tags.job_status='failed'` so the
+        # Search Past Runs view in the app flips the row from 'started'
+        # (🟩⬜⬜) to 'failed' (🟥). Runs serverless — cheap, ~5 s.
+        - task_key: tag_failed
+          depends_on:
+            - task_key: run_lt_small
+            - task_key: run_lt_medium
+            - task_key: run_lt_large
+            - task_key: run_gt_large
+          run_if: AT_LEAST_ONE_FAILED
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/tag_run_failed.py
             source: WORKSPACE
 
       environments:
         - environment_key: default
           spec:
             client: '4'
+
+      # Per-route job_clusters — each analyze task picks the one matching its
+      # file-size bucket. SingleNode CPU + ML runtime (gives us scanpy +
+      # anndata + scipy pre-installed). data_security_mode=SINGLE_USER so
+      # the cluster runs under the user's identity and can read the Volume.
+      job_clusters:
+        - job_cluster_key: scanpy_small
+          new_cluster:
+            num_workers: 0
+            node_type_id: ${var.cpu_small_node_type}
+            driver_node_type_id: ${var.cpu_small_node_type}
+            spark_version: '15.4.x-cpu-ml-scala2.12'
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            enable_elastic_disk: true
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+            # cloud-specific availability set per-target in databricks.yml
+
+        - job_cluster_key: scanpy_medium
+          new_cluster:
+            num_workers: 0
+            node_type_id: ${var.cpu_medium_node_type}
+            driver_node_type_id: ${var.cpu_medium_node_type}
+            spark_version: '15.4.x-cpu-ml-scala2.12'
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            enable_elastic_disk: true
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+
+        - job_cluster_key: scanpy_large
+          new_cluster:
+            num_workers: 0
+            node_type_id: ${var.cpu_large_node_type}
+            driver_node_type_id: ${var.cpu_large_node_type}
+            spark_version: '15.4.x-cpu-ml-scala2.12'
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            enable_elastic_disk: true
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+
+        - job_cluster_key: scanpy_xlarge
+          new_cluster:
+            num_workers: 0
+            node_type_id: ${var.cpu_xlarge_node_type}
+            driver_node_type_id: ${var.cpu_xlarge_node_type}
+            spark_version: '15.4.x-cpu-ml-scala2.12'
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            enable_elastic_disk: true
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
 
       parameters:
         - name: catalog
@@ -112,6 +208,8 @@ resources:
           default: scanpy_genesis_workbench
         - name: mlflow_run_name
           default: scanpy_genesis_workbench
+        - name: mlflow_run_id
+          default: ""
         - name: gene_name_column
           default: gene_name
         - name: min_genes
@@ -125,7 +223,7 @@ resources:
         - name: target_sum
           default: 10000
         - name: n_top_genes
-          default: 500
+          default: 2000
         - name: n_pcs
           default: 50
         - name: cluster_resolution

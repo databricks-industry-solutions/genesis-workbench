@@ -349,9 +349,171 @@ Module-level helpers:
 
 ### Optional but recommended — progress dots in the search table
 
-Mirror `disease_biology._PROGRESS_MAP` / `add_progress_column` (`modules/core/app/utils/disease_biology.py:23-54`). For the enzyme stack, the implementation lives at `modules/core/app/utils/enzyme_optimization_tools.py:_ENZYME_PROGRESS_MAP / _enzyme_progress / _add_progress_column`. Define a fixed-width emoji scheme (e.g., `🟩🟩⬜⬜`), call from `_format_search_runs` so both search functions get it for free.
+Mirror `disease_biology._PROGRESS_MAP` / `add_progress_column` (`modules/core/app/utils/disease_biology.py:23-54`). For the enzyme stack, the implementation lives at `modules/core/app/utils/enzyme_optimization_tools.py:_ENZYME_PROGRESS_MAP / _enzyme_progress / _add_progress_column`. For the scanpy stack: `modules/core/app/utils/single_cell_analysis.py:_SC_PROGRESS_MAP / add_singlecell_progress_column`. Define a fixed-width emoji scheme (e.g., `🟩🟩⬜⬜`), call from the search-helper so both search functions get it for free.
+
+Canonical 3-stage helper (copy-paste then rename the prefix):
+
+```python
+_SC_PROGRESS_MAP = {
+    "started":    "🟩⬜⬜",
+    "processing": "🟩🟩⬜",
+    "complete":   "🟩🟩🟩",
+    "finished":   "🟩🟩🟩",   # alias for legacy runs
+    "failed":     "🟥",
+    "unknown":    "⬜⬜⬜",
+}
+
+def add_singlecell_progress_column(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty or "status" not in df.columns:
+        return df
+    df = df.copy()
+    df["progress"] = df["status"].astype(str).str.lower().map(
+        lambda s: _SC_PROGRESS_MAP.get(s, _SC_PROGRESS_MAP["unknown"])
+    )
+    cols = list(df.columns)
+    if "progress" in cols and "status" in cols:
+        cols.remove("progress")
+        cols.insert(cols.index("status") + 1, "progress")
+        df = df[cols]
+    return df
+```
 
 For variable-stage workflows (e.g., enzyme optimization has N iterations × 4 sub-stages each), collapse intermediate stages onto a single bucket so the dot count stays fixed-width. Don't try to render `iter_3_scoring_substep_2` — encode it as one of the four buckets.
+
+**In-progress banner (blinking orange dot above the search table).** Pair the progress column with a small banner so the user knows runs are still running and the row will update. Render it just above the `st.dataframe(...)` call:
+
+```python
+in_progress = search_df[search_df["status"].astype(str).str.lower().isin(
+    ["started", "processing", "running"]
+)]
+if not in_progress.empty:
+    st.markdown(
+        """
+        <style>
+        @keyframes scanpy-blink-orange { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+        .scanpy-run-dot { display: inline-block; width: 10px; height: 10px;
+                          border-radius: 50%; background-color: #FF8C00;
+                          animation: scanpy-blink-orange 1.2s infinite;
+                          margin-right: 8px; vertical-align: middle; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f'<span class="scanpy-run-dot"></span> '
+        f'<strong>{len(in_progress)} run{"s" if len(in_progress) > 1 else ""} in progress</strong> '
+        f'<span style="color: #888;">(click Search again to refresh status)</span>',
+        unsafe_allow_html=True,
+    )
+```
+
+Streamlit does NOT auto-refresh; the banner explicitly tells the user to click Search again. Don't add `st.experimental_rerun()` on a timer — it kills cluster start-up cost amortization and creates jittery selection state in the dataframe.
+
+**View button gating.** When the search table has in-progress rows, the View button should be disabled for those rows so the user can't click into a run that hasn't logged `markers_flat.parquet` (or whatever the result artifact is) yet. Use the PRIOR render's selection (live in session_state via the dataframe's `key`) to decide button state BEFORE the widget is drawn:
+
+```python
+prior_state = st.session_state.get("scanpy_search_display_df")
+prior_rows = []
+if isinstance(prior_state, dict):
+    prior_rows = prior_state.get("selection", {}).get("rows", []) or []
+
+view_disabled = True
+view_help = "Select a row from the table below first."
+if prior_rows:
+    row_status = str(search_df.iloc[prior_rows[0]].get("status", "")).lower()
+    if row_status in ("started", "processing", "running"):
+        view_help = f"This run is **{row_status}** — wait for it to reach `complete`."
+    else:
+        view_disabled = False
+        view_help = "Load the selected run into the View Analysis Results tab."
+
+view_btn = st.button(
+    "View", key="scanpy_search_view_btn", type="primary",
+    disabled=view_disabled, help=view_help,
+)
+```
+
+The button is drawn ABOVE the dataframe; its state derives from session_state populated by the previous render's selection. The `on_select="rerun"` on the dataframe re-fires the script on row click so the button updates immediately.
+
+### Programmatic "tab" switch — segmented_control + pending flag
+
+**Background.** `st.tabs(...)` in Streamlit 1.44 has **no programmatic activate API**. You cannot make View-button click navigate to the results tab. JS workarounds (clicking `button[data-baseweb="tab"]` inside `window.parent.document` from a `components.html` iframe) are fragile — selectors change between Streamlit versions, the iframe's parent-DOM access is sandboxed, and timing race with hydration is hard to get right.
+
+**The fix.** Use `st.segmented_control` (added in 1.41) as the outer "tab" strip instead. It looks like a horizontal pill toggle, behaves like tabs for the user, and is fully session-state controllable. Then conditionally render the active panel.
+
+**Gotcha — widget-key write rule.** Streamlit forbids writing to a widget's session_state key *after* the widget is instantiated in this script run:
+
+```
+streamlit.errors.StreamlitAPIException:
+st.session_state.<key> cannot be modified after the widget with key <key> is instantiated.
+```
+
+The View-button handler runs *inside* the form/search panel (which is rendered *after* the outer segmented_control). So the handler cannot write to the segmented_control's key directly. Use a **separate pending-flag key**: the handler writes to that flag (legal — it's not a widget key), then `st.rerun()`. At the top of the next render — *before* the segmented_control instantiates — consume the flag and write to the widget key (legal — widget not yet drawn).
+
+**Reference implementation** (`modules/core/app/views/single_cell_workflows/processing.py:render()`):
+
+```python
+def render():
+    st.markdown("### Raw Single Cell Analysis")
+
+    _VIEW_KEY = "scanpy_active_view_widget"
+    # Consume any pending programmatic switch BEFORE the widget renders.
+    pending = st.session_state.pop("_scanpy_pending_view", None)
+    if pending:
+        st.session_state[_VIEW_KEY] = pending
+    elif _VIEW_KEY not in st.session_state:
+        st.session_state[_VIEW_KEY] = "Run New Analysis"
+
+    st.segmented_control(
+        label="View",
+        options=["Run New Analysis", "View Analysis Results"],
+        key=_VIEW_KEY,
+        label_visibility="collapsed",
+    )
+
+    active = st.session_state.get(_VIEW_KEY) or "Run New Analysis"
+    if active == "Run New Analysis":
+        _display_run_analysis()
+    else:
+        _display_results_viewer()
+```
+
+And inside the View-button handler (which runs from `_display_run_analysis()`):
+
+```python
+if view_btn and prior_rows:
+    selected_run_id = search_df.iloc[prior_rows[0]]["run_id"]
+    try:
+        _load_run_into_session(selected_run_id)
+    except Exception as e:
+        st.error(f"Error loading run: {e}")
+    else:
+        st.session_state["_scanpy_pending_view"] = "View Analysis Results"
+        st.rerun()
+```
+
+Direct user clicks on the segmented_control are unaffected — Streamlit handles them natively via the widget key. The pending flag is set only by programmatic flows (View button, Back-to-search button, etc.).
+
+**Anti-patterns to avoid:**
+- ❌ `components.html("<script>document.querySelector(...).click()</script>")` — DOM-selector hack, breaks on Streamlit upgrades.
+- ❌ Writing to the widget key from inside the View handler — `StreamlitAPIException` (widget already instantiated).
+- ❌ Keeping `st.tabs` and trying to "force" the active tab — there's no API; just use `st.segmented_control`.
+- ❌ Syncing widget key from canonical state at the TOP of every render unconditionally — this wipes the user's direct widget click before Streamlit can apply it.
+
+### Clear-state-on-search
+
+When the user clicks Search, the View Analysis Results panel may have a previously-loaded run still in session_state (markers, annotations, UMAP overlays). Wipe it so a stale run doesn't leak across the search → view boundary:
+
+```python
+if search_btn:
+    prev_run_id = st.session_state.get('singlecell_run_id')
+    if prev_run_id:
+        _clear_run_session_state(prev_run_id)
+    with st.spinner("Searching"):
+        ...
+```
+
+`_clear_run_session_state(run_id)` pops the run dataframe + per-run-id-keyed annotation/UMAP/cluster caches. See `modules/core/app/views/single_cell_workflows/processing.py:_clear_run_session_state`.
 
 ## Reference implementations (in order of recency)
 
@@ -378,6 +540,29 @@ cd modules/core && ./update.sh <cloud>
 
 **Never** `./deploy.sh core` — wipes settings + user-profile tables.
 
+## Documentation (hard rule — same as the development skill)
+
+A batch workflow is a "new feature" — the three docs artifacts required by
+[`SKILL_GENESIS_WORKBENCH_DEVELOPMENT.md`](SKILL_GENESIS_WORKBENCH_DEVELOPMENT.md#documentation-hard-rule)
+apply in full and must ship in the same PR as the workflow code:
+
+1. **`modules/core/app/docs/<module>_<feature>.md`** — what it does, how to
+   use the launch form, what inputs/outputs look like, where results land
+   (MLflow run + result dialog), known limitations.
+2. **Root `README.md` bullet** under the matching module in "Inside Genesis
+   Workbench", linking to the doc page.
+3. **`CHANGELOG.md` entry** following the existing dated-header pattern —
+   explain the *decisions*, not just "added X". Call out which anti-pattern
+   from the list above the implementation explicitly avoids.
+
+Batch workflows are particularly doc-heavy because they touch five layers
+(orchestrator job, registration, dispatcher, search, dialog) — the doc page
+is what spares the next contributor from re-deriving the wiring by reading
+five files. If the doc page is hard to write, the workflow's UX is probably
+wrong too.
+
+---
+
 ## Verification (smoke test for any new batch workflow)
 
 After both deploys land:
@@ -387,6 +572,7 @@ After both deploys land:
 3. **Viewer dialog** — click a row + **View**. Status banner, MLflow link, progress chart, results table all render.
 4. **Failure surfacing** — force a failure (malformed input, etc.). Row should land on `job_status=failed`; the dialog should still open and show partial state.
 5. **Direct Jobs-UI fallback** — trigger the orchestrator from the Databricks Jobs UI directly with `mlflow_run_id=""`. Should work — orchestrator falls back to creating its own run (Layer 4 else-branch).
+6. **Docs land in the same PR** — the three doc artifacts above. A PR that ships code but no docs is incomplete and should be sent back.
 
 If any of these don't work, the issue is almost always one of:
 

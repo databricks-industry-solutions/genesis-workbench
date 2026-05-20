@@ -1,0 +1,112 @@
+variables:
+  current_user:
+    description: User deploying the bundle. Can apply to service principals as well.
+    default: ${workspace.current_user.userName}
+
+  current_working_directory:
+    description: Working directory or bundle root.
+    default: /Users/${var.current_user}/.bundle/${bundle.name}/${bundle.target}
+
+  workspace_url:
+    description: Workspace url for deployment
+
+  common_resource_tags:
+    description: Resource tags
+    default:
+      application: genesis_workbench
+      module: teddy
+      created_by: ${workspace.current_user.short_name}
+
+  cpu_node_type:
+    description: Node type for CPU vms
+
+  t4_node_type:
+    description: Node type for T4 GPUs
+
+  a10_node_type:
+    description: Node type for A10 GPUs
+
+  gpu_small_setting:
+    description: The config setting for small gpu
+
+  gpu_medium_setting:
+    description: The config setting for medium gpu
+
+  gpu_large_setting:
+    description: The config setting for large gpu
+
+  cpu_small_node_type:
+    description: Node type for small CPU clusters
+
+  cpu_medium_node_type:
+    description: Node type for medium CPU clusters
+
+  cpu_large_node_type:
+    description: Node type for large CPU clusters
+
+  cpu_xlarge_node_type:
+    description: Node type for xlarge CPU clusters
+
+  gpu_t4_rapids_node_type:
+    description: Node type for T4 GPU rapids clusters
+
+  gpu_ml_spark_version:
+    description: Spark version for GPU ML runtime
+
+  core_catalog_name:
+    description: primary catalog where data, models, and files are stored for this project.
+
+  core_schema_name:
+    description: The schema where core components will be installed.
+
+  module_schema_name:
+    description: The schema where a module components will be installed.
+    default: dev_teddy_genesis_workbench
+
+  sql_warehouse_id:
+    description: Id of the SQL Warehouse that will be used by the app
+
+  module_registration_experiment_name:
+    description: The experiment to which all registered modules are logged
+    default: teddy_genesis_workbench_modules
+
+  cache_dir:
+    description: The cache directory for TEDDY model
+    default: teddy
+
+  teddy_hf_repo:
+    description: Hugging Face repo id hosting the TEDDY weights and source code.
+    default: Merck/TEDDY
+
+  teddy_hf_revision:
+    description: Hugging Face revision (commit SHA or tag) pinned for reproducibility. Override per deploy.
+    default: main
+
+  teddy_model_size:
+    description: |
+      Which TEDDY-G variant to register (70M, 160M, or 400M).
+      400M is the default — the TEDDY paper only benchmarks zero-shot retrieval
+      on 400M, and the 70M encoder has been observed to collapse immune cell
+      types (NK ↔ plasma cosine 0.98 in our inspection). 400M needs A10 GPU
+      (GPU_MEDIUM serving workload, ~1024-dim embeddings, ~1.6 GB weights).
+    default: 400M
+
+  teddy_reembed_target_n_cells:
+    description: |
+      Number of CELLxGENE Census cells to embed into the `teddy_cells` reference Delta.
+      Bigger reference = better KNN annotation recall but more A10 GPU time.
+      Default 2M cells ≈ 5-8h on A10 with bf16 + batch=32.
+      Set to 500000 for a quick install (~1-2h) or 5000000 for max coverage.
+    default: "2000000"
+
+  teddy_reembed_per_stratum_cap:
+    description: |
+      Max cells per (tissue_general, disease) stratum during stratified sampling.
+      Keeps the reference balanced — no single tissue/disease pair dominates.
+    default: "30000"
+
+  teddy_reembed_census_version:
+    description: |
+      CELLxGENE Census version tag pinned for reproducibility. Use a dated LTS
+      release (e.g. "2024-07-01"), not "latest", so re-runs are reproducible.
+    default: "2024-07-01"
