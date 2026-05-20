@@ -61,7 +61,10 @@ def render():
 
     user_info = get_user_info()
 
-    # Check if endpoint is actually deployed and reachable (not just in the map)
+    # Check if endpoint is actually deployed and reachable (not just in the map).
+    # Pre-bind endpoint_name so the generic-Exception handler below can still
+    # reference it even when get_endpoint_name() itself raised before assignment.
+    endpoint_name = "<scGPT Perturbation>"
     try:
         endpoint_name = get_endpoint_name("scGPT Perturbation")
         ws = WorkspaceClient()
@@ -75,7 +78,7 @@ def render():
     except RuntimeError:
         st.warning(
             "The scGPT Perturbation endpoint is not configured. "
-            "Add it to `_MODEL_ENDPOINT_MAP` in streamlit_helper.py."
+            "Deploy the scGPT module to use this feature."
         )
         return
     except Exception as e:

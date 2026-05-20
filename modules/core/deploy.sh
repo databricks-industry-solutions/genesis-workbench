@@ -36,6 +36,7 @@ fi
 
 databricks secrets put-secret $secret_scope_name core_catalog_name --string-value $core_catalog_name
 databricks secrets put-secret $secret_scope_name core_schema_name --string-value $core_schema_name
+databricks secrets put-secret $secret_scope_name dev_user_prefix --string-value "${dev_user_prefix:-}"
 
 echo ""
 echo "▶️ Building libraries"

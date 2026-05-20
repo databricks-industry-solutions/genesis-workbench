@@ -495,38 +495,33 @@ def _display_results_viewer():
                                 st.error(f"SCimilarity annotation failed: {e}")
 
                     if use_teddy:
-                        # TEDDY needs a wide gene context (~2000 HVG) to produce
-                        # meaningful embeddings. Try the dedicated hvg_matrix
-                        # artifact first; if it's absent (older run from before
-                        # the HVG-logging change), fall back to markers_flat
-                        # with a warning that quality will be limited.
-                        teddy_input_df = None
-                        try:
-                            hvg_df = download_singlecell_hvg_matrix(run_id)
-                        except Exception as hvg_err:
-                            st.warning(f"Could not load hvg_matrix.parquet: {hvg_err}. Falling back to markers_flat.")
-                            hvg_df = None
-                        if hvg_df is not None and not hvg_df.empty:
-                            # NB: use a distinct local name (`hvg_expr_cols`) so we
-                            # don't shadow the outer-fragment `expr_cols` from line 346
-                            # — Python would then treat `expr_cols` as local-only and
-                            # trigger UnboundLocalError when the outer fragment code
-                            # uses it later (UMAP hover, dot plot, etc.).
-                            hvg_expr_cols = [c for c in hvg_df.columns if c.startswith("expr_")]
-                            # HVG artifact uses the standardized 'cluster' column;
-                            # markers_flat may use 'leiden' or 'louvain' — re-resolve.
-                            hvg_cluster_col = _get_cluster_column(hvg_df) or cluster_col
-                            teddy_input_df = hvg_df
-                            teddy_cluster_col = hvg_cluster_col
-                            st.caption(f"TEDDY input: {len(hvg_expr_cols):,} HVG genes from hvg_matrix.parquet")
-                        else:
-                            teddy_input_df = df
-                            teddy_cluster_col = cluster_col
-                            st.caption(
-                                "⚠️ TEDDY input falling back to markers_flat (~100 genes). "
-                                "This run predates the HVG-matrix artifact; embedding quality will be limited. "
-                                "Re-run the Scanpy processing to log hvg_matrix.parquet for full TEDDY quality."
-                            )
+                        # TEDDY input selection — use markers_flat (~100 high-signal
+                        # marker genes per cluster), NOT the HVG matrix.
+                        #
+                        # Why: TEDDY's rank-value encoding takes the top-K
+                        # most-expressed genes per cell. With the HVG matrix at
+                        # ~96% zero density, only ~80 of the 2000 input positions
+                        # carry actual expression signal — the remaining ~1920
+                        # positions become zero-tied gene IDs in index order
+                        # (PyTorch's topk tie-break behavior), which is IDENTICAL
+                        # across all cells regardless of cell type. With a uniform
+                        # attention mask, the model attends equally to that
+                        # identical 96% filler and the 4% real signal — embeddings
+                        # collapse and KNN retrieval lands on a fixed region (e.g.,
+                        # every PBMC cluster predicting "glutamatergic neuron").
+                        # markers_flat is dense (~100% non-zero in the cells they
+                        # were picked from) and matches the signal density TEDDY
+                        # was pretrained on. Top-K=100 of a 100-gene input = all
+                        # real signal, no zero-padded tail. Once the long-term
+                        # attention-mask fix lands in wrapper + notebook 03 and
+                        # the reference is rebuilt with it, the HVG path can be
+                        # reinstated safely.
+                        teddy_input_df = df
+                        teddy_cluster_col = cluster_col
+                        st.caption(
+                            f"TEDDY input: markers_flat ({sum(c.startswith('expr_') for c in df.columns):,} "
+                            f"per-cluster marker genes — high signal density)."
+                        )
 
                         progress_t = st.progress(0, text="TEDDY: starting…")
                         with st.spinner("Running TEDDY annotation…"):

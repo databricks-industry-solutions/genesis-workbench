@@ -36,6 +36,7 @@ fi
 
 databricks secrets put-secret $secret_scope_name core_catalog_name --string-value $core_catalog_name
 databricks secrets put-secret $secret_scope_name core_schema_name --string-value $core_schema_name
+databricks secrets put-secret $secret_scope_name dev_user_prefix --string-value "${dev_user_prefix:-}"
 
 echo ""
 echo "▶️ Building libraries"
@@ -63,10 +64,12 @@ for file in library/genesis_workbench/dist/*.whl; do
 
     echo "Checking if $filename exists as dependency"
 
-    if ! grep -wq "$filename" app/requirements.txt; then        
+    if ! grep -wq "$filename" app/requirements.txt; then
         echo "Adding $filename to the app dependency"
-        # Append the filename to the output file 
-        echo -e "\nlib/$filename" >> app/requirements.txt
+        # Use printf — macOS /bin/echo doesn't honor -e, which would write
+        # the literal string "-e \nlib/..." to requirements.txt and break
+        # pip install ("ERROR: -e requires a source location").
+        printf "\nlib/%s\n" "$filename" >> app/requirements.txt
     else
         echo "Dependency already exists"
     fi

@@ -19,9 +19,9 @@ Annotates the clusters from a Scanpy run with both **cell type** and **disease**
 
 ## Inputs
 
-- A completed Scanpy run logged under `scanpy_genesis_workbench` (the source of `markers_flat.parquet` + the new `hvg_matrix.parquet` artifacts).
-- The app reads `hvg_matrix.parquet` first (highly-variable genes, ~2000 per cluster). Falls back to `markers_flat.parquet` if HVG is missing (legacy runs).
-- Required gene-name convention: HGNC symbols. The app translates to ENSG IDs via the cached `gene_mapping.json` on the volume before calling the endpoint.
+- A completed Scanpy run logged under `scanpy_genesis_workbench`. The annotator reads `markers_flat.parquet` (per-cluster top marker genes, ~68 dense genes, mostly non-zero in the cells they were picked from).
+- **Why markers_flat and not the HVG matrix?** The wider HVG matrix (~2000 genes) is ~96 % zero per cell. With TEDDY's rank-value encoding, the zero-valued tail of each cell's topk sequence is filled in gene-index order (PyTorch tie-break), producing an identical "filler tail" across cells. The model's uniform attention mask attends equally to that identical 96 % filler and the 4 % real signal — embeddings collapse and every cluster lands on the same KNN region. markers_flat's higher signal density matches what TEDDY was pretrained on. (Once the long-term attention-mask fix lands in the wrapper + the reference is rebuilt with the same masking, the HVG path can be reinstated for richer context.)
+- Required gene-name convention: HGNC symbols. The app translates to ENSG IDs via `gene_mapping.json` (60,530 entries) on the UC Volume before calling the endpoint. **Reads via the SDK Files API**, not POSIX `open()` — Databricks Apps' sandbox has no FUSE mount for `/Volumes`, so `open()` would silently fail and leave the mapping empty, sending raw HGNC symbols to the endpoint which then maps everything to `<unk>` and returns identical embeddings.
 
 ## Outputs
 
@@ -34,10 +34,10 @@ For each annotated run, logged to the run's MLflow artifacts directory under `ce
 ## Underlying models / endpoints
 
 - **Model:** TEDDY-G 400M, registered at `${catalog}.${schema}.teddy` (Unity Catalog) — Apache 2.0.
-- **Serving endpoint:** `gwb_teddy_endpoint` on GPU_MEDIUM (A10). Single replica; embeddings only (no classification head — the public TEDDY-G has `n_cls=0`).
-- **Reference table:** `${catalog}.${schema}.teddy_cells` — 2 M cells stratified across 197 (tissue_general, disease) strata from CELLxGENE Census 2024-07-01 LTS. Includes healthy + disease cells (the earlier disease-only filter was removed to fix the NK ↔ plasma collapse).
+- **Serving endpoint:** name looked up from the `model_deployments` table at call time via `genesis_workbench.models.get_endpoint_name_for_uc_model("teddy")`. (Replaces the prior pattern of constructing `gwb_{DEV_USER_PREFIX}_teddy_endpoint` client-side — that approach silently 404'd whenever the env var didn't make it through the deploy chain.) The endpoint runs on GPU_MEDIUM (A10), single replica, embeddings only (no classification head — public TEDDY-G has `n_cls=0`).
+- **Reference table:** `${catalog}.${schema}.teddy_cells` — 2 M cells stratified across 197 (tissue_general, disease) strata from CELLxGENE Census 2024-07-01 LTS. Includes healthy + disease cells.
 - **Vector Search index:** `${catalog}.${schema}.teddy_cell_index` on `gwb_teddy_vs_endpoint`. Delta Sync, TRIGGERED, embedding dim 1024.
-- **Gene mapping artifact:** `/Volumes/${catalog}/${schema}/teddy/gene_mapping.json` — HGNC → ENSG translation (60,530 entries from Census var).
+- **Gene mapping artifact:** `/Volumes/${catalog}/${schema}/teddy/gene_mapping.json` — HGNC → ENSG translation (60,530 entries from Census var). Read via SDK Files API in the app (see Inputs).
 
 Detailed model + deploy reference: [`modules/single_cell/teddy/teddy_g_v1/README.md`](../../../single_cell/teddy/teddy_g_v1/README.md).
 
@@ -45,6 +45,6 @@ Detailed model + deploy reference: [`modules/single_cell/teddy/teddy_g_v1/README
 
 - **No rare-disease retrieval guarantee.** Diseases with < 1000 cells in the 2 M reference are voted but with low confidence; the UI shows confidence in the result table.
 - **Human only.** Census slice is `homo_sapiens`. Mouse runs fall back to SCimilarity-only annotation (TEDDY checkbox is greyed out when the Scanpy run's species ≠ `hsapiens`).
-- **HVG required for best quality.** Older Scanpy runs without `hvg_matrix.parquet` produce noisier TEDDY predictions because only `markers_flat.parquet`'s ~100 marker genes feed the encoder vs the ~2000-gene HVG matrix.
+- **markers_flat is the active input today.** The HVG-matrix input is currently disabled in the app — it triggers an attention-pattern collapse with the current wrapper. A long-term fix (per-cell attention mask that ignores zero-expression positions on both query and reference sides, plus a reference rebuild) will re-enable HVG for richer context.
 - **400M-only.** The earlier 70M variant collapsed immune cell types (NK ↔ plasma cosine 0.98 in inspection); the TEDDY paper validates zero-shot retrieval only on 400M. The bundle variable `teddy_model_size` defaults to `400M` and should not be lowered for production.
 - **Endpoint cold-start.** First annotation after idle (~30 min) takes 30-60 s extra for endpoint scale-up.

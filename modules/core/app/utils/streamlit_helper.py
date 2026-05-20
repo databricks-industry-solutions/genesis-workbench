@@ -43,17 +43,16 @@ _MODEL_ENDPOINT_MAP = {
 }
 
 def get_endpoint_name(model_name: str) -> str:
-    """Get the serving endpoint name for a model. Uses hardcoded mapping for now;
-    will be replaced with database lookup later."""
-    dev_user_prefix = os.environ.get("DEV_USER_PREFIX", None)
-    if dev_user_prefix and dev_user_prefix.lower() in ("none", ""):
-        dev_user_prefix = None
-
+    """Look up the serving endpoint name for a model from the model_deployments
+    table — the source of truth populated by deploy_model_endpoint() at
+    deploy time. Replaces the prior `gwb_{DEV_USER_PREFIX}_{suffix}_endpoint`
+    construction which silently 404s when the env var isn't bound through
+    the deploy chain (see the May 20 TEDDY annotation incident)."""
+    from genesis_workbench.models import get_endpoint_name_for_uc_model
     uc_name = _MODEL_ENDPOINT_MAP.get(model_name)
     if uc_name is None:
         raise RuntimeError(f"Unknown model '{model_name}'. Add it to _MODEL_ENDPOINT_MAP in streamlit_helper.py")
-
-    return f"gwb_{dev_user_prefix}_{uc_name}_endpoint" if dev_user_prefix else f"gwb_{uc_name}_endpoint"
+    return get_endpoint_name_for_uc_model(uc_name)
 
 
 def get_user_info():

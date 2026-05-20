@@ -58,23 +58,30 @@ def _gene_mapping_path() -> str:
 
 
 def _load_gene_mapping() -> dict:
-    """Lazily load the HGNC → ENSG mapping from the Volume. Returns {} on miss."""
+    """Lazily load the HGNC → ENSG mapping from the Volume. Returns {} on miss.
+
+    Uses the Databricks SDK Files API because Databricks Apps run in a
+    sandboxed container without POSIX/FUSE access to /Volumes paths —
+    plain `open("/Volumes/...")` fails silently with FileNotFoundError,
+    leaves the mapping empty, and every input gene becomes <unk> at the
+    endpoint's tokenizer, which collapses all embeddings to a constant.
+    (This is the same pattern `processing._load_gmt` uses for GMT files.)
+    """
     if _GENE_MAPPING_CACHE["loaded"]:
         return _GENE_MAPPING_CACHE["data"]
     path = _gene_mapping_path()
     try:
-        with open(path, "r") as f:
-            mapping = json.load(f)
+        ws = workspace_client
+        response = ws.files.download(path)
+        mapping = json.loads(response.contents.read().decode("utf-8"))
         logger.info(f"Loaded TEDDY gene mapping: {len(mapping):,} entries from {path}")
         _GENE_MAPPING_CACHE["data"] = mapping
-    except FileNotFoundError:
+    except Exception as e:  # noqa: BLE001 — includes NotFound and any SDK errors
         logger.warning(
-            f"TEDDY gene mapping not found at {path}. Inputs that aren't already "
-            f"ENSG IDs will become <unk> at query time → noisy embeddings. Run "
-            f"notebooks/06_extract_gene_mapping.py to populate it."
+            f"Failed to load TEDDY gene mapping from {path}: {e}. Inputs that "
+            f"aren't already ENSG IDs will become <unk> at query time → noisy "
+            f"embeddings. Run notebooks/06_extract_gene_mapping.py to populate it."
         )
-    except Exception as e:  # noqa: BLE001
-        logger.warning(f"Failed to load TEDDY gene mapping from {path}: {e}")
     _GENE_MAPPING_CACHE["loaded"] = True
     return _GENE_MAPPING_CACHE["data"]
 
@@ -111,10 +118,18 @@ def _translate_gene_names(names: list) -> tuple:
 
 
 def _get_endpoint_name() -> str:
-    dev_user_prefix = os.environ.get("DEV_USER_PREFIX", "")
-    if dev_user_prefix and dev_user_prefix.lower() not in ("none", ""):
-        return f"gwb_{dev_user_prefix}_teddy_endpoint"
-    return "gwb_teddy_endpoint"
+    """Look up the TEDDY serving endpoint name from the model_deployments table.
+
+    Source of truth: `deploy_model_endpoint()` writes the actual deployed
+    endpoint name into the table at deploy time. We read it back here, rather
+    than constructing it from `DEV_USER_PREFIX` + a hardcoded suffix — that
+    pattern silently 404s when the env var isn't plumbed (see the May 20
+    incident: app-side `_translate_gene_names` silently returned HGNC because
+    the env var wasn't bound, embeddings collapsed, every cluster predicted
+    glutamatergic neuron).
+    """
+    from genesis_workbench.models import get_endpoint_name_for_uc_model
+    return get_endpoint_name_for_uc_model("teddy")
 
 
 def _query_endpoint(payload):

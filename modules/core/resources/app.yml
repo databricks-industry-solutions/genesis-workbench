@@ -26,6 +26,12 @@ resources:
             scope: ${var.secret_scope_name}
             permission: "READ"
 
+        - name: "dev_user_prefix"
+          secret:
+            key: "dev_user_prefix"
+            scope: ${var.secret_scope_name}
+            permission: "READ"
+
         - name: "deploy_model_job"
           job:
             id: ${resources.jobs.deploy_model_job.id}
