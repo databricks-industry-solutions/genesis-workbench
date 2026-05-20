@@ -7,7 +7,9 @@ import pandas as pd
 import tempfile
 import os
 
-def start_scanpy_job(
+def _start_singlecell_job(
+    job_env_var: str,
+    processing_mode: str,
     data_path: str,
     mlflow_experiment: str,
     mlflow_run_name: str,
@@ -24,27 +26,42 @@ def start_scanpy_job(
     user_info: UserInfo,
     compute_pseudotime: bool = False,
 ):
-    """
-    Trigger the scanpy analysis job with specified parameters
-    Returns: (job_id, run_id) tuple
+    """Shared dispatcher for scanpy + rapids-singlecell.
+
+    Pre-creates the MLflow run with `job_status="started"` so the Run-New-Analysis
+    search UI can show it as in-progress immediately (Disease-Biology pattern). The
+    orchestrator notebook attaches to this run via `mlflow.start_run(run_id=...)`
+    and updates `job_status` through stages.
     """
     w = WorkspaceClient()
-
-    scanpy_job_id = os.environ.get("RUN_SCANPY_JOB_ID")
-    if not scanpy_job_id:
-        raise RuntimeError("Scanpy job not registered. Please deploy the single_cell module first.")
+    job_id = os.environ.get(job_env_var)
+    if not job_id:
+        raise RuntimeError(
+            f"{processing_mode} job not registered (env {job_env_var} unset). "
+            "Deploy the corresponding submodule first."
+        )
 
     experiment = set_mlflow_experiment(
         experiment_tag=mlflow_experiment,
-        user_email=user_info.user_email
+        user_email=user_info.user_email,
     )
 
-    job_run = w.jobs.run_now(
-        job_id=scanpy_job_id,
-        job_parameters={
-            "catalog": os.environ["CORE_CATALOG_NAME"],
-            "schema": os.environ["CORE_SCHEMA_NAME"],
-            "user_email": user_info.user_email,
+    # Pre-create the MLflow run. Discovery tags + initial params are written
+    # synchronously here so the Search Past Runs table picks the run up
+    # immediately, with job_status="started". The job's params dict is then
+    # passed mlflow_run_id so the notebook attaches instead of creating its own.
+    with mlflow.start_run(
+        run_name=mlflow_run_name,
+        experiment_id=experiment.experiment_id,
+    ) as run:
+        mlflow_run_id = run.info.run_id
+
+        # All user-facing analysis params logged up front. The analyze
+        # notebook MUST NOT re-log these keys (MLflow rejects duplicates
+        # via `INVALID_PARAMETER_VALUE: <key> was already logged`); the
+        # notebook checks for `mlflow_run_id` and skips its own
+        # log_params on the attached-run path.
+        mlflow.log_params({
             "data_path": data_path,
             "mlflow_experiment": experiment.name,
             "mlflow_run_name": mlflow_run_name,
@@ -59,101 +76,136 @@ def start_scanpy_job(
             "n_pcs": str(n_pcs),
             "cluster_resolution": str(cluster_resolution),
             "compute_pseudotime": str(compute_pseudotime).lower(),
-        }
+        })
+
+        job_run = w.jobs.run_now(
+            job_id=job_id,
+            job_parameters={
+                "catalog": os.environ["CORE_CATALOG_NAME"],
+                "schema": os.environ["CORE_SCHEMA_NAME"],
+                "user_email": user_info.user_email,
+                "data_path": data_path,
+                "mlflow_experiment": experiment.name,
+                "mlflow_run_name": mlflow_run_name,
+                "mlflow_run_id": mlflow_run_id,
+                "gene_name_column": gene_name_column,
+                "species": species,
+                "min_genes": str(min_genes),
+                "min_cells": str(min_cells),
+                "pct_counts_mt": str(pct_counts_mt),
+                "n_genes_by_counts": str(n_genes_by_counts),
+                "target_sum": str(target_sum),
+                "n_top_genes": str(n_top_genes),
+                "n_pcs": str(n_pcs),
+                "cluster_resolution": str(cluster_resolution),
+                "compute_pseudotime": str(compute_pseudotime).lower(),
+            },
+        )
+
+        mlflow.set_tag("origin", "genesis_workbench")
+        mlflow.set_tag("feature", processing_mode)
+        mlflow.set_tag("processing_mode", processing_mode)
+        mlflow.set_tag("created_by", user_info.user_email)
+        mlflow.set_tag("job_run_id", str(job_run.run_id))
+        mlflow.set_tag("job_status", "started")
+
+    return job_id, job_run.run_id
+
+
+def start_scanpy_job(**kwargs):
+    """Trigger the scanpy analysis job. Returns (job_id, job_run_id)."""
+    return _start_singlecell_job(
+        job_env_var="RUN_SCANPY_JOB_ID",
+        processing_mode="scanpy",
+        **kwargs,
     )
 
-    return scanpy_job_id, job_run.run_id
 
-
-def start_rapids_singlecell_job(
-    data_path: str,
-    mlflow_experiment: str,
-    mlflow_run_name: str,
-    gene_name_column: str,
-    species: str,
-    min_genes: int,
-    min_cells: int,
-    pct_counts_mt: float,
-    n_genes_by_counts: int,
-    target_sum: int,
-    n_top_genes: int,
-    n_pcs: int,
-    cluster_resolution: float,
-    user_info: UserInfo,
-    compute_pseudotime: bool = False,
-):
-    """
-    Trigger the rapids-singlecell analysis job with specified parameters
-    Returns: (job_id, run_id) tuple
-    """
-    w = WorkspaceClient()
-
-    rapids_job_id = os.environ.get("RUN_RAPIDSSINGLECELL_JOB_ID")
-    if not rapids_job_id:
-        raise RuntimeError("rapids-singlecell job not registered. Please deploy the rapids-singlecell module first.")
-
-    experiment = set_mlflow_experiment(
-        experiment_tag=mlflow_experiment,
-        user_email=user_info.user_email
+def start_rapids_singlecell_job(**kwargs):
+    """Trigger the rapids-singlecell analysis job. Returns (job_id, job_run_id)."""
+    return _start_singlecell_job(
+        job_env_var="RUN_RAPIDSSINGLECELL_JOB_ID",
+        processing_mode="rapids-singlecell",
+        **kwargs,
     )
-
-    job_run = w.jobs.run_now(
-        job_id=rapids_job_id,
-        job_parameters={
-            "catalog": os.environ["CORE_CATALOG_NAME"],
-            "schema": os.environ["CORE_SCHEMA_NAME"],
-            "user_email": user_info.user_email,
-            "data_path": data_path,
-            "mlflow_experiment": experiment.name,
-            "mlflow_run_name": mlflow_run_name,
-            "gene_name_column": gene_name_column,
-            "species": species,
-            "min_genes": str(min_genes),
-            "min_cells": str(min_cells),
-            "pct_counts_mt": str(pct_counts_mt),
-            "n_genes_by_counts": str(n_genes_by_counts),
-            "target_sum": str(target_sum),
-            "n_top_genes": str(n_top_genes),
-            "n_pcs": str(n_pcs),
-            "cluster_resolution": str(cluster_resolution),
-            "compute_pseudotime": str(compute_pseudotime).lower(),
-        }
-    )
-
-    return rapids_job_id, job_run.run_id
 
 
 def download_singlecell_markers_df(run_id: str) -> pd.DataFrame:
     """
     Download the markers_flat.parquet from an MLflow single-cell analysis run
-    
+
     Works with scanpy, rapids-singlecell, or any tool that produces the standard
     markers_flat.parquet artifact.
-    
+
     Args:
         run_id: The MLflow run ID
-    
+
     Returns:
         DataFrame with cells, embeddings, and marker expression
     """
     mlflow.set_registry_uri("databricks-uc")
     mlflow.set_tracking_uri("databricks")
     client = MlflowClient()
-    
+
     # Download the parquet artifact
     with tempfile.TemporaryDirectory() as tmpdir:
         artifact_path = "markers_flat.parquet"
         local_file = client.download_artifacts(run_id, artifact_path, dst_path=tmpdir)
         df = pd.read_parquet(local_file)
-    
+
     return df
+
+
+def download_singlecell_hvg_matrix(run_id: str):
+    """Download hvg_matrix.parquet (cells × top-HVG genes + cluster col) from a run.
+
+    Returns:
+        DataFrame if the artifact exists (newer scanpy runs), else None for
+        older runs that predate the HVG-logging change. Callers should fall
+        back to markers_flat with a warning when None is returned.
+
+    Foundation-model annotators (TEDDY) need a wide gene context (~2000 genes)
+    to produce meaningful embeddings; markers_flat's ~100 top-marker genes is
+    too sparse. The HVG matrix sits between markers_flat and the full AnnData
+    in size — purpose-built for these models.
+    """
+    from mlflow.exceptions import MlflowException
+
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+    client = MlflowClient()
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            local_file = client.download_artifacts(run_id, "hvg_matrix.parquet", dst_path=tmpdir)
+            return pd.read_parquet(local_file)
+    except MlflowException as e:
+        # "Artifact not found" vs other errors. Treat absence as None.
+        msg = str(e).lower()
+        if "does not exist" in msg or "not found" in msg or "resource_does_not_exist" in msg:
+            return None
+        raise
+    except FileNotFoundError:
+        return None
 
 
 ANNOTATION_ARTIFACT_NAME = "scimilarity_annotation.json"
 
+# Per-model artifact naming so SCimilarity and TEDDY annotations can coexist
+# on the same MLflow run. Legacy "scimilarity_annotation.json" still resolves
+# to model="scimilarity" via the map below — keeps older runs readable.
+_ANNOTATION_ARTIFACTS = {
+    "scimilarity": "scimilarity_annotation.json",
+    "teddy": "teddy_annotation.json",
+}
 
-def save_singlecell_annotation(run_id: str, results_df: pd.DataFrame, cluster_col: str) -> None:
-    """Log SCimilarity cluster annotation as ``ANNOTATION_ARTIFACT_NAME`` on the run.
+
+def save_singlecell_annotation(run_id: str, results_df: pd.DataFrame, cluster_col: str,
+                                model: str = "scimilarity") -> None:
+    """Log a cluster-annotation result as a per-model JSON artifact on the run.
+
+    ``model`` selects the artifact filename — see ``_ANNOTATION_ARTIFACTS``. SCimilarity
+    and TEDDY annotations live alongside each other on the same run.
 
     Uses ``MlflowClient.log_artifact`` directly. ``mlflow.start_run(run_id=...)``
     raises "Cannot start run with ID X because active run ID does not match
@@ -165,23 +217,28 @@ def save_singlecell_annotation(run_id: str, results_df: pd.DataFrame, cluster_co
     """
     import json
 
+    artifact_name = _ANNOTATION_ARTIFACTS.get(model)
+    if artifact_name is None:
+        raise ValueError(f"Unknown annotation model '{model}'. Expected one of: {list(_ANNOTATION_ARTIFACTS)}")
+
     mlflow.set_registry_uri("databricks-uc")
     mlflow.set_tracking_uri("databricks")
 
     client = MlflowClient()
     payload = {
         "cluster_col": cluster_col,
+        "model": model,
         "results": results_df.to_dict(orient="list"),
     }
     with tempfile.TemporaryDirectory() as tmp:
-        local = os.path.join(tmp, ANNOTATION_ARTIFACT_NAME)
+        local = os.path.join(tmp, artifact_name)
         with open(local, "w") as f:
             json.dump(payload, f)
         client.log_artifact(run_id=run_id, local_path=local)
 
 
-def download_singlecell_annotation(run_id: str):
-    """Return (results_df, cluster_col) if the run has a saved annotation, else (None, None).
+def download_singlecell_annotation(run_id: str, model: str = "scimilarity"):
+    """Return (results_df, cluster_col) if the run has a saved annotation for ``model``, else (None, None).
 
     Distinguishes "no annotation present" (artifact missing) from real failures
     (auth, network, malformed JSON) — the former returns (None, None); the
@@ -190,13 +247,17 @@ def download_singlecell_annotation(run_id: str):
     """
     from mlflow.exceptions import MlflowException
 
+    artifact_name = _ANNOTATION_ARTIFACTS.get(model)
+    if artifact_name is None:
+        raise ValueError(f"Unknown annotation model '{model}'. Expected one of: {list(_ANNOTATION_ARTIFACTS)}")
+
     mlflow.set_registry_uri("databricks-uc")
     mlflow.set_tracking_uri("databricks")
     client = MlflowClient()
 
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
-            local_file = client.download_artifacts(run_id, ANNOTATION_ARTIFACT_NAME, dst_path=tmpdir)
+            local_file = client.download_artifacts(run_id, artifact_name, dst_path=tmpdir)
             import json as _json
             with open(local_file, "r") as f:
                 payload = _json.load(f)
@@ -301,14 +362,27 @@ def search_singlecell_runs(user_email: str, processing_mode: str = None, days_ba
     experiments = {exp.experiment_id: exp.name for exp in experiment_list}
     experiment_ids = list(experiments.keys())
     
-    # Build filter string - only show successful runs
+    # Include runs in any state — the dispatcher pre-creates an MLflow run
+    # tagged job_status="started", and the notebook updates that to
+    # "complete" / "failed" through its execution. We show all of them in
+    # Search Past Runs so users see in-progress runs immediately (matching
+    # the Disease-Biology batch-workflow pattern).
+    #
+    # IMPORTANT: scope the search to single-cell processing modes even when
+    # the UI's mode dropdown is set to "All". Without this clause the filter
+    # returns every genesis_workbench run the user created — including
+    # Disease Biology, AlphaFold, etc. — because experiments and the
+    # origin/created_by tags are shared across the whole app.
+    SINGLECELL_MODES = ("scanpy", "rapids-singlecell")
     filter_parts = [
-        f"tags.created_by='{user_email}'", 
+        f"tags.created_by='{user_email}'",
         "tags.origin='genesis_workbench'",
-        "attributes.status='FINISHED'"  # Only successful runs
     ]
     if processing_mode:
         filter_parts.append(f"tags.processing_mode='{processing_mode}'")
+    else:
+        quoted = ",".join(f"'{m}'" for m in SINGLECELL_MODES)
+        filter_parts.append(f"tags.processing_mode IN ({quoted})")
     
     # Search for single-cell runs created by this user
     try:
@@ -318,13 +392,12 @@ def search_singlecell_runs(user_email: str, processing_mode: str = None, days_ba
             order_by=["start_time DESC"],
             max_results=100
         )
-    except Exception:
-        # Fallback if tag filtering doesn't work
-        runs = mlflow.search_runs(
-            experiment_ids=experiment_ids,
-            order_by=["start_time DESC"],
-            max_results=100
-        )
+    except Exception as e:
+        # Do NOT fall back to an unfiltered search — that would leak runs
+        # from other GWB features (Disease Biology, AlphaFold, etc.) into
+        # the single-cell search results. Surface as empty + log.
+        print(f"[search_singlecell_runs] filtered search failed: {e}")
+        return pd.DataFrame()
     
     if len(runs) == 0:
         return pd.DataFrame()
@@ -355,12 +428,65 @@ def search_singlecell_runs(user_email: str, processing_mode: str = None, days_ba
     # Format the results
     runs['experiment_name'] = runs['experiment_id'].map(experiments)
     runs['experiment_simple'] = runs['experiment_name'].apply(lambda x: x.split('/')[-1] if '/' in x else x)
-    
-    # Select and rename columns
-    result_columns = ['run_id', 'tags.mlflow.runName', 'experiment_simple', 'start_time', 'status']
+
+    # Compute displayed status from tags.job_status (set by dispatcher +
+    # notebook) — "started" / "complete" / "failed". Override to "failed"
+    # whenever MLflow's native attributes.status says FAILED, even if the
+    # tag is still "started" — happens when the notebook crashes before
+    # the tag_failed finalize task ran (e.g., legacy runs from before that
+    # task existed, or analyze-task failures from before the YAML update).
+    raw_status_lower = runs.get('status', pd.Series(index=runs.index, dtype=str)).astype(str).str.lower()
+    if 'tags.job_status' in runs.columns:
+        tag_status = runs['tags.job_status'].where(
+            runs['tags.job_status'].notna() & (runs['tags.job_status'] != ""),
+            raw_status_lower,
+        )
+    else:
+        tag_status = raw_status_lower
+    # MLflow's "FAILED" (raw) trumps the tag — the run actually crashed.
+    runs['job_status'] = tag_status.where(raw_status_lower != "failed", "failed")
+
+    if 'tags.processing_mode' in runs.columns:
+        runs['processing_mode'] = runs['tags.processing_mode'].fillna("")
+    else:
+        runs['processing_mode'] = ""
+
+    result_columns = ['run_id', 'tags.mlflow.runName', 'experiment_simple', 'processing_mode', 'start_time', 'job_status']
     available_columns = [c for c in result_columns if c in runs.columns]
-    
     result = runs[available_columns].copy()
-    result.columns = ['run_id', 'run_name', 'experiment', 'start_time', 'status'][:len(available_columns)]
-    
+    rename_map = {
+        'tags.mlflow.runName': 'run_name',
+        'experiment_simple': 'experiment',
+        'job_status': 'status',
+    }
+    result = result.rename(columns=rename_map)
     return result
+
+
+# Progress visualization for single-cell search results — mirrors
+# disease_biology._PROGRESS_MAP. The orchestrator notebook updates
+# `job_status` through ~3 stages (started → processed → complete).
+_SC_PROGRESS_MAP = {
+    "started":         "🟩⬜⬜",
+    "processing":      "🟩🟩⬜",
+    "complete":        "🟩🟩🟩",
+    "finished":        "🟩🟩🟩",  # legacy attributes.status
+    "failed":          "🟥",
+    "unknown":         "⬜⬜⬜",
+}
+
+
+def add_singlecell_progress_column(df: pd.DataFrame) -> pd.DataFrame:
+    """Add a 3-step progress column derived from the `status` column."""
+    if df.empty or "status" not in df.columns:
+        return df
+    df = df.copy()
+    df["progress"] = df["status"].astype(str).str.lower().map(
+        lambda s: _SC_PROGRESS_MAP.get(s, _SC_PROGRESS_MAP["unknown"])
+    )
+    cols = list(df.columns)
+    if "progress" in cols and "status" in cols:
+        cols.remove("progress")
+        cols.insert(cols.index("status") + 1, "progress")
+        df = df[cols]
+    return df

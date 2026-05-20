@@ -1,0 +1,129 @@
+resources:
+  jobs:
+    register_teddy:
+      name: register_teddy
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        # 1) Register the TEDDY model + tokenizer + HF snapshot into UC.
+        - task_key: register_teddy_task
+          job_cluster_key: job_cluster_teddy
+          notebook_task:
+            notebook_path: ../notebooks/01_register_teddy.py
+
+        # 2) Import the UC model into GWB + deploy serving endpoint.
+        - task_key: import_teddy_model_task
+          depends_on:
+            - task_key: "register_teddy_task"
+          notebook_task:
+            notebook_path: ../notebooks/02_import_model_gwb.py
+
+        # 3) Extract HGNC→ENSG gene mapping from CELLxGENE Census. Runs in
+        # parallel with steps 1/2 — only depends on the cache volume existing.
+        - task_key: extract_gene_mapping_task
+          depends_on:
+            - task_key: "register_teddy_task"
+          notebook_task:
+            notebook_path: ../notebooks/06_extract_gene_mapping.py
+
+        # 4) Re-embed a stratified Census subset into the reference Delta
+        # `teddy_cells`. Heavy GPU job (8× A10 multi-node, ~45-60 min for 2M
+        # cells with bf16+batch=32 via pandas_udf, soma_id-sorted partitions
+        # for sequential Census reads). The notebook is idempotent — skips
+        # if the table is already populated at the target size + dim.
+        - task_key: reembed_reference_task
+          depends_on:
+            - task_key: "register_teddy_task"
+          job_cluster_key: job_cluster_teddy_a10_multinode
+          notebook_task:
+            notebook_path: ../notebooks/03_reembed_reference.py
+
+        # 5) Create/sync the Vector Search index over teddy_cells. Idempotent
+        # — detects existing index and triggers sync_index() instead.
+        # NB: gwb_teddy_vs_endpoint + teddy_cell_index + teddy_cells are
+        # ALL preserved across `databricks bundle destroy` (not bundle
+        # resources). See README.
+        - task_key: create_vs_index_task
+          depends_on:
+            - task_key: "reembed_reference_task"
+          notebook_task:
+            notebook_path: ../notebooks/04_create_teddy_vs_index.py
+
+      environments: ## serverless
+        - environment_key: default
+          spec:
+            client: '2'
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: model_name
+          default: teddy
+        - name: cache_dir
+          default: ${resources.volumes.teddy_cache_dir.name}
+        - name: experiment_name
+          default: ${var.module_registration_experiment_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: user_email
+          default: ${var.current_user}
+        - name: workload_type
+          default: ${var.gpu_medium_setting}
+        - name: teddy_hf_repo
+          default: ${var.teddy_hf_repo}
+        - name: teddy_hf_revision
+          default: ${var.teddy_hf_revision}
+        - name: teddy_model_size
+          default: ${var.teddy_model_size}
+        # Reembed reference parameters
+        - name: target_n_cells
+          default: ${var.teddy_reembed_target_n_cells}
+        - name: per_stratum_cap
+          default: ${var.teddy_reembed_per_stratum_cap}
+        - name: census_version
+          default: ${var.teddy_reembed_census_version}
+
+      job_clusters:
+        - job_cluster_key: job_cluster_teddy
+          new_cluster:
+            num_workers: 0
+            node_type_id: ${var.t4_node_type}
+            driver_node_type_id: ${var.t4_node_type}
+            spark_version: '15.4.x-gpu-ml-scala2.12'
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+
+        # Multi-node A10 cluster for the reembed task. 8 workers × 1 A10 = 8
+        # GPUs in parallel via pandas_udf / mapInPandas — ~8× the throughput
+        # of the original single-node A10 setup. Driver does Census obs query
+        # + Spark coordination only; workers do all GPU embedding.
+        # `spark.task.resource.gpu.amount=1` pins one Spark task per GPU so
+        # we don't fight for the same CUDA context.
+        - job_cluster_key: job_cluster_teddy_a10_multinode
+          new_cluster:
+            num_workers: 8
+            node_type_id: ${var.a10_node_type}
+            driver_node_type_id: ${var.a10_node_type}
+            spark_version: '15.4.x-gpu-ml-scala2.12'
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            spark_conf:
+              spark.task.resource.gpu.amount: "1"
+            # cloud-specific availability is set per-target in databricks.yml
+
+      timeout_seconds: 43200  # 12h hard cap — covers the 5-8h reembed plus
+                              # mapping, register, and serving deploy overhead.
+
+      tags: ${var.common_resource_tags}

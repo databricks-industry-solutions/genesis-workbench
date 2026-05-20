@@ -18,11 +18,14 @@ SCIMILARITY_CELL_INDEX = "scimilarity_cell_index"
 
 
 def _get_endpoint_name(model_suffix: str) -> str:
-    """Resolve endpoint name with optional dev_user prefix."""
-    dev_user_prefix = os.environ.get("DEV_USER_PREFIX", "")
-    if dev_user_prefix and dev_user_prefix.lower() not in ("none", ""):
-        return f"gwb_{dev_user_prefix}_{model_suffix}_endpoint"
-    return f"gwb_{model_suffix}_endpoint"
+    """Look up the SCimilarity endpoint name from the model_deployments table.
+
+    Source of truth: the deployments table (populated by deploy_model_endpoint()
+    at deploy time). Replaces the prior `gwb_{DEV_USER_PREFIX}_{suffix}_endpoint`
+    construction pattern which silently 404s when the env var isn't bound.
+    """
+    from genesis_workbench.models import get_endpoint_name_for_uc_model
+    return get_endpoint_name_for_uc_model(model_suffix)
 
 
 def _query_endpoint(endpoint_name: str, payload):

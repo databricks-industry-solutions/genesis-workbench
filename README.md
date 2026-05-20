@@ -41,7 +41,7 @@ Despite their expertise in biology, many highly talented life science scientists
 
 - Scripts to deploy Genesis Workbench core module in your workspace
 - Scripts to deploy below modules:
-	- Single Cell module that deploys and uses scGPT, SCimilarity, Scanpy and Rapids-SingleCell
+	- Single Cell module that deploys and uses scGPT, SCimilarity, Scanpy, Rapids-SingleCell, and Merck's [TEDDY-G 400M](modules/core/app/docs/single_cell_teddy_annotation.md) for joint cell-type + disease annotation
 	- Protein Studies module that deploys and uses ESMFold, ESM2 Embeddings, Alphafold2, ProteinMPNN, RFDiffusion and Boltz
 	- Small Molecule module that deploys and uses Chemprop, DiffDock, Proteina-Complexa, NetSolP-1.0 (protein solubility prediction), PLTNUM-ESM2 (protein half-life relative stability ranking), DeepSTABp (protein melting temperature regression) and MHCflurry 2.x (MHC-I immunogenic burden prediction)
 	- Disease Biology module for VCF ingestion, variant annotation and GWAS analysis

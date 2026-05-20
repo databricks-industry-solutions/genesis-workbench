@@ -166,6 +166,64 @@ def get_available_models(model_category : ModelCategory) -> pd.DataFrame:
     result_df = execute_select_query(query)
     return result_df
 
+# Per-process cache for endpoint-name lookups. App restarts on each deploy, so
+# stale cache entries auto-invalidate then; we don't expire mid-process.
+_ENDPOINT_NAME_CACHE: dict[str, str] = {}
+
+
+def get_endpoint_name_for_uc_model(short_name: str) -> str:
+    """Look up the active serving endpoint name for a model by its short name.
+
+    Single source of truth: the `model_deployments` table populated by
+    `deploy_model_endpoint()` at deploy time. Avoids the brittle pattern of
+    constructing endpoint names client-side from `gwb_{DEV_USER_PREFIX}_{short}_endpoint`
+    which silently 404s whenever the env var isn't plumbed through the deploy
+    chain correctly (see feedback_apps_volume_filesapi.md for the TEDDY
+    annotation incident that motivated this).
+
+    `short_name` matches the last segment of `model_uc_name` (e.g., "teddy",
+    "scimilarity_get_embedding", "chemprop_admet"). Lookup is case-sensitive.
+
+    Returns the endpoint name as stored in the deployments table (e.g.,
+    "gwb_demo_teddy_endpoint"). Raises RuntimeError if no active deployment
+    is found — fail loud so missing-model bugs surface immediately instead
+    of silent 404s on every prediction.
+
+    Cached per-process; not invalidated mid-session (app restarts re-deploy).
+    """
+    if short_name in _ENDPOINT_NAME_CACHE:
+        return _ENDPOINT_NAME_CACHE[short_name]
+
+    catalog = os.environ.get("CORE_CATALOG_NAME")
+    schema = os.environ.get("CORE_SCHEMA_NAME")
+    if not catalog or not schema:
+        raise RuntimeError(
+            f"CORE_CATALOG_NAME / CORE_SCHEMA_NAME env vars must be set to look "
+            f"up endpoint for '{short_name}' from the deployments table."
+        )
+
+    # `model_uc_name LIKE '%.<short>'` matches the typical
+    # <catalog>.<schema>.<short> pattern. Exact equality covers cases where
+    # callers happen to pass the full UC path.
+    query = (
+        f"SELECT model_endpoint_name "
+        f"FROM {catalog}.{schema}.model_deployments md "
+        f"INNER JOIN {catalog}.{schema}.models m ON md.model_id = m.model_id "
+        f"WHERE (m.model_uc_name = '{short_name}' OR m.model_uc_name LIKE '%.{short_name}') "
+        f"AND md.is_active = true "
+        f"ORDER BY md.deployment_id DESC LIMIT 1"
+    )
+    df = execute_select_query(query)
+    if df.empty:
+        raise RuntimeError(
+            f"No active deployment found for model '{short_name}' in "
+            f"{catalog}.{schema}.model_deployments. Has the registration job run?"
+        )
+    endpoint_name = str(df.iloc[0]["model_endpoint_name"])
+    _ENDPOINT_NAME_CACHE[short_name] = endpoint_name
+    return endpoint_name
+
+
 def get_deployed_models(model_category : ModelCategory)-> pd.DataFrame:
     """Gets all models that are available for deployment"""
     

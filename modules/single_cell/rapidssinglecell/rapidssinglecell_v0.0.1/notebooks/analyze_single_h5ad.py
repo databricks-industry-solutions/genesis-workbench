@@ -66,6 +66,10 @@ dbutils.widgets.text("n_top_genes", "500", "Number of Highly Variable Genes")
 dbutils.widgets.text("n_pcs", "50", "Number of Principal Components")
 dbutils.widgets.text("cluster_resolution", "0.2", "Cluster Resolution")
 dbutils.widgets.text("compute_pseudotime", "false", "Compute Pseudotime (true/false)")
+# Mirrors the scanpy notebook: when the dispatcher pre-creates an MLflow
+# run with job_status="started", we attach instead of creating a new one
+# so the Search Past Runs UI surfaces this run immediately as in-progress.
+dbutils.widgets.text("mlflow_run_id", "", "MLflow Run Id (pre-created by dispatcher)")
 
 # COMMAND ----------
 
@@ -495,18 +499,25 @@ total_time = t1-t0
 metrics['total_time'] = total_time
 
 run_name = parameters['mlflow_run_name'] if parameters['mlflow_run_name'] else None
+mlflow_run_id = dbutils.widgets.get("mlflow_run_id") or None
 
-# Log to MLflow with proper tags for Genesis Workbench
-with mlflow.start_run(run_name=run_name, experiment_id=experiment.experiment_id) as run:
-    # Log metrics and params
+if mlflow_run_id:
+    _run_ctx = mlflow.start_run(run_id=mlflow_run_id)
+    _params_already_logged = True
+else:
+    _run_ctx = mlflow.start_run(run_name=run_name, experiment_id=experiment.experiment_id)
+    _params_already_logged = False
+
+with _run_ctx:
     mlflow.log_metrics(metrics)
-    mlflow.log_params(parameters)
+    if not _params_already_logged:
+        mlflow.log_params(parameters)
     mlflow.log_artifacts(tmpdir.name)
-    
-    # Set required tags for Genesis Workbench search
     mlflow.set_tag("origin", "genesis_workbench")
     mlflow.set_tag("created_by", parameters['user_email'])
     mlflow.set_tag("processing_mode", "rapids-singlecell")
+    mlflow.set_tag("feature", "rapids-singlecell")
+    mlflow.set_tag("job_status", "complete")
 
 # COMMAND ----------
 
