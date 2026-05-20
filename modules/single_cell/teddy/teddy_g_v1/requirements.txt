@@ -1,0 +1,21 @@
+--extra-index-url https://download.pytorch.org/whl/cu118
+torch==2.3.1+cu118
+torchvision==0.18.1+cu118
+transformers==4.44.2
+huggingface_hub==0.25.2
+safetensors==0.4.5
+anndata==0.10.9
+scanpy==1.10.3
+numpy==1.26.4
+pandas==2.2.3
+scipy==1.13.1
+scikit-learn==1.5.2
+tqdm==4.66.5
+pyyaml==6.0.2
+cloudpickle==2.2.1
+mlflow==2.22.0
+# teddy/ source ships via MLflow code_paths (not pip) — pyproject.toml in
+# the HF repo uses poetry with ~150 pinned deps that conflict with this stack.
+# Using `python_model=path_to_wrapper.py` (file-based, not cloudpickle) means
+# MLflow imports the wrapper from disk after adding code_paths to sys.path,
+# so `import teddy` resolves without needing it on PyPI.

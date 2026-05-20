@@ -1,0 +1,69 @@
+resources:
+  jobs:
+    register_teddy:
+      name: register_teddy
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: register_teddy_task
+          job_cluster_key: job_cluster_teddy
+          notebook_task:
+            notebook_path: ../notebooks/01_register_teddy.py
+
+        # Serverless task — imports the registered model into GWB
+        # and deploys it to a GPU serving endpoint.
+        - task_key: import_teddy_model_task
+          depends_on:
+            - task_key: "register_teddy_task"
+          notebook_task:
+            notebook_path: ../notebooks/02_import_model_gwb.py
+
+      environments: ## serverless
+        - environment_key: default
+          spec:
+            client: '2'
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: model_name
+          default: teddy
+        - name: cache_dir
+          default: ${resources.volumes.teddy_cache_dir.name}
+        - name: experiment_name
+          default: ${var.module_registration_experiment_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: user_email
+          default: ${var.current_user}
+        - name: workload_type
+          default: ${var.gpu_small_setting}
+        - name: teddy_hf_repo
+          default: ${var.teddy_hf_repo}
+        - name: teddy_hf_revision
+          default: ${var.teddy_hf_revision}
+        - name: teddy_model_size
+          default: ${var.teddy_model_size}
+
+      job_clusters:
+        - job_cluster_key: job_cluster_teddy
+          new_cluster:
+            num_workers: 0
+            node_type_id: ${var.t4_node_type}
+            driver_node_type_id: ${var.t4_node_type}
+            spark_version: '15.4.x-gpu-ml-scala2.12'
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+
+      tags: ${var.common_resource_tags}

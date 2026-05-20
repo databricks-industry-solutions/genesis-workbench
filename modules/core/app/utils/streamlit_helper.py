@@ -39,6 +39,7 @@ _MODEL_ENDPOINT_MAP = {
     "AlphaFold2": "alphafold2",
     # Single Cell
     "scGPT Perturbation": "scgpt_perturbation",
+    "TEDDY Annotation": "teddy",
 }
 
 def get_endpoint_name(model_name: str) -> str:
