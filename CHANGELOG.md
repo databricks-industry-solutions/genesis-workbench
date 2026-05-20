@@ -1,5 +1,57 @@
 # Genesis Workbench — Changelog
 
+## teddy_annotation (2026-05-20) — Merck TEDDY-G 400M joint cell-type + disease annotation
+
+Added Merck's [TEDDY-G 400M](https://huggingface.co/Merck/TEDDY) (Apache 2.0) as a foundation model for single-cell biology. Workflow #1 is **joint cell-type + disease annotation** on the existing UMAP tab — TEDDY runs side-by-side with SCimilarity, both checkboxes default ON. New submodule: `modules/single_cell/teddy/teddy_g_v1`. New feature doc: [`modules/core/app/docs/single_cell_teddy_annotation.md`](modules/core/app/docs/single_cell_teddy_annotation.md).
+
+### Why 400M and not 70M
+
+The public TEDDY-G ships as encoder-only (`n_cls=0`, no classification head). GWB wraps the encoder in a serving endpoint that returns per-cell embeddings, then performs KNN annotation against a 2 M-cell CELLxGENE Census reference Delta + Vector Search index. Initial implementation used 70M for cost. On inspection, the 70M encoder placed an NK-cluster representative at cosine 0.98 to plasma cells on a `scanpy_20260507_1950` run that was unambiguously NK by marker genes — meaning KNN retrieval could not distinguish the two cell types. The TEDDY paper validates zero-shot retrieval only on the 400M variant. Variant size is **not** a cost knob for this workflow; 400M is now the default and `teddy_model_size` should not be lowered.
+
+### Reference build — multinode pandas_udf on 8× A10
+
+The 2 M-cell reference embed is a `mapInPandas` job on a multi-node GPU cluster (`job_cluster_teddy_a10_multinode`), not the single-node A10 used in earlier revisions:
+
+- **8 workers × 1× A10 + A10 driver, on-demand.** `spark.task.resource.gpu.amount=1` pins one task per GPU.
+- Each Spark worker loads TEDDY-G 400M from the UC volume once per process, opens its own `cellxgene_census` handle, fetches X for its partition via `get_anndata(obs_coords=...)`, embeds at batch=48 with bf16 autocast, yields embeddings. GPU-side `torch.topk` over the 60,530-gene matrix.
+- Wall-clock: ~3 h 15 min for 2 M cells. Full DAG (register → endpoint deploy + extract gene mapping || reembed → create VS index) ~5 h 18 min end-to-end on the validated build.
+
+### The 256-partition bug — root cause for a prior 9 h trajectory
+
+First multinode attempt didn't finish in 12 h. The bug:
+
+```python
+n_partitions = max(spark.sparkContext.defaultParallelism, ceil(n_cells / 50_000))
+```
+
+`defaultParallelism` on a 4× g5.16xlarge cluster is 256 (4 nodes × 64 vCPU). That produced 256 partitions of 7,812 cells each. With `task.resource.gpu.amount=1`, only 4 ran concurrently — each GPU processed 64 partitions sequentially, and each partition's `get_anndata(obs_coords=<7,812 scattered joinids>)` triggered hundreds of S3 random point reads in TileDB-SOMA. Net: ~9 min/partition × 64 partitions per GPU = 9.6 h per GPU.
+
+The fix is two changes:
+
+1. **Sort the obs sample by `soma_joinid` and use `repartitionByRange("soma_joinid", N)`** — each partition gets a contiguous joinid range, so Census reads are sequential S3 instead of random point reads.
+2. **Hard-floor partition count at the GPU worker count (not `defaultParallelism`).** Target ~5 partitions per GPU → 40 partitions of 50k cells each on the 8-GPU build.
+
+Don't use `defaultParallelism` as a floor on GPU-bound mapInPandas jobs. It will produce a partition count proportional to CPU count, which is orders of magnitude larger than the GPU count and serializes everything through the GPU bottleneck.
+
+### Endpoint, wrapper, idempotency, destroy
+
+- **Serving endpoint** `gwb_teddy_endpoint` deploys on **GPU_MEDIUM (A10)**, not GPU_SMALL. 400M weights + seq=2048 attention activations don't fit T4 16 GB reliably.
+- **bf16 autocast** in both the wrapper (`teddy_wrapper.py:_forward`) and the reembed UDF — halves attention activation memory and roughly 2× the throughput on A10. Activations stay in fp32 by default; only the math goes bf16.
+- **Dim-aware idempotency** in both notebook 03 and notebook 04. A re-deploy on an already-built reference exits in seconds. A variant switch (70M → 400M) is detected via `dim != expected_dim` and triggers a clean rebuild (drop + recreate Delta, drop + recreate VS index — sync can't change index dim).
+- **Destroy preserves `teddy_cells`, `gwb_teddy_vs_endpoint`, `teddy_cell_index`.** These are created procedurally inside the notebooks, NOT declared as bundle resources — `databricks bundle destroy` cannot touch them. `destroy.sh` prints an explicit "PRESERVED / REMOVED" list at the top to make this visible. This mirrors the SCimilarity destroy policy.
+
+### Documentation hard rule encoded in skills
+
+Every new GWB feature must ship three doc artifacts in the same PR: a `modules/core/app/docs/<module>_<feature>.md` page, a root-README bullet under the matching module, and a CHANGELOG entry. Encoded as "Documentation (hard rule)" in `claude_skills/SKILL_GENESIS_WORKBENCH_DEVELOPMENT.md` (alongside Dependency hygiene + On-demand compute) and as a sixth verification step in `SKILL_GENESIS_WORKBENCH_BATCH_WORKFLOW_PATTERN.md`. The TEDDY entry above is the first feature shipped under the new rule.
+
+### Reference implementations to mirror for the next single-cell foundation model
+
+- `modules/single_cell/teddy/teddy_g_v1/notebooks/03_reembed_reference.py` — multinode pandas_udf + sorted partitioning + GPU topk for any Census-backed reference build.
+- `modules/single_cell/teddy/teddy_g_v1/notebooks/04_create_teddy_vs_index.py` — dim-aware VS index recreate-or-sync.
+- `modules/core/app/views/single_cell_workflows/processing.py` — side-by-side annotation UI pattern (model checkboxes default-ON, both predictions logged to the same MLflow run).
+
+---
+
 ## guided_enzyme_creation (2026-05-07) — Phase 1.6: Batch-workflow pattern + Variant Annotation per-run tables
 
 ### Batch-workflow pattern, formalized

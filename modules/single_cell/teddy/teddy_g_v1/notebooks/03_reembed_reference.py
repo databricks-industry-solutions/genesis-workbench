@@ -1,16 +1,18 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC ### Re-embed the CELLxGENE Census reference with TEDDY
+# MAGIC ### Re-embed the CELLxGENE Census reference with TEDDY — multi-node GPU
 # MAGIC
-# MAGIC Pulls a curated subset from CELLxGENE Census (human, has disease label,
-# MAGIC stratified across tissues + diseases), embeds each cell with TEDDY-G locally on
-# MAGIC the GPU cluster, and writes a Delta table `{catalog}.{schema}.teddy_cells` with:
+# MAGIC Pulls a curated subset from CELLxGENE Census (human, stratified across
+# MAGIC tissues + diseases), embeds each cell with TEDDY-G on a multi-node A10 GPU
+# MAGIC cluster via `mapInPandas`, and writes a Delta table
+# MAGIC `{catalog}.{schema}.teddy_cells` with:
 # MAGIC
 # MAGIC - `cell_id     STRING` (primary key — Census soma_joinid as string)
 # MAGIC - `embedding   ARRAY<FLOAT>` (d_model — 512 for 70M, 768 for 160M, 1024 for 400M)
 # MAGIC - `cell_type   STRING` — from `cell_type` column of Census obs
 # MAGIC - `disease     STRING` — from `disease` column
 # MAGIC - `tissue      STRING`
+# MAGIC - `tissue_general STRING`
 # MAGIC - `dataset_id  STRING`
 # MAGIC
 # MAGIC Change Data Feed is enabled so the Vector Search Delta Sync index (notebook 04)
@@ -19,50 +21,54 @@
 # MAGIC
 # MAGIC ---
 # MAGIC
-# MAGIC #### Why a serial Python loop and not `pandas_udf` over Spark?
+# MAGIC #### Why `mapInPandas` on a multi-node GPU cluster
 # MAGIC
-# MAGIC This notebook embeds cells in a serial driver-side loop rather than fanning
-# MAGIC out via `pandas_udf` + Spark. That's a deliberate trade-off for THIS setup:
+# MAGIC Earlier revisions of this notebook ran a serial driver-side loop on a single
+# MAGIC A10 GPU — 5+ hours for 2M cells. The bottleneck was always GPU throughput
+# MAGIC since attention is O(B * H * S^2). To get linear speedup we need more GPUs
+# MAGIC running concurrently.
 # MAGIC
-# MAGIC 1. **Single-node cluster, single GPU.** The orchestrator job runs on
-# MAGIC    `num_workers=0` — there's one T4 on the driver. `pandas_udf` parallelises
-# MAGIC    across Spark Python workers, but on a single-node cluster those workers
-# MAGIC    spawn on the same machine and contend for the same GPU. No speedup, just
-# MAGIC    CUDA-context thrashing.
-# MAGIC 2. **Heavy, serialization-fragile model.** TEDDY-G is ~280 MB on disk plus
-# MAGIC    the bundled `teddy/` source and `GeneTokenizer`. `pandas_udf` serialises
-# MAGIC    the function (and its closure) to each worker via cloudpickle — the same
-# MAGIC    cloudpickle path that bit us for ~7 rev iterations on the serving deploy.
-# MAGIC    Lazy-load-inside-the-UDF workarounds exist but add complexity with no
-# MAGIC    payoff on a single-node cluster.
-# MAGIC 3. **Data origin is Python-native, not Spark.** Cells come from CELLxGENE
-# MAGIC    Census (TileDB-SOMA) via the `cellxgene_census` Python API. Flow today is:
-# MAGIC    SOMA → pandas → numpy → torch → numpy → pandas → Spark (only for the Delta
-# MAGIC    write). To use `pandas_udf` properly, the Census data would have to be
-# MAGIC    materialised into a Spark/Delta table first — significant up-front cost
-# MAGIC    just to make the data partitionable.
-# MAGIC 4. **CUDA contexts don't share across Python workers cleanly.** PyTorch's
-# MAGIC    CUDA context is per-process; multiple Spark workers on one GPU need MPS
-# MAGIC    or queueing to coexist.
+# MAGIC The new design (matching the cluster spec `job_cluster_teddy_a10_multinode`
+# MAGIC = 4 workers × 1 A10 each):
 # MAGIC
-# MAGIC `pandas_udf` would be the right call when:
-# MAGIC - The cluster is multi-node GPU (e.g., 4 workers × T4) so each partition lands
-# MAGIC   on its own GPU.
-# MAGIC - The source data is already in a partitioned Delta table (no Census API
-# MAGIC   conversion at the head of the pipeline).
-# MAGIC - Use `applyInPandas` with `pandas_udf` over the partitioned DataFrame; each
-# MAGIC   partition lazy-loads the model once per executor.
+# MAGIC 1. **Driver**: opens Census, builds a stratified obs sample, creates a Spark
+# MAGIC    DataFrame containing only `soma_joinid`s + metadata, repartitions for
+# MAGIC    even fanout, hands it to Spark.
+# MAGIC 2. **Each worker** (via `mapInPandas`): opens Census once per Python process
+# MAGIC    (S3-backed TileDB-SOMA — concurrent reads are safe), loads TEDDY-G once
+# MAGIC    per process from the UC Volume, then for each Arrow batch fetches X via
+# MAGIC    `cellxgene_census.get_anndata`, embeds with bf16 autocast at batch=32,
+# MAGIC    yields a pandas DF that Spark writes to Delta.
+# MAGIC 3. **`spark.task.resource.gpu.amount=1`** on the cluster ensures one Spark
+# MAGIC    task per GPU — no CUDA context contention.
 # MAGIC
-# MAGIC Faster alternatives that fit the current single-node setup:
-# MAGIC - **Bigger driver GPU** (A10 g5.4xlarge with 24 GB → `BATCH_EMB=32+` vs current
-# MAGIC   8 → ~4× faster throughput).
-# MAGIC - **fp16 inference** (`torch.bfloat16` autocast → ~2× faster, half the VRAM).
-# MAGIC - **Bigger batch with gradient checkpointing** (already grad-free here since
-# MAGIC   inference; checkpointing not applicable).
+# MAGIC Why this is safe / fast despite earlier reservations against `pandas_udf`:
+# MAGIC - **Model serialization isn't an issue**: the model is loaded inside the
+# MAGIC   UDF from the UC Volume, never sent through cloudpickle.
+# MAGIC - **One CUDA context per worker process**: enforced by the Spark GPU
+# MAGIC   scheduler config.
+# MAGIC - **Census API is worker-safe**: `cellxgene_census.open_soma()` works from
+# MAGIC   any Python process — it's just TileDB-SOMA reads from S3.
+# MAGIC - **No Spark / Census conversion penalty up front**: we only ship
+# MAGIC   `soma_joinid`s through Spark; workers fetch their own X slices in
+# MAGIC   parallel from Census.
 # MAGIC
-# MAGIC For a one-time-per-deploy 500k–2M-cell reference build, serial-loop-on-T4
-# MAGIC ships in 3–6h and keeps the code simple. If the reference grows to 5M+ cells
-# MAGIC and rebuilds become a frequent operation, switch to multi-node + `pandas_udf`.
+# MAGIC #### Observing progress while the rebuild runs
+# MAGIC
+# MAGIC The final `mapInPandas(...).write.mode("overwrite").saveAsTable()` is an
+# MAGIC atomic Spark write — the Delta table is only visible AT THE END. To watch
+# MAGIC progress LIVE:
+# MAGIC
+# MAGIC 1. **Spark UI → Stages tab** (linked from the run page): the
+# MAGIC    `mapInPandas` stage shows `tasks completed / N`. With N partitions
+# MAGIC    across 4 workers, expect ~5-6 tasks per worker.
+# MAGIC 2. **Cluster → Driver Logs → stderr**: each worker prints a tagged
+# MAGIC    progress line per GPU batch and per Arrow batch (`[w=<host>]`).
+# MAGIC 3. **GPU utilization** via `databricks clusters get <cluster_id>` or
+# MAGIC    the cluster's Metrics tab — should be near 100 % on all 4 GPUs.
+# MAGIC
+# MAGIC If a worker is slow / stuck, the Spark UI's task duration histogram
+# MAGIC will show it as a straggler (one outlier task duration).
 
 # COMMAND ----------
 
@@ -75,7 +81,7 @@
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_yyang_genesis_workbench", "Schema")
 dbutils.widgets.text("cache_dir", "teddy", "Cache dir")
-dbutils.widgets.text("teddy_model_size", "70M", "TEDDY-G variant")
+dbutils.widgets.text("teddy_model_size", "400M", "TEDDY-G variant")
 dbutils.widgets.text("target_n_cells", "2000000", "Target reference cell count")
 dbutils.widgets.text("per_stratum_cap", "30000", "Max cells per (tissue, disease) stratum")
 dbutils.widgets.text("census_version", "2024-07-01", "CELLxGENE Census version (LTS tag or 'latest')")
@@ -94,11 +100,16 @@ teddy_pkg_dir = f"{snapshot_dir}/teddy"
 model_dir = f"{teddy_pkg_dir}/models/teddy_g/{model_size}"
 
 CELLS_TABLE = f"{catalog}.{schema}.teddy_cells"
-# Attention is O(B * H * S^2) — at S=2048 even modest batches blow T4's 16GB.
-# 8 cells/batch * 8 heads * 2048^2 * fp32 ≈ 1 GB attention buffer; leaves room
-# for params (280 MB), activations, and gradient-free overhead.
-BATCH_EMB = 8        # cells per GPU forward pass
-BATCH_WRITE = 50_000 # cells per Spark write batch
+# Per-worker GPU forward batch. Empirically measured on A10 + bf16 + 400M:
+# batch=32 → 17 GB VRAM, 60 % GPU compute util. Bumped to 48 to use the
+# remaining ~7 GB of headroom and push compute toward saturation.
+# Memory scales ~linearly with batch (attention activations + activations),
+# so batch=48 should land at ~22-24 GB — at the edge but within A10's 24 GB.
+# If you see CUDA OOM in worker stderr, drop to 40.
+BATCH_EMB = 48
+# Cells per pandas_udf Arrow batch (one input DF per call to the UDF). Each
+# worker processes its partition as a stream of these.
+ARROW_BATCH = 10_000
 
 print(f"Cache: {cache_full_path}")
 print(f"Model: TEDDY-G {model_size} at {model_dir}")
@@ -110,15 +121,25 @@ print(f"Target cells: {target_n_cells:,} (cap {per_stratum_cap:,}/stratum)")
 # DBTITLE 1,Idempotency check
 already_done = False
 if spark.catalog.tableExists(CELLS_TABLE):
-    existing = spark.table(CELLS_TABLE).count()
-    print(f"{CELLS_TABLE} already has {existing:,} rows")
-    if existing >= target_n_cells * 0.95:  # tolerate small undercount from stratum balancing
-        print("Looks complete — skipping rebuild. Drop the table if you want to re-run.")
+    existing_rows = spark.table(CELLS_TABLE).count()
+    existing_dim = (
+        spark.table(CELLS_TABLE).selectExpr("size(embedding) as d").limit(1).collect()[0]["d"]
+        if existing_rows > 0 else None
+    )
+    expected_dim = {"70M": 512, "160M": 768, "400M": 1024}.get(model_size)
+    print(f"{CELLS_TABLE} already has {existing_rows:,} rows, embedding dim={existing_dim}")
+    # Only consider it done if BOTH the row count AND the embedding dim match
+    # the current variant — switching 70M → 400M means dim 512 → 1024, in
+    # which case we MUST rebuild even if the row count looks fine.
+    if existing_rows >= target_n_cells * 0.95 and existing_dim == expected_dim:
+        print("Looks complete and dim matches — skipping rebuild. Drop the table to force re-run.")
         already_done = True
+    elif existing_dim is not None and existing_dim != expected_dim:
+        print(f"Embedding dim mismatch (have {existing_dim}, want {expected_dim} for {model_size}) — rebuilding.")
 
 # COMMAND ----------
 
-# DBTITLE 1,Connect to CELLxGENE Census and build stratified obs sample
+# DBTITLE 1,Driver: open Census and build stratified obs sample
 if not already_done:
     import cellxgene_census
     import numpy as np
@@ -128,25 +149,24 @@ if not already_done:
     census = cellxgene_census.open_soma(census_version=census_version)
     obs = census["census_data"]["homo_sapiens"].obs
 
-    # Pull only the columns we need + soma_joinid for X lookup.
-    # Filter to cells with non-null disease at the SOMA query level so we
-    # don't materialize hundreds of millions of irrelevant rows.
+    # NB: previously this filtered `disease != 'normal'`, which under-represented
+    # healthy cell types (NK, naive T, etc.) in the reference and biased KNN
+    # annotation toward disease cells. We now include healthy cells.
     obs_df = (
         obs.read(
             column_names=[
                 "soma_joinid", "cell_type", "disease", "tissue_general",
                 "tissue", "dataset_id", "assay", "is_primary_data",
             ],
-            value_filter="is_primary_data == True and disease != 'normal'",
+            value_filter="is_primary_data == True",
         )
         .concat()
         .to_pandas()
     )
-    print(f"Census cells (primary, disease != normal): {len(obs_df):,}")
+    print(f"Census cells (primary, healthy + disease): {len(obs_df):,}")
 
-    # Use tissue_general (~50 categories) for the strata to keep the cardinality manageable.
-    # Cast to plain string first — Census returns these as pandas Categorical, and
-    # .fillna("unknown") on a Categorical with no "unknown" category raises TypeError.
+    # Stratify on (tissue_general, disease). Cast through object to dodge
+    # pandas Categorical fillna issues.
     _tissue = obs_df["tissue_general"].astype("object").where(obs_df["tissue_general"].notna(), "unknown")
     _disease = obs_df["disease"].astype("object").where(obs_df["disease"].notna(), "unknown")
     obs_df["__stratum"] = _tissue.astype(str) + " | " + _disease.astype(str)
@@ -154,8 +174,6 @@ if not already_done:
     print(f"Distinct (tissue_general, disease) strata: {len(strata_counts)}")
     print(f"Top 10 strata:\n{strata_counts.head(10)}")
 
-    # Stratified sample: cap each stratum, then if we still need to hit target_n_cells
-    # top up uniformly across the strata that have headroom.
     rng = np.random.default_rng(seed=42)
     sampled_parts = []
     for stratum, idx in obs_df.groupby("__stratum").groups.items():
@@ -170,194 +188,372 @@ if not already_done:
         sampled_idx = sampled_idx[:target_n_cells]
 
     obs_sample = obs_df.iloc[sampled_idx].reset_index(drop=True)
-    print(f"Selected {len(obs_sample):,} cells across {obs_sample['__stratum'].nunique()} strata")
+    n_to_embed = len(obs_sample)
+    print(f"Selected {n_to_embed:,} cells across {obs_sample['__stratum'].nunique()} strata")
+
+    # Driver closes its Census handle — workers open their own.
+    del census
 
 # COMMAND ----------
 
-# DBTITLE 1,Load TEDDY locally on the GPU cluster (skipping the serving endpoint for throughput)
+# DBTITLE 1,Discover Census gene vocab (driver-side, one-time) for worker token cache
 if not already_done:
-    import sys, os, json, torch
-    if snapshot_dir not in sys.path:
-        sys.path.insert(0, snapshot_dir)
-
-    from teddy.models.model_directory import get_architecture, model_dict
-    from teddy.tokenizer.gene_tokenizer import GeneTokenizer
-
-    arch = get_architecture(model_dir)
-    config_cls = model_dict[arch]["config_cls"]
-    model_cls = model_dict[arch]["model_cls"]
-    config = config_cls.from_pretrained(model_dir)
-    model = model_cls.from_pretrained(model_dir, config=config)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model.to(device).eval()
-    tokenizer = GeneTokenizer.from_pretrained(model_dir)
-    d_model = int(config.d_model)
-    add_cls = bool(getattr(config, "add_cls", False))
-    cls_token_id = int(getattr(config, "cls_token_id", 0))
-    max_seq_len = int(getattr(config, "max_position_embeddings", 2048))
-    print(f"TEDDY-G {model_size} loaded on {device}, d_model={d_model}")
+    # Workers need the exact gene order Census returns inside get_anndata().
+    # Census uses a global gene vocab per organism — same order for every cell.
+    # We discover it once on the driver by reading the `var` axis, then pass
+    # the gene list as a broadcast variable so all workers have identical
+    # token_array without re-querying Census just to learn gene order.
+    import cellxgene_census as _cc_for_var
+    _c2 = _cc_for_var.open_soma(census_version=census_version)
+    _var = (
+        _c2["census_data"]["homo_sapiens"]
+        .ms["RNA"]
+        .var.read(column_names=["soma_joinid", "feature_id"])
+        .concat()
+        .to_pandas()
+    )
+    # Census ordering: rows in var match the gene axis index used by get_anndata.
+    census_gene_ids = _var.sort_values("soma_joinid")["feature_id"].astype(str).tolist()
+    print(f"Census gene vocab size: {len(census_gene_ids):,}")
+    del _c2
+    gene_ids_b = spark.sparkContext.broadcast(census_gene_ids)
 
 # COMMAND ----------
 
-# DBTITLE 1,Embed cells in GPU batches and write Delta in larger Spark batches
+# DBTITLE 1,Build Spark DataFrame of soma_joinids + metadata; repartition for fanout
 if not already_done:
-    import inspect
-    import scipy.sparse
+    from pyspark.sql import functions as F
     from pyspark.sql.types import (
-        StructType, StructField, StringType, ArrayType, FloatType,
+        StructType, StructField, StringType, ArrayType, FloatType, LongType,
     )
 
-    spark.sql(f"DROP TABLE IF EXISTS {CELLS_TABLE}")
+    # CRITICAL: sort by soma_joinid before partitioning. CELLxGENE Census
+    # is TileDB-SOMA backed; random-access reads (scattered soma_joinids in
+    # one get_anndata call) trigger many S3 point reads. Sorting gives each
+    # partition a contiguous range of joinids → orders of magnitude faster
+    # Census fetch per batch. This was the dominant bottleneck on the prior
+    # run (10+ min per 7,812-cell partition just for the Census read).
+    obs_sample_sorted = obs_sample.sort_values("soma_joinid").reset_index(drop=True)
 
-    schema_spark = StructType([
-        StructField("cell_id", StringType(), nullable=False),
-        StructField("embedding", ArrayType(FloatType(), containsNull=False), nullable=False),
-        StructField("cell_type", StringType(), nullable=True),
-        StructField("disease", StringType(), nullable=True),
-        StructField("tissue", StringType(), nullable=True),
+    input_pdf = pd.DataFrame({
+        "soma_joinid": obs_sample_sorted["soma_joinid"].astype("int64").to_numpy(),
+        "cell_type":     obs_sample_sorted["cell_type"].astype(str).fillna("").to_numpy(),
+        "disease":       obs_sample_sorted["disease"].astype(str).fillna("").to_numpy(),
+        "tissue":        obs_sample_sorted["tissue"].astype(str).fillna("").to_numpy(),
+        "tissue_general":obs_sample_sorted["tissue_general"].astype(str).fillna("").to_numpy(),
+        "dataset_id":    obs_sample_sorted["dataset_id"].astype(str).fillna("").to_numpy(),
+    })
+
+    input_schema = StructType([
+        StructField("soma_joinid",    LongType(),   nullable=False),
+        StructField("cell_type",      StringType(), nullable=True),
+        StructField("disease",        StringType(), nullable=True),
+        StructField("tissue",         StringType(), nullable=True),
         StructField("tissue_general", StringType(), nullable=True),
-        StructField("dataset_id", StringType(), nullable=True),
+        StructField("dataset_id",     StringType(), nullable=True),
     ])
 
-    fwd_params = set(inspect.signature(model.forward).parameters.keys())
+    # Target ~50k cells per partition. With 8 GPUs (8 concurrent tasks)
+    # that's ~5 partitions per GPU — enough to absorb stragglers without
+    # paying model-load + Census-setup overhead too many times.
+    #
+    # IMPORTANT: do NOT use `spark.sparkContext.defaultParallelism` as a
+    # floor. On a g5.16xlarge multinode cluster (64 vCPU × N workers), that
+    # number is in the hundreds, which produces tiny partitions and
+    # serializes them through the GPU bottleneck. The prior 4-GPU run set
+    # 256 partitions of 7,812 cells each, took ~9 min/partition due to S3
+    # random-access in Census, and would not have completed in 12h.
+    TARGET_PARTITION_SIZE = 50_000
+    n_partitions = max(8, (n_to_embed + TARGET_PARTITION_SIZE - 1) // TARGET_PARTITION_SIZE)
+    print(
+        f"Input partitions: {n_partitions} (~{n_to_embed // max(n_partitions, 1):,} cells each); "
+        f"sorted by soma_joinid for contiguous Census reads"
+    )
 
-    _unk_id = tokenizer.convert_tokens_to_ids(tokenizer.unk_token)
+    # repartitionByRange("soma_joinid") gives exactly n_partitions, each
+    # containing a contiguous range of soma_joinids. This guarantees that
+    # within each partition, the soma_ids passed to `get_anndata` form a
+    # tight range — TileDB-SOMA fetches them with sequential S3 reads
+    # instead of random point reads.
+    input_sdf = (
+        spark.createDataFrame(input_pdf, schema=input_schema)
+        .repartitionByRange(n_partitions, "soma_joinid")
+    )
 
-    def encode_gene_names(names):
-        # TEDDY's GeneTokenizer returns None (not unk_token_id) for OOV tokens
-        # from both encode() and convert_tokens_to_ids(). Substitute manually.
-        ids = tokenizer.convert_tokens_to_ids(list(names))
-        ids = [_unk_id if i is None else i for i in ids]
-        return torch.tensor(ids, dtype=torch.long)
+# COMMAND ----------
 
-    def build_batch(X_dense, token_array):
-        X_t = torch.tensor(X_dense, dtype=torch.float32)
-        seq_tokens = max_seq_len - 1 if add_cls else max_seq_len
-        k = min(seq_tokens, X_t.shape[1])
-        _vals, top_idx = torch.topk(X_t, k=k, largest=True, sorted=True)
-        gene_ids = token_array[top_idx]
-        rank_vec = torch.linspace(1.0, -1.0, steps=k)
-        gene_values = rank_vec.unsqueeze(0).expand(X_t.shape[0], -1).clone()
-        if add_cls:
-            batch = X_t.shape[0]
-            cls_col = torch.full((batch, 1), cls_token_id, dtype=gene_ids.dtype)
-            gene_ids = torch.cat([cls_col, gene_ids], dim=1)
-            ones_col = torch.ones(batch, 1, dtype=gene_values.dtype)
-            gene_values = torch.cat([ones_col, gene_values], dim=1)
-        attn = torch.ones_like(gene_ids, dtype=torch.long)
-        return gene_ids.to(device), gene_values.to(device), attn.to(device)
+# DBTITLE 1,Define the mapInPandas UDF (loads TEDDY locally on each worker)
+if not already_done:
+    # Capture vars by value for closure into the UDF — keep these pure Python
+    # primitives so cloudpickle has no trouble.
+    _snapshot_dir = snapshot_dir
+    _model_dir = model_dir
+    _model_size = model_size
+    _census_version = census_version
+    _batch_emb = BATCH_EMB
+    _expected_dim = {"70M": 512, "160M": 768, "400M": 1024}.get(model_size, 1024)
+    _gene_ids_bcast = gene_ids_b  # broadcast — cheap to send
 
-    def call_forward(gene_ids, gene_values, attn):
-        kw = {}
-        for n in ("gene_ids", "input_ids"):
-            if n in fwd_params:
-                kw[n] = gene_ids; break
-        for n in ("gene_values", "values", "expression_values", "gene_value"):
-            if n in fwd_params:
-                kw[n] = gene_values; break
-        for n in ("attention_mask", "mask"):
-            if n in fwd_params:
-                kw[n] = attn; break
-        with torch.no_grad():
-            return model(**kw)
+    out_schema = StructType([
+        StructField("cell_id",        StringType(), nullable=False),
+        StructField("embedding",      ArrayType(FloatType(), containsNull=False), nullable=False),
+        StructField("cell_type",      StringType(), nullable=True),
+        StructField("disease",        StringType(), nullable=True),
+        StructField("tissue",         StringType(), nullable=True),
+        StructField("tissue_general", StringType(), nullable=True),
+        StructField("dataset_id",     StringType(), nullable=True),
+    ])
 
-    def extract_hidden(out):
-        """Return (tensor, is_pooled). is_pooled=True means already (batch, d_model)."""
-        def _get(o, n):
-            return o.get(n) if isinstance(o, dict) else getattr(o, n, None)
-        for n in ("cell_emb", "cell_embedding", "pooled_output", "pooler_output"):
-            v = _get(out, n)
-            if isinstance(v, torch.Tensor) and v.dim() == 2:
-                return v, True
-        for n in ("last_hidden_state", "hidden_states", "encoder_last_hidden_state"):
-            v = _get(out, n)
-            if isinstance(v, torch.Tensor) and v.dim() >= 2:
-                return v, v.dim() == 2
-        if isinstance(out, (tuple, list)):
-            for v in out:
-                if isinstance(v, torch.Tensor) and v.dim() in (2, 3):
-                    return v, v.dim() == 2
-        if isinstance(out, torch.Tensor) and out.dim() in (2, 3):
-            return out, out.dim() == 2
-        return None, False
+    def embed_partition(iterator):
+        """Runs on each Spark executor. mapInPandas hands us an iterator of
+        pandas DFs (one per Arrow batch ~10k cells) and we yield embedded DFs.
 
-    # Use cellxgene_census.get_anndata() to pull (X, obs, var) in CONSISTENT row
-    # order — the raw SOMA `.X.read(coords=...).tocsr()` returns a sparse matrix
-    # indexed by soma_joinid (not positional row), which silently misaligns rows
-    # when joinids are sparse. get_anndata() handles that for us.
-    soma_ids = obs_sample["soma_joinid"].astype(int).to_numpy()
-    total = len(soma_ids)
-    written = 0
-    token_array = None  # built lazily on first chunk so we use the right gene order
+        Per-worker-process caching of model + tokenizer + Census handle +
+        token_array is via a module-level global dict on the executor.
 
-    for write_start in range(0, total, BATCH_WRITE):
-        write_end = min(write_start + BATCH_WRITE, total)
-        chunk_ids = soma_ids[write_start:write_end].tolist()
+        Progress observability: each batch logs a tagged line to stderr with
+        worker host, batch num, n_cells, GPU forward time, total elapsed, and
+        throughput cells/s. Visible in Spark UI → Executors → stderr."""
+        import sys
+        import socket
+        import time
+        import inspect
+        import numpy as np
+        import pandas as pd
+        import torch
+        import cellxgene_census
 
-        adata = cellxgene_census.get_anndata(
-            census,
-            organism="Homo sapiens",
-            obs_coords=chunk_ids,
-        )
-        # adata.shape: (n_cells_returned, n_genes). Rows aligned with adata.obs.
-        n_cells = adata.shape[0]
-        if n_cells == 0:
-            print(f"chunk {write_start}-{write_end}: 0 cells returned, skipping")
-            continue
-        if n_cells != (write_end - write_start):
-            print(f"chunk {write_start}-{write_end}: requested {write_end - write_start}, got {n_cells} (some joinids missing)")
+        # Worker tag for log lines — host helps differentiate the 4 workers.
+        _worker_tag = f"[w={socket.gethostname()}]"
+        def _log(msg):
+            print(f"{_worker_tag} {time.strftime('%H:%M:%S')} {msg}", file=sys.stderr, flush=True)
 
-        # First chunk: build the gene-id token array using the CONSISTENT var
-        # order that get_anndata returns. var_df.shape may vary chunk-to-chunk
-        # in theory but in practice Census uses the global gene vocab.
-        if token_array is None:
-            gene_ids_list = adata.var["feature_id"].astype(str).tolist()
-            token_array = encode_gene_names(gene_ids_list)
-            n_unk = int((token_array == _unk_id).sum().item())
-            print(f"Census gene vocab: {len(gene_ids_list):,}  (unk after lookup: {n_unk:,})")
+        _partition_start = time.time()
+        _partition_n_cells = 0
+        _batch_num = 0
 
-        # Densify X. AnnData's X is scipy.sparse.csr or numpy depending on size.
-        X = adata.X
-        if hasattr(X, "toarray"):
-            X_dense_full = X.toarray()
-        else:
-            X_dense_full = np.asarray(X)
+        # ---- one-shot per-process init ----
+        global _TEDDY_WORKER_CACHE
+        try:
+            _TEDDY_WORKER_CACHE
+        except NameError:
+            _TEDDY_WORKER_CACHE = {}
 
-        embeddings = np.zeros((n_cells, d_model), dtype=np.float32)
-        for s in range(0, n_cells, BATCH_EMB):
-            e = min(s + BATCH_EMB, n_cells)
-            X_batch = X_dense_full[s:e]
-            gene_ids, gene_values, attn = build_batch(X_batch, token_array)
-            fwd = call_forward(gene_ids, gene_values, attn)
-            hidden, is_pooled = extract_hidden(fwd)
-            if hidden is None:
-                raise RuntimeError(f"Could not extract hidden state from TEDDY forward: {type(fwd).__name__}")
-            emb = hidden if is_pooled else hidden.mean(dim=1)
-            embeddings[s:e] = emb.detach().cpu().numpy().astype(np.float32)
+        if "model" not in _TEDDY_WORKER_CACHE:
+            _t_load = time.time()
+            _log(f"loading TEDDY-G {_model_size} from {_model_dir}…")
+            if _snapshot_dir not in sys.path:
+                sys.path.insert(0, _snapshot_dir)
+            from teddy.models.model_directory import get_architecture, model_dict
+            from teddy.tokenizer.gene_tokenizer import GeneTokenizer
 
-        # adata.obs is guaranteed row-aligned with adata.X (this is the whole
-        # point of get_anndata over raw SOMA reads).
-        obs = adata.obs.reset_index(drop=True)
-        def _strcol(col):
-            return obs[col].astype("object").where(obs[col].notna(), None).astype(object).map(
-                lambda v: None if v is None else str(v)
+            arch = get_architecture(_model_dir)
+            config_cls = model_dict[arch]["config_cls"]
+            model_cls = model_dict[arch]["model_cls"]
+            config = config_cls.from_pretrained(_model_dir)
+            model = model_cls.from_pretrained(_model_dir, config=config)
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            model.to(device).eval()
+            tokenizer = GeneTokenizer.from_pretrained(_model_dir)
+            unk_id = tokenizer.convert_tokens_to_ids(tokenizer.unk_token)
+
+            # Pre-tokenize the global Census gene vocab — same array reused for
+            # every cell since get_anndata returns rows aligned to this vocab.
+            gene_names = _gene_ids_bcast.value
+            ids = tokenizer.convert_tokens_to_ids(list(gene_names))
+            ids = [unk_id if i is None else i for i in ids]
+            token_array = torch.tensor(ids, dtype=torch.long)
+
+            fwd_params = set(inspect.signature(model.forward).parameters.keys())
+            add_cls = bool(getattr(config, "add_cls", False))
+            cls_token_id = int(getattr(config, "cls_token_id", 0))
+            d_model = int(config.d_model)
+            max_seq_len = int(getattr(config, "max_position_embeddings", 2048))
+
+            _TEDDY_WORKER_CACHE.update({
+                "model": model, "device": device, "fwd_params": fwd_params,
+                "add_cls": add_cls, "cls_token_id": cls_token_id,
+                "d_model": d_model, "max_seq_len": max_seq_len,
+                "token_array": token_array, "unk_id": unk_id,
+            })
+            _log(f"TEDDY loaded on {device} in {time.time()-_t_load:.1f}s, d_model={d_model}, vocab={len(gene_names):,}")
+
+        if "census" not in _TEDDY_WORKER_CACHE:
+            _TEDDY_WORKER_CACHE["census"] = cellxgene_census.open_soma(
+                census_version=_census_version
             )
-        pdf = pd.DataFrame({
-            "cell_id": obs["soma_joinid"].astype(str).to_numpy(),
-            "embedding": [row.tolist() for row in embeddings],
-            "cell_type": _strcol("cell_type"),
-            "disease": _strcol("disease"),
-            "tissue": _strcol("tissue"),
-            "tissue_general": _strcol("tissue_general"),
-            "dataset_id": _strcol("dataset_id"),
-        })
 
-        sdf = spark.createDataFrame(pdf, schema=schema_spark)
-        sdf.write.format("delta").mode("append").saveAsTable(CELLS_TABLE)
-        written += n_cells
-        print(f"Wrote {written:,}/{total:,} cells")
+        c = _TEDDY_WORKER_CACHE
+        model = c["model"]; device = c["device"]
+        fwd_params = c["fwd_params"]; add_cls = c["add_cls"]
+        cls_token_id = c["cls_token_id"]; d_model = c["d_model"]
+        max_seq_len = c["max_seq_len"]; token_array = c["token_array"]
+        census = c["census"]
 
-    print(f"Done. Total rows in {CELLS_TABLE}: {spark.table(CELLS_TABLE).count():,}")
+        # Move token_array to device once (CPU→GPU lookup once per worker).
+        token_array_dev = token_array.to(device)
+
+        # ---- helpers (closed over the per-worker model state) ----
+        def build_batch(X_dense):
+            # Build the whole batch on GPU — topk over 60k genes is the per-batch
+            # hot path. CPU topk for batch=32 × 60k ≈ 2M comparisons; moving to
+            # GPU made the original 70M reembed ~3× faster end-to-end.
+            X_t = torch.tensor(X_dense, dtype=torch.float32, device=device)
+            seq_tokens = max_seq_len - 1 if add_cls else max_seq_len
+            k = min(seq_tokens, X_t.shape[1])
+            _vals, top_idx = torch.topk(X_t, k=k, largest=True, sorted=True)
+            gene_ids_b = token_array_dev[top_idx]
+            rank_vec = torch.linspace(1.0, -1.0, steps=k, device=device)
+            gene_values = rank_vec.unsqueeze(0).expand(X_t.shape[0], -1).clone()
+            if add_cls:
+                batch = X_t.shape[0]
+                cls_col = torch.full((batch, 1), cls_token_id, dtype=gene_ids_b.dtype, device=device)
+                gene_ids_b = torch.cat([cls_col, gene_ids_b], dim=1)
+                ones_col = torch.ones(batch, 1, dtype=gene_values.dtype, device=device)
+                gene_values = torch.cat([ones_col, gene_values], dim=1)
+            attn = torch.ones_like(gene_ids_b, dtype=torch.long)
+            return gene_ids_b, gene_values, attn
+
+        _use_bf16 = (device == "cuda")
+
+        def call_forward(gene_ids_b, gene_values, attn):
+            kw = {}
+            for n in ("gene_ids", "input_ids"):
+                if n in fwd_params: kw[n] = gene_ids_b; break
+            for n in ("gene_values", "values", "expression_values", "gene_value"):
+                if n in fwd_params: kw[n] = gene_values; break
+            for n in ("attention_mask", "mask"):
+                if n in fwd_params: kw[n] = attn; break
+            with torch.no_grad():
+                if _use_bf16:
+                    with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                        return model(**kw)
+                return model(**kw)
+
+        def extract_hidden(out):
+            def _get(o, n):
+                return o.get(n) if isinstance(o, dict) else getattr(o, n, None)
+            for n in ("cell_emb", "cell_embedding", "pooled_output", "pooler_output"):
+                v = _get(out, n)
+                if isinstance(v, torch.Tensor) and v.dim() == 2:
+                    return v, True
+            for n in ("last_hidden_state", "hidden_states", "encoder_last_hidden_state"):
+                v = _get(out, n)
+                if isinstance(v, torch.Tensor) and v.dim() >= 2:
+                    return v, v.dim() == 2
+            if isinstance(out, (tuple, list)):
+                for v in out:
+                    if isinstance(v, torch.Tensor) and v.dim() in (2, 3):
+                        return v, v.dim() == 2
+            if isinstance(out, torch.Tensor) and out.dim() in (2, 3):
+                return out, out.dim() == 2
+            return None, False
+
+        # ---- main loop: per Arrow batch ----
+        for in_pdf in iterator:
+            if in_pdf.empty:
+                continue
+            _batch_num += 1
+            _batch_start = time.time()
+            soma_ids = in_pdf["soma_joinid"].astype("int64").tolist()
+
+            _t = time.time()
+            adata = cellxgene_census.get_anndata(
+                census, organism="Homo sapiens", obs_coords=soma_ids,
+            )
+            n_cells = adata.shape[0]
+            _t_census = time.time() - _t
+            if n_cells == 0:
+                _log(f"batch {_batch_num}: 0 cells returned from Census, skipping")
+                continue
+
+            _t = time.time()
+            X = adata.X
+            X_dense_full = X.toarray() if hasattr(X, "toarray") else np.asarray(X)
+            _t_densify = time.time() - _t
+
+            _t = time.time()
+            embeddings = np.zeros((n_cells, d_model), dtype=np.float32)
+            for s in range(0, n_cells, _batch_emb):
+                e = min(s + _batch_emb, n_cells)
+                gids, gvals, attn = build_batch(X_dense_full[s:e])
+                fwd = call_forward(gids, gvals, attn)
+                hidden, is_pooled = extract_hidden(fwd)
+                if hidden is None:
+                    raise RuntimeError(
+                        f"Could not extract hidden state from TEDDY forward: {type(fwd).__name__}"
+                    )
+                emb = hidden if is_pooled else hidden.mean(dim=1)
+                embeddings[s:e] = emb.detach().cpu().numpy().astype(np.float32)
+            _t_embed = time.time() - _t
+
+            _partition_n_cells += n_cells
+            _partition_elapsed = time.time() - _partition_start
+            _batch_elapsed = time.time() - _batch_start
+            _log(
+                f"batch {_batch_num}: {n_cells} cells in {_batch_elapsed:.1f}s "
+                f"(census {_t_census:.1f}s, densify {_t_densify:.1f}s, embed {_t_embed:.1f}s) | "
+                f"partition: {_partition_n_cells:,} cells / {_partition_elapsed/60:.1f} min "
+                f"({_partition_n_cells/max(_partition_elapsed,0.1):.1f} cells/s)"
+            )
+
+            # Align metadata with the row order Census returned (adata.obs.soma_joinid).
+            obs_pd = adata.obs.reset_index(drop=True)
+            returned_ids = obs_pd["soma_joinid"].astype("int64").to_numpy()
+            in_pdf_indexed = in_pdf.set_index("soma_joinid")
+            meta_pd = in_pdf_indexed.loc[returned_ids].reset_index()
+
+            out_pdf = pd.DataFrame({
+                "cell_id":        meta_pd["soma_joinid"].astype(str).to_numpy(),
+                "embedding":      [row.tolist() for row in embeddings],
+                "cell_type":      meta_pd["cell_type"].astype(str).where(meta_pd["cell_type"] != "", None),
+                "disease":        meta_pd["disease"].astype(str).where(meta_pd["disease"] != "", None),
+                "tissue":         meta_pd["tissue"].astype(str).where(meta_pd["tissue"] != "", None),
+                "tissue_general": meta_pd["tissue_general"].astype(str).where(meta_pd["tissue_general"] != "", None),
+                "dataset_id":     meta_pd["dataset_id"].astype(str).where(meta_pd["dataset_id"] != "", None),
+            })
+            yield out_pdf
+
+        _log(
+            f"partition done: {_partition_n_cells:,} cells in "
+            f"{(time.time()-_partition_start)/60:.1f} min "
+            f"({_partition_n_cells/max(time.time()-_partition_start,0.1):.1f} cells/s)"
+        )
+
+# COMMAND ----------
+
+# DBTITLE 1,Run mapInPandas across workers and write Delta in one shot
+if not already_done:
+    import time as _time
+    spark.sql(f"DROP TABLE IF EXISTS {CELLS_TABLE}")
+
+    # Surface the Spark UI URL so progress is observable mid-run. mapInPandas
+    # below is one big stage with N tasks; the stage's task progress is the
+    # only live signal until the final write commits.
+    _app_id = spark.sparkContext.applicationId
+    try:
+        _ui_url = spark.sparkContext.uiWebUrl
+        print(f"Spark UI: {_ui_url}  (watch the mapInPandas stage's tasks completed/N)")
+    except Exception:
+        print(f"Spark UI: open the cluster's Spark UI (app id {_app_id})")
+    print(f"Workers will log per-batch progress to executor stderr — see Spark UI → Executors.")
+
+    _t0 = _time.time()
+    result_sdf = input_sdf.mapInPandas(embed_partition, schema=out_schema)
+    (
+        result_sdf.write
+        .format("delta")
+        .mode("overwrite")
+        .option("overwriteSchema", "true")
+        .saveAsTable(CELLS_TABLE)
+    )
+    _elapsed_min = (_time.time() - _t0) / 60
+    _n_rows = spark.table(CELLS_TABLE).count()
+    print(
+        f"Done in {_elapsed_min:.1f} min. Total rows in {CELLS_TABLE}: {_n_rows:,} "
+        f"({_n_rows/max(_elapsed_min*60,0.1):.1f} cells/s overall — includes setup, "
+        f"Census fetch, embedding, and Delta write across all workers)"
+    )
 
 # COMMAND ----------
 

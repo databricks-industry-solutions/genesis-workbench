@@ -20,11 +20,13 @@
 
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "dev_yyang_genesis_workbench", "Schema")
-dbutils.widgets.text("teddy_model_size", "70M", "TEDDY-G variant (sets embedding dim)")
+dbutils.widgets.text("teddy_model_size", "400M", "TEDDY-G variant (sets embedding dim)")
+dbutils.widgets.text("target_n_cells", "2000000", "Target reference cell count (for idempotency)")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 model_size = dbutils.widgets.get("teddy_model_size")
+target_n_cells = int(dbutils.widgets.get("target_n_cells"))
 
 # d_model per variant from the TEDDY-G configs (config.json)
 EMB_DIM = {"70M": 512, "160M": 768, "400M": 1024}.get(model_size)
@@ -71,6 +73,58 @@ from databricks.sdk.service.vectorsearch import (
 
 source_table = f"{catalog}.{schema}.teddy_cells"
 index_name = f"{catalog}.{schema}.teddy_cell_index"
+
+# ── Pre-flight idempotency check ──────────────────────────────────────────
+# If teddy_cells is already populated to >=95% of target at the right dim AND
+# teddy_cell_index already exists at the matching dim, this notebook is a
+# no-op. Mirrors notebook 03's idempotency — together they guarantee that
+# re-running `deploy.sh teddy` on a fully-built install does nothing.
+def _existing_table_state():
+    if not spark.catalog.tableExists(source_table):
+        return (0, None)
+    n = spark.table(source_table).count()
+    if n == 0:
+        return (0, None)
+    d = spark.table(source_table).selectExpr("size(embedding) as d").limit(1).collect()[0]["d"]
+    return (n, d)
+
+def _existing_index_dim(idx):
+    try:
+        spec = getattr(idx, "delta_sync_index_spec", None)
+        if spec is None: return None
+        cols = getattr(spec, "embedding_vector_columns", None) or []
+        if cols:
+            return int(getattr(cols[0], "embedding_dimension", 0)) or None
+    except Exception:
+        return None
+    return None
+
+tbl_rows, tbl_dim = _existing_table_state()
+print(f"teddy_cells: {tbl_rows:,} rows, dim={tbl_dim} (want >= {int(target_n_cells*0.95):,} rows, dim={EMB_DIM})")
+
+try:
+    _existing_for_skip = w.vector_search_indexes.get_index(index_name)
+except NotFound:
+    _existing_for_skip = None
+except Exception as e:
+    print(f"  get_index transient: {e}")
+    _existing_for_skip = None
+
+if (
+    tbl_rows >= int(target_n_cells * 0.95)
+    and tbl_dim == EMB_DIM
+    and _existing_for_skip is not None
+    and _existing_index_dim(_existing_for_skip) == EMB_DIM
+):
+    print(
+        f"✅ Data + index already in place for {model_size} "
+        f"(table dim={tbl_dim}, index dim={_existing_index_dim(_existing_for_skip)}). "
+        f"Skipping create/sync — true no-op on re-deploy."
+    )
+    dbutils.notebook.exit("skipped: data and index already present")
+
+# ──────────────────────────────────────────────────────────────────────────
+
 spark.sql(f"ALTER TABLE {source_table} SET TBLPROPERTIES (delta.enableChangeDataFeed = true)")
 
 existing = None
@@ -88,12 +142,33 @@ else:
     raise RuntimeError(f"Could not determine whether '{index_name}' exists after 5 attempts.")
 
 if existing is not None:
-    print(f"Index '{index_name}' exists — triggering sync.")
-    try:
-        w.vector_search_indexes.sync_index(index_name=index_name)
-    except BadRequest as e:
-        print(f"Sync not triggered (pipeline busy): {e}")
-else:
+    existing_dim = _existing_index_dim(existing)
+    if existing_dim is not None and existing_dim != EMB_DIM:
+        # Variant switch (e.g. 70M dim=512 → 400M dim=1024). Sync can't change
+        # the index's declared dim — we MUST drop and recreate. Destroy-
+        # preservation policy applies only to `databricks bundle destroy`,
+        # not to deliberate variant-switch deploys.
+        print(
+            f"Index '{index_name}' exists at dim={existing_dim}, "
+            f"but {model_size} requires dim={EMB_DIM} — dropping and recreating."
+        )
+        w.vector_search_indexes.delete_index(index_name=index_name)
+        # Brief wait for the delete to propagate before create_index.
+        for _ in range(12):
+            try:
+                w.vector_search_indexes.get_index(index_name)
+            except NotFound:
+                break
+            time.sleep(5)
+        existing = None
+    else:
+        print(f"Index '{index_name}' exists at dim={existing_dim or EMB_DIM} — triggering sync.")
+        try:
+            w.vector_search_indexes.sync_index(index_name=index_name)
+        except BadRequest as e:
+            print(f"Sync not triggered (pipeline busy): {e}")
+
+if existing is None:
     print(f"Creating Delta Sync index '{index_name}'…")
     w.vector_search_indexes.create_index(
         name=index_name,

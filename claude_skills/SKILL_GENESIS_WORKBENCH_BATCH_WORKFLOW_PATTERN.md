@@ -378,6 +378,29 @@ cd modules/core && ./update.sh <cloud>
 
 **Never** `./deploy.sh core` — wipes settings + user-profile tables.
 
+## Documentation (hard rule — same as the development skill)
+
+A batch workflow is a "new feature" — the three docs artifacts required by
+[`SKILL_GENESIS_WORKBENCH_DEVELOPMENT.md`](SKILL_GENESIS_WORKBENCH_DEVELOPMENT.md#documentation-hard-rule)
+apply in full and must ship in the same PR as the workflow code:
+
+1. **`modules/core/app/docs/<module>_<feature>.md`** — what it does, how to
+   use the launch form, what inputs/outputs look like, where results land
+   (MLflow run + result dialog), known limitations.
+2. **Root `README.md` bullet** under the matching module in "Inside Genesis
+   Workbench", linking to the doc page.
+3. **`CHANGELOG.md` entry** following the existing dated-header pattern —
+   explain the *decisions*, not just "added X". Call out which anti-pattern
+   from the list above the implementation explicitly avoids.
+
+Batch workflows are particularly doc-heavy because they touch five layers
+(orchestrator job, registration, dispatcher, search, dialog) — the doc page
+is what spares the next contributor from re-deriving the wiring by reading
+five files. If the doc page is hard to write, the workflow's UX is probably
+wrong too.
+
+---
+
 ## Verification (smoke test for any new batch workflow)
 
 After both deploys land:
@@ -387,6 +410,7 @@ After both deploys land:
 3. **Viewer dialog** — click a row + **View**. Status banner, MLflow link, progress chart, results table all render.
 4. **Failure surfacing** — force a failure (malformed input, etc.). Row should land on `job_status=failed`; the dialog should still open and show partial state.
 5. **Direct Jobs-UI fallback** — trigger the orchestrator from the Databricks Jobs UI directly with `mlflow_run_id=""`. Should work — orchestrator falls back to creating its own run (Layer 4 else-branch).
+6. **Docs land in the same PR** — the three doc artifacts above. A PR that ships code but no docs is incomplete and should be sent back.
 
 If any of these don't work, the issue is almost always one of:
 

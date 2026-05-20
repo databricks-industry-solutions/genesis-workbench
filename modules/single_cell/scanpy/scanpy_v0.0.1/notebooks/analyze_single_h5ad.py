@@ -35,7 +35,7 @@ dbutils.widgets.text("min_cells", "3", "Min Cells per Gene")
 dbutils.widgets.text("pct_counts_mt", "5", "Max % Mitochondrial Counts")
 dbutils.widgets.text("n_genes_by_counts", "2500", "Max Genes by Counts")
 dbutils.widgets.text("target_sum", "10000", "Target Sum for Normalization")
-dbutils.widgets.text("n_top_genes", "500", "Number of Highly Variable Genes")
+dbutils.widgets.text("n_top_genes", "2000", "Number of Highly Variable Genes")
 dbutils.widgets.text("n_pcs", "50", "Number of Principal Components")
 dbutils.widgets.text("cluster_resolution", "0.2", "Cluster Resolution")
 dbutils.widgets.text("compute_pseudotime", "false", "Compute Pseudotime (true/false)")
@@ -506,6 +506,27 @@ adata.var = adata.var.drop(columns=['Gene name'], errors='ignore')
 adata.write_h5ad(tmpdir.name+"/adata_output.h5ad")
 # save the flat dataframe to disk
 df_flat.to_parquet(tmpdir.name + "/markers_flat.parquet")
+
+# Also save the HVG expression matrix — same cells as markers_flat but with
+# the ~n_top_genes highly-variable genes (not just per-cluster top markers).
+# Foundation-model annotators (e.g. TEDDY) need a richer gene context than
+# the ~100 markers in markers_flat to produce meaningful embeddings.
+if 'highly_variable' in adata.var.columns:
+    _hvg_mask = adata.var['highly_variable'].values
+    _hvg_genes = adata.var.index[_hvg_mask].tolist()
+    _adata_hvg = adata[adata_markers.obs_names, _hvg_mask]
+    _hvg_X = _adata_hvg.X.toarray() if scipy.sparse.issparse(_adata_hvg.X) else _adata_hvg.X
+    _hvg_df = pd.DataFrame(
+        _hvg_X,
+        columns=[f"expr_{g}" for g in _hvg_genes],
+        index=_adata_hvg.obs_names,
+    )
+    # Include the cluster column so annotators can group cells.
+    _hvg_df['cluster'] = adata_markers.obs['cluster'].astype(str).values
+    _hvg_df.to_parquet(tmpdir.name + "/hvg_matrix.parquet")
+    print(f"Logged hvg_matrix.parquet: {_hvg_df.shape[0]:,} cells × {len(_hvg_genes):,} HVG genes")
+else:
+    print("WARNING: adata.var has no 'highly_variable' column — skipping hvg_matrix.parquet")
 
 
 t1 = time.time()

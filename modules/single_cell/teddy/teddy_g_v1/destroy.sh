@@ -13,6 +13,19 @@ esac
 echo "=========================================================="
 echo "⚙️ Preparing to destroy module teddy_g_v1 (target=$TARGET)"
 echo "=========================================================="
+echo ""
+echo "ℹ️  PRESERVED across destroy (NOT bundle resources):"
+echo "     • Delta table: {catalog}.{schema}.teddy_cells   ← rebuild takes hours"
+echo "     • VS endpoint: gwb_teddy_vs_endpoint"
+echo "     • VS index:    {catalog}.{schema}.teddy_cell_index"
+echo "   These are created procedurally by notebooks 03/04 and live outside the"
+echo "   bundle, so 'databricks bundle destroy' leaves them intact. Re-deploying"
+echo "   later is a no-op for them (notebooks 03/04 idempotency-check first)."
+echo ""
+echo "🗑️  Removed by destroy (bundle resources):"
+echo "     • Job:     register_teddy"
+echo "     • Volume:  teddy (HF model snapshot — re-downloaded on next deploy)"
+echo ""
 
 databricks bundle destroy --target $TARGET $EXTRA_PARAMS --auto-approve
 

@@ -16,8 +16,10 @@ from utils.single_cell_analysis import (start_scanpy_job,
                                         get_mlflow_run_url,
                                         search_singlecell_runs,
                                         save_singlecell_annotation,
-                                        download_singlecell_annotation)
-from utils.scimilarity_tools import annotate_clusters
+                                        download_singlecell_annotation,
+                                        download_singlecell_hvg_matrix)
+from utils.scimilarity_tools import annotate_clusters as scim_annotate_clusters
+from utils.teddy_tools import annotate_clusters as teddy_annotate_clusters
 
 
 def _display_run_analysis():
@@ -70,7 +72,10 @@ def _display_run_analysis():
         with col3:
             st.markdown("**Normalization & Feature Selection:**")
             target_sum = st.number_input("Target Sum for Normalization", min_value=0, value=10000, step=1000)
-            n_top_genes = st.number_input("Number of Highly Variable Genes", min_value=0, value=500, step=50)
+            n_top_genes = st.number_input(
+                "Number of Highly Variable Genes", min_value=0, value=2000, step=100,
+                help="Top variable genes used for clustering and logged as hvg_matrix.parquet. TEDDY foundation-model annotation benefits from ~2000 — its native sequence length is 2048.",
+            )
         with col4:
             st.markdown("**Dimensionality Reduction & Clustering:**")
             n_pcs = st.number_input("Number of Principal Components", min_value=0, value=50, step=5)
@@ -304,10 +309,15 @@ def _display_results_viewer():
     prev_run_id = st.session_state.get('singlecell_run_id')
     if prev_run_id and prev_run_id != run_id:
         for key in ['singlecell_df', 'singlecell_run_id', 'singlecell_mlflow_url',
-                     f'annotation_{prev_run_id}',
+                     f'annotation_scimilarity_{prev_run_id}',
+                     f'annotation_teddy_{prev_run_id}',
                      f'annotation_cluster_col_{prev_run_id}',
                      f'annotation_loaded_{prev_run_id}',
-                     f'annotation_load_error_{prev_run_id}']:
+                     f'annotation_load_error_{prev_run_id}',
+                     f'umap_overlay_model_{prev_run_id}',
+                     f'umap_use_scim_{prev_run_id}',
+                     f'umap_use_teddy_{prev_run_id}',
+                     f'umap_bias_correct_{prev_run_id}']:
             st.session_state.pop(key, None)
 
     if load_button:
@@ -376,32 +386,43 @@ def _display_results_viewer():
         st.info("This viewer displays a subsampled dataset (max 10,000 cells) with marker genes only for faster, interactive plotting. "
                 "The complete output AnnData object with all genes is available in the MLflow run.")
 
-        annotation_cache_key = f"annotation_{run_id}"
+        # Per-model session-state keys — SCimilarity and TEDDY annotations
+        # coexist on the same run and are displayed side-by-side.
+        scim_cache_key = f"annotation_scimilarity_{run_id}"
+        teddy_cache_key = f"annotation_teddy_{run_id}"
         annotation_loaded_key = f"annotation_loaded_{run_id}"
         annotation_load_error_key = f"annotation_load_error_{run_id}"
 
-        # Try loading a previously saved annotation from the MLflow run (once per run_id).
-        # Real errors (auth, network, malformed JSON) are stashed in session state so
-        # the user sees a meaningful error message instead of "annotate again from
-        # scratch". The "not found" case (artifact absent) is silent — the UI's
-        # "Annotate Clusters" button is the right action in that case.
-        if annotation_cache_key not in st.session_state and annotation_loaded_key not in st.session_state:
+        # Try loading previously-saved annotations from the MLflow run for both
+        # models (once per run_id). Real errors (auth, network, malformed JSON)
+        # are stashed in session state so the user sees a meaningful error
+        # instead of "annotate again from scratch". The "artifact absent" case
+        # is silent — the Annotate button is the right action then.
+        if annotation_loaded_key not in st.session_state:
             st.session_state[annotation_loaded_key] = True
-            try:
-                saved_results, saved_cluster_col = download_singlecell_annotation(run_id)
-            except Exception as load_err:
-                saved_results, saved_cluster_col = None, None
-                st.session_state[annotation_load_error_key] = str(load_err)
-            if saved_results is not None and not saved_results.empty:
-                st.session_state[annotation_cache_key] = saved_results
-                if saved_cluster_col:
-                    st.session_state[f"annotation_cluster_col_{run_id}"] = saved_cluster_col
+            errors = []
+            for _mdl, _cache_key in (
+                ("scimilarity", scim_cache_key),
+                ("teddy", teddy_cache_key),
+            ):
+                try:
+                    saved_results, saved_cluster_col = download_singlecell_annotation(run_id, model=_mdl)
+                except Exception as load_err:
+                    saved_results, saved_cluster_col = None, None
+                    errors.append(f"{_mdl}: {load_err}")
+                if saved_results is not None and not saved_results.empty:
+                    st.session_state[_cache_key] = saved_results
+                    if saved_cluster_col:
+                        st.session_state[f"annotation_cluster_col_{run_id}"] = saved_cluster_col
+            if errors:
+                st.session_state[annotation_load_error_key] = " | ".join(errors)
 
         # Surface load outcome so the user knows what happened.
-        if annotation_cache_key in st.session_state:
+        loaded_models = [m for m, k in (("SCimilarity", scim_cache_key), ("TEDDY", teddy_cache_key)) if k in st.session_state]
+        if loaded_models:
             st.caption(
-                "ℹ️ Loaded saved cell-type annotation from this MLflow run. "
-                "Re-run the annotation below to overwrite, or skip it to keep this one."
+                f"ℹ️ Loaded saved annotation(s) from this MLflow run: {', '.join(loaded_models)}. "
+                "Re-run below to overwrite."
             )
         elif st.session_state.get(annotation_load_error_key):
             st.warning(
@@ -411,16 +432,39 @@ def _display_results_viewer():
 
         @st.fragment
         def _umap_fragment():
-            # --- Cell Type Annotation ---
+            # --- Cell Type Annotation (multi-model) ---
             st.markdown("###### Cell Type Annotation")
-            st.caption("Annotate clusters using SCimilarity's 23M-cell reference database.")
+            st.caption(
+                "Annotate clusters with SCimilarity (23M-cell reference) and/or "
+                "TEDDY (Merck foundation model + CELLxGENE reference). Both labels "
+                "are saved to this MLflow run."
+            )
+
+            mcol1, mcol2, mcol3, _spacer = st.columns([1, 1, 2, 2], vertical_alignment="bottom")
+            with mcol1:
+                use_scim = st.checkbox("SCimilarity", value=True, key=f"umap_use_scim_{run_id}")
+            with mcol2:
+                use_teddy = st.checkbox("TEDDY", value=True, key=f"umap_use_teddy_{run_id}")
+            with mcol3:
+                # IDF voting only affects TEDDY (its reference is biased toward
+                # disease cells). SCimilarity has its own balanced 23M-cell ref.
+                bias_correct = st.checkbox(
+                    "Bias-correct (IDF)", value=True,
+                    key=f"umap_bias_correct_{run_id}",
+                    help="(TEDDY only) Weight each neighbor vote inversely to that cell type's frequency in the TEDDY reference — counteracts the disease-only filter bias.",
+                    disabled=not use_teddy,
+                )
+
             anno_col1, anno_col2, anno_col3 = st.columns([2, 2, 2], vertical_alignment="bottom")
             with anno_col1:
                 anno_cpc = st.number_input("Cells per cluster:", min_value=3, max_value=50, value=10, step=5, key="umap_anno_cpc")
             with anno_col2:
                 anno_k = st.number_input("Neighbors (k):", min_value=5, max_value=200, value=20, step=5, key="umap_anno_k")
             with anno_col3:
-                anno_btn = st.button("Annotate Clusters", type="primary", key="umap_anno_btn")
+                anno_btn = st.button(
+                    "Annotate Clusters", type="primary", key="umap_anno_btn",
+                    disabled=not (use_scim or use_teddy),
+                )
 
             if anno_btn:
                 cluster_col = _get_cluster_column(df)
@@ -429,37 +473,120 @@ def _display_results_viewer():
                 elif 'UMAP_0' not in df.columns:
                     st.error("UMAP coordinates not found — cannot annotate.")
                 else:
-                    progress = st.progress(0, text="Starting annotation...")
-                    with st.spinner("Running annotation..."):
-                        try:
-                            results_df = annotate_clusters(
-                                df, cluster_col=cluster_col,
-                                cells_per_cluster=anno_cpc, k_neighbors=anno_k,
-                                progress_callback=lambda pct, text: progress.progress(min(pct, 100), text=text),
-                            )
-                            st.session_state[annotation_cache_key] = results_df
-                            st.session_state[f"annotation_cluster_col_{run_id}"] = cluster_col
-
-                            # Persist to the MLflow run so future viewers see annotations without re-running.
+                    # Run each selected model in turn. Independent progress + save
+                    # per model so a failure in one doesn't lose the other.
+                    if use_scim:
+                        progress = st.progress(0, text="SCimilarity: starting…")
+                        with st.spinner("Running SCimilarity annotation…"):
                             try:
-                                save_singlecell_annotation(run_id, results_df, cluster_col)
-                                st.success("Annotation complete and saved to MLflow run.")
-                            except Exception as save_err:
-                                st.warning(f"Annotation computed but could not be saved to MLflow: {save_err}")
-                        except Exception as e:
-                            st.error(f"Annotation failed: {e}")
+                                sci_results = scim_annotate_clusters(
+                                    df, cluster_col=cluster_col,
+                                    cells_per_cluster=anno_cpc, k_neighbors=anno_k,
+                                    progress_callback=lambda pct, text: progress.progress(min(int(pct), 100), text=f"SCimilarity: {text}"),
+                                )
+                                st.session_state[scim_cache_key] = sci_results
+                                st.session_state[f"annotation_cluster_col_{run_id}"] = cluster_col
+                                try:
+                                    save_singlecell_annotation(run_id, sci_results, cluster_col, model="scimilarity")
+                                    st.success("SCimilarity annotation saved to MLflow.")
+                                except Exception as save_err:
+                                    st.warning(f"SCimilarity result computed but not saved to MLflow: {save_err}")
+                            except Exception as e:
+                                st.error(f"SCimilarity annotation failed: {e}")
 
-            if annotation_cache_key in st.session_state:
-                results_df = st.session_state[annotation_cache_key]
-                st.dataframe(results_df, use_container_width=True, hide_index=True)
+                    if use_teddy:
+                        # TEDDY needs a wide gene context (~2000 HVG) to produce
+                        # meaningful embeddings. Try the dedicated hvg_matrix
+                        # artifact first; if it's absent (older run from before
+                        # the HVG-logging change), fall back to markers_flat
+                        # with a warning that quality will be limited.
+                        teddy_input_df = None
+                        try:
+                            hvg_df = download_singlecell_hvg_matrix(run_id)
+                        except Exception as hvg_err:
+                            st.warning(f"Could not load hvg_matrix.parquet: {hvg_err}. Falling back to markers_flat.")
+                            hvg_df = None
+                        if hvg_df is not None and not hvg_df.empty:
+                            # NB: use a distinct local name (`hvg_expr_cols`) so we
+                            # don't shadow the outer-fragment `expr_cols` from line 346
+                            # — Python would then treat `expr_cols` as local-only and
+                            # trigger UnboundLocalError when the outer fragment code
+                            # uses it later (UMAP hover, dot plot, etc.).
+                            hvg_expr_cols = [c for c in hvg_df.columns if c.startswith("expr_")]
+                            # HVG artifact uses the standardized 'cluster' column;
+                            # markers_flat may use 'leiden' or 'louvain' — re-resolve.
+                            hvg_cluster_col = _get_cluster_column(hvg_df) or cluster_col
+                            teddy_input_df = hvg_df
+                            teddy_cluster_col = hvg_cluster_col
+                            st.caption(f"TEDDY input: {len(hvg_expr_cols):,} HVG genes from hvg_matrix.parquet")
+                        else:
+                            teddy_input_df = df
+                            teddy_cluster_col = cluster_col
+                            st.caption(
+                                "⚠️ TEDDY input falling back to markers_flat (~100 genes). "
+                                "This run predates the HVG-matrix artifact; embedding quality will be limited. "
+                                "Re-run the Scanpy processing to log hvg_matrix.parquet for full TEDDY quality."
+                            )
+
+                        progress_t = st.progress(0, text="TEDDY: starting…")
+                        with st.spinner("Running TEDDY annotation…"):
+                            try:
+                                teddy_results = teddy_annotate_clusters(
+                                    teddy_input_df, cluster_col=teddy_cluster_col,
+                                    cells_per_cluster=anno_cpc, k_neighbors=anno_k,
+                                    bias_correct=bias_correct,
+                                    progress_callback=lambda pct, text: progress_t.progress(min(int(pct), 100), text=f"TEDDY: {text}"),
+                                )
+                                st.session_state[teddy_cache_key] = teddy_results
+                                st.session_state[f"annotation_cluster_col_{run_id}"] = cluster_col
+                                try:
+                                    save_singlecell_annotation(run_id, teddy_results, cluster_col, model="teddy")
+                                    st.success("TEDDY annotation saved to MLflow.")
+                                except Exception as save_err:
+                                    st.warning(f"TEDDY result computed but not saved to MLflow: {save_err}")
+                            except Exception as e:
+                                st.error(f"TEDDY annotation failed: {e}")
+
+            # --- Side-by-side results ---
+            has_scim = scim_cache_key in st.session_state
+            has_teddy = teddy_cache_key in st.session_state
+            if has_scim or has_teddy:
+                cols = st.columns(2 if (has_scim and has_teddy) else 1)
+                idx = 0
+                if has_scim:
+                    with cols[idx]:
+                        st.markdown("**SCimilarity** — cell type")
+                        st.dataframe(st.session_state[scim_cache_key], use_container_width=True, hide_index=True)
+                    idx += 1
+                if has_teddy:
+                    with cols[idx]:
+                        st.markdown("**TEDDY** — cell type + disease")
+                        st.dataframe(st.session_state[teddy_cache_key], use_container_width=True, hide_index=True)
 
             st.divider()
 
             # --- Prepare annotation overlay if available ---
-            has_annotation = annotation_cache_key in st.session_state
+            # When both models have results, let the user pick which to overlay.
+            available_overlays = []
+            if has_scim:
+                available_overlays.append("SCimilarity")
+            if has_teddy:
+                available_overlays.append("TEDDY")
+
+            overlay_model = None
+            if len(available_overlays) > 1:
+                overlay_model = st.radio(
+                    "UMAP overlay source:", available_overlays, horizontal=True,
+                    key=f"umap_overlay_model_{run_id}",
+                )
+            elif available_overlays:
+                overlay_model = available_overlays[0]
+
+            has_annotation = overlay_model is not None
             annotated_cluster_col = None
             if has_annotation:
-                anno_results = st.session_state[annotation_cache_key]
+                cache_key = scim_cache_key if overlay_model == "SCimilarity" else teddy_cache_key
+                anno_results = st.session_state[cache_key]
                 anno_cluster_col = st.session_state.get(f"annotation_cluster_col_{run_id}", _get_cluster_column(df))
                 if anno_cluster_col:
                     cluster_to_type = dict(zip(anno_results["Cluster"].astype(str), anno_results["Predicted Cell Type"]))
@@ -470,13 +597,21 @@ def _display_results_viewer():
                     # and compound the label, e.g. "0 - classical monocyte" →
                     # "0 - classical monocyte - classical monocyte".
                     cluster_to_label = {k: f"{k} - {v}" for k, v in cluster_to_type.items()}
-                    annotated_cluster_col = f"{anno_cluster_col} (annotated)"
+                    annotated_cluster_col = f"{anno_cluster_col} ({overlay_model})"
                     df[annotated_cluster_col] = df[anno_cluster_col].astype(str).map(cluster_to_label).fillna(df[anno_cluster_col].astype(str))
+                    # If TEDDY also predicted disease, expose that column for the UMAP color picker.
+                    if overlay_model == "TEDDY" and "Predicted Disease" in anno_results.columns:
+                        cluster_to_disease = dict(zip(anno_results["Cluster"].astype(str), anno_results["Predicted Disease"]))
+                        df["Predicted Disease"] = df[anno_cluster_col].astype(str).map(cluster_to_disease).fillna("Unknown")
 
             # --- UMAP color controls ---
             color_options = ["Cluster", "Marker Gene", "QC Metric"]
             if has_annotation:
                 color_options.insert(1, "Predicted Cell Type")
+            # TEDDY uniquely also predicts disease — expose as a coloring option
+            # when its overlay is active.
+            if "Predicted Disease" in df.columns:
+                color_options.insert(2 if has_annotation else 1, "Predicted Disease")
 
             col1, col2, col3, col4, col5 = st.columns([2, 2, 1, 1, 1])
             with col1:
@@ -485,6 +620,9 @@ def _display_results_viewer():
                 if color_type == "Predicted Cell Type":
                     color_col = "Predicted Cell Type"
                     st.selectbox("Column:", ["Predicted Cell Type"], disabled=True)
+                elif color_type == "Predicted Disease":
+                    color_col = "Predicted Disease"
+                    st.selectbox("Column:", ["Predicted Disease"], disabled=True)
                 elif color_type == "Cluster":
                     if annotated_cluster_col:
                         # Default to the annotated label so the legend shows
@@ -524,7 +662,7 @@ def _display_results_viewer():
             if 'UMAP_0' not in df.columns or 'UMAP_1' not in df.columns:
                 st.warning("UMAP coordinates not found in data.")
             else:
-                is_categorical = color_col in obs_categorical or color_type in ("Cluster", "Predicted Cell Type")
+                is_categorical = color_col in obs_categorical or color_type in ("Cluster", "Predicted Cell Type", "Predicted Disease")
                 hover_data_dict = {'UMAP_0': ':.2f', 'UMAP_1': ':.2f'}
                 for gene_col in expr_cols[:3]: hover_data_dict[gene_col] = ':.2f'
 

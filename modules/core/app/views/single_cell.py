@@ -6,7 +6,7 @@ from genesis_workbench.models import (ModelCategory,
                                       get_deployed_models,
                                       get_batch_models)
 
-from views.single_cell_workflows import settings, processing, cell_similarity, perturbation, teddy_annotation
+from views.single_cell_workflows import settings, processing, cell_similarity, perturbation
 
 st.title(":material/microbiology:  Single Cell Studies")
 
@@ -48,12 +48,11 @@ with st.spinner("Loading data"):
         st.session_state["deployed_single_cell_models_df"] = deployed_single_cell_models_df
     deployed_single_cell_models_df = st.session_state["deployed_single_cell_models_df"]
 
-settings_tab, processing_tab, similarity_tab, perturbation_tab, teddy_tab = st.tabs([
+settings_tab, processing_tab, similarity_tab, perturbation_tab = st.tabs([
     "Deployed Models",
     "Raw Single Cell Processing",
     "Cell Similarity",
     "Perturbation Prediction",
-    "TEDDY Annotation",
 ])
 
 with settings_tab:
@@ -67,6 +66,3 @@ with similarity_tab:
 
 with perturbation_tab:
     perturbation.render()
-
-with teddy_tab:
-    teddy_annotation.render()

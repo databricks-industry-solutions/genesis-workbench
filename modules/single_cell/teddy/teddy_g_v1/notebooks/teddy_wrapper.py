@@ -64,6 +64,10 @@ class TEDDYEmbedder(mlflow.pyfunc.PythonModel):
         self.add_cls = bool(getattr(self.config, "add_cls", False))
         self.cls_token_id = int(getattr(self.config, "cls_token_id", 0))
         self.d_model = int(getattr(self.config, "d_model", 0))
+        # bf16 autocast on CUDA — needed for 400M to fit A10 with batch ≥ 8 and
+        # roughly halves attention activation memory. bfloat16 (not float16)
+        # keeps a safe dynamic range, so no NaN risk from underflow.
+        self._use_bf16 = (self.device == "cuda")
 
     def _encode_genes(self, gene_names):
         # TEDDY's GeneTokenizer returns None for OOV tokens from both
@@ -107,6 +111,9 @@ class TEDDYEmbedder(mlflow.pyfunc.PythonModel):
             if name in self._forward_params:
                 kwargs[name] = attention_mask; break
         with torch.no_grad():
+            if self._use_bf16:
+                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                    return self.model(**kwargs)
             return self.model(**kwargs)
 
     @classmethod

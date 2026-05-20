@@ -126,34 +126,79 @@ def start_rapids_singlecell_job(
 def download_singlecell_markers_df(run_id: str) -> pd.DataFrame:
     """
     Download the markers_flat.parquet from an MLflow single-cell analysis run
-    
+
     Works with scanpy, rapids-singlecell, or any tool that produces the standard
     markers_flat.parquet artifact.
-    
+
     Args:
         run_id: The MLflow run ID
-    
+
     Returns:
         DataFrame with cells, embeddings, and marker expression
     """
     mlflow.set_registry_uri("databricks-uc")
     mlflow.set_tracking_uri("databricks")
     client = MlflowClient()
-    
+
     # Download the parquet artifact
     with tempfile.TemporaryDirectory() as tmpdir:
         artifact_path = "markers_flat.parquet"
         local_file = client.download_artifacts(run_id, artifact_path, dst_path=tmpdir)
         df = pd.read_parquet(local_file)
-    
+
     return df
+
+
+def download_singlecell_hvg_matrix(run_id: str):
+    """Download hvg_matrix.parquet (cells × top-HVG genes + cluster col) from a run.
+
+    Returns:
+        DataFrame if the artifact exists (newer scanpy runs), else None for
+        older runs that predate the HVG-logging change. Callers should fall
+        back to markers_flat with a warning when None is returned.
+
+    Foundation-model annotators (TEDDY) need a wide gene context (~2000 genes)
+    to produce meaningful embeddings; markers_flat's ~100 top-marker genes is
+    too sparse. The HVG matrix sits between markers_flat and the full AnnData
+    in size — purpose-built for these models.
+    """
+    from mlflow.exceptions import MlflowException
+
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+    client = MlflowClient()
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            local_file = client.download_artifacts(run_id, "hvg_matrix.parquet", dst_path=tmpdir)
+            return pd.read_parquet(local_file)
+    except MlflowException as e:
+        # "Artifact not found" vs other errors. Treat absence as None.
+        msg = str(e).lower()
+        if "does not exist" in msg or "not found" in msg or "resource_does_not_exist" in msg:
+            return None
+        raise
+    except FileNotFoundError:
+        return None
 
 
 ANNOTATION_ARTIFACT_NAME = "scimilarity_annotation.json"
 
+# Per-model artifact naming so SCimilarity and TEDDY annotations can coexist
+# on the same MLflow run. Legacy "scimilarity_annotation.json" still resolves
+# to model="scimilarity" via the map below — keeps older runs readable.
+_ANNOTATION_ARTIFACTS = {
+    "scimilarity": "scimilarity_annotation.json",
+    "teddy": "teddy_annotation.json",
+}
 
-def save_singlecell_annotation(run_id: str, results_df: pd.DataFrame, cluster_col: str) -> None:
-    """Log SCimilarity cluster annotation as ``ANNOTATION_ARTIFACT_NAME`` on the run.
+
+def save_singlecell_annotation(run_id: str, results_df: pd.DataFrame, cluster_col: str,
+                                model: str = "scimilarity") -> None:
+    """Log a cluster-annotation result as a per-model JSON artifact on the run.
+
+    ``model`` selects the artifact filename — see ``_ANNOTATION_ARTIFACTS``. SCimilarity
+    and TEDDY annotations live alongside each other on the same run.
 
     Uses ``MlflowClient.log_artifact`` directly. ``mlflow.start_run(run_id=...)``
     raises "Cannot start run with ID X because active run ID does not match
@@ -165,23 +210,28 @@ def save_singlecell_annotation(run_id: str, results_df: pd.DataFrame, cluster_co
     """
     import json
 
+    artifact_name = _ANNOTATION_ARTIFACTS.get(model)
+    if artifact_name is None:
+        raise ValueError(f"Unknown annotation model '{model}'. Expected one of: {list(_ANNOTATION_ARTIFACTS)}")
+
     mlflow.set_registry_uri("databricks-uc")
     mlflow.set_tracking_uri("databricks")
 
     client = MlflowClient()
     payload = {
         "cluster_col": cluster_col,
+        "model": model,
         "results": results_df.to_dict(orient="list"),
     }
     with tempfile.TemporaryDirectory() as tmp:
-        local = os.path.join(tmp, ANNOTATION_ARTIFACT_NAME)
+        local = os.path.join(tmp, artifact_name)
         with open(local, "w") as f:
             json.dump(payload, f)
         client.log_artifact(run_id=run_id, local_path=local)
 
 
-def download_singlecell_annotation(run_id: str):
-    """Return (results_df, cluster_col) if the run has a saved annotation, else (None, None).
+def download_singlecell_annotation(run_id: str, model: str = "scimilarity"):
+    """Return (results_df, cluster_col) if the run has a saved annotation for ``model``, else (None, None).
 
     Distinguishes "no annotation present" (artifact missing) from real failures
     (auth, network, malformed JSON) — the former returns (None, None); the
@@ -190,13 +240,17 @@ def download_singlecell_annotation(run_id: str):
     """
     from mlflow.exceptions import MlflowException
 
+    artifact_name = _ANNOTATION_ARTIFACTS.get(model)
+    if artifact_name is None:
+        raise ValueError(f"Unknown annotation model '{model}'. Expected one of: {list(_ANNOTATION_ARTIFACTS)}")
+
     mlflow.set_registry_uri("databricks-uc")
     mlflow.set_tracking_uri("databricks")
     client = MlflowClient()
 
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
-            local_file = client.download_artifacts(run_id, ANNOTATION_ARTIFACT_NAME, dst_path=tmpdir)
+            local_file = client.download_artifacts(run_id, artifact_name, dst_path=tmpdir)
             import json as _json
             with open(local_file, "r") as f:
                 payload = _json.load(f)

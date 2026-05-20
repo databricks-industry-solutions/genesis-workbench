@@ -125,7 +125,7 @@ resources:
         - name: target_sum
           default: 10000
         - name: n_top_genes
-          default: 500
+          default: 2000
         - name: n_pcs
           default: 50
         - name: cluster_resolution
