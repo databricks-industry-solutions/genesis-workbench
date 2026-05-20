@@ -25,6 +25,24 @@ targets:
               new_cluster:
                 aws_attributes:
                   availability: ON_DEMAND
+        scanpy:
+          job_clusters:
+            - job_cluster_key: scanpy_small
+              new_cluster:
+                aws_attributes:
+                  availability: ON_DEMAND
+            - job_cluster_key: scanpy_medium
+              new_cluster:
+                aws_attributes:
+                  availability: ON_DEMAND
+            - job_cluster_key: scanpy_large
+              new_cluster:
+                aws_attributes:
+                  availability: ON_DEMAND
+            - job_cluster_key: scanpy_xlarge
+              new_cluster:
+                aws_attributes:
+                  availability: ON_DEMAND
 
   prod_azure:
     mode: production
@@ -43,6 +61,24 @@ targets:
               new_cluster:
                 azure_attributes:
                   availability: ON_DEMAND_AZURE
+        scanpy:
+          job_clusters:
+            - job_cluster_key: scanpy_small
+              new_cluster:
+                azure_attributes:
+                  availability: ON_DEMAND_AZURE
+            - job_cluster_key: scanpy_medium
+              new_cluster:
+                azure_attributes:
+                  availability: ON_DEMAND_AZURE
+            - job_cluster_key: scanpy_large
+              new_cluster:
+                azure_attributes:
+                  availability: ON_DEMAND_AZURE
+            - job_cluster_key: scanpy_xlarge
+              new_cluster:
+                azure_attributes:
+                  availability: ON_DEMAND_AZURE
 
   prod_gcp:
     mode: production
@@ -58,6 +94,24 @@ targets:
         download_cellxgene_gwb:
           job_clusters:
             - job_cluster_key: cellxgene_cluster
+              new_cluster:
+                gcp_attributes:
+                  availability: ON_DEMAND_GCP
+        scanpy:
+          job_clusters:
+            - job_cluster_key: scanpy_small
+              new_cluster:
+                gcp_attributes:
+                  availability: ON_DEMAND_GCP
+            - job_cluster_key: scanpy_medium
+              new_cluster:
+                gcp_attributes:
+                  availability: ON_DEMAND_GCP
+            - job_cluster_key: scanpy_large
+              new_cluster:
+                gcp_attributes:
+                  availability: ON_DEMAND_GCP
+            - job_cluster_key: scanpy_xlarge
               new_cluster:
                 gcp_attributes:
                   availability: ON_DEMAND_GCP
