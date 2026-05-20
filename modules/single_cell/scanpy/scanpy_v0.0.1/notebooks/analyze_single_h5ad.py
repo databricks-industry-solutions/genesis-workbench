@@ -39,6 +39,11 @@ dbutils.widgets.text("n_top_genes", "2000", "Number of Highly Variable Genes")
 dbutils.widgets.text("n_pcs", "50", "Number of Principal Components")
 dbutils.widgets.text("cluster_resolution", "0.2", "Cluster Resolution")
 dbutils.widgets.text("compute_pseudotime", "false", "Compute Pseudotime (true/false)")
+# The dispatcher pre-creates an MLflow run with `job_status="started"` so the
+# Run-New-Analysis search UI surfaces in-progress runs (Disease-Biology
+# pattern). When present, we attach to that run instead of creating a new
+# one; when empty, we fall back to legacy "create our own run" behavior.
+dbutils.widgets.text("mlflow_run_id", "", "MLflow Run Id (pre-created by dispatcher)")
 
 # COMMAND ----------
 
@@ -534,18 +539,30 @@ total_time = t1-t0
 metrics['total_time'] = total_time
 
 run_name = parameters['mlflow_run_name'] if parameters['mlflow_run_name'] else None
+mlflow_run_id = dbutils.widgets.get("mlflow_run_id") or None
 
-# Log to MLflow with proper tags for Genesis Workbench
-with mlflow.start_run(run_name=run_name, experiment_id=experiment.experiment_id) as run:
-    # Log metrics and params
+# Attach to the dispatcher-created run when mlflow_run_id is provided, else
+# create our own (legacy / standalone-notebook path). When attached, the
+# dispatcher already logged params at pre-create time — re-logging them
+# triggers `INVALID_PARAMETER_VALUE: <key> was already logged`. So we only
+# log params on the standalone path.
+if mlflow_run_id:
+    _run_ctx = mlflow.start_run(run_id=mlflow_run_id)
+    _params_already_logged = True
+else:
+    _run_ctx = mlflow.start_run(run_name=run_name, experiment_id=experiment.experiment_id)
+    _params_already_logged = False
+
+with _run_ctx:
     mlflow.log_metrics(metrics)
-    mlflow.log_params(parameters)
+    if not _params_already_logged:
+        mlflow.log_params(parameters)
     mlflow.log_artifacts(tmpdir.name)
-    
-    # Set required tags for Genesis Workbench search
     mlflow.set_tag("origin", "genesis_workbench")
     mlflow.set_tag("created_by", parameters['user_email'])
     mlflow.set_tag("processing_mode", "scanpy")
+    mlflow.set_tag("feature", "scanpy")
+    mlflow.set_tag("job_status", "complete")
 
 # COMMAND ----------
 

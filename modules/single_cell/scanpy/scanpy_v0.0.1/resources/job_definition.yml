@@ -108,6 +108,22 @@ resources:
               species: hsapiens
             source: WORKSPACE
 
+        # Failure-finalize. Fires when ANY analyze task fails. Sets the
+        # pre-created MLflow run's `tags.job_status='failed'` so the
+        # Search Past Runs view in the app flips the row from 'started'
+        # (🟩⬜⬜) to 'failed' (🟥). Runs serverless — cheap, ~5 s.
+        - task_key: tag_failed
+          depends_on:
+            - task_key: run_lt_small
+            - task_key: run_lt_medium
+            - task_key: run_lt_large
+            - task_key: run_gt_large
+          run_if: AT_LEAST_ONE_FAILED
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/tag_run_failed.py
+            source: WORKSPACE
+
       environments:
         - environment_key: default
           spec:
@@ -192,6 +208,8 @@ resources:
           default: scanpy_genesis_workbench
         - name: mlflow_run_name
           default: scanpy_genesis_workbench
+        - name: mlflow_run_id
+          default: ""
         - name: gene_name_column
           default: gene_name
         - name: min_genes

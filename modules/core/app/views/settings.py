@@ -1,7 +1,8 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import os
 import base64
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from utils.streamlit_helper import get_user_info, display_import_model_uc_dialog
 from genesis_workbench.workbench import execute_workflow, execute_select_query
 from databricks.sdk import WorkspaceClient
@@ -176,7 +177,9 @@ with endpoint_tab:
 
     if active_run:
         start_ms = active_run.get("start_time")
-        start_time = datetime.fromtimestamp(start_ms / 1000) if start_ms else None
+        # Tz-aware UTC — we pass an ISO-8601 UTC string to JS and let the
+        # browser render it in the user's local timezone via toLocaleString.
+        start_time = datetime.fromtimestamp(start_ms / 1000, tz=timezone.utc) if start_ms else None
 
         # job_parameters is a list of {"name": ..., "value": ...} dicts
         num_hours_param = None
@@ -186,8 +189,19 @@ with endpoint_tab:
                 break
 
         estimated_end = None
+        remaining_str = "Unknown"
         if start_time and num_hours_param:
             estimated_end = start_time + timedelta(hours=int(num_hours_param))
+            remaining = estimated_end - datetime.now(timezone.utc)
+            total_secs = int(remaining.total_seconds())
+            if total_secs <= 0:
+                remaining_str = "0h 0m (expiring)"
+            else:
+                hours, rem = divmod(total_secs, 3600)
+                minutes = rem // 60
+                remaining_str = f"{hours}h {minutes}m"
+
+        start_iso = start_time.isoformat() if start_time else ""
 
         st.markdown("""
         <style>
@@ -201,11 +215,41 @@ with endpoint_tab:
             f'<div style="padding: 1rem; border-radius: 0.5rem; border: 1px solid #FF8C00; background-color: rgba(255,140,0,0.05);">'
             f'<span class="blinking-dot"></span>'
             f'<strong>Keep-alive job is running</strong> (Run ID: {active_run.get("run_id")})<br><br>'
-            f'<strong>Started:</strong> {start_time.strftime("%Y-%m-%d %H:%M") if start_time else "Unknown"}<br>'
+            f'<strong>Started:</strong> <span class="ka-local-time" data-iso="{start_iso}">{start_time.strftime("%Y-%m-%d %H:%M UTC") if start_time else "Unknown"}</span><br>'
             f'<strong>Duration:</strong> {num_hours_param} hour(s)<br>'
-            f'<strong>Estimated end:</strong> {estimated_end.strftime("%Y-%m-%d %H:%M") if estimated_end else "Unknown"}'
+            f'<strong>Remaining:</strong> {remaining_str}'
             f'</div>',
             unsafe_allow_html=True
+        )
+        # Streamlit strips <script> tags from st.markdown — run the
+        # ISO→browser-local conversion from a sibling components.html
+        # iframe that pokes into the parent doc. We poll briefly for
+        # the span(s) since the iframe loads asynchronously.
+        components.html(
+            """
+            <script>
+            (function(){
+                let tries = 0;
+                const tick = () => {
+                    tries += 1;
+                    const els = window.parent.document.querySelectorAll('.ka-local-time');
+                    if (els.length === 0 && tries < 40) { setTimeout(tick, 50); return; }
+                    els.forEach(function(el){
+                        const iso = el.getAttribute('data-iso'); if(!iso) return;
+                        try {
+                            const d = new Date(iso);
+                            el.textContent = d.toLocaleString(undefined, {
+                                year: 'numeric', month: '2-digit', day: '2-digit',
+                                hour: '2-digit', minute: '2-digit', timeZoneName: 'short'
+                            });
+                        } catch(e) {}
+                    });
+                };
+                tick();
+            })();
+            </script>
+            """,
+            height=0,
         )
     else:
         col1, col2 = st.columns([1, 2])

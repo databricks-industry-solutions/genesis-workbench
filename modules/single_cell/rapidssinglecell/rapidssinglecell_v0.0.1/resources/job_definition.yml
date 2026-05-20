@@ -18,6 +18,24 @@ resources:
               species: hsapiens
             source: WORKSPACE
 
+        # Failure-finalize. Fires only when the analyze task fails. Sets
+        # tags.job_status='failed' on the pre-created MLflow run so the
+        # app's Search Past Runs view flips 'started' → 'failed'. Runs
+        # serverless — cheap, ~5 s.
+        - task_key: tag_failed
+          depends_on:
+            - task_key: run_rapidssinglecell
+          run_if: AT_LEAST_ONE_FAILED
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/tag_run_failed.py
+            source: WORKSPACE
+
+      environments:
+        - environment_key: default
+          spec:
+            client: '4'
+
       job_clusters:
         - job_cluster_key: gpu_ml_cluster
           new_cluster:
@@ -47,6 +65,8 @@ resources:
           default: rapidssinglecell_genesis_workbench
         - name: mlflow_run_name
           default: rapidssinglecell_genesis_workbench
+        - name: mlflow_run_id
+          default: ""
         - name: gene_name_column
           default: ""
         - name: species

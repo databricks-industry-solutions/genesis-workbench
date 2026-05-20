@@ -17,9 +17,62 @@ from utils.single_cell_analysis import (start_scanpy_job,
                                         search_singlecell_runs,
                                         save_singlecell_annotation,
                                         download_singlecell_annotation,
-                                        download_singlecell_hvg_matrix)
+                                        download_singlecell_hvg_matrix,
+                                        add_singlecell_progress_column)
 from utils.scimilarity_tools import annotate_clusters as scim_annotate_clusters
 from utils.teddy_tools import annotate_clusters as teddy_annotate_clusters
+
+
+def _clear_run_session_state(prev_run_id: str) -> None:
+    """Drop any cached per-run state when the user switches runs. Keeps the
+    analysis tabs honest — annotations / UMAP overlays / cluster maps from
+    the previous run don't leak across."""
+    keys = ['singlecell_df', 'singlecell_run_id', 'singlecell_mlflow_url', 'singlecell_run_header']
+    if prev_run_id:
+        keys += [f'annotation_scimilarity_{prev_run_id}',
+                 f'annotation_teddy_{prev_run_id}',
+                 f'annotation_cluster_col_{prev_run_id}',
+                 f'annotation_loaded_{prev_run_id}',
+                 f'annotation_load_error_{prev_run_id}',
+                 f'umap_overlay_model_{prev_run_id}',
+                 f'umap_use_scim_{prev_run_id}',
+                 f'umap_use_teddy_{prev_run_id}',
+                 f'umap_bias_correct_{prev_run_id}']
+    for k in keys:
+        st.session_state.pop(k, None)
+
+
+def _load_run_into_session(run_id: str) -> None:
+    """Load markers_flat + run header metadata for `run_id` into session_state.
+    Called from the View button in the search section."""
+    prev_run_id = st.session_state.get('singlecell_run_id')
+    if prev_run_id and prev_run_id != run_id:
+        _clear_run_session_state(prev_run_id)
+
+    df = download_singlecell_markers_df(run_id)
+    mlflow_url = get_mlflow_run_url(run_id)
+
+    # Pull run params + metrics for the header card.
+    client = MlflowClient()
+    mlflow_run = client.get_run(run_id)
+    params = dict(mlflow_run.data.params or {})
+    metrics = dict(mlflow_run.data.metrics or {})
+    tags = dict(mlflow_run.data.tags or {})
+    header = {
+        "data_path": params.get("data_path", "(not logged)"),
+        "experiment": params.get("mlflow_experiment", tags.get("mlflow.experimentName", "(unknown)")),
+        "run_name": params.get("mlflow_run_name", tags.get("mlflow.runName", "(unknown)")),
+        "processing_mode": tags.get("processing_mode", "(unknown)"),
+        "species": params.get("species", "(not logged)"),
+        "gene_name_column": params.get("gene_name_column", "(default)"),
+        "start_time": mlflow_run.info.start_time,
+        "metrics": metrics,
+    }
+
+    st.session_state['singlecell_df'] = df
+    st.session_state['singlecell_run_id'] = run_id
+    st.session_state['singlecell_mlflow_url'] = mlflow_url
+    st.session_state['singlecell_run_header'] = header
 
 
 def _display_run_analysis():
@@ -124,6 +177,152 @@ def _display_run_analysis():
                 st.error(f"An error occurred while starting the job: {str(e)}")
                 print(e)
 
+    # ─── SEARCH PAST RUNS ─────────────────────────────────────────────────
+    st.divider()
+    st.markdown("###### Search Past Runs:")
+    user_info = get_user_info()
+
+    s_c1, s_c2, s_c3, s_c4 = st.columns([1.2, 1, 1, 1], vertical_alignment="bottom")
+    with s_c1:
+        search_mode = st.pills(
+            "Search By:", ["Experiment Name", "Run Name"],
+            selection_mode="single", default="Run Name",
+            key="scanpy_search_mode",
+        )
+    with s_c2:
+        search_text = st.text_input(
+            f"{search_mode} contains:", value="",
+            key="scanpy_search_text",
+            placeholder="e.g., scanpy_2026",
+        )
+    with s_c3:
+        processing_mode_filter = st.selectbox(
+            "Mode:", ["All", "scanpy", "rapids-singlecell"],
+            key="scanpy_search_processing_mode",
+        )
+    with s_c4:
+        search_btn = st.button("Search", key="scanpy_search_btn", use_container_width=True)
+
+    if search_btn:
+        # User is starting fresh — drop any run currently loaded into the
+        # View Analysis Results tab so stale markers / annotations / UMAP
+        # overlays don't survive into the next viewed run.
+        prev_run_id = st.session_state.get('singlecell_run_id')
+        if prev_run_id:
+            _clear_run_session_state(prev_run_id)
+        with st.spinner("Searching"):
+            st.session_state.pop("scanpy_search_result_df", None)
+            mode_arg = None if processing_mode_filter == "All" else processing_mode_filter
+            try:
+                df_results = search_singlecell_runs(
+                    user_email=user_info.user_email,
+                    processing_mode=mode_arg,
+                    days_back=None,
+                )
+            except Exception as e:
+                st.error(f"Search failed: {e}")
+                df_results = pd.DataFrame()
+
+            if df_results.empty:
+                st.info("No runs found.")
+            else:
+                # Apply the search-text filter against the chosen column.
+                txt = search_text.strip()
+                if txt:
+                    col = "experiment" if search_mode == "Experiment Name" else "run_name"
+                    df_results = df_results[df_results[col].astype(str).str.contains(txt, case=False, na=False)]
+                if df_results.empty:
+                    st.info(f"No runs found matching {search_mode}: '{txt}'.")
+                else:
+                    # Decorate with the 3-step progress column (matches the
+                    # Disease-Biology pattern). The dispatcher tags new runs
+                    # `started`, the notebook tags them `complete` / `failed`.
+                    st.session_state["scanpy_search_result_df"] = add_singlecell_progress_column(
+                        df_results.reset_index(drop=True)
+                    )
+
+    if "scanpy_search_result_df" in st.session_state:
+        search_df = st.session_state["scanpy_search_result_df"]
+
+        # In-progress banner — mirrors disease_biology._show_in_progress_banner.
+        in_progress = search_df[search_df["status"].astype(str).str.lower().isin(["started", "processing", "running"])]
+        if not in_progress.empty:
+            st.markdown(
+                """
+                <style>
+                @keyframes scanpy-blink-orange { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+                .scanpy-run-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+                                  background-color: #FF8C00; animation: scanpy-blink-orange 1.2s infinite;
+                                  margin-right: 8px; vertical-align: middle; }
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                f'<span class="scanpy-run-dot"></span> '
+                f'<strong>{len(in_progress)} run{"s" if len(in_progress) > 1 else ""} in progress</strong> '
+                f'<span style="color: #888;">(click Search again to refresh status)</span>',
+                unsafe_allow_html=True,
+            )
+
+        # Decide View-button enabled state from the PRIOR render's selection
+        # (st.dataframe stores selection in session_state under its key, so
+        # we can read it before the widget is re-drawn this run).
+        prior_state = st.session_state.get("scanpy_search_display_df")
+        prior_rows = []
+        if isinstance(prior_state, dict):
+            prior_rows = prior_state.get("selection", {}).get("rows", []) or []
+
+        view_disabled = True
+        view_help = "Select a row from the table below first."
+        if prior_rows:
+            row_status = str(search_df.iloc[prior_rows[0]].get("status", "")).lower()
+            if row_status in ("started", "processing", "running"):
+                view_help = f"This run is **{row_status}** — wait for it to reach `complete`, then re-Search."
+            else:
+                view_disabled = False
+                view_help = "Load the selected run into the View Analysis Results tab."
+
+        v_c1, _ = st.columns([1, 5], vertical_alignment="bottom")
+        with v_c1:
+            view_btn = st.button(
+                "View", key="scanpy_search_view_btn", type="primary",
+                disabled=view_disabled, help=view_help,
+            )
+
+        selected_event = st.dataframe(
+            search_df,
+            column_config={
+                "run_id": None,
+                "run_name": st.column_config.TextColumn("Run Name"),
+                "experiment": st.column_config.TextColumn("Experiment"),
+                "processing_mode": st.column_config.TextColumn("Mode"),
+                "start_time": st.column_config.DatetimeColumn("Started"),
+                "status": st.column_config.TextColumn("Status"),
+                "progress": st.column_config.TextColumn("Progress"),
+            },
+            use_container_width=True,
+            hide_index=True,
+            selection_mode="single-row",
+            on_select="rerun",
+            key="scanpy_search_display_df",
+        )
+
+        if view_btn and prior_rows:
+            selected_run_id = search_df.iloc[prior_rows[0]]["run_id"]
+            with st.spinner("Loading run data from MLflow..."):
+                try:
+                    _load_run_into_session(selected_run_id)
+                except Exception as e:
+                    st.error(f"Error loading run: {e}")
+                else:
+                    # Leave a pending-switch flag — render() consumes it at
+                    # the top of the next run, BEFORE the segmented_control
+                    # widget instantiates, which is the only point at which
+                    # writing to its key is allowed.
+                    st.session_state["_scanpy_pending_view"] = "View Analysis Results"
+                    st.rerun()
+
 
 def _get_cluster_column(df):
     if 'cluster' in df.columns: return 'cluster'
@@ -203,145 +402,82 @@ def _run_local_enrichment(gene_list, gmt_dict, background_genes, gene_set_name="
     return result
 
 
-def _display_results_viewer():
-    st.markdown("##### Single-Cell Results Viewer")
-    st.markdown("Select a completed single-cell analysis run to visualize")
+def _render_run_header() -> None:
+    """Render the loaded-run details card (input file, experiment, run name,
+    key metrics, MLflow link) at the top of the View Analysis Results tab.
 
-    user_info = get_user_info()
-
-    if 'date_filter' not in st.session_state:
-        st.session_state['date_filter'] = None
-    if 'processing_mode_filter' not in st.session_state:
-        st.session_state['processing_mode_filter'] = "All"
-
-    main_col1, main_col2, main_col3, main_col4 = st.columns([5, 1.5, 2.5, 1], vertical_alignment="bottom")
-
-    with main_col1:
-        experiment_filter = st.text_input("MLflow Experiment:", value="genesis_workbench",
-                                          help="Enter experiment name to filter runs (partial match supported).")
-
-    with main_col2:
-        processing_mode_option = st.radio("Mode:", ["All", "Scanpy", "Rapids-SingleCell"],
-                                          index=["All", "Scanpy", "Rapids-SingleCell"].index(st.session_state['processing_mode_filter']),
-                                          help="Filter by processing pipeline")
-        if processing_mode_option != st.session_state['processing_mode_filter']:
-            st.session_state['processing_mode_filter'] = processing_mode_option
-            if 'singlecell_runs_df' in st.session_state:
-                del st.session_state['singlecell_runs_df']
-
-    with main_col3:
-        st.markdown("**Time Period:**")
-        row1_col1, row1_col2 = st.columns(2)
-        with row1_col1:
-            if st.button("Today", use_container_width=True):
-                st.session_state['date_filter'] = 0
-                if 'singlecell_runs_df' in st.session_state: del st.session_state['singlecell_runs_df']
-        with row1_col2:
-            if st.button("Last 7 Days", use_container_width=True):
-                st.session_state['date_filter'] = 7
-                if 'singlecell_runs_df' in st.session_state: del st.session_state['singlecell_runs_df']
-        row2_col1, row2_col2 = st.columns(2)
-        with row2_col1:
-            if st.button("Last 30 Days", use_container_width=True):
-                st.session_state['date_filter'] = 30
-                if 'singlecell_runs_df' in st.session_state: del st.session_state['singlecell_runs_df']
-        with row2_col2:
-            if st.button("All Time", use_container_width=True):
-                st.session_state['date_filter'] = None
-                if 'singlecell_runs_df' in st.session_state: del st.session_state['singlecell_runs_df']
-
-    with main_col4:
-        st.write(""); st.write("")
-        refresh_button = st.button("Refresh", use_container_width=True)
-
-    if refresh_button or 'singlecell_runs_df' not in st.session_state:
-        with st.spinner("Searching for your single-cell analysis runs..."):
-            try:
-                processing_mode = None
-                if st.session_state['processing_mode_filter'] != "All":
-                    processing_mode = st.session_state['processing_mode_filter'].lower().replace("-", "-")
-                    if processing_mode == "rapids-singlecell": processing_mode = "rapids-singlecell"
-                    elif processing_mode == "scanpy": processing_mode = "scanpy"
-                runs_df = search_singlecell_runs(user_email=user_info.user_email, processing_mode=processing_mode, days_back=st.session_state['date_filter'])
-                st.session_state['singlecell_runs_df'] = runs_df
-                if len(runs_df) == 0: st.info("No single-cell analysis runs found. Run an analysis first!")
-            except Exception as e:
-                st.error(f"Error searching runs: {str(e)}"); return
-
-    runs_df = st.session_state.get('singlecell_runs_df', pd.DataFrame())
-    if len(runs_df) == 0:
-        st.info("No single-cell runs found. Go to 'Run New Analysis' to create one!"); return
-
-    if experiment_filter and experiment_filter.strip():
-        runs_df = runs_df[runs_df['experiment'].str.contains(experiment_filter.strip(), case=False, na=False)]
-        if len(runs_df) == 0:
-            st.warning(f"No runs found matching experiment: '{experiment_filter}'"); return
-
-    st.divider()
-    runs_df = runs_df.sort_values('start_time', ascending=False)
-    runs_df['display_name'] = runs_df.apply(
-        lambda row: f"{row['run_name']} ({row['experiment']}) - {row['start_time'].strftime('%Y-%m-%d %H:%M') if hasattr(row['start_time'], 'strftime') else row['start_time']}", axis=1)
-    run_options = dict(zip(runs_df['display_name'], runs_df['run_id']))
-
-    select_col1, select_col2, select_col3 = st.columns([4, 5, 1], vertical_alignment="bottom")
-    with select_col1:
-        run_name_filter = st.text_input("Search by Run Name:", value="", placeholder="Type to filter runs...")
-
-    if run_name_filter and run_name_filter.strip():
-        filtered_runs = runs_df[runs_df['run_name'].str.contains(run_name_filter.strip(), case=False, na=False)]
-        if len(filtered_runs) == 0:
-            st.warning(f"No runs found matching run name: '{run_name_filter}'"); return
-        filtered_options = dict(zip(filtered_runs['display_name'], filtered_runs['run_id']))
-    else:
-        filtered_runs = runs_df
-        filtered_options = run_options
-
-    with select_col2:
-        st.markdown(f"**{len(filtered_runs)} Runs:**")
-        selected_display = st.selectbox("Select:", list(filtered_options.keys()), label_visibility="collapsed")
-    with select_col3:
-        st.write("")
-        load_button = st.button("Load", type="primary", use_container_width=True)
-
-    run_id = filtered_options[selected_display]
-
-    # Reset analysis when user picks a different run
-    prev_run_id = st.session_state.get('singlecell_run_id')
-    if prev_run_id and prev_run_id != run_id:
-        for key in ['singlecell_df', 'singlecell_run_id', 'singlecell_mlflow_url',
-                     f'annotation_scimilarity_{prev_run_id}',
-                     f'annotation_teddy_{prev_run_id}',
-                     f'annotation_cluster_col_{prev_run_id}',
-                     f'annotation_loaded_{prev_run_id}',
-                     f'annotation_load_error_{prev_run_id}',
-                     f'umap_overlay_model_{prev_run_id}',
-                     f'umap_use_scim_{prev_run_id}',
-                     f'umap_use_teddy_{prev_run_id}',
-                     f'umap_bias_correct_{prev_run_id}']:
-            st.session_state.pop(key, None)
-
-    if load_button:
-        with st.spinner("Loading data from MLflow..."):
-            try:
-                df = download_singlecell_markers_df(run_id)
-                mlflow_url = get_mlflow_run_url(run_id)
-                st.session_state['singlecell_df'] = df
-                st.session_state['singlecell_run_id'] = run_id
-                st.session_state['singlecell_mlflow_url'] = mlflow_url
-                st.success(f"Loaded {len(df):,} cells with {len(df.columns)} features")
-            except Exception as e:
-                st.error(f"Error loading data: {str(e)}")
-                st.info("Tip: Make sure this run includes the markers_flat.parquet artifact")
-                return
-
-    if 'singlecell_df' not in st.session_state:
+    Mirrors the AlphaFold/Disease-Biology batch-workflow header layout —
+    metadata + selected metrics, no analysis-tab clutter."""
+    header = st.session_state.get('singlecell_run_header')
+    if not header:
         return
 
-    df = st.session_state['singlecell_df']
-    run_id = st.session_state.get('singlecell_run_id', '')
-    mlflow_url = st.session_state.get('singlecell_mlflow_url', '')
+    h_c1, h_c2 = st.columns([3, 1], vertical_alignment="top")
+    with h_c1:
+        st.markdown(f"#### Run: `{header['run_name']}`")
+        st.markdown(
+            f"**Experiment:** `{header['experiment']}` &nbsp;&nbsp;"
+            f"**Mode:** `{header['processing_mode']}` &nbsp;&nbsp;"
+            f"**Species:** `{header['species']}`"
+        )
+        st.markdown(f"**Input file:** `{header['data_path']}`")
+    with h_c2:
+        url = st.session_state.get('singlecell_mlflow_url')
+        if url:
+            st.link_button("Open in MLflow", url, use_container_width=True)
+        if st.button("Clear loaded run", use_container_width=True, key="scanpy_clear_loaded_run"):
+            prev = st.session_state.get('singlecell_run_id')
+            _clear_run_session_state(prev)
+            st.rerun()
 
-    st.markdown("---")
+    # Key metrics — pick the most useful subset from whatever scanpy logged.
+    metrics = header.get('metrics') or {}
+    if metrics:
+        st.markdown("**Key metrics:**")
+        # Surface a curated set of well-known scanpy metrics first, then
+        # let the user drill in via the expander for the full set.
+        key_metrics_order = [
+            ("total_cells_starting", "Total cells (input)", "{:,.0f}"),
+            ("total_cells_before_subsample", "Cells before subsample", "{:,.0f}"),
+            ("filter_simple_retention", "Filter retention (%)", "{:.1f}%"),
+            ("filter_mtgenes_retention", "MT-gene retention (%)", "{:.1f}%"),
+            ("gene_mapping_rate", "Gene-mapping rate (%)", "{:.1f}%"),
+            ("total_time", "Total time (s)", "{:.1f}s"),
+        ]
+        shown = [(k, label, fmt) for (k, label, fmt) in key_metrics_order if k in metrics]
+        if shown:
+            cols = st.columns(len(shown))
+            for col, (k, label, fmt) in zip(cols, shown):
+                try:
+                    col.metric(label, fmt.format(metrics[k]))
+                except Exception:
+                    col.metric(label, str(metrics[k]))
+        with st.expander(f"All logged metrics ({len(metrics)})", expanded=False):
+            st.dataframe(
+                pd.DataFrame(sorted(metrics.items()), columns=["metric", "value"]),
+                use_container_width=True, hide_index=True,
+            )
+    st.divider()
+
+
+def _display_results_viewer():
+    """View Analysis Results tab — renders the run header + analysis sub-tabs.
+
+    The run is loaded via the View button on the Run New Analysis tab's
+    Search Past Runs section, which populates `singlecell_run_id` +
+    `singlecell_df` + `singlecell_run_header` in session_state."""
+    if 'singlecell_run_id' not in st.session_state or 'singlecell_df' not in st.session_state:
+        st.info(
+            "No run loaded. Go to the **Run New Analysis** tab to start a new "
+            "analysis or use **Search Past Runs** there to load a previous run."
+        )
+        return
+
+    _render_run_header()
+
+    run_id = st.session_state['singlecell_run_id']
+    df = st.session_state['singlecell_df']
+    mlflow_url = st.session_state.get('singlecell_mlflow_url', '')
 
     expr_cols = [c for c in df.columns if c.startswith('expr_')]
     obs_categorical = df.select_dtypes(include=['object', 'category']).columns.tolist()
@@ -368,12 +504,15 @@ def _display_results_viewer():
     with col4:
         if 'UMAP_0' in df.columns: st.metric("Embeddings", "UMAP")
 
-    btn_col1, btn_col2, btn_col3 = st.columns([2, 1, 1])
+    btn_col1, btn_col2, _ = st.columns([2, 1, 1])
     with btn_col2:
         csv_data = df.to_csv(index=False).encode('utf-8')
-        st.download_button(label="Download CSV", data=csv_data, file_name=f"singlecell_results_{st.session_state['singlecell_run_id'][:8]}.csv", mime="text/csv")
-    with btn_col3:
-        st.link_button("MLflow Run", mlflow_url, type="secondary")
+        st.download_button(
+            label="Download CSV",
+            data=csv_data,
+            file_name=f"singlecell_results_{st.session_state['singlecell_run_id'][:8]}.csv",
+            mime="text/csv",
+        )
 
     tab_umap, tab_dotplot, tab_de, tab_enrich, tab_traj, tab_qc, tab_raw = st.tabs([
         "UMAP", "Marker Genes", "Differential Expression",
@@ -929,10 +1068,28 @@ def _display_results_viewer():
 def render():
     st.markdown("### Raw Single Cell Analysis")
 
-    run_tab, view_tab = st.tabs(["Run New Analysis", "View Analysis Results"])
+    # st.tabs has no programmatic activate API in Streamlit 1.44, so we use
+    # st.segmented_control (1.41+) as the outer "tab" strip. Streamlit
+    # forbids writing to a widget key after the widget is instantiated,
+    # so the View handler can't poke the widget key directly. Instead it
+    # leaves a "_scanpy_pending_view" flag and we apply it here, BEFORE
+    # the widget renders — that write is allowed.
+    _VIEW_KEY = "scanpy_active_view_widget"
+    pending = st.session_state.pop("_scanpy_pending_view", None)
+    if pending:
+        st.session_state[_VIEW_KEY] = pending
+    elif _VIEW_KEY not in st.session_state:
+        st.session_state[_VIEW_KEY] = "Run New Analysis"
 
-    with run_tab:
+    st.segmented_control(
+        label="View",
+        options=["Run New Analysis", "View Analysis Results"],
+        key=_VIEW_KEY,
+        label_visibility="collapsed",
+    )
+
+    active = st.session_state.get(_VIEW_KEY) or "Run New Analysis"
+    if active == "Run New Analysis":
         _display_run_analysis()
-
-    with view_tab:
+    else:
         _display_results_viewer()
