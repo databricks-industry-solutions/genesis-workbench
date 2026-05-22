@@ -61,11 +61,26 @@ schema = dbutils.widgets.get("schema")
 import subprocess, os
 
 _proteina_clone_dir = "/tmp/proteina_complexa_repo"
+# Pin to the `remove_openbabel` branch's HEAD commit. This commit (a) removes
+# `atomworks[ml,openbabel,dev]` → `atomworks[ml,dev]` from the env script and
+# (b) drops the top-level `from atomworks.ml.transforms.openbabel_utils
+# import ...` in `atomworks_ligand_transforms.py`, replacing the
+# `use_openbabel=True` codepath with a NotImplementedError (the
+# `use_rdkit_from_smiles` and `use_bonds_from_file` paths are untouched).
+# GWB's wrapper always passes `use_bonds_from_file=True` for both the Ligand
+# and AME variants, so the removed codepath is never exercised. Net result:
+# Proteina-Complexa runs GPL-clean. SHA pinned (not branch) so the build
+# stays reproducible if NVIDIA force-pushes or rebases the branch.
+_PROTEINA_COMMIT = "f95f2d4bbcebcad0613b89a0012edec8637a6334"
 if not os.path.exists(_proteina_clone_dir):
     subprocess.run(
-        ["git", "clone", "--depth=1",
+        ["git", "clone",
          "https://github.com/NVIDIA-Digital-Bio/Proteina-Complexa.git",
          _proteina_clone_dir],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", _proteina_clone_dir, "checkout", _PROTEINA_COMMIT],
         check=True,
     )
 subprocess.check_call(
@@ -133,7 +148,11 @@ subprocess.check_call([
     "biopandas", "biopython", "cpdb-protein", "deepdiff", "dm-tree",
     "h5py", "mdtraj", "ml-collections", "modin", "multipledispatch",
     "plotly", "prody", "pydantic", "python-dotenv", "rich", "rich-click",
-    "seaborn", "wandb", "wget", "xarray", "toolz", "openbabel-wheel",
+    "seaborn", "wandb", "wget", "xarray", "toolz",
+    # openbabel-wheel removed (GPL-2.0). Nothing in the GWB-side wrapper
+    # imports openbabel. If Proteina-Complexa's runtime needs OB for some
+    # ligand format we don't exercise, re-add narrowly with the license
+    # exposure documented.
 ])
 subprocess.check_call(["pip", "install", "-q", "--no-build-isolation", "--no-deps", "graphein"])
 
@@ -695,7 +714,6 @@ conda_env = {
                 "toolz==1.1.0",
                 "joblib==1.4.2",
                 "tqdm==4.66.4",
-                "openbabel-wheel==3.1.1.23",
                 "cloudpickle==3.1.2",
                 "pyyaml==6.0.3",
             ]
