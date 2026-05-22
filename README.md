@@ -43,7 +43,7 @@ Despite their expertise in biology, many highly talented life science scientists
 - Scripts to deploy below modules:
 	- Single Cell module that deploys and uses scGPT, SCimilarity, Scanpy, Rapids-SingleCell, and Merck's [TEDDY-G 400M](modules/core/app/docs/single_cell_teddy_annotation.md) for joint cell-type + disease annotation
 	- Protein Studies module that deploys and uses ESMFold, ESM2 Embeddings, Alphafold2, ProteinMPNN, RFDiffusion and Boltz
-	- Small Molecule module that deploys and uses Chemprop, DiffDock, Proteina-Complexa, NetSolP-1.0 (protein solubility prediction), PLTNUM-ESM2 (protein half-life relative stability ranking), DeepSTABp (protein melting temperature regression) and MHCflurry 2.x (MHC-I immunogenic burden prediction)
+	- Small Molecule module that deploys and uses Chemprop, DiffDock, Proteina-Complexa, NetSolP-1.0 (protein solubility prediction), PLTNUM-ESM2 (protein half-life relative stability ranking), DeepSTABp (protein melting temperature regression), and MHCflurry 2.x (MHC-I immunogenic burden prediction); also exposes a [Guided Enzyme Optimization](modules/core/app/docs/small_molecule_enzyme_optimization.md) workflow that composes Proteina-Complexa, ProteinMPNN, ESMFold, Boltz, NetSolP, PLTNUM, DeepSTABp, and MHCflurry into an iterative scaffold-and-score loop
 	- Disease Biology module for VCF ingestion, variant annotation and GWAS analysis
 	- BioNeMo container definitions and workflows
 	- Parabricks container definitions and workflows

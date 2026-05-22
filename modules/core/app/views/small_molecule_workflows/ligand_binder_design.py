@@ -45,7 +45,7 @@ def render():
         with st.form("ligand_binder_form", enter_to_submit=False):
             if input_mode == "SMILES":
                 ligand_smiles = st.text_input("Ligand SMILES:", value=EXAMPLE_SMILES,
-                                              help="SMILES string for the small molecule — will be converted to PDB with 3D coordinates via Open Babel")
+                                              help="SMILES string for the small molecule — converted to PDB with 3D coordinates via RDKit (ETKDGv3 embedding + MMFF94 minimization).")
                 ligand_pdb = None
             else:
                 ligand_pdb = st.text_area("Ligand (PDB with HETATM records):", value=EXAMPLE_LIGAND_PDB, height=250,

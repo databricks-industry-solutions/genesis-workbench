@@ -1,5 +1,32 @@
 # Genesis Workbench — Changelog
 
+## proteina_no_openbabel (2026-05-22) — Drop GPL-2.0 Open Babel from the Proteina-Complexa serving environment
+
+Removed Open Babel (GPL-2.0) from the GWB Proteina-Complexa endpoints. Two related changes:
+
+1. **Submodule deletion.** `modules/small_molecule/open_babel/` is gone. It registered as the `open_babel_converter` model but was never called from any app code; `utils/small_molecule_tools.py:smiles_to_pdb` does SMILES→PDB via RDKit (BSD-3) using `AllChem.EmbedMolecule(ETKDGv3) + MMFFOptimizeMolecule`. The stale help text in `ligand_binder_design.py:48` ("…will be converted to PDB via Open Babel") is corrected to point at RDKit.
+
+2. **Proteina-Complexa pinned to NVIDIA's `remove_openbabel` branch.** `modules/small_molecule/proteina_complexa/proteina_complexa_v1/notebooks/01_register_proteina_complexa.py` now clones at SHA `f95f2d4bbcebcad0613b89a0012edec8637a6334`. That commit drops the unconditional `from atomworks.ml.transforms.openbabel_utils import ...` in `proteinfoundation/datasets/atomworks_ligand_transforms.py` and replaces the `use_openbabel=True` codepath with `NotImplementedError`. The `use_rdkit_from_smiles` and `use_bonds_from_file` paths are untouched. `openbabel-wheel` is removed from both pip-install lines in the notebook (the driver-side install and the conda_env spec served to the endpoint container).
+
+### Why this was needed
+
+The first attempt at removing `openbabel-wheel` from just the conda_env succeeded at registration but exploded on the first endpoint invocation: `ModuleNotFoundError: No module named 'openbabel'`. Trace: `proteinfoundation/datasets/gen_dataset.py:15` unconditionally imports `atomworks_ligand_transforms`, which imports `atomworks/ml/transforms/openbabel_utils.py`, which does `from openbabel import openbabel, pybel` at module top. Even with no openbabel functions actually called in the GWB invocation path, the import was a hard module-load failure. The NVIDIA team published a `remove_openbabel` branch that severs this import; that's what we pin to.
+
+### Why GWB's invocations are GPL-clean even though Proteina has a `use_openbabel=True` codepath
+
+`ProteinaComplexaLigandModel.predict` (line 530) and `ProteinaComplexaAMEModel.predict` (line 599) build `LigandFeatures(..., use_bonds_from_file=True)` and never set `use_openbabel=True`. The `NotImplementedError` introduced by the upstream branch fires only when `use_openbabel=True`; GWB's two ligand-aware variants stay in the RDKit-backed file-bonds path. The protein-protein binder variant doesn't construct `LigandFeatures` at all.
+
+### Verification
+
+- Bundle deploy: SUCCESS at 2026-05-21 21:05:53
+- Registration job (run_id `830465540994892`): SUCCESS at 22:05:32 (60 min, all three variants logged in a single `for variant_key in MODELS.items()` loop)
+- UC model versions, all `READY`: `proteina_complexa` @ 21:48 UTC, `proteina_complexa_ligand` @ 21:49 UTC, `proteina_complexa_ame` @ 21:50 UTC
+- Predict-time smoke test on the stored input example (the one that previously raised `ModuleNotFoundError: openbabel`): passes
+
+### Upgrade hazard for future bumps
+
+The SHA pin is intentional. Before bumping to a newer Proteina commit (especially if NVIDIA merges `remove_openbabel` into `main`/`dev` and starts iterating), grep the target SHA for any top-level `from openbabel ...` or `from atomworks.ml.transforms.openbabel_utils ...`. If they come back, the GPL coupling has been reintroduced and the pin should not be bumped. Encoded as a feedback memory at `~/.claude/.../memory/feedback_proteina_no_openbabel.md`.
+
 ## teddy_annotation (2026-05-20) — Merck TEDDY-G 400M joint cell-type + disease annotation
 
 Added Merck's [TEDDY-G 400M](https://huggingface.co/Merck/TEDDY) (Apache 2.0) as a foundation model for single-cell biology. Workflow #1 is **joint cell-type + disease annotation** on the existing UMAP tab — TEDDY runs side-by-side with SCimilarity, both checkboxes default ON. New submodule: `modules/single_cell/teddy/teddy_g_v1`. New feature doc: [`modules/core/app/docs/single_cell_teddy_annotation.md`](modules/core/app/docs/single_cell_teddy_annotation.md).
