@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 0 0% 12%;
+  --foreground: 0 0% 90%;
+  --card: 0 0% 15%;
+  --card-foreground: 0 0% 90%;
+  --muted: 0 0% 18%;
+  --muted-foreground: 0 0% 60%;
+  --border: 0 0% 25%;
+  --accent: 0 0% 22%;
+  --primary: 212 100% 60%;
+  --primary-foreground: 0 0% 100%;
+  --destructive: 0 75% 60%;
+  --success: 132 50% 50%;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
