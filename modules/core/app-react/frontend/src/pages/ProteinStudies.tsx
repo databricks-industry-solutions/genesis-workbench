@@ -1,5 +1,5 @@
 import { Tabs } from '@/components/Tabs'
-import { DeployedModelsTab } from '@/components/DeployedModelsTab'
+import { DeployedModelsButton } from '@/components/DeployedModelsButton'
 import { StructurePredictionTab } from '@/components/StructurePredictionTab'
 import { SequenceSearchTab } from '@/components/SequenceSearchTab'
 import { InverseFoldingTab } from '@/components/InverseFoldingTab'
@@ -12,6 +12,7 @@ export function ProteinStudiesPage() {
         <h1 className="text-2xl font-semibold">Protein Studies</h1>
       </header>
       <Tabs
+        rightAccessory={<DeployedModelsButton module="protein_studies" />}
         tabs={[
           {
             id: 'sequence_search',
@@ -33,7 +34,6 @@ export function ProteinStudiesPage() {
             label: 'Inverse Folding',
             content: <InverseFoldingTab />,
           },
-          { id: 'models', label: 'Deployed Models', content: <DeployedModelsTab module="protein_studies" /> },
         ]}
       />
     </div>

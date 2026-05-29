@@ -942,11 +942,11 @@ function RewardChart({ status }: { status: EnzymeStatusResponse }) {
           } as never,
         ]}
         layout={{
-          title: { text: 'Composite reward by iteration', font: { color: '#e6e6e6' } },
+          title: { text: 'Composite reward by iteration' },
           height: 240,
           paper_bgcolor: 'rgba(0,0,0,0)',
           plot_bgcolor: 'rgba(0,0,0,0)',
-          font: { color: '#e6e6e6', size: 11 },
+          font: { size: 11 },
           xaxis: { title: { text: 'iteration' }, gridcolor: '#333' },
           yaxis: { title: { text: 'reward' }, gridcolor: '#333' },
           legend: { font: { size: 10 } },

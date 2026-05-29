@@ -173,7 +173,7 @@ function DashboardTab() {
     <iframe
       title="Admin usage dashboard"
       src={q.data.embed_url}
-      className="h-[600px] w-full rounded-md border border-border bg-background"
+      className="h-[1200px] w-full rounded-md border border-border bg-background"
     />
   )
 }

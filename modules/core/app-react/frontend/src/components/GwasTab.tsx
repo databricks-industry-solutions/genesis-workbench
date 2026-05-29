@@ -306,11 +306,11 @@ function GwasResultsBody({ run }: { run: DBRunRow }) {
               } as never,
             ]}
             layout={{
-              title: { text: 'GWAS Manhattan plot', font: { color: '#e6e6e6' } },
+              title: { text: 'GWAS Manhattan plot' },
               height: 320,
               paper_bgcolor: 'rgba(0,0,0,0)',
               plot_bgcolor: 'rgba(0,0,0,0)',
-              font: { color: '#e6e6e6', size: 11 },
+              font: { size: 11 },
               xaxis: { title: { text: 'genomic position' }, gridcolor: '#333' },
               yaxis: { title: { text: '-log10(p)' }, gridcolor: '#333' },
               shapes: [

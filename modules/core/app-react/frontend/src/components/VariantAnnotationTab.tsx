@@ -239,6 +239,12 @@ function AnnotationResultsBody({ run }: { run: DBRunRow }) {
     staleTime: 60_000,
   })
 
+  const dash = useQuery({
+    queryKey: ['db', 'annotation_dashboard', run.run_name],
+    queryFn: () => api.variantAnnotationDashboard(run.run_name),
+    staleTime: 60_000,
+  })
+
   const cols = useMemo<ColumnDef<AnnotationVariant, unknown>[]>(
     () => [
       { id: 'gene', header: 'Gene', accessorKey: 'gene' },
@@ -282,10 +288,25 @@ function AnnotationResultsBody({ run }: { run: DBRunRow }) {
     )
   }
 
+  const dashboardLink = dash.data?.embed_url?.replace('/embed/dashboardsv3/', '/dashboardsv3/')
+
   return (
     <div className="space-y-3 text-xs">
-      <div className="text-sm">
-        <strong>{results.data.total.toLocaleString()}</strong> pathogenic variants
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-sm">
+          <strong>{results.data.total.toLocaleString()}</strong> pathogenic variants
+        </div>
+        {dashboardLink && (
+          <a
+            href={dashboardLink}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md border border-primary bg-primary/10 px-3 py-1.5 text-xs text-primary hover:bg-primary/20"
+            title="Open the Variant Annotation Lakeview dashboard in a new tab"
+          >
+            Open dashboard ↗
+          </a>
+        )}
       </div>
       <DataTable columns={cols} data={results.data.variants} />
     </div>

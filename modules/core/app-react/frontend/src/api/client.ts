@@ -20,6 +20,7 @@ import type {
   GwasStartRequest,
   JobDispatchResponse,
   RunDetailsResponse,
+  VariantAnnotationDashboardResponse,
   VariantAnnotationResultsResponse,
   VariantAnnotationStartRequest,
   VariantCallingPickerResponse,
@@ -363,6 +364,10 @@ export const api = {
   variantAnnotationResults: (run_id: string) =>
     request<VariantAnnotationResultsResponse>(
       `/api/disease_biology/variant_annotation/results?run_id=${encodeURIComponent(run_id)}`,
+    ),
+  variantAnnotationDashboard: (run_name?: string) =>
+    request<VariantAnnotationDashboardResponse>(
+      `/api/disease_biology/variant_annotation/dashboard${run_name ? `?run_name=${encodeURIComponent(run_name)}` : ''}`,
     ),
 
   diseaseBiologyRunDetails: (run_id: string) =>

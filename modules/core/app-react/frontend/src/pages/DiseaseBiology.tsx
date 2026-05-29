@@ -1,5 +1,5 @@
 import { Tabs } from '@/components/Tabs'
-import { DeployedModelsTab } from '@/components/DeployedModelsTab'
+import { DeployedModelsButton } from '@/components/DeployedModelsButton'
 import { GwasTab } from '@/components/GwasTab'
 import { VariantAnnotationTab } from '@/components/VariantAnnotationTab'
 import { VariantCallingTab } from '@/components/VariantCallingTab'
@@ -12,6 +12,7 @@ export function DiseaseBiologyPage() {
         <h1 className="text-2xl font-semibold">Disease Biology</h1>
       </header>
       <Tabs
+        rightAccessory={<DeployedModelsButton module="disease_biology" />}
         tabs={[
           {
             id: 'variant_calling',
@@ -32,11 +33,6 @@ export function DiseaseBiologyPage() {
             id: 'annotation',
             label: 'Variant Annotation',
             content: <VariantAnnotationTab />,
-          },
-          {
-            id: 'models',
-            label: 'Deployed Models',
-            content: <DeployedModelsTab module="disease_biology" />,
           },
         ]}
       />

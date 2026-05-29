@@ -240,11 +240,11 @@ function CountsBar({
           } as any,
         ]}
         layout={{
-          title: { text: title, font: { color: '#e6e6e6', size: 13 } },
+          title: { text: title, font: { size: 13 } },
           height: 380,
           paper_bgcolor: 'rgba(0,0,0,0)',
           plot_bgcolor: 'rgba(0,0,0,0)',
-          font: { color: '#e6e6e6', size: 10 },
+          font: { size: 10 },
           margin: { l: 160, r: 20, t: 40, b: 30 },
           xaxis: { gridcolor: '#333' },
           yaxis: { automargin: true },

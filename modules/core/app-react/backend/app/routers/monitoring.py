@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from app.auth import CurrentUserDep
 from app.config import get_settings
 from app.services import workbench
+from app.services.databricks_links import dashboard_embed_url
 
 router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
 
@@ -73,7 +74,8 @@ def runs(user: CurrentUserDep, days_back: int = 7) -> WorkflowRunsResponse:
 
 @router.get("/admin-dashboard", response_model=AdminDashboardResponse)
 def admin_dashboard(_: CurrentUserDep) -> AdminDashboardResponse:
-    dash_id = get_settings().admin_usage_dashboard_id
-    if not dash_id:
-        return AdminDashboardResponse(embed_url=None)
-    return AdminDashboardResponse(embed_url=f"{_host()}/embed/dashboardsv3/{dash_id}")
+    dash_id = (
+        workbench.get_app_setting("admin_usage_dashboard_id")
+        or get_settings().admin_usage_dashboard_id
+    )
+    return AdminDashboardResponse(embed_url=dashboard_embed_url(dash_id))

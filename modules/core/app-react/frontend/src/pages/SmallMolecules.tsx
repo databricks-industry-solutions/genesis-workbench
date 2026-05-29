@@ -1,6 +1,6 @@
 import { Tabs } from '@/components/Tabs'
 import { AdmetSafetyTab } from '@/components/AdmetSafetyTab'
-import { DeployedModelsTab } from '@/components/DeployedModelsTab'
+import { DeployedModelsButton } from '@/components/DeployedModelsButton'
 import { EnzymeOptimizationTab } from '@/components/EnzymeOptimizationTab'
 import { LigandBinderDesignTab } from '@/components/LigandBinderDesignTab'
 import { MolecularDockingTab } from '@/components/MolecularDockingTab'
@@ -14,6 +14,7 @@ export function SmallMoleculesPage() {
         <h1 className="text-2xl font-semibold">Small Molecules</h1>
       </header>
       <Tabs
+        rightAccessory={<DeployedModelsButton module="small_molecule" />}
         tabs={[
           {
             id: 'docking',
@@ -45,7 +46,6 @@ export function SmallMoleculesPage() {
             label: 'ADMET & Safety',
             content: <AdmetSafetyTab />,
           },
-          { id: 'models', label: 'Deployed Models', content: <DeployedModelsTab module="small_molecule" /> },
         ]}
       />
     </div>

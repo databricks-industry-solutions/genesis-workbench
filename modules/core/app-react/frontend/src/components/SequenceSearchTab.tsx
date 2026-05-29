@@ -130,15 +130,15 @@ export function SequenceSearchTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-baseline justify-between">
+      <div>
         <h3 className="text-sm font-semibold">Find Similar Protein Sequences</h3>
-        <span className="text-xs text-muted-foreground">
+        <p className="mt-1 text-xs text-muted-foreground">
           BLAST-like search: ESM-2 embeddings + Vector Search + Smith-Waterman alignment
-        </span>
+        </p>
       </div>
 
       <div className="flex flex-col gap-3 md:flex-row md:items-stretch">
-        <div className="flex-1 space-y-2">
+        <div className="space-y-2 md:w-[55%] md:max-w-2xl">
           <div className="flex items-center gap-2">
             <span className="text-xs uppercase tracking-wide text-muted-foreground">Input:</span>
             {(['paste', 'fasta'] as const).map((m) => (

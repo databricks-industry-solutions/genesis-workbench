@@ -14,7 +14,8 @@ from pydantic import BaseModel, Field
 from app.auth import CurrentUserDep
 from app.routers.protein import _build_user_info
 from app.services import disease_biology as db
-from app.services.databricks_links import job_run_url
+from app.services import workbench
+from app.services.databricks_links import dashboard_embed_url, job_run_url
 
 logger = logging.getLogger(__name__)
 
@@ -491,6 +492,23 @@ def variant_annotation_results(
             )
         )
     return VariantAnnotationResultsResponse(variants=variants, total=len(variants))
+
+
+class VariantAnnotationDashboardResponse(BaseModel):
+    embed_url: str
+    run_name: str | None = None
+
+
+@router.get("/variant_annotation/dashboard", response_model=VariantAnnotationDashboardResponse)
+def variant_annotation_dashboard(
+    _: CurrentUserDep, run_name: Optional[str] = Query(None)
+) -> VariantAnnotationDashboardResponse:
+    dash_id = workbench.get_app_setting("variant_annotation_dashboard_id")
+    params = {"run_name": run_name} if run_name else None
+    return VariantAnnotationDashboardResponse(
+        embed_url=dashboard_embed_url(dash_id, params),
+        run_name=run_name,
+    )
 
 
 # ─── Run details (shared View dialogs) ────────────────────────────────────

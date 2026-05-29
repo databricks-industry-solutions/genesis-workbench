@@ -160,11 +160,11 @@ function UmapScatter({ points }: { points: UmapPoint[] }) {
       <Plot
         data={traces}
         layout={{
-          title: { text: 'UMAP — Predicted Cell Types', font: { color: '#e6e6e6' } },
+          title: { text: 'UMAP — Predicted Cell Types' },
           height: 560,
           paper_bgcolor: 'rgba(0,0,0,0)',
           plot_bgcolor: 'rgba(0,0,0,0)',
-          font: { color: '#e6e6e6', size: 11 },
+          font: { size: 11 },
           xaxis: { title: { text: 'UMAP_0' }, gridcolor: '#333' },
           yaxis: { title: { text: 'UMAP_1' }, gridcolor: '#333' },
           legend: { font: { size: 11 } },

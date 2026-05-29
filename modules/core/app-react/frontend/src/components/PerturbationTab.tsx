@@ -302,11 +302,11 @@ function DeltaBar({ rows }: { rows: PerturbationGene[] }) {
           } as any,
         ]}
         layout={{
-          title: { text: 'Top affected genes (signed Δ)', font: { color: '#e6e6e6', size: 13 } },
+          title: { text: 'Top affected genes (signed Δ)', font: { size: 13 } },
           height: Math.max(360, ordered.length * 22),
           paper_bgcolor: 'rgba(0,0,0,0)',
           plot_bgcolor: 'rgba(0,0,0,0)',
-          font: { color: '#e6e6e6', size: 10 },
+          font: { size: 10 },
           margin: { l: 120, r: 20, t: 40, b: 30 },
           xaxis: { gridcolor: '#333' },
           yaxis: { automargin: true },
@@ -352,11 +352,11 @@ function OrigVsPredictedScatter({ rows }: { rows: PerturbationGene[] }) {
           } as any,
         ]}
         layout={{
-          title: { text: 'Original vs Predicted expression', font: { color: '#e6e6e6', size: 13 } },
+          title: { text: 'Original vs Predicted expression', font: { size: 13 } },
           height: 400,
           paper_bgcolor: 'rgba(0,0,0,0)',
           plot_bgcolor: 'rgba(0,0,0,0)',
-          font: { color: '#e6e6e6', size: 10 },
+          font: { size: 10 },
           margin: { l: 50, r: 20, t: 40, b: 50 },
           xaxis: { title: { text: 'Original' }, gridcolor: '#333' },
           yaxis: { title: { text: 'Predicted' }, gridcolor: '#333' },

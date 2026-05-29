@@ -31,3 +31,20 @@ def job_run_url(job_id: str | int | None, job_run_id: str | int | None) -> str:
     if not host:
         return ""
     return f"{host}/jobs/{job_id}/runs/{job_run_id}"
+
+
+def dashboard_embed_url(dashboard_id: str | None, params: dict[str, str] | None = None) -> str:
+    """Lakeview (dashboardsv3) embed URL. Optional `params` are passed as
+    raw `?<keyword>=<value>` query string entries — Lakeview matches each
+    against the dashboard parameter declared with that `keyword` and binds
+    it into the SQL queries' `:name` placeholders."""
+    if not dashboard_id:
+        return ""
+    host = workspace_host()
+    if not host:
+        return ""
+    url = f"{host}/embed/dashboardsv3/{dashboard_id}"
+    if params:
+        from urllib.parse import urlencode
+        url += "?" + urlencode({k: v for k, v in params.items() if v})
+    return url

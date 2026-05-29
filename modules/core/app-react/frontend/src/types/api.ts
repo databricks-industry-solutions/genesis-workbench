@@ -698,6 +698,11 @@ export type VariantAnnotationResultsResponse = {
   total: number
 }
 
+export type VariantAnnotationDashboardResponse = {
+  embed_url: string
+  run_name: string | null
+}
+
 export type DiseaseBiologyDefaultsResponse = {
   variant_calling: {
     fastq_r1: string

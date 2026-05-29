@@ -408,11 +408,11 @@ export function UmapSubTab({ runId, summary }: { runId: string; summary: RunSumm
         <Plot
           data={traces as never}
           layout={{
-            title: { text: `UMAP — coloured by ${titleSuffix}`, font: { color: '#e6e6e6' } },
+            title: { text: `UMAP — coloured by ${titleSuffix}` },
             height: 560,
             paper_bgcolor: 'rgba(0,0,0,0)',
             plot_bgcolor: 'rgba(0,0,0,0)',
-            font: { color: '#e6e6e6', size: 11 },
+            font: { size: 11 },
             xaxis: { title: { text: 'UMAP_0' }, gridcolor: '#333' },
             yaxis: { title: { text: 'UMAP_1' }, gridcolor: '#333' },
             legend: { font: { size: 10 } },
@@ -756,11 +756,11 @@ function Dotplot({ data }: { data: DotplotResponse }) {
       <Plot
         data={[trace as never]}
         layout={{
-          title: { text: 'Marker expression by cluster', font: { color: '#e6e6e6' } },
+          title: { text: 'Marker expression by cluster' },
           height: Math.max(400, data.clusters.length * 50),
           paper_bgcolor: 'rgba(0,0,0,0)',
           plot_bgcolor: 'rgba(0,0,0,0)',
-          font: { color: '#e6e6e6', size: 11 },
+          font: { size: 11 },
           xaxis: { tickangle: 45, gridcolor: '#333' },
           yaxis: { gridcolor: '#333', automargin: true },
           margin: { l: 100, r: 20, t: 60, b: 100 },
@@ -937,11 +937,11 @@ function VolcanoPlot({ genes, a, b }: { genes: DEGene[]; a: string; b: string })
       <Plot
         data={traces as never}
         layout={{
-          title: { text: `Volcano: Cluster ${a} vs ${b}`, font: { color: '#e6e6e6' } },
+          title: { text: `Volcano: Cluster ${a} vs ${b}` },
           height: 460,
           paper_bgcolor: 'rgba(0,0,0,0)',
           plot_bgcolor: 'rgba(0,0,0,0)',
-          font: { color: '#e6e6e6', size: 11 },
+          font: { size: 11 },
           xaxis: { title: { text: 'log2 fold change' }, gridcolor: '#333' },
           yaxis: { title: { text: '-log10 adjusted p' }, gridcolor: '#333' },
           shapes: [
@@ -1114,11 +1114,11 @@ function EnrichmentBar({ terms, cluster }: { terms: EnrichmentTerm[]; cluster: s
       <Plot
         data={[trace as never]}
         layout={{
-          title: { text: `Top enriched terms — Cluster ${cluster}`, font: { color: '#e6e6e6' } },
+          title: { text: `Top enriched terms — Cluster ${cluster}` },
           height: Math.max(360, sorted.length * 28),
           paper_bgcolor: 'rgba(0,0,0,0)',
           plot_bgcolor: 'rgba(0,0,0,0)',
-          font: { color: '#e6e6e6', size: 10 },
+          font: { size: 10 },
           xaxis: { title: { text: '-log10 p_adj' }, gridcolor: '#333' },
           yaxis: { automargin: true },
           margin: { l: 200, r: 20, t: 50, b: 50 },
@@ -1192,11 +1192,11 @@ export function TrajectorySubTab({
               } as never,
             ]}
             layout={{
-              title: { text: 'UMAP — coloured by pseudotime', font: { color: '#e6e6e6' } },
+              title: { text: 'UMAP — coloured by pseudotime' },
               height: 500,
               paper_bgcolor: 'rgba(0,0,0,0)',
               plot_bgcolor: 'rgba(0,0,0,0)',
-              font: { color: '#e6e6e6', size: 11 },
+              font: { size: 11 },
               xaxis: { title: { text: 'UMAP_0' }, gridcolor: '#333' },
               yaxis: { title: { text: 'UMAP_1' }, gridcolor: '#333' },
               margin: { l: 50, r: 20, t: 50, b: 50 },
@@ -1240,11 +1240,11 @@ export function TrajectorySubTab({
               } as never,
             ]}
             layout={{
-              title: { text: `${gene} expression along pseudotime`, font: { color: '#e6e6e6' } },
+              title: { text: `${gene} expression along pseudotime` },
               height: 360,
               paper_bgcolor: 'rgba(0,0,0,0)',
               plot_bgcolor: 'rgba(0,0,0,0)',
-              font: { color: '#e6e6e6', size: 11 },
+              font: { size: 11 },
               xaxis: { title: { text: 'Pseudotime' }, gridcolor: '#333' },
               yaxis: { title: { text: `${gene} expression` }, gridcolor: '#333' },
               margin: { l: 60, r: 20, t: 40, b: 50 },
