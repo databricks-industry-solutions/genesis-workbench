@@ -15,6 +15,8 @@ from databricks.sdk import WorkspaceClient
 from genesis_workbench.models import set_mlflow_experiment
 from genesis_workbench.workbench import UserInfo, execute_workflow
 
+from app.services.workbench import get_job_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -49,7 +51,7 @@ def start_run_alphafold_job(
         mlflow.log_param("protein_sequence", protein_sequence)
 
         job_run_id = execute_workflow(
-            job_id=int(os.environ["RUN_ALPHAFOLD_JOB_ID"]),
+            job_id=int(get_job_id("run_alphafold_job_id")),
             params={
                 "catalog": os.environ["CORE_CATALOG_NAME"],
                 "schema": os.environ["CORE_SCHEMA_NAME"],
@@ -93,7 +95,7 @@ def _df_to_runs(experiments: dict[str, str], df: pd.DataFrame) -> list[AlphaFold
 
     df = df.copy()
     df["experiment_name"] = df["experiment_id"].map(experiments)
-    job_id = os.environ.get("RUN_ALPHAFOLD_JOB_ID", "")
+    job_id = get_job_id("run_alphafold_job_id")
     out: list[AlphaFoldRun] = []
     for _, r in df.iterrows():
         job_run_id = str(r.get("tags.job_run_id", "") or "")

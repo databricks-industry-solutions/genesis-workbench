@@ -6,6 +6,7 @@ import logging
 import os
 import tempfile
 from dataclasses import dataclass
+from functools import lru_cache
 
 import mlflow
 import pandas as pd
@@ -105,6 +106,12 @@ def search_runs(user_email: str, processing_mode: str | None = None) -> list[Sin
     return out
 
 
+# Each View Analysis sub-tab independently fetches markers — UMAP, markers,
+# DE, pathway enrichment, trajectory, cell similarity, perturbation. Without
+# caching that's ~5s × 7 = 35s of repeated parquet downloads per View click.
+# An LRU keyed by run_id lets every sub-tab share one read. DataFrames are
+# treated as immutable by callers (no in-place mutation downstream).
+@lru_cache(maxsize=8)
 def download_markers_df(run_id: str) -> pd.DataFrame:
     mlflow.set_registry_uri("databricks-uc")
     mlflow.set_tracking_uri("databricks")
@@ -114,6 +121,7 @@ def download_markers_df(run_id: str) -> pd.DataFrame:
         return pd.read_parquet(local_file)
 
 
+@lru_cache(maxsize=8)
 def download_cluster_markers_mapping(run_id: str) -> pd.DataFrame:
     """Per-cluster Wilcoxon rank-sum markers from `top_markers_per_cluster.csv`.
 

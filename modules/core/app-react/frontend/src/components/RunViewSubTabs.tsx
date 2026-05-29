@@ -1228,15 +1228,32 @@ export function TrajectorySubTab({
 
       {traj.data && traj.data.gene_points.length > 0 && gene && (
         <div className="rounded-md border border-border bg-card p-2">
+          {(() => {
+            const xs = traj.data.gene_points.map((p) => p.pseudotime)
+            const ys = traj.data.gene_points.map((p) => p.expression)
+            const smooth = lowess(xs, ys, 0.3)
+            return (
           <Plot
             data={[
               {
                 type: 'scattergl' as const,
                 mode: 'markers' as const,
-                x: traj.data.gene_points.map((p) => p.pseudotime),
-                y: traj.data.gene_points.map((p) => p.expression),
+                name: 'cells',
+                x: xs,
+                y: ys,
                 marker: { size: 3, opacity: 0.5 },
                 hovertemplate: 't %{x:.2f}<br>expr %{y:.2f}<extra></extra>',
+                showlegend: false,
+              } as never,
+              {
+                type: 'scatter' as const,
+                mode: 'lines' as const,
+                name: 'LOWESS',
+                x: smooth.x,
+                y: smooth.y,
+                line: { color: '#ef4444', width: 2 },
+                hoverinfo: 'skip',
+                showlegend: false,
               } as never,
             ]}
             layout={{
@@ -1253,10 +1270,50 @@ export function TrajectorySubTab({
             style={{ width: '100%' }}
             useResizeHandler
           />
+            )
+          })()}
         </div>
       )}
     </div>
   )
+}
+
+// LOWESS smoother — local linear regression with tricube weights.
+// Span = fraction of points in each local neighborhood (statsmodels default 0.3).
+// Used as the trendline overlay for "gene expression along pseudotime",
+// matching the Streamlit version's Plotly Express `trendline="lowess"`.
+function lowess(xs: number[], ys: number[], span = 0.3): { x: number[]; y: number[] } {
+  const n = xs.length
+  if (n === 0) return { x: [], y: [] }
+  const order = Array.from(xs.keys()).sort((a, b) => xs[a] - xs[b])
+  const sx = order.map((i) => xs[i])
+  const sy = order.map((i) => ys[i])
+  const k = Math.max(2, Math.min(n, Math.floor(span * n)))
+  const out: number[] = new Array(n)
+  for (let i = 0; i < n; i++) {
+    const x0 = sx[i]
+    const dists: { d: number; j: number }[] = []
+    for (let j = 0; j < n; j++) dists.push({ d: Math.abs(sx[j] - x0), j })
+    dists.sort((a, b) => a.d - b.d)
+    const near = dists.slice(0, k)
+    const maxD = near[near.length - 1].d || 1
+    let Sw = 0, Swx = 0, Swy = 0, Swxx = 0, Swxy = 0
+    for (const { d, j } of near) {
+      const u = Math.min(d / maxD, 1)
+      const w = Math.pow(1 - u * u * u, 3)
+      const x = sx[j], y = sy[j]
+      Sw += w; Swx += w * x; Swy += w * y; Swxx += w * x * x; Swxy += w * x * y
+    }
+    const denom = Sw * Swxx - Swx * Swx
+    if (Math.abs(denom) < 1e-12) {
+      out[i] = Sw > 0 ? Swy / Sw : 0
+      continue
+    }
+    const m = (Sw * Swxy - Swx * Swy) / denom
+    const b = (Swy - m * Swx) / Sw
+    out[i] = m * x0 + b
+  }
+  return { x: sx, y: out }
 }
 
 // ─── QC & Outputs ──────────────────────────────────────────────────────────

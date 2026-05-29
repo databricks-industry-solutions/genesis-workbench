@@ -54,12 +54,21 @@ def get_app_setting(key: str) -> str | None:
         return None
 
 
+def get_job_id(setting_key: str) -> str:
+    """Resolve a Databricks job id by its `settings` Delta table key.
+    Falls back to the same key uppercased as an env var so we tolerate
+    either provisioning path. Returns "" when neither is populated."""
+    import os
+    return get_app_setting(setting_key) or os.environ.get(setting_key.upper(), "")
+
+
 __all__ = [
     "execute_select_query",
     "execute_non_select_query",
     "execute_workflow",
     "get_deployed_modules",
     "get_app_setting",
+    "get_job_id",
     "get_user_settings",
     "get_workflow_job_status",
     "initialize_lib",

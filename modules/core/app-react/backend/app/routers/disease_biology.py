@@ -168,7 +168,7 @@ def variant_calling_start(
         )
     return JobDispatchResponse(
         job_run_id=job_run_id,
-        run_url=_run_url(os.environ.get("PARABRICKS_ALIGNMENT_JOB_ID", ""), job_run_id),
+        run_url=_run_url(workbench.get_job_id("parabricks_alignment_job_id"), job_run_id),
     )
 
 
@@ -240,7 +240,7 @@ def gwas_start(payload: GwasStartRequest, user: CurrentUserDep) -> JobDispatchRe
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Failed to dispatch GWAS job: {e}")
     return JobDispatchResponse(
         job_run_id=job_run_id,
-        run_url=_run_url(os.environ.get("GWAS_ANALYSIS_JOB_ID", ""), job_run_id),
+        run_url=_run_url(workbench.get_job_id("gwas_analysis_job_id"), job_run_id),
     )
 
 
@@ -357,7 +357,7 @@ def vcf_ingestion_start(
         )
     return JobDispatchResponse(
         job_run_id=job_run_id,
-        run_url=_run_url(os.environ.get("VCF_INGESTION_JOB_ID", ""), job_run_id),
+        run_url=_run_url(workbench.get_job_id("vcf_ingestion_job_id"), job_run_id),
     )
 
 
@@ -433,7 +433,7 @@ def variant_annotation_start(
         )
     return JobDispatchResponse(
         job_run_id=job_run_id,
-        run_url=_run_url(os.environ.get("VARIANT_ANNOTATION_JOB_ID", ""), job_run_id),
+        run_url=_run_url(workbench.get_job_id("variant_annotation_job_id"), job_run_id),
     )
 
 

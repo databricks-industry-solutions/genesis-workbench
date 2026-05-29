@@ -169,7 +169,7 @@ def batch_models(_: CurrentUserDep) -> BatchModelsResponse:
 
 @router.get("/start-endpoints/status", response_model=StartEndpointsStatusResponse)
 def start_endpoints_status(_: CurrentUserDep) -> StartEndpointsStatusResponse:
-    job_id = os.environ.get("START_ALL_ENDPOINTS_JOB_ID")
+    job_id = workbench.get_job_id("start_all_endpoints_job_id") or None
     if not job_id:
         return StartEndpointsStatusResponse(active=False)
     try:
@@ -213,7 +213,7 @@ def start_endpoints_status(_: CurrentUserDep) -> StartEndpointsStatusResponse:
 def start_endpoints_trigger(
     payload: StartEndpointsTriggerRequest, _: CurrentUserDep
 ) -> StartEndpointsTriggerResponse:
-    job_id = os.environ.get("START_ALL_ENDPOINTS_JOB_ID")
+    job_id = workbench.get_job_id("start_all_endpoints_job_id") or None
     if not job_id:
         raise HTTPException(
             status.HTTP_409_CONFLICT,

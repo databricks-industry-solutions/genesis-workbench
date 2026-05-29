@@ -49,10 +49,12 @@ function GeneralTab() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <ReadField label="Application Schema" value={`${q.data.catalog}.${q.data.schema_name}`} />
-        <ReadField label="SQL Warehouse" value={q.data.warehouse_id} />
         <ReadField label="Catalog" value={q.data.catalog} />
+        <ReadField label="Schema" value={q.data.schema_name} />
+        <ReadField label="Warehouse" value={q.data.warehouse_id} />
       </div>
+
+      <AppearanceSection />
 
       <Tabs
         tabs={[
@@ -236,7 +238,6 @@ export function SettingsPage() {
       </header>
       <Tabs
         tabs={[
-          { id: 'appearance', label: 'Appearance', content: <AppearanceTab /> },
           { id: 'general', label: 'General', content: <GeneralTab /> },
           { id: 'endpoints', label: 'Endpoint Management', content: <EndpointTab /> },
           { id: 'batch', label: 'Batch Models', content: <BatchModelsTab /> },
@@ -246,7 +247,7 @@ export function SettingsPage() {
   )
 }
 
-function AppearanceTab() {
+function AppearanceSection() {
   const theme = useThemeStore((s) => s.theme)
   const setTheme = useThemeStore((s) => s.setTheme)
   const setUserSettings = useUserStore((s) => s.setUserSettings)
@@ -270,14 +271,9 @@ function AppearanceTab() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 rounded-md border border-border bg-card px-4 py-3">
       <div>
-        <h3 className="text-sm font-semibold">Theme</h3>
-        <p className="text-xs text-muted-foreground">
-          Saved to your account (the user_settings Delta table), so the preference follows you
-          across browsers and sessions. Note: a few Plotly charts still ship with dark-tuned
-          text + grid colours — that's a separate cleanup pass.
-        </p>
+        <h3 className="text-sm font-semibold">Appearance</h3>
       </div>
       <div className="flex items-center gap-3">
         <div className="flex gap-1">

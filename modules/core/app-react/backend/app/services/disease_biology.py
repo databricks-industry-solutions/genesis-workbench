@@ -19,7 +19,7 @@ from genesis_workbench.workbench import UserInfo, execute_workflow
 from mlflow.tracking import MlflowClient
 
 from app.services.databricks_links import job_run_url
-from app.services.workbench import execute_select_query
+from app.services.workbench import execute_select_query, get_job_id
 
 logger = logging.getLogger(__name__)
 
@@ -43,14 +43,14 @@ class DBRun:
     run_url: str = ""
 
 
-# MLflow feature tag → env var holding the orchestrator job id used to
-# dispatch that feature's runs. Lookup is per-row so we can build a working
-# "Open in workspace" link for every search hit.
-_FEATURE_TO_JOB_ENV: dict[str, str] = {
-    "gwas_alignment": "PARABRICKS_ALIGNMENT_JOB_ID",
-    "gwas": "GWAS_ANALYSIS_JOB_ID",
-    "vcf_ingestion": "VCF_INGESTION_JOB_ID",
-    "variant_annotation": "VARIANT_ANNOTATION_JOB_ID",
+# MLflow feature tag → settings-table key holding the orchestrator job id
+# used to dispatch that feature's runs. Lookup is per-row so we can build
+# a working "Open in workspace" link for every search hit.
+_FEATURE_TO_JOB_SETTING: dict[str, str] = {
+    "gwas_alignment": "parabricks_alignment_job_id",
+    "gwas": "gwas_analysis_job_id",
+    "vcf_ingestion": "vcf_ingestion_job_id",
+    "variant_annotation": "variant_annotation_job_id",
 }
 
 
@@ -140,8 +140,8 @@ def _search(
             return []
 
     runs["experiment_name"] = runs["experiment_id"].map(exp_map)
-    job_id_env = _FEATURE_TO_JOB_ENV.get(feature, "")
-    job_id = os.environ.get(job_id_env, "") if job_id_env else ""
+    job_setting = _FEATURE_TO_JOB_SETTING.get(feature, "")
+    job_id = get_job_id(job_setting) if job_setting else ""
     out: list[DBRun] = []
     for _, r in runs.iterrows():
         status = str(r.get("tags.job_status", "") or "")
@@ -188,7 +188,7 @@ def start_parabricks_alignment(
         mlflow.log_param("fastq_r2", fastq_r2)
         mlflow.log_param("reference_genome", reference_genome_path)
         job_run_id = execute_workflow(
-            job_id=os.environ["PARABRICKS_ALIGNMENT_JOB_ID"],
+            job_id=get_job_id("parabricks_alignment_job_id"),
             params={
                 "catalog": os.environ["CORE_CATALOG_NAME"],
                 "schema": os.environ["CORE_SCHEMA_NAME"],
@@ -272,7 +272,7 @@ def start_gwas_analysis(
         mlflow.log_param("contigs", contigs)
         mlflow.log_param("hwe_cutoff", hwe_cutoff)
         job_run_id = execute_workflow(
-            job_id=os.environ["GWAS_ANALYSIS_JOB_ID"],
+            job_id=get_job_id("gwas_analysis_job_id"),
             params={
                 "catalog": os.environ["CORE_CATALOG_NAME"],
                 "schema": os.environ["CORE_SCHEMA_NAME"],
@@ -346,7 +346,7 @@ def start_vcf_ingestion(
         mlflow.log_param("vcf_path", vcf_path)
         mlflow.log_param("output_table_name", output_table_name)
         job_run_id = execute_workflow(
-            job_id=os.environ["VCF_INGESTION_JOB_ID"],
+            job_id=get_job_id("vcf_ingestion_job_id"),
             params={
                 "catalog": catalog,
                 "schema": schema,
@@ -426,7 +426,7 @@ def start_variant_annotation(
         if gene_panel_mode != "acmg":
             mlflow.log_param("gene_regions", gene_regions)
         job_run_id = execute_workflow(
-            job_id=os.environ["VARIANT_ANNOTATION_JOB_ID"],
+            job_id=get_job_id("variant_annotation_job_id"),
             params={
                 "catalog": os.environ["CORE_CATALOG_NAME"],
                 "schema": os.environ["CORE_SCHEMA_NAME"],
