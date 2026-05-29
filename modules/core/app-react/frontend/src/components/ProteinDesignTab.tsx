@@ -54,28 +54,23 @@ export function ProteinDesignTab() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold">Protein Design (ESMFold → RFDiffusion → ProteinMPNN)</h3>
+        <h3 className="text-sm font-semibold">Redesign a Masked Sequence Region</h3>
         <p className="text-xs text-muted-foreground">
           Mask a region with <code>[brackets]</code>. The pipeline folds the original sequence,
           inpaints the masked region with RFDiffusion, then redesigns sequences with ProteinMPNN
           and validates each by re-folding with ESMFold. Logs every step to MLflow.
         </p>
-        <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
-          <strong>Heads up:</strong> this runs ≥5 sequential serving-endpoint calls (4 endpoints).
-          Any cold-start can push the total wall-clock past the Databricks Apps proxy timeout
-          (~60s) and produce a 504. Keep the endpoints warm via Settings → Endpoint Management →
-          Start All Endpoints before running.
-        </div>
       </div>
 
-      <div className="flex flex-col gap-3 md:flex-row md:items-stretch">
-        <div className="flex-1 space-y-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,420px)_1fr]">
+        {/* Left: form */}
+        <div className="space-y-3">
           <label className="block text-xs">
             <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
               Input sequence — masked region in [brackets]
             </span>
             <textarea
-              rows={6}
+              rows={8}
               value={sequence}
               onChange={(e) => setSequence(e.target.value)}
               placeholder="MAQV...[TNYADS]...SSGQ"
@@ -87,29 +82,7 @@ export function ProteinDesignTab() {
               Sequence must contain a [bracketed] region to redesign.
             </div>
           )}
-        </div>
 
-        <div className="flex w-72 flex-col gap-2">
-          <label className="block text-xs">
-            <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
-              MLflow experiment
-            </span>
-            <input
-              value={experiment}
-              onChange={(e) => setExperiment(e.target.value)}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="block text-xs">
-            <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
-              Run name
-            </span>
-            <input
-              value={runName}
-              onChange={(e) => setRunName(e.target.value)}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            />
-          </label>
           <label className="block text-xs">
             <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
               RFDiffusion scaffolds
@@ -126,6 +99,29 @@ export function ProteinDesignTab() {
               ))}
             </select>
           </label>
+
+          <div className="rounded-md border border-border bg-card p-3 text-xs">
+            <div className="mb-2 font-medium uppercase tracking-wide text-muted-foreground">
+              MLflow tracking
+            </div>
+            <label className="block">
+              <span className="mb-1 block text-muted-foreground">Experiment</span>
+              <input
+                value={experiment}
+                onChange={(e) => setExperiment(e.target.value)}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="mt-2 block">
+              <span className="mb-1 block text-muted-foreground">Run name</span>
+              <input
+                value={runName}
+                onChange={(e) => setRunName(e.target.value)}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              />
+            </label>
+          </div>
+
           <div className="flex gap-2">
             <button
               onClick={runDesign}
@@ -143,51 +139,63 @@ export function ProteinDesignTab() {
             </button>
           </div>
         </div>
-      </div>
 
-      {design.isPending && (
-        <RealtimeProgress
-          title={`Designing ${nHits} scaffold${nHits > 1 ? 's' : ''}`}
-          pct={design.progress?.pct ?? 0}
-          msg={design.progress?.msg ?? 'Starting…'}
-          stages={[
-            { label: 'Folding original sequence (ESMFold)', pctEnd: 10 },
-            { label: `RFDiffusion x ${nHits}`, pctEnd: 50 },
-            { label: 'ProteinMPNN sequence design', pctEnd: 70 },
-            { label: 'Folding each designed sequence (ESMFold)', pctEnd: 95 },
-            { label: 'Aligning designed structures', pctEnd: 100 },
-          ]}
-        />
-      )}
+        {/* Right: progress + viewer */}
+        <div className="space-y-3">
+          {design.isPending && (
+            <RealtimeProgress
+              title={`Designing ${nHits} scaffold${nHits > 1 ? 's' : ''}`}
+              pct={design.progress?.pct ?? 0}
+              msg={design.progress?.msg ?? 'Starting…'}
+              stages={[
+                { label: 'Folding original sequence (ESMFold)', pctEnd: 10 },
+                { label: `RFDiffusion x ${nHits}`, pctEnd: 50 },
+                { label: 'ProteinMPNN sequence design', pctEnd: 70 },
+                { label: 'Folding each designed sequence (ESMFold)', pctEnd: 95 },
+                { label: 'Aligning designed structures', pctEnd: 100 },
+              ]}
+            />
+          )}
 
-      {design.error && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-          {String(design.error)}
+          {design.error && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {String(design.error)}
+            </div>
+          )}
+
+          {design.data ? (
+            <>
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium">
+                  {design.data.n_designs} design{design.data.n_designs === 1 ? '' : 's'} (aligned
+                  to initial)
+                </h4>
+                {mlflowUrl && (
+                  <a
+                    href={mlflowUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-primary hover:underline"
+                    title={`workspace_host=${workspaceHost}`}
+                  >
+                    View MLflow run ↗
+                  </a>
+                )}
+              </div>
+              <MolstarViewer viewerHtml={design.data.viewer_html} height={560} />
+            </>
+          ) : (
+            !design.isPending &&
+            !design.error && (
+              <div className="rounded-md border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+                Submit the form to generate designs. The pipeline folds the original sequence,
+                inpaints the masked region with RFDiffusion, redesigns each scaffold with
+                ProteinMPNN, and re-folds every candidate with ESMFold.
+              </div>
+            )
+          )}
         </div>
-      )}
-
-      {design.data && (
-        <section className="space-y-3 border-t border-border pt-4">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-medium">
-              {design.data.n_designs} design{design.data.n_designs === 1 ? '' : 's'} (aligned to
-              initial)
-            </h4>
-            {mlflowUrl && (
-              <a
-                href={mlflowUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-primary hover:underline"
-                title={`workspace_host=${workspaceHost}`}
-              >
-                View MLflow run ↗
-              </a>
-            )}
-          </div>
-          <MolstarViewer viewerHtml={design.data.viewer_html} height={560} />
-        </section>
-      )}
+      </div>
     </div>
   )
 }

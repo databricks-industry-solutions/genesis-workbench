@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
@@ -12,6 +13,7 @@ import { SmallMoleculesPage } from '@/pages/SmallMolecules'
 import { DiseaseBiologyPage } from '@/pages/DiseaseBiology'
 import { BootstrapGate } from '@/components/BootstrapGate'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { useThemeStore } from '@/stores/theme'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,6 +26,16 @@ const queryClient = new QueryClient({
 })
 
 export default function App() {
+  // Sync the Tailwind `dark` class on <html> with the persisted theme store
+  // so every component using `bg-background`/`text-foreground`/etc. picks
+  // up the correct CSS variables on mount + on any toggle.
+  const theme = useThemeStore((s) => s.theme)
+  useEffect(() => {
+    const root = document.documentElement
+    if (theme === 'dark') root.classList.add('dark')
+    else root.classList.remove('dark')
+  }, [theme])
+
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>

@@ -1,20 +1,41 @@
+import { Fragment } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 
 import { useUserStore, selectIsSetupDone, selectDisplayName } from '@/stores/user'
 import { cn } from '@/lib/utils'
 
-type NavItem = { to: string; label: string; module?: string }
+type NavItem = {
+  to: string
+  label: string
+  icon: string
+  module?: string
+  /** Render a horizontal divider above this item — used to visually
+   * separate workflow modules from admin/utility pages. */
+  dividerAbove?: boolean
+}
 
+// Icon names map to Material Symbols (loaded via Google Fonts in index.html).
+// Match the Streamlit sidebar's :material/...: glyphs exactly.
 const ALL_NAV: NavItem[] = [
-  { to: '/', label: 'Home' },
-  { to: '/single-cell', label: 'Single Cell', module: 'single_cell' },
-  { to: '/protein-studies', label: 'Protein Studies', module: 'protein_studies' },
-  { to: '/small-molecules', label: 'Small Molecules', module: 'small_molecule' },
-  { to: '/disease-biology', label: 'Disease Biology', module: 'disease_biology' },
-  { to: '/profile', label: 'Profile' },
-  { to: '/monitoring', label: 'Monitoring' },
-  { to: '/settings', label: 'Settings' },
+  { to: '/', label: 'Home', icon: 'home' },
+  { to: '/single-cell', label: 'Single Cell', icon: 'microbiology', module: 'single_cell' },
+  { to: '/protein-studies', label: 'Protein Studies', icon: 'biotech', module: 'protein_studies' },
+  { to: '/small-molecules', label: 'Small Molecules', icon: 'science', module: 'small_molecule' },
+  { to: '/disease-biology', label: 'Disease Biology', icon: 'coronavirus', module: 'disease_biology' },
+  { to: '/monitoring', label: 'Monitoring', icon: 'monitoring', dividerAbove: true },
+  { to: '/settings', label: 'Settings', icon: 'settings' },
 ]
+
+function MaterialIcon({ name, className }: { name: string; className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cn('material-symbols-outlined text-[20px] leading-none', className)}
+    >
+      {name}
+    </span>
+  )
+}
 
 export function Layout() {
   const bootstrap = useUserStore((s) => s.bootstrap)
@@ -35,24 +56,50 @@ export function Layout() {
           />
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-3">
-          {visible.map((item) => {
-            const showWarning = item.to === '/profile' && bootstrap && !setupDone
-            return (
+          {visible.map((item) => (
+            <Fragment key={item.to}>
+              {item.dividerAbove && (
+                <hr className="my-2 border-t border-border" aria-hidden />
+              )}
               <NavLink
-                key={item.to}
                 to={item.to}
                 end={item.to === '/'}
                 className={({ isActive }) =>
                   cn(
-                    'flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors',
+                    'flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors',
                     isActive
                       ? 'bg-accent text-foreground'
                       : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
                   )
                 }
               >
+                <MaterialIcon name={item.icon} />
                 <span>{item.label}</span>
-                {showWarning && (
+              </NavLink>
+            </Fragment>
+          ))}
+        </nav>
+        <div className="space-y-2 border-t border-border px-5 py-3 text-xs text-muted-foreground">
+          {bootstrap ? (
+            <>
+              <div>
+                <div className="truncate text-foreground">{displayName}</div>
+                <div className="truncate">{bootstrap.user.email ?? ''}</div>
+              </div>
+              <NavLink
+                to="/profile"
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-3 rounded-md px-3 py-1.5 text-xs transition-colors',
+                    isActive
+                      ? 'bg-accent text-foreground'
+                      : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+                  )
+                }
+              >
+                <MaterialIcon name="account_circle" className="text-[18px]" />
+                <span className="flex-1">Profile</span>
+                {!setupDone && (
                   <span
                     className="rounded-full bg-destructive/15 px-1.5 py-0.5 text-[10px] uppercase text-destructive"
                     title="Setup incomplete"
@@ -61,14 +108,6 @@ export function Layout() {
                   </span>
                 )}
               </NavLink>
-            )
-          })}
-        </nav>
-        <div className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
-          {bootstrap ? (
-            <>
-              <div className="truncate text-foreground">{displayName}</div>
-              <div className="truncate">{bootstrap.user.email ?? ''}</div>
             </>
           ) : (
             <div>Loading…</div>

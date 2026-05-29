@@ -41,7 +41,7 @@ export function StructurePredictionTab() {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-sm font-semibold">Predict Protein Structure</h3>
+      <h3 className="text-sm font-semibold">Predict 3D Structure from Sequence</h3>
 
       <div className="flex flex-wrap gap-2">
         {MODELS.map((m) => (
@@ -61,63 +61,85 @@ export function StructurePredictionTab() {
       </div>
 
       {!isAsync && (
-        <>
-          <textarea
-            rows={4}
-            value={sequence}
-            onChange={(e) => setSequence(e.target.value)}
-            placeholder="Paste a protein sequence (single-letter amino acid code)"
-            className="w-full rounded-md border border-border bg-background p-3 font-mono text-xs"
-          />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,420px)_1fr]">
+          {/* Left: form */}
+          <div className="space-y-3">
+            <label className="block text-xs">
+              <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
+                Protein sequence
+              </span>
+              <textarea
+                rows={10}
+                value={sequence}
+                onChange={(e) => setSequence(e.target.value)}
+                placeholder="Paste a protein sequence (single-letter amino acid code)"
+                className="w-full rounded-md border border-border bg-background p-3 font-mono text-xs"
+              />
+            </label>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => predict.mutate()}
-              disabled={disabled}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
-            >
-              {predict.isPending ? 'Predicting…' : buttonLabel}
-            </button>
-            <button
-              onClick={() => {
-                setViewerHtml(null)
-                predict.reset()
-              }}
-              disabled={!viewerHtml && !predict.isError && !predict.isPending}
-              className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent disabled:opacity-50"
-            >
-              Clear
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => predict.mutate()}
+                disabled={disabled}
+                className="flex-1 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+              >
+                {predict.isPending ? 'Predicting…' : buttonLabel}
+              </button>
+              <button
+                onClick={() => {
+                  setViewerHtml(null)
+                  predict.reset()
+                }}
+                disabled={!viewerHtml && !predict.isError && !predict.isPending}
+                className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent disabled:opacity-50"
+              >
+                Clear
+              </button>
+            </div>
           </div>
 
-          {predict.error && (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-              {String(predict.error)}
-            </div>
-          )}
+          {/* Right: progress + viewer */}
+          <div className="space-y-3">
+            <WorkflowProgress
+              active={predict.isPending}
+              title={`${model} prediction`}
+              stages={
+                model === 'ESMFold'
+                  ? [{ label: 'Predicting structure (ESMFold)', estSeconds: 12 }]
+                  : [
+                      { label: 'Submitting input to Boltz', estSeconds: 2 },
+                      { label: 'Predicting structure', estSeconds: 60 },
+                    ]
+              }
+              note={
+                model === 'Boltz'
+                  ? 'Boltz cold-start can exceed the proxy timeout (~60s) — pre-warm via Settings → Endpoint Management.'
+                  : 'Endpoint cold-start can add 20–30s on the first call.'
+              }
+            />
 
-          <WorkflowProgress
-            active={predict.isPending}
-            title={`${model} prediction`}
-            stages={
-              model === 'ESMFold'
-                ? [{ label: 'Predicting structure (ESMFold)', estSeconds: 12 }]
-                : [
-                    { label: 'Submitting input to Boltz', estSeconds: 2 },
-                    { label: 'Predicting structure', estSeconds: 60 },
-                  ]
-            }
-            note={
-              model === 'Boltz'
-                ? 'Boltz cold-start can exceed the proxy timeout (~60s) — pre-warm via Settings → Endpoint Management.'
-                : 'Endpoint cold-start can add 20–30s on the first call.'
-            }
-          />
+            {predict.error && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                {String(predict.error)}
+              </div>
+            )}
 
-          {viewerHtml && (
-            <MolstarViewer viewerHtml={viewerHtml} title={`${model} structure viewer`} />
-          )}
-        </>
+            {viewerHtml ? (
+              <MolstarViewer
+                viewerHtml={viewerHtml}
+                title={`${model} structure viewer`}
+                height={540}
+              />
+            ) : (
+              !predict.isPending &&
+              !predict.error && (
+                <div className="rounded-md border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+                  Paste a sequence and hit {buttonLabel} to render the predicted structure here.
+                </div>
+              )
+            )}
+          </div>
+        </div>
       )}
 
       {isAsync && <AlphaFoldPanel />}

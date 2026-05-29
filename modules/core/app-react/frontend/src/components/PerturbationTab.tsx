@@ -105,7 +105,7 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold">Gene Perturbation Prediction (scGPT)</h3>
+        <h3 className="text-sm font-semibold">Predict Gene Perturbation Effects</h3>
         <p className="text-xs text-muted-foreground">
           Predict the effect of knocking out or overexpressing one or more genes on the cluster's
           mean expression profile using scGPT.

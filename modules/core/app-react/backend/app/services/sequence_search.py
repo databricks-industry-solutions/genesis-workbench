@@ -30,6 +30,14 @@ class AlignmentHit:
     identity_pct: float
     sw_score: int
     alignment_length: int
+    # Fraction of the query that was actually aligned, 0-100. Lets us rank
+    # by "global-ish" similarity rather than raw local SW score — a 30aa
+    # target with a perfect 30/30 match against a 200aa query is a low-
+    # coverage hit and shouldn't outrank a 180/200 medium-quality hit.
+    query_coverage_pct: float
+    # identity_pct * (clamped coverage) — single composite used as the
+    # primary sort key. Higher = better.
+    similarity_score: float
     vector_distance: float
     aligned_query: str
     aligned_comp: str
@@ -88,6 +96,7 @@ def _align(
     matrix = parasail.blosum62
     gap_open = 11
     gap_extend = 1
+    query_len = max(len(query_seq), 1)
     out: list[AlignmentHit] = []
     n = max(len(candidates), 1)
     for i, cand in enumerate(candidates):
@@ -100,6 +109,12 @@ def _align(
         matches = sum(1 for a, b in zip(aligned_query, aligned_target) if a == b)
         alignment_length = len(aligned_query)
         identity_pct = (matches / alignment_length * 100) if alignment_length else 0.0
+        # Aligned-query characters excluding gaps — better signal than the
+        # raw alignment_length for coverage, since SW pads the local match
+        # with gap characters when the target is short.
+        aligned_query_no_gaps = sum(1 for c in aligned_query if c != "-")
+        coverage_pct = min(aligned_query_no_gaps / query_len, 1.0) * 100.0
+        similarity = identity_pct * (coverage_pct / 100.0)
         out.append(
             AlignmentHit(
                 seq_id=cand["seq_id"],
@@ -108,6 +123,8 @@ def _align(
                 identity_pct=round(identity_pct, 1),
                 sw_score=res.score,
                 alignment_length=alignment_length,
+                query_coverage_pct=round(coverage_pct, 1),
+                similarity_score=round(similarity, 2),
                 vector_distance=cand.get("distance", 0.0),
                 aligned_query=aligned_query,
                 aligned_comp=aligned_comp,
@@ -117,15 +134,22 @@ def _align(
         if progress_callback:
             pct = pct_start + int(((i + 1) / n) * (pct_end - pct_start))
             progress_callback(pct, f"Smith-Waterman alignment {i + 1}/{n}")
-    out.sort(key=lambda h: h.sw_score, reverse=True)
+    # Primary sort by composite similarity (identity × coverage). SW score
+    # is tiebreaker so two equally-good hits with the same identity and
+    # coverage still order by absolute alignment strength.
+    out.sort(key=lambda h: (h.similarity_score, h.sw_score), reverse=True)
     return out
 
 
 def run_sequence_search(
     query_sequence: str,
     top_k: int = 50,
+    min_coverage_pct: float = 0.0,
     progress_callback=None,
 ) -> list[AlignmentHit]:
+    """`min_coverage_pct` (0-100) drops candidates whose aligned-query
+    coverage is below the threshold — useful when the query is long and the
+    user doesn't want tiny perfect-match fragments cluttering the top-K."""
     s = get_settings()
     embedding_endpoint = get_endpoint_name("ESM2 Embeddings")
     vs_index = f"{s.catalog}.{s.schema}.{VS_INDEX_SUFFIX}"
@@ -168,7 +192,15 @@ def run_sequence_search(
                 }
             )
     _p(60, f"Aligning {len(candidates)} sequences (Smith-Waterman)")
-    aligned = _align(query_sequence, candidates, progress_callback=progress_callback)[:top_k]
+    aligned = _align(query_sequence, candidates, progress_callback=progress_callback)
+    if min_coverage_pct > 0:
+        before = len(aligned)
+        aligned = [h for h in aligned if h.query_coverage_pct >= min_coverage_pct]
+        logger.info(
+            "sequence_search: coverage filter %d%% kept %d/%d hits",
+            int(min_coverage_pct), len(aligned), before,
+        )
+    aligned = aligned[:top_k]
     _p(100, f"Returned top {len(aligned)} hits")
     return aligned
 

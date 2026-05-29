@@ -1,10 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/api/client'
+import { Dialog } from '@/components/Dialog'
 import { useUserStore } from '@/stores/user'
 
 const ProfileFormSchema = z.object({
@@ -54,8 +55,10 @@ export function ProfilePage() {
   const email = bootstrap?.user.email ?? ''
   const folderValue = form.watch('mlflow_experiment_folder')
 
+  const [howTo, setHowTo] = useState<null | 'folder' | 'permissions'>(null)
+
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-8">
+    <div className="space-y-6 px-8 py-8">
       <header>
         <h1 className="text-2xl font-semibold">Profile</h1>
         <p className="text-sm text-muted-foreground">
@@ -102,18 +105,42 @@ export function ProfilePage() {
             />
           </Field>
 
-          <div className="mt-4 space-y-2 text-xs text-muted-foreground">
+          <div className="mt-4 space-y-3 text-xs text-muted-foreground">
             <div>
-              <strong>Step 1.</strong> Create the folder if it doesn't exist:{' '}
-              <code className="rounded bg-muted px-1">
-                /Workspace/Users/{email}/{folderValue}
-              </code>
+              <div className="flex items-baseline gap-2">
+                <strong>Step 1.</strong>
+                <span>
+                  Create the folder if it doesn't exist:{' '}
+                  <code className="rounded bg-muted px-1">
+                    /Workspace/Users/{email}/{folderValue}
+                  </code>
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHowTo('folder')}
+                className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary shadow-sm transition-colors hover:bg-primary/20"
+              >
+                <span className="material-symbols-outlined text-base leading-none">play_circle</span>
+                Show me how
+              </button>
             </div>
             <div>
-              <strong>Step 2.</strong> Share with the app service principal:
+              <div className="flex items-baseline gap-2">
+                <strong>Step 2.</strong>
+                <span>Share with the app service principal:</span>
+              </div>
               <pre className="mt-1 overflow-auto rounded bg-muted p-2 text-xs">
                 {appSpId ?? '(app service principal id not available)'}
               </pre>
+              <button
+                type="button"
+                onClick={() => setHowTo('permissions')}
+                className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary shadow-sm transition-colors hover:bg-primary/20"
+              >
+                <span className="material-symbols-outlined text-base leading-none">play_circle</span>
+                Show me how
+              </button>
             </div>
             <div>
               <strong>Step 3.</strong> Grant <em>Can Manage</em> and submit. We'll create a test
@@ -138,6 +165,54 @@ export function ProfilePage() {
           )}
         </div>
       </form>
+
+      <Dialog
+        open={howTo !== null}
+        onClose={() => setHowTo(null)}
+        title={
+          howTo === 'folder'
+            ? 'How to create a workspace folder'
+            : howTo === 'permissions'
+              ? 'How to grant Can Manage permission'
+              : ''
+        }
+        width="max-w-3xl"
+      >
+        {howTo === 'folder' && (
+          <div className="space-y-3 text-sm">
+            <p>
+              Open the workspace browser at{' '}
+              <code className="rounded bg-muted px-1">
+                /Workspace/Users/{email || '<your email>'}/
+              </code>
+              , click <strong>Create → Folder</strong>, and type{' '}
+              <code className="rounded bg-muted px-1">{folderValue}</code>.
+            </p>
+            <img
+              src="/demo_new_folder.gif"
+              alt="Create a new workspace folder"
+              className="w-full rounded-md border border-border"
+            />
+          </div>
+        )}
+        {howTo === 'permissions' && (
+          <div className="space-y-3 text-sm">
+            <p>
+              Navigate to the folder you just created, click the <strong>Share</strong> button on
+              the top right, paste the app service principal id below, and pick{' '}
+              <strong>Can Manage</strong>.
+            </p>
+            <pre className="overflow-auto rounded bg-muted p-2 text-xs">
+              {appSpId ?? '(app service principal id not available)'}
+            </pre>
+            <img
+              src="/set_permissions.gif"
+              alt="Grant Can Manage permission to the service principal"
+              className="w-full rounded-md border border-border"
+            />
+          </div>
+        )}
+      </Dialog>
     </div>
   )
 }

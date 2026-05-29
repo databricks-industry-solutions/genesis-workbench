@@ -26,6 +26,8 @@ class AlphaFoldRun:
     protein_sequence: str
     start_time_ms: int | None
     status: str
+    # Workspace UI link to the dispatched AlphaFold job's run page.
+    run_url: str = ""
 
 
 def start_run_alphafold_job(
@@ -87,10 +89,14 @@ def _search_runs(user_email: str) -> tuple[dict[str, str], pd.DataFrame]:
 def _df_to_runs(experiments: dict[str, str], df: pd.DataFrame) -> list[AlphaFoldRun]:
     if df.empty:
         return []
+    from app.services.databricks_links import job_run_url
+
     df = df.copy()
     df["experiment_name"] = df["experiment_id"].map(experiments)
+    job_id = os.environ.get("RUN_ALPHAFOLD_JOB_ID", "")
     out: list[AlphaFoldRun] = []
     for _, r in df.iterrows():
+        job_run_id = str(r.get("tags.job_run_id", "") or "")
         out.append(
             AlphaFoldRun(
                 run_id=str(r["run_id"]),
@@ -101,6 +107,7 @@ def _df_to_runs(experiments: dict[str, str], df: pd.DataFrame) -> list[AlphaFold
                 if pd.notna(r.get("start_time"))
                 else None,
                 status=str(r.get("tags.job_status", "unknown")),
+                run_url=job_run_url(job_id, job_run_id),
             )
         )
     return out

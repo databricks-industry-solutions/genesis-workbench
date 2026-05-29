@@ -1,6 +1,11 @@
 import { Tabs } from '@/components/Tabs'
+import { AdmetSafetyTab } from '@/components/AdmetSafetyTab'
 import { DeployedModelsTab } from '@/components/DeployedModelsTab'
-import { WorkflowComingSoon } from '@/components/WorkflowComingSoon'
+import { EnzymeOptimizationTab } from '@/components/EnzymeOptimizationTab'
+import { LigandBinderDesignTab } from '@/components/LigandBinderDesignTab'
+import { MolecularDockingTab } from '@/components/MolecularDockingTab'
+import { MotifScaffoldingTab } from '@/components/MotifScaffoldingTab'
+import { ProteinBinderDesignTab } from '@/components/ProteinBinderDesignTab'
 
 export function SmallMoleculesPage() {
   return (
@@ -13,32 +18,32 @@ export function SmallMoleculesPage() {
           {
             id: 'docking',
             label: 'Molecular Docking',
-            content: <WorkflowComingSoon name="Molecular Docking" />,
+            content: <MolecularDockingTab />,
           },
           {
             id: 'binder_design',
             label: 'Protein Binder Design',
-            content: <WorkflowComingSoon name="Protein Binder Design" />,
+            content: <ProteinBinderDesignTab />,
           },
           {
             id: 'ligand_binder',
             label: 'Ligand Binder Design',
-            content: <WorkflowComingSoon name="Ligand Binder Design" />,
+            content: <LigandBinderDesignTab />,
           },
           {
             id: 'motif_scaffolding',
             label: 'Motif Scaffolding',
-            content: <WorkflowComingSoon name="Motif Scaffolding" />,
+            content: <MotifScaffoldingTab />,
           },
           {
             id: 'enzyme_optimization',
             label: 'Guided Enzyme Optimization',
-            content: <WorkflowComingSoon name="Guided Enzyme Optimization" />,
+            content: <EnzymeOptimizationTab />,
           },
           {
             id: 'admet',
             label: 'ADMET & Safety',
-            content: <WorkflowComingSoon name="ADMET & Safety" />,
+            content: <AdmetSafetyTab />,
           },
           { id: 'models', label: 'Deployed Models', content: <DeployedModelsTab module="small_molecule" /> },
         ]}

@@ -1,6 +1,9 @@
 import { Tabs } from '@/components/Tabs'
 import { DeployedModelsTab } from '@/components/DeployedModelsTab'
-import { WorkflowComingSoon } from '@/components/WorkflowComingSoon'
+import { GwasTab } from '@/components/GwasTab'
+import { VariantAnnotationTab } from '@/components/VariantAnnotationTab'
+import { VariantCallingTab } from '@/components/VariantCallingTab'
+import { VcfIngestionTab } from '@/components/VcfIngestionTab'
 
 export function DiseaseBiologyPage() {
   return (
@@ -13,20 +16,28 @@ export function DiseaseBiologyPage() {
           {
             id: 'variant_calling',
             label: 'Variant Calling',
-            content: <WorkflowComingSoon name="Variant Calling" />,
+            content: <VariantCallingTab />,
           },
-          { id: 'gwas', label: 'GWAS', content: <WorkflowComingSoon name="GWAS Analysis" /> },
+          {
+            id: 'gwas',
+            label: 'GWAS',
+            content: <GwasTab />,
+          },
           {
             id: 'ingestion',
             label: 'VCF Ingestion',
-            content: <WorkflowComingSoon name="VCF Ingestion" />,
+            content: <VcfIngestionTab />,
           },
           {
             id: 'annotation',
             label: 'Variant Annotation',
-            content: <WorkflowComingSoon name="Variant Annotation" />,
+            content: <VariantAnnotationTab />,
           },
-          { id: 'models', label: 'Deployed Models', content: <DeployedModelsTab module="disease_biology" /> },
+          {
+            id: 'models',
+            label: 'Deployed Models',
+            content: <DeployedModelsTab module="disease_biology" />,
+          },
         ]}
       />
     </div>

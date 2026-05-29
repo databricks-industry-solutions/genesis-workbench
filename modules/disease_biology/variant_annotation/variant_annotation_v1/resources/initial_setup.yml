@@ -22,7 +22,11 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/initialize.py
           max_retries: 0
-          timeout_seconds: 600
+          # Bumped from 600s — fresh installs do pip install on serverless
+          # (slow cold-pull) plus a ~3 GB FTP download of the sample FASTQs
+          # from 1000 Genomes, which routinely runs past the 10 min budget.
+          # Re-runs short-circuit on the `os.path.exists` guards.
+          timeout_seconds: 1800
 
       environments:
         - environment_key: default

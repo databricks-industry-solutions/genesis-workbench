@@ -72,111 +72,125 @@ export function InverseFoldingTab() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold">Inverse Folding with ProteinMPNN</h3>
+        <h3 className="text-sm font-semibold">Design Sequences for a Backbone</h3>
         <p className="text-xs text-muted-foreground">
           Given a protein backbone (PDB), generate new amino-acid sequences predicted to fold into
           that structure. Each design is then validated by ESMFold.
         </p>
       </div>
 
-      <div className="flex flex-col gap-3 md:flex-row md:items-end">
-        <div className="flex-1">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,420px)_1fr]">
+        {/* Left: form + design selector */}
+        <div className="space-y-3">
           <label className="block text-xs">
             <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
               PDB content
             </span>
             <textarea
-              rows={8}
+              rows={10}
               value={pdb}
               onChange={(e) => setPdb(e.target.value)}
               placeholder="Paste a PDB starting with ATOM records"
-              className="w-full rounded-md border border-border bg-background p-3 font-mono text-[11px]"
+              className="w-full rounded-md border border-border bg-background p-3 font-mono text-[11px] leading-tight"
             />
           </label>
+          <div className="flex gap-2">
+            <button
+              onClick={() => design.mutate()}
+              disabled={!canDesign}
+              className="flex-1 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+            >
+              {design.isPending ? 'Designing…' : 'Design Sequences'}
+            </button>
+            <button
+              onClick={() => {
+                design.reset()
+                setSelectedIdx(0)
+              }}
+              disabled={!design.data && !design.isError}
+              className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent disabled:opacity-50"
+            >
+              Clear
+            </button>
+          </div>
+
+          {sequences.length > 0 && (
+            <div className="space-y-2 rounded-md border border-border bg-card p-3">
+              <label className="block text-xs">
+                <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
+                  Select design
+                </span>
+                <select
+                  value={selectedIdx}
+                  onChange={(e) => setSelectedIdx(parseInt(e.target.value))}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                >
+                  {sequences.map((_, i) => (
+                    <option key={i} value={i}>
+                      Design {i + 1}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="text-[11px] text-muted-foreground">
+                {sequences.length} designs returned by ProteinMPNN
+              </div>
+              <div>
+                <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Sequence
+                </div>
+                <pre className="max-h-40 overflow-auto rounded-md border border-border bg-muted/30 p-2 font-mono text-[10px] leading-tight">
+                  {selectedSeq}
+                </pre>
+              </div>
+            </div>
+          )}
         </div>
-        <div className="flex flex-col gap-2">
-          <button
-            onClick={() => design.mutate()}
-            disabled={!canDesign}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
-          >
-            {design.isPending ? 'Designing…' : 'Design Sequences'}
-          </button>
-          <button
-            onClick={() => {
-              design.reset()
-              setSelectedIdx(0)
-            }}
-            disabled={!design.data && !design.isError}
-            className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent disabled:opacity-50"
-          >
-            Clear
-          </button>
+
+        {/* Right: progress + viewer */}
+        <div className="space-y-3">
+          <WorkflowProgress
+            active={design.isPending}
+            title="ProteinMPNN inverse-folding"
+            stages={[{ label: 'Designing sequences for backbone', estSeconds: 8 }]}
+          />
+
+          {design.error && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {String(design.error)}
+            </div>
+          )}
+
+          {sequences.length > 0 ? (
+            <>
+              <h4 className="text-sm font-medium">
+                Validated structure (ESMFold) — Design {selectedIdx + 1}
+              </h4>
+              <WorkflowProgress
+                active={fold.isLoading}
+                title={`Folding Design ${selectedIdx + 1}`}
+                stages={[{ label: 'Predicting structure with ESMFold', estSeconds: 12 }]}
+              />
+              {fold.error ? (
+                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200">
+                  ESMFold failed: {String(fold.error)}
+                </div>
+              ) : fold.data ? (
+                <MolstarViewer viewerHtml={fold.data.viewer_html} height={520} />
+              ) : null}
+            </>
+          ) : (
+            !design.isPending &&
+            !design.error && (
+              <div className="rounded-md border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+                Paste a backbone PDB and run Design Sequences. ProteinMPNN returns candidate
+                sequences for that backbone; each one is then auto-folded by ESMFold and shown
+                here.
+              </div>
+            )
+          )}
         </div>
       </div>
-
-      <WorkflowProgress
-        active={design.isPending}
-        title="ProteinMPNN inverse-folding"
-        stages={[{ label: 'Designing sequences for backbone', estSeconds: 8 }]}
-      />
-
-      {design.error && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-          {String(design.error)}
-        </div>
-      )}
-
-      {sequences.length > 0 && (
-        <section className="space-y-4 border-t border-border pt-4">
-          <div className="flex items-center gap-3">
-            <label className="text-xs">
-              <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
-                Select design
-              </span>
-              <select
-                value={selectedIdx}
-                onChange={(e) => setSelectedIdx(parseInt(e.target.value))}
-                className="rounded-md border border-border bg-background px-3 py-2 text-sm"
-              >
-                {sequences.map((_, i) => (
-                  <option key={i} value={i}>
-                    Design {i + 1}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <span className="text-xs text-muted-foreground">
-              {sequences.length} designs returned by ProteinMPNN
-            </span>
-          </div>
-
-          <div>
-            <div className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
-              Sequence — Design {selectedIdx + 1}
-            </div>
-            <pre className="overflow-x-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs">
-              {selectedSeq}
-            </pre>
-          </div>
-
-          <div>
-            <h4 className="mb-2 text-sm font-medium">Validated structure (ESMFold)</h4>
-            <WorkflowProgress
-              active={fold.isLoading}
-              title={`Folding Design ${selectedIdx + 1}`}
-              stages={[{ label: 'Predicting structure with ESMFold', estSeconds: 12 }]}
-            />
-            {fold.error ? (
-              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200">
-                ESMFold failed: {String(fold.error)}
-              </div>
-            ) : fold.data ? (
-              <MolstarViewer viewerHtml={fold.data.viewer_html} height={500} />
-            ) : null}
-          </div>
-        </section>
-      )}
     </div>
   )
 }

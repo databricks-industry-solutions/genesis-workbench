@@ -163,6 +163,7 @@ export type AlphaFoldRun = {
   protein_sequence: string
   start_time_ms: number | null
   status: string
+  run_url: string
 }
 
 export type AlphaFoldSearchResponse = { runs: AlphaFoldRun[] }
@@ -176,6 +177,10 @@ export type SequenceHit = {
   identity_pct: number
   sw_score: number
   alignment_length: number
+  /** Fraction of the query that was aligned, 0-100. */
+  query_coverage_pct: number
+  /** Composite ranking score = identity_pct × (coverage / 100). */
+  similarity_score: number
   vector_distance: number
   aligned_query: string
   aligned_comp: string
@@ -387,4 +392,328 @@ export type PerturbationResponse = {
   summary_total_genes: number
   summary_max_abs_delta: number
   summary_significant_count: number
+}
+
+// ─── Small Molecules ──────────────────────────────────────────────────────
+
+export type DockingExampleResponse = {
+  smiles: string
+  pdb: string
+}
+
+export type DockingPose = {
+  rank: number
+  confidence: number
+  ligand_sdf: string
+  viewer_html: string
+  error: string | null
+}
+
+export type MolecularDockingResponse = {
+  poses: DockingPose[]
+  experiment_id: string
+  run_id: string
+  n_success: number
+}
+
+export type BinderDesign = {
+  sample_id: string
+  sequence: string
+  rewards: number
+  esmfold_validated: boolean
+  viewer_html_binder_only: string | null
+  viewer_html_with_target: string | null
+}
+
+export type BinderDesignResponse = {
+  designs: BinderDesign[]
+  target_pdb: string
+  target_only_viewer_html: string
+  experiment_id: string
+  run_id: string
+  warnings: string[]
+}
+
+export type LigandBinderDesign = {
+  sample_id: string
+  sequence: string
+  rewards: number
+  esmfold_validated: boolean
+  dock_confidence: number | null
+  viewer_html_ca_backbone: string | null
+  viewer_html_esmfold: string | null
+  viewer_html_ca_plus_dock: string | null
+  viewer_html_esmfold_plus_dock: string | null
+}
+
+export type LigandBinderDesignResponse = {
+  designs: LigandBinderDesign[]
+  ligand_pdb: string
+  experiment_id: string
+  run_id: string
+  warnings: string[]
+}
+
+export type MotifScaffold = {
+  sample_id: string
+  sequence: string
+  mpnn_sequence: string | null
+  rewards: number
+  esmfold_validated: boolean
+  viewer_html: string | null
+}
+
+export type MotifScaffoldingResponse = {
+  scaffolds: MotifScaffold[]
+  motif_pdb: string
+  experiment_id: string
+  run_id: string
+  warnings: string[]
+}
+
+export type AdmetResponse = {
+  smiles: string[]
+  bbbp: (number | null)[] | null
+  clintox: (number | null)[] | null
+  /** Per-molecule dict keyed by ADMET task name. */
+  admet: Record<string, number | null>[] | null
+  experiment_id: string
+  run_id: string
+  warnings: string[]
+}
+
+// ─── Enzyme Optimization ──────────────────────────────────────────────────
+
+export type EnzymeRefRow = {
+  sequence: string
+  half_life_hours: number
+  cell_system: string
+}
+
+export type EnzymeOptimizationStartRequest = {
+  motif_pdb: string
+  motif_residues: number[]
+  target_chain: string
+  scaffold_length_min: number
+  scaffold_length_max: number
+  num_samples: number
+  num_iterations: number
+  weights: Record<string, number>
+  substrate_smiles: string
+  references: EnzymeRefRow[]
+  half_life_margin: number
+  resampling_temperature: number
+  strategy: 'resample' | 'noop'
+  run_proteinmpnn: boolean
+  convergence_threshold: number | null
+  convergence_window: number
+  target_reward: number | null
+  best_k_target: number | null
+  best_k_threshold: number | null
+  use_inprocess_ame: boolean
+  mlflow_experiment: string
+  mlflow_run_name: string
+}
+
+export type EnzymeOptimizationStartResponse = {
+  job_id: number
+  job_run_id: number
+  mlflow_run_id: string
+  experiment_id: string
+  run_url: string
+}
+
+export type EnzymeRunRow = {
+  run_id: string
+  run_name: string
+  experiment_name: string
+  generation_mode: string
+  iter_max_reward: number | null
+  iterations_completed: number | null
+  start_time_ms: number | null
+  job_status: string
+  progress: string
+  /** Workspace UI link to the dispatched orchestrator-job run. */
+  run_url: string
+}
+
+export type EnzymeSearchResponse = { runs: EnzymeRunRow[] }
+
+export type EnzymeRewardHistoryPoint = { step: number; value: number }
+
+export type EnzymeStatusResponse = {
+  status: string
+  job_status: string
+  run_name: string
+  experiment_id: string
+  iter_max_reward_history: EnzymeRewardHistoryPoint[]
+  iter_mean_reward_history: EnzymeRewardHistoryPoint[]
+  current_metrics: Record<string, number>
+  trajectory: Record<string, number | string | null>[]
+}
+
+export type EnzymeCandidate = {
+  candidate_id: string
+  pdb: string
+  viewer_html: string
+}
+
+export type EnzymeTopKResponse = { candidates: EnzymeCandidate[] }
+
+export type EnzymeSmokeTestResponse = {
+  sequence: string
+  solubility: number | null
+  half_life: number | null
+  thermostab: number | null
+  immuno: number | null
+}
+
+export type EnzymeDefaultsResponse = {
+  motif_pdb: string
+  default_weights: Record<string, number>
+  default_references: EnzymeRefRow[]
+}
+
+// ─── Disease Biology ──────────────────────────────────────────────────────
+
+export type DBRunRow = {
+  run_id: string
+  run_name: string
+  experiment_name: string
+  status: string
+  progress: string
+  start_time_ms: number | null
+  detail: string
+  /** Workspace UI link to the dispatched job's run page; empty if unavailable. */
+  run_url: string
+}
+
+export type DBSearchResponse = { runs: DBRunRow[] }
+
+export type JobDispatchResponse = {
+  job_run_id: number
+  run_url: string
+}
+
+export type RunDetailsResponse = {
+  run_name: string
+  experiment_id: string
+  status: string
+  job_status: string
+  job_run_id: string
+  params: Record<string, string>
+  tags: Record<string, string>
+}
+
+export type VariantCallingStartRequest = {
+  fastq_r1: string
+  fastq_r2: string
+  reference_genome_path: string
+  output_volume_path: string
+  mlflow_experiment: string
+  mlflow_run_name: string
+}
+
+export type VariantCallingPickerRow = {
+  run_id: string
+  run_name: string
+  experiment_name: string
+  output_vcf: string
+  start_time_ms: number | null
+}
+
+export type VariantCallingPickerResponse = { runs: VariantCallingPickerRow[] }
+
+export type GwasStartRequest = {
+  vcf_path: string
+  phenotype_path: string
+  phenotype_column: string
+  contigs: string
+  hwe_cutoff: string
+  pvalue_threshold: string
+  mlflow_experiment: string
+  mlflow_run_name: string
+}
+
+export type GwasHit = {
+  contig: string
+  position: number
+  pvalue: number
+  neg_log_pval: number | null
+  reference_allele: string
+  alternate_alleles: string
+  effect: number | null
+  phenotype: string | null
+}
+
+export type GwasResultsResponse = {
+  total_variants: number
+  significant_count: number
+  min_pvalue: number | null
+  top_hits: GwasHit[]
+  manhattan_points: { x: number; y: number }[]
+}
+
+export type VcfIngestionStartRequest = {
+  vcf_path: string
+  output_table_name: string
+  mlflow_experiment: string
+  mlflow_run_name: string
+}
+
+export type VcfIngestionPickerRow = {
+  run_id: string
+  run_name: string
+  experiment_name: string
+  output_table: string
+  start_time_ms: number | null
+}
+
+export type VcfIngestionPickerResponse = { runs: VcfIngestionPickerRow[] }
+
+export type VariantAnnotationStartRequest = {
+  variants_table: string
+  gene_regions: string
+  pathogenic_vcf_path: string
+  gene_panel_mode: 'custom' | 'acmg'
+  mlflow_experiment: string
+  mlflow_run_name: string
+}
+
+export type AnnotationVariant = {
+  gene: string
+  chromosome: string
+  position: number
+  ref: string
+  alt: string
+  zygosity: string | null
+  clinical_significance: string | null
+  disease_name: string | null
+  category: string | null
+  condition: string | null
+}
+
+export type VariantAnnotationResultsResponse = {
+  variants: AnnotationVariant[]
+  total: number
+}
+
+export type DiseaseBiologyDefaultsResponse = {
+  variant_calling: {
+    fastq_r1: string
+    fastq_r2: string
+    reference_genome_path: string
+    output_volume_path: string
+  }
+  gwas: {
+    vcf_path: string
+    phenotype_path: string
+    phenotype_column: string
+    contigs: string
+    hwe_cutoff: string
+    pvalue_threshold: string
+  }
+  vcf_ingestion: {
+    vcf_path: string
+  }
 }

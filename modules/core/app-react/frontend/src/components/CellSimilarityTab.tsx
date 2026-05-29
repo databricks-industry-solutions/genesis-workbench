@@ -63,7 +63,7 @@ export function CellSimilarityTab({ runId }: { runId: string | null }) {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold">Cell Similarity Search</h3>
+        <h3 className="text-sm font-semibold">Find Similar Cells in Reference</h3>
         <p className="text-xs text-muted-foreground">
           For each cell in the selected cluster, embed via the chosen foundation model and search
           its reference index for nearest neighbours. SCimilarity uses a 23M-cell pan-tissue

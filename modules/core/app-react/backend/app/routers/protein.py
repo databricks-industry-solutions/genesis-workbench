@@ -71,6 +71,7 @@ class AlphaFoldRun(BaseModel):
     protein_sequence: str
     start_time_ms: int | None
     status: str
+    run_url: str = ""
 
 
 class AlphaFoldSearchResponse(BaseModel):
@@ -144,6 +145,7 @@ def alphafold_search(
                 protein_sequence=r.protein_sequence,
                 start_time_ms=r.start_time_ms,
                 status=r.status,
+                run_url=r.run_url,
             )
             for r in rows
         ]
@@ -167,6 +169,10 @@ def alphafold_result(
 class SequenceSearchRequest(BaseModel):
     sequence: str = Field(..., min_length=1)
     top_k: int = Field(50, ge=1, le=500)
+    # Drop hits whose aligned-query coverage is below this %. Default 0 = no
+    # filter (preserves the historical behaviour); the UI defaults to 30%
+    # for long queries.
+    min_coverage_pct: float = Field(0.0, ge=0.0, le=100.0)
 
 
 class SequenceHit(BaseModel):
@@ -176,6 +182,8 @@ class SequenceHit(BaseModel):
     identity_pct: float
     sw_score: int
     alignment_length: int
+    query_coverage_pct: float
+    similarity_score: float
     vector_distance: float
     aligned_query: str
     aligned_comp: str
@@ -200,7 +208,11 @@ def sequence_search(payload: SequenceSearchRequest, _: CurrentUserDep) -> Sequen
     if not sequence:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Empty sequence")
     try:
-        hits = seq_search.run_sequence_search(sequence, top_k=payload.top_k)
+        hits = seq_search.run_sequence_search(
+            sequence,
+            top_k=payload.top_k,
+            min_coverage_pct=payload.min_coverage_pct,
+        )
     except Exception as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Sequence search failed: {e}")
     return SequenceSearchResponse(
@@ -212,6 +224,8 @@ def sequence_search(payload: SequenceSearchRequest, _: CurrentUserDep) -> Sequen
                 identity_pct=h.identity_pct,
                 sw_score=h.sw_score,
                 alignment_length=h.alignment_length,
+                query_coverage_pct=h.query_coverage_pct,
+                similarity_score=h.similarity_score,
                 vector_distance=h.vector_distance,
                 aligned_query=h.aligned_query,
                 aligned_comp=h.aligned_comp,
@@ -235,7 +249,10 @@ def sequence_search_stream(payload: SequenceSearchRequest, _: CurrentUserDep):
 
     def work(progress_cb):
         hits = seq_search.run_sequence_search(
-            sequence, top_k=payload.top_k, progress_callback=progress_cb
+            sequence,
+            top_k=payload.top_k,
+            min_coverage_pct=payload.min_coverage_pct,
+            progress_callback=progress_cb,
         )
         return {
             "hits": [
@@ -246,6 +263,8 @@ def sequence_search_stream(payload: SequenceSearchRequest, _: CurrentUserDep):
                     "identity_pct": h.identity_pct,
                     "sw_score": h.sw_score,
                     "alignment_length": h.alignment_length,
+                    "query_coverage_pct": h.query_coverage_pct,
+                    "similarity_score": h.similarity_score,
                     "vector_distance": h.vector_distance,
                     "aligned_query": h.aligned_query,
                     "aligned_comp": h.aligned_comp,

@@ -56,7 +56,26 @@ export function AlphaFoldPanel() {
 
   const columns = useMemo<ColumnDef<AlphaFoldRun, unknown>[]>(
     () => [
-      { id: 'run_name', header: 'Run Name', accessorKey: 'run_name' },
+      {
+        id: 'run_name',
+        header: 'Run Name',
+        cell: (ctx) => {
+          const r = ctx.row.original
+          return r.run_url ? (
+            <a
+              href={r.run_url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary hover:underline"
+              title="Open Databricks run page"
+            >
+              {r.run_name}
+            </a>
+          ) : (
+            r.run_name
+          )
+        },
+      },
       { id: 'experiment_name', header: 'Experiment', accessorKey: 'experiment_name' },
       {
         id: 'protein_sequence',
@@ -178,7 +197,7 @@ export function AlphaFoldPanel() {
                 key={m}
                 onClick={() => setSearchMode(m)}
                 className={cn(
-                  'rounded-md border px-3 py-1.5 text-xs transition-colors',
+                  'rounded-md border px-3 py-2 text-sm transition-colors',
                   m === searchMode
                     ? 'border-primary bg-primary/10 text-primary'
                     : 'border-border text-muted-foreground hover:bg-accent',

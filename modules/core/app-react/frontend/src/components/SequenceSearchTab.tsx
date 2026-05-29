@@ -41,15 +41,18 @@ export function SequenceSearchTab() {
   const [sequence, setSequence] = useState(EXAMPLE_SEQUENCE)
   const [fastaName, setFastaName] = useState<string | null>(null)
   const [topK, setTopK] = useState(50)
+  const [minCoverage, setMinCoverage] = useState(30)
   const [viewing, setViewing] = useState<SequenceHit | null>(null)
+  const [showHelp, setShowHelp] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const search = useSseMutation<
-    { sequence: string; top_k: number },
+    { sequence: string; top_k: number; min_coverage_pct: number },
     SequenceSearchResponse
   >('/api/protein_studies/sequence_search/stream')
 
-  const runSearch = () => search.start({ sequence, top_k: topK })
+  const runSearch = () =>
+    search.start({ sequence, top_k: topK, min_coverage_pct: minCoverage })
 
   const cleanSeq = useMemo(
     () => sequence.replace(/\s/g, '').toUpperCase(),
@@ -73,6 +76,22 @@ export function SequenceSearchTab() {
 
   const columns = useMemo<ColumnDef<SequenceHit, unknown>[]>(
     () => [
+      {
+        id: 'similarity_score',
+        header: 'Similarity',
+        accessorFn: (r) => r.similarity_score.toFixed(1),
+        meta: { thClass: 'min-w-[80px]' },
+      },
+      {
+        id: 'identity_pct',
+        header: 'Identity %',
+        accessorFn: (r) => r.identity_pct.toFixed(1),
+      },
+      {
+        id: 'query_coverage_pct',
+        header: 'Coverage %',
+        accessorFn: (r) => r.query_coverage_pct.toFixed(0),
+      },
       { id: 'seq_id', header: 'Seq ID', accessorKey: 'seq_id' },
       {
         id: 'description',
@@ -81,15 +100,11 @@ export function SequenceSearchTab() {
           const d = ctx.row.original.description
           return d.length > 80 ? d.slice(0, 80) + '…' : d
         },
+        meta: { thClass: 'min-w-[280px]', tdClass: 'whitespace-normal' },
       },
-      {
-        id: 'identity_pct',
-        header: 'Identity %',
-        accessorFn: (r) => r.identity_pct.toFixed(1),
-      },
-      { id: 'sw_score', header: 'SW Score', accessorKey: 'sw_score' },
-      { id: 'alignment_length', header: 'Aln Len', accessorKey: 'alignment_length' },
       { id: 'seq_length', header: 'Seq Len', accessorKey: 'seq_length' },
+      { id: 'alignment_length', header: 'Aln Len', accessorKey: 'alignment_length' },
+      { id: 'sw_score', header: 'SW Score', accessorKey: 'sw_score' },
       {
         id: 'vector_distance',
         header: 'Vec Dist',
@@ -116,7 +131,7 @@ export function SequenceSearchTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-baseline justify-between">
-        <h3 className="text-sm font-semibold">Sequence Similarity Search</h3>
+        <h3 className="text-sm font-semibold">Find Similar Protein Sequences</h3>
         <span className="text-xs text-muted-foreground">
           BLAST-like search: ESM-2 embeddings + Vector Search + Smith-Waterman alignment
         </span>
@@ -195,6 +210,23 @@ export function SequenceSearchTab() {
               ))}
             </select>
           </label>
+          <label
+            className="block text-xs"
+            title="Drops candidates whose Smith-Waterman alignment covers less than this fraction of the query — keeps small fragment hits out of the top-K. Set to 0 to disable."
+          >
+            <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
+              Min coverage %
+            </span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={5}
+              value={minCoverage}
+              onChange={(e) => setMinCoverage(parseInt(e.target.value || '0'))}
+              className="w-24 rounded-md border border-border bg-background px-3 py-2 text-sm"
+            />
+          </label>
           <button
             onClick={runSearch}
             disabled={!canSearch}
@@ -229,11 +261,20 @@ export function SequenceSearchTab() {
       {search.data && (
         <section className="space-y-3 border-t border-border pt-4">
           <div className="flex items-baseline justify-between">
-            <h4 className="text-sm font-medium">
+            <h4 className="flex items-center gap-2 text-sm font-medium">
               Results — {search.data.hits.length} hits
+              <button
+                type="button"
+                onClick={() => setShowHelp(true)}
+                className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                aria-label="About the search and the result columns"
+                title="What do these columns mean?"
+              >
+                i
+              </button>
             </h4>
             <span className="text-xs text-muted-foreground">
-              Sorted by Smith-Waterman score
+              Sorted by similarity (identity × coverage)
             </span>
           </div>
           {search.data.hits.length === 0 ? (
@@ -253,6 +294,15 @@ export function SequenceSearchTab() {
         width="max-w-5xl"
       >
         {viewing && <HitDetail hit={viewing} />}
+      </Dialog>
+
+      <Dialog
+        open={showHelp}
+        onClose={() => setShowHelp(false)}
+        title="About sequence search"
+        width="max-w-2xl"
+      >
+        <SequenceSearchHelp />
       </Dialog>
     </div>
   )
@@ -285,9 +335,9 @@ function HitDetail({ hit }: { hit: SequenceHit }) {
       </div>
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+        <Metric label="Similarity" value={hit.similarity_score.toFixed(1)} />
         <Metric label="Identity" value={`${hit.identity_pct}%`} />
-        <Metric label="SW Score" value={String(hit.sw_score)} />
-        <Metric label="Alignment Length" value={String(hit.alignment_length)} />
+        <Metric label="Query coverage" value={`${hit.query_coverage_pct.toFixed(0)}%`} />
         <Metric label="Seq Length" value={String(hit.seq_length)} />
       </div>
 
@@ -337,4 +387,95 @@ function chunkAlignment(query: string, comp: string, target: string, chunk = 60)
     lines.push('')
   }
   return lines.join('\n')
+}
+
+function SequenceSearchHelp() {
+  const columns: { label: string; desc: string }[] = [
+    {
+      label: 'Similarity',
+      desc: 'Composite score = Identity % × (Coverage / 100). 0–100, higher is better. Primary sort key.',
+    },
+    {
+      label: 'Identity %',
+      desc: 'Fraction of aligned residues that match exactly, over the aligned region only.',
+    },
+    {
+      label: 'Coverage %',
+      desc: 'Fraction of the QUERY sequence that was aligned (gaps excluded). Penalises hits that match only a tiny window of the query.',
+    },
+    { label: 'Seq ID', desc: 'Database identifier for the matched sequence.' },
+    { label: 'Description', desc: 'FASTA header / annotation for the matched sequence in the reference.' },
+    {
+      label: 'Seq Len',
+      desc: 'Total length of the matched target sequence (not just the aligned region).',
+    },
+    {
+      label: 'Aln Len',
+      desc: 'Length of the Smith-Waterman local alignment (including gap characters).',
+    },
+    {
+      label: 'SW Score',
+      desc: 'Raw Smith-Waterman score (BLOSUM62, gap_open=11, gap_extend=1). Tiebreaker for ranking.',
+    },
+    {
+      label: 'Vec Dist',
+      desc: 'Cosine-ish distance between query and target ESM-2 embeddings — what the vector-search stage ranked by before alignment.',
+    },
+  ]
+
+  return (
+    <div className="space-y-4 text-sm">
+      <section>
+        <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Search technique — Hybrid funnel
+        </h3>
+        <ol className="list-decimal space-y-1 pl-5 text-xs">
+          <li>
+            <strong>ESM-2 embed</strong> the query sequence to a fixed-length vector.
+          </li>
+          <li>
+            <strong>Vector Search ANN</strong> over the UniRef-derived{' '}
+            <code>sequence_embedding_index</code> for the top-K nearest candidates (K = 10×
+            your Max-results).
+          </li>
+          <li>
+            <strong>Fetch</strong> the candidate sequences from the Delta reference.
+          </li>
+          <li>
+            <strong>Smith-Waterman</strong> local alignment via parasail (BLOSUM62) of the
+            query against each candidate.
+          </li>
+          <li>
+            <strong>Filter + rank</strong>: drop hits below the Min-coverage threshold, then
+            sort by Similarity descending (SW Score breaks ties).
+          </li>
+        </ol>
+      </section>
+
+      <section>
+        <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Sort order
+        </h3>
+        <p className="text-xs">
+          Results are sorted by <strong>Similarity</strong> (Identity % × Coverage / 100)
+          descending — short fragment hits with perfect identity but tiny coverage rank
+          below longer hits that span most of the query. SW Score is the tiebreaker.
+        </p>
+      </section>
+
+      <section>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Column definitions
+        </h3>
+        <dl className="grid grid-cols-1 gap-x-4 gap-y-2 md:grid-cols-[120px,1fr]">
+          {columns.map((c) => (
+            <div key={c.label} className="contents">
+              <dt className="font-medium text-foreground">{c.label}</dt>
+              <dd className="text-xs text-muted-foreground">{c.desc}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+    </div>
+  )
 }

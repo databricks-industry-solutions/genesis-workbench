@@ -19,6 +19,10 @@ class ProfileSaveRequest(BaseModel):
     mlflow_experiment_folder: str = Field(..., min_length=1)
 
 
+class ThemeSaveRequest(BaseModel):
+    theme: str = Field(..., pattern=r"^(dark|light)$")
+
+
 class MlflowTestRequest(BaseModel):
     mlflow_experiment_folder: str
 
@@ -62,18 +66,33 @@ def save_profile(payload: ProfileSaveRequest, user: CurrentUserDep) -> ProfileRe
             f"MLflow folder access failed. Confirm the folder exists and the app service principal has Can Manage. ({e})",
         )
 
-    workbench.save_user_settings(
-        user_email=user.email,
-        user_settings={
-            "user_display_name": payload.user_display_name,
-            "mlflow_experiment_folder": payload.mlflow_experiment_folder,
-            "setup_done": "Y",
-        },
-    )
+    # Merge with existing settings so user-set values that aren't part of
+    # this form (e.g. `theme`) aren't dropped by the underlying full
+    # delete+insert in save_user_settings.
+    existing = workbench.get_user_settings(user_email=user.email)
+    merged = {
+        **existing,
+        "user_display_name": payload.user_display_name,
+        "mlflow_experiment_folder": payload.mlflow_experiment_folder,
+        "setup_done": "Y",
+    }
+    workbench.save_user_settings(user_email=user.email, user_settings=merged)
     return ProfileResponse(
         email=user.email,
         user_settings=workbench.get_user_settings(user_email=user.email),
     )
+
+
+@router.put("/profile/theme", response_model=ProfileResponse)
+def save_theme(payload: ThemeSaveRequest, user: CurrentUserDep) -> ProfileResponse:
+    """Persist the user's UI theme preference without disturbing the rest
+    of their profile (display name, MLflow folder, setup_done flag)."""
+    if not user.email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "User email missing from headers")
+    existing = workbench.get_user_settings(user_email=user.email)
+    merged = {**existing, "theme": payload.theme}
+    workbench.save_user_settings(user_email=user.email, user_settings=merged)
+    return ProfileResponse(email=user.email, user_settings=merged)
 
 
 @router.post("/mlflow/test", response_model=MlflowTestResponse)

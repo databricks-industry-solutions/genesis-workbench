@@ -1,8 +1,9 @@
+from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.serving import ChatMessage, ChatMessageRole
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.auth import WorkspaceClientDep
+from app.auth import CurrentUserDep
 from app.config import get_settings
 from app.services import docs as docs_service
 
@@ -43,7 +44,7 @@ def _build_doc_context() -> str:
 
 
 @router.post("/query", response_model=AssistantQueryResponse)
-def query(payload: AssistantQueryRequest, w: WorkspaceClientDep) -> AssistantQueryResponse:
+def query(payload: AssistantQueryRequest, _: CurrentUserDep) -> AssistantQueryResponse:
     endpoint = get_settings().llm_endpoint_name
     if not endpoint:
         raise HTTPException(
@@ -60,6 +61,9 @@ Keep your response concise — use bullet points with workflow names in bold.
 Available workflows:
 {_build_doc_context()}"""
 
+    # App SP — user OBO tokens lack the model-serving scope. Authentication
+    # check happens via the CurrentUserDep dependency above.
+    w = WorkspaceClient()
     try:
         response = w.serving_endpoints.query(
             name=endpoint,

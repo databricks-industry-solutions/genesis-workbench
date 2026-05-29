@@ -5,11 +5,14 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
 import { Tabs } from '@/components/Tabs'
+import { useThemeStore, type Theme } from '@/stores/theme'
+import { useUserStore } from '@/stores/user'
 import type {
   BatchModelRow,
   EndpointRow,
   SettingRow,
 } from '@/types/api'
+import { cn } from '@/lib/utils'
 
 function titleCase(s: string): string {
   return s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
@@ -233,11 +236,79 @@ export function SettingsPage() {
       </header>
       <Tabs
         tabs={[
+          { id: 'appearance', label: 'Appearance', content: <AppearanceTab /> },
           { id: 'general', label: 'General', content: <GeneralTab /> },
           { id: 'endpoints', label: 'Endpoint Management', content: <EndpointTab /> },
           { id: 'batch', label: 'Batch Models', content: <BatchModelsTab /> },
         ]}
       />
+    </div>
+  )
+}
+
+function AppearanceTab() {
+  const theme = useThemeStore((s) => s.theme)
+  const setTheme = useThemeStore((s) => s.setTheme)
+  const setUserSettings = useUserStore((s) => s.setUserSettings)
+  const qc = useQueryClient()
+
+  const save = useMutation({
+    mutationFn: (t: Theme) => api.saveTheme(t),
+    onSuccess: (resp) => {
+      setUserSettings(resp.user_settings)
+      // Bootstrap caches user_settings — keep them in sync.
+      qc.invalidateQueries({ queryKey: ['bootstrap'] })
+    },
+  })
+
+  const pickTheme = (t: Theme) => {
+    // Optimistic local update so the UI flips instantly; server save races
+    // in the background. localStorage persistence still acts as a fallback
+    // if the request fails (the user_settings table just won't update).
+    setTheme(t)
+    save.mutate(t)
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold">Theme</h3>
+        <p className="text-xs text-muted-foreground">
+          Saved to your account (the user_settings Delta table), so the preference follows you
+          across browsers and sessions. Note: a few Plotly charts still ship with dark-tuned
+          text + grid colours — that's a separate cleanup pass.
+        </p>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="flex gap-1">
+          {(['dark', 'light'] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => pickTheme(t)}
+              disabled={save.isPending}
+              className={cn(
+                'rounded-md border px-4 py-2 text-sm transition-colors',
+                theme === t
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border text-muted-foreground hover:bg-accent',
+                save.isPending && 'opacity-70',
+              )}
+            >
+              {t === 'dark' ? 'Dark' : 'Light'}
+            </button>
+          ))}
+        </div>
+        {save.isPending && (
+          <span className="text-xs text-muted-foreground">Saving…</span>
+        )}
+        {save.isSuccess && (
+          <span className="text-xs text-success">Saved.</span>
+        )}
+        {save.error && (
+          <span className="text-xs text-destructive">{String(save.error)}</span>
+        )}
+      </div>
     </div>
   )
 }

@@ -393,7 +393,7 @@ function SearchPastRuns({ onView }: { onView: (run: SingleCellRun) => void }) {
               type="button"
               onClick={() => setSearchMode(m)}
               className={cn(
-                'rounded-md border px-3 py-1.5 text-xs transition-colors',
+                'rounded-md border px-3 py-2 text-sm transition-colors',
                 m === searchMode
                   ? 'border-primary bg-primary/10 text-primary'
                   : 'border-border text-muted-foreground hover:bg-accent',
