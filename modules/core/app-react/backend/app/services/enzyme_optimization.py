@@ -176,6 +176,11 @@ def start_enzyme_optimization_job(
         mlflow.set_tag("origin", "genesis_workbench")
         mlflow.set_tag("feature", "enzyme_optimization")
         mlflow.set_tag("created_by", user_info.user_email)
+        # `job_status` is provisionally `submitted` so the search-past-runs
+        # table shows the dispatch as in-flight. If `jobs.run_now` raises
+        # below (e.g. CAN_MANAGE_RUN missing on the orchestrator job, UC
+        # WRITE missing on the motif volume), the except handler flips it
+        # to `failed` so the run doesn't sit at "Submitted" forever.
         mlflow.set_tag("job_status", "submitted")
         mlflow.log_param("generation_mode", "Accurate" if use_inprocess_ame else "Fast")
         mlflow.log_param("scaffold_length_min", scaffold_length_min)
@@ -183,41 +188,46 @@ def start_enzyme_optimization_job(
         mlflow.log_param("num_samples", num_samples)
         mlflow.log_param("num_iterations", num_iterations)
 
-        job_run = w.jobs.run_now(
-            job_id=job_id,
-            job_parameters={
-                "catalog": catalog,
-                "schema": schema,
-                "cache_dir": ORCHESTRATOR_VOLUME_DIR_NAME,
-                "sql_warehouse_id": os.environ.get("SQL_WAREHOUSE", ""),
-                "user_email": user_info.user_email,
-                "mlflow_experiment": mlflow_experiment,
-                "mlflow_run_name": mlflow_run_name,
-                "mlflow_run_id": mlflow_run_id,
-                "motif_pdb_path": motif_pdb_path,
-                "motif_residues_csv": ",".join(str(r) for r in motif_residues),
-                "target_chain": target_chain,
-                "scaffold_length_min": str(scaffold_length_min),
-                "scaffold_length_max": str(scaffold_length_max),
-                "num_samples": str(num_samples),
-                "num_iterations": str(num_iterations),
-                "substrate_smiles": substrate_smiles or "",
-                "references_json": json.dumps(references or []),
-                "half_life_margin": str(half_life_margin),
-                "weights_json": json.dumps({**DEFAULT_AXIS_WEIGHTS, **(weights or {})}),
-                "resampling_temperature": str(resampling_temperature),
-                "strategy": strategy,
-                "run_proteinmpnn": str(run_proteinmpnn).lower(),
-                "dev_user_prefix": os.environ.get("DEV_USER_PREFIX", "") or "",
-                "convergence_threshold": str(convergence_threshold)
-                if convergence_threshold is not None else "0.01",
-                "convergence_window": str(int(convergence_window)),
-                "target_reward": str(target_reward) if target_reward is not None else "",
-                "best_k_target": str(int(best_k_target)) if best_k_target is not None else "",
-                "best_k_threshold": str(best_k_threshold) if best_k_threshold is not None else "",
-                "use_inprocess_ame": "true" if use_inprocess_ame else "false",
-            },
-        )
+        try:
+            job_run = w.jobs.run_now(
+                job_id=job_id,
+                job_parameters={
+                    "catalog": catalog,
+                    "schema": schema,
+                    "cache_dir": ORCHESTRATOR_VOLUME_DIR_NAME,
+                    "sql_warehouse_id": os.environ.get("SQL_WAREHOUSE", ""),
+                    "user_email": user_info.user_email,
+                    "mlflow_experiment": mlflow_experiment,
+                    "mlflow_run_name": mlflow_run_name,
+                    "mlflow_run_id": mlflow_run_id,
+                    "motif_pdb_path": motif_pdb_path,
+                    "motif_residues_csv": ",".join(str(r) for r in motif_residues),
+                    "target_chain": target_chain,
+                    "scaffold_length_min": str(scaffold_length_min),
+                    "scaffold_length_max": str(scaffold_length_max),
+                    "num_samples": str(num_samples),
+                    "num_iterations": str(num_iterations),
+                    "substrate_smiles": substrate_smiles or "",
+                    "references_json": json.dumps(references or []),
+                    "half_life_margin": str(half_life_margin),
+                    "weights_json": json.dumps({**DEFAULT_AXIS_WEIGHTS, **(weights or {})}),
+                    "resampling_temperature": str(resampling_temperature),
+                    "strategy": strategy,
+                    "run_proteinmpnn": str(run_proteinmpnn).lower(),
+                    "dev_user_prefix": os.environ.get("DEV_USER_PREFIX", "") or "",
+                    "convergence_threshold": str(convergence_threshold)
+                    if convergence_threshold is not None else "0.01",
+                    "convergence_window": str(int(convergence_window)),
+                    "target_reward": str(target_reward) if target_reward is not None else "",
+                    "best_k_target": str(int(best_k_target)) if best_k_target is not None else "",
+                    "best_k_threshold": str(best_k_threshold) if best_k_threshold is not None else "",
+                    "use_inprocess_ame": "true" if use_inprocess_ame else "false",
+                },
+            )
+        except Exception as e:
+            mlflow.set_tag("job_status", "failed")
+            mlflow.set_tag("error", str(e)[:500])
+            raise
         mlflow.set_tag("job_run_id", str(job_run.run_id))
 
     return JobDispatchResult(
