@@ -182,21 +182,12 @@ export function MonitoringPage() {
   return (
     <div className="space-y-6 px-8 py-8">
       <header>
-        <h1 className="text-2xl font-semibold">Monitoring and Alerts</h1>
+        <h1 className="text-2xl font-semibold">Monitoring</h1>
       </header>
       <Tabs
         tabs={[
           { id: 'runs', label: 'Workflow Runs', content: <WorkflowRunsTab /> },
           { id: 'dashboard', label: 'Dashboard', content: <DashboardTab /> },
-          {
-            id: 'alerts',
-            label: 'Alerts',
-            content: (
-              <div className="rounded-md border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-                Alerts functionality coming soon.
-              </div>
-            ),
-          },
         ]}
       />
     </div>

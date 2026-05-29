@@ -5,6 +5,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
 import { Dialog } from '@/components/Dialog'
+import { InProgressBadge } from '@/components/InProgressBadge'
 import { MolstarViewer } from '@/components/MolstarViewer'
 import type { AlphaFoldRun } from '@/types/api'
 import { cn } from '@/lib/utils'
@@ -189,7 +190,16 @@ export function AlphaFoldPanel() {
       </section>
 
       <section className="space-y-3 border-t border-border pt-6">
-        <h4 className="text-sm font-medium">Search past runs</h4>
+        <div className="flex items-baseline justify-between">
+          <h4 className="text-sm font-medium">Search Past Runs</h4>
+          <InProgressBadge
+            count={
+              (search.data?.runs ?? []).filter(
+                (r) => r.status === 'started' || r.status === 'running',
+              ).length
+            }
+          />
+        </div>
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex gap-1">
             {(['experiment_name', 'run_name'] as const).map((m) => (

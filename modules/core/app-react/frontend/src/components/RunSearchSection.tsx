@@ -4,11 +4,16 @@ import type { ColumnDef } from '@tanstack/react-table'
 
 import { DataTable } from '@/components/DataTable'
 import { Dialog } from '@/components/Dialog'
+import { InProgressBadge } from '@/components/InProgressBadge'
 import type { DBRunRow, DBSearchResponse } from '@/types/api'
 import { cn } from '@/lib/utils'
 
+// Disease Biology workflow statuses that mean "the job is still running"
+// (mirrors _IN_PROGRESS in backend/app/services/disease_biology.py).
+const DB_IN_PROGRESS_STATUSES = new Set(['started', 'phenotype_prepared'])
+
 /**
- * Generic "Search past runs" block for the Disease Biology tabs. Each tab
+ * Generic "Search Past Runs" block for the Disease Biology tabs. Each tab
  * supplies its own searchFn + detail-column label + result-dialog renderer.
  * View button is disabled until the run reaches one of the `viewable_statuses`.
  */
@@ -125,9 +130,16 @@ export function RunSearchSection({
     [detailLabel, viewableStatuses],
   )
 
+  const inProgressCount = rows.filter((r) =>
+    DB_IN_PROGRESS_STATUSES.has(r.status),
+  ).length
+
   return (
     <section className="space-y-3 border-t border-border pt-4">
-      <h4 className="text-sm font-medium">Search past runs</h4>
+      <div className="flex items-baseline justify-between">
+        <h4 className="text-sm font-medium">Search Past Runs</h4>
+        <InProgressBadge count={inProgressCount} />
+      </div>
       <div className="flex flex-wrap items-end gap-3">
         <label className="block text-xs">
           <span className="mb-1 block uppercase tracking-wide text-muted-foreground">

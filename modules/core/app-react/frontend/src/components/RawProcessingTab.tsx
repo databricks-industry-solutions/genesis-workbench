@@ -8,6 +8,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
 import { Dialog } from '@/components/Dialog'
+import { InProgressBadge } from '@/components/InProgressBadge'
 import { QcSubTab, RawDataSubTab } from '@/components/RunViewSubTabs'
 import { Tabs } from '@/components/Tabs'
 import { WorkflowProgress } from '@/components/WorkflowProgress'
@@ -376,13 +377,8 @@ function SearchPastRuns({ onView }: { onView: (run: SingleCellRun) => void }) {
   return (
     <section className="space-y-3">
       <div className="flex items-baseline justify-between">
-        <h4 className="text-sm font-medium">Search past runs</h4>
-        {inProgressCount > 0 && (
-          <span className="inline-flex items-center gap-2 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs text-amber-200">
-            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-400" />
-            {inProgressCount} run{inProgressCount > 1 ? 's' : ''} in progress
-          </span>
-        )}
+        <h4 className="text-sm font-medium">Search Past Runs</h4>
+        <InProgressBadge count={inProgressCount} />
       </div>
 
       <div className="flex flex-wrap items-end gap-3">

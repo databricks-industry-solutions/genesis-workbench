@@ -4,6 +4,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 
 import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
+import { InProgressDot } from '@/components/InProgressBadge'
 import { Tabs } from '@/components/Tabs'
 import { useThemeStore, type Theme } from '@/stores/theme'
 import { useUserStore } from '@/stores/user'
@@ -117,7 +118,14 @@ function EndpointTab() {
     <div className="space-y-6">
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Deployed Endpoints</h3>
+          <h3 className="text-sm font-semibold">
+            Deployed Endpoints
+            {list.data && (
+              <span className="ml-2 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-normal text-muted-foreground">
+                {list.data.endpoints.length}
+              </span>
+            )}
+          </h3>
           <button
             onClick={() => qc.invalidateQueries({ queryKey: ['settings', 'endpoints'] })}
             className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent"
@@ -147,7 +155,10 @@ function EndpointTab() {
 
         {status.data?.active ? (
           <div className="mt-4 rounded-md border border-warning bg-warning/10 p-4 text-sm">
-            <div className="font-semibold">Keep-alive job is running (Run ID: {status.data.run_id})</div>
+            <div className="flex items-center gap-2 font-semibold">
+              <InProgressDot />
+              Keep-alive job is running (Run ID: {status.data.run_id})
+            </div>
             <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
               <div>
                 <span className="text-muted-foreground">Started:</span>{' '}
@@ -222,11 +233,21 @@ function BatchModelsTab() {
   if (q.error || !q.data) return <ErrorBlock error={q.error} />
 
   return (
-    <DataTable
-      columns={columns}
-      data={q.data.batch_models}
-      emptyText="No batch models registered yet. Deploy Parabricks, AlphaFold2, or BioNeMo to register batch models."
-    />
+    <section>
+      <div className="mb-3 flex items-center">
+        <h3 className="text-sm font-semibold">
+          Batch Models/Packages
+          <span className="ml-2 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-normal text-muted-foreground">
+            {q.data.batch_models.length}
+          </span>
+        </h3>
+      </div>
+      <DataTable
+        columns={columns}
+        data={q.data.batch_models}
+        emptyText="No batch models registered yet. Deploy Parabricks, AlphaFold2, or BioNeMo to register batch models."
+      />
+    </section>
   )
 }
 
@@ -240,7 +261,7 @@ export function SettingsPage() {
         tabs={[
           { id: 'general', label: 'General', content: <GeneralTab /> },
           { id: 'endpoints', label: 'Endpoint Management', content: <EndpointTab /> },
-          { id: 'batch', label: 'Batch Models', content: <BatchModelsTab /> },
+          { id: 'batch', label: 'Batch Models/Packages', content: <BatchModelsTab /> },
         ]}
       />
     </div>

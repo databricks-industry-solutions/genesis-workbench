@@ -5,6 +5,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
 import { Dialog } from '@/components/Dialog'
+import { InProgressBadge } from '@/components/InProgressBadge'
 import { MolstarViewer } from '@/components/MolstarViewer'
 import { PlotlyChart as Plot } from '@/components/PlotlyChart'
 import type {
@@ -142,7 +143,7 @@ export function EnzymeOptimizationTab() {
           ESMFold → score every candidate on physical fidelity <em>and</em> developability axes
           (solubility, anchor-relative half-life, thermostability, immunogenic burden). Each
           iteration's composite reward biases the next round's sampling. Long-running — the
-          orchestrator runs as a Databricks Job; track progress in <strong>Search past runs</strong> below.
+          orchestrator runs as a Databricks Job; track progress in <strong>Search Past Runs</strong> below.
         </p>
       </div>
 
@@ -562,7 +563,7 @@ function DispatchSuccess({ data }: { data: EnzymeOptimizationStartResponse }) {
           View in Databricks ↗
         </a>
       )}
-      . Track progress under <strong>Search past runs</strong> below.
+      . Track progress under <strong>Search Past Runs</strong> below.
     </div>
   )
 }
@@ -663,7 +664,7 @@ function ReferencesEditor({
   )
 }
 
-// ─── Search past runs + result dialog ──────────────────────────────────────
+// ─── Search Past Runs + result dialog ──────────────────────────────────────
 
 function _isViewable(status: string): boolean {
   if (!status) return false
@@ -761,9 +762,16 @@ function SearchPastRunsSection() {
     [],
   )
 
+  const inProgressCount = runs.filter(
+    (r) => r.job_status && r.job_status !== 'complete' && r.job_status !== 'failed',
+  ).length
+
   return (
     <section className="space-y-3 border-t border-border pt-4">
-      <h4 className="text-sm font-medium">Search past runs</h4>
+      <div className="flex items-baseline justify-between">
+        <h4 className="text-sm font-medium">Search Past Runs</h4>
+        <InProgressBadge count={inProgressCount} />
+      </div>
       <div className="flex flex-wrap items-end gap-3">
         <label className="block text-xs">
           <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
@@ -855,6 +863,18 @@ function RunResultsBody({ runId }: { runId: string }) {
     return topK.data.candidates.find((c) => c.candidate_id === selectedCand) ?? null
   }, [topK.data, selectedCand])
 
+  // Pull the trajectory row for the selected candidate so we can render
+  // its scoring metrics above the viewer. Same join Streamlit does on
+  // `candidate_id` (see views/small_molecule_workflows/enzyme_optimization.py).
+  const selectedTrajRow = useMemo<Record<string, number | string | null> | null>(() => {
+    if (!status.data || !selectedCand) return null
+    return (
+      status.data.trajectory.find(
+        (r) => String(r.candidate_id ?? '') === selectedCand,
+      ) ?? null
+    )
+  }, [status.data, selectedCand])
+
   return (
     <div className="space-y-4">
       {status.data && <StatusHeader status={status.data} />}
@@ -881,6 +901,7 @@ function RunResultsBody({ runId }: { runId: string }) {
               ))}
             </select>
           </label>
+          {selectedTrajRow && <CandidateMetrics row={selectedTrajRow} />}
           <MolstarViewer viewerHtml={selected.viewer_html} height={480} />
           <button
             type="button"
@@ -904,6 +925,42 @@ function RunResultsBody({ runId }: { runId: string }) {
           No completed candidates were logged for this run yet.
         </div>
       )}
+    </div>
+  )
+}
+
+function fmtMetric(val: unknown, digits = 3): string {
+  if (val === null || val === undefined || val === '') return '—'
+  const n = typeof val === 'number' ? val : Number(val)
+  return Number.isFinite(n) ? n.toFixed(digits) : String(val)
+}
+
+function CandidateMetrics({ row }: { row: Record<string, number | string | null> }) {
+  // Same 8 metrics + formatting as Streamlit's _display_enzyme_opt_result_dialog
+  // (views/small_molecule_workflows/enzyme_optimization.py).
+  const tiles: { label: string; value: string }[] = [
+    { label: 'Composite Reward', value: fmtMetric(row.composite_reward) },
+    { label: 'Motif RMSD (Å)',   value: fmtMetric(row.motif_rmsd) },
+    { label: 'pLDDT',            value: fmtMetric(row.plddt, 1) },
+    { label: 'Boltz',            value: fmtMetric(row.boltz) },
+    { label: 'Solubility',       value: fmtMetric(row.solubility) },
+    { label: 'Half-Life',        value: fmtMetric(row.half_life) },
+    { label: 'Thermostab (°C)',  value: fmtMetric(row.thermostab, 1) },
+    { label: 'Immunogenicity',   value: fmtMetric(row.immuno) },
+  ]
+  return (
+    <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+      {tiles.map((t) => (
+        <div
+          key={t.label}
+          className="rounded-md border border-border bg-muted/30 px-3 py-2"
+        >
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            {t.label}
+          </div>
+          <div className="text-base font-medium">{t.value}</div>
+        </div>
+      ))}
     </div>
   )
 }
