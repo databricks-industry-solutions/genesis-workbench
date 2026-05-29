@@ -3,14 +3,6 @@
 Phase 0 of the [Streamlit → React migration](../../docs/streamlit-to-react-migration-analysis.md).
 Sibling Databricks App to the existing Streamlit `app/`. They run side-by-side until parity.
 
-## Known follow-ups
-
-- **Boltz sync inference can exceed the Databricks Apps proxy timeout (~60s) during cold start.** Returns 504 to the browser even though FastAPI eventually receives the prediction. Fix: move Boltz to the async-job pattern (Start → poll → result) like AlphaFold2, or pre-warm via Start All Endpoints. Tracked, deferred from Phase 4 slice 1.
-- **Protein design has the same cold-start-vs-proxy-timeout risk as Boltz**, magnified — ≥5 sequential serving-endpoint calls per Generate. Same fix: move to async-job pattern.
-- **Add a filter widget bound to `run_name` in `variant_annotation_dashboard.lvdash.json`** so the embedded Lakeview dashboard works inside the React Variant Annotation popup (or via URL-param binding). Without a widget, the parameter never binds and all `:run_name` queries fail with `UNBOUND_SQL_PARAMETER`. Today the popup keeps the inline pathogenic-variants table + an "Open dashboard ↗" link to the full dashboard. Requires re-registering the dashboard via the initial_setup job.
-- **`batch_models` schema: add a `kind` column ('model' vs 'package')** so the Models & Packages drawer doesn't have to maintain a `WORKFLOW_PACKAGES` allow-list in `DeployedModelsTab.tsx`. Touches `initialize_*` core notebook (schema), every register notebook that writes a row, the `/api/models/batch` response shape, and the frontend.
-- **Multi-app SP grants are ad-hoc on the current deployment.** Every orchestrator job (13 across disease_biology, protein_studies, single_cell, small_molecule, bionemo) + the four volumes the React backend touches (`enzyme_optimization`, `alphafold`, `teddy`, `scanpy_reference`) currently have the gwb-react SP granted by hand because the jobs/volumes were created before the React app existed in `DATABRICKS_APP_NAMES`. A planned destroy + redeploy with `DATABRICKS_APP_NAMES=genesis-workbench,gwb-react` set will make grants permanent — each register/initialize notebook now calls `set_app_permissions_for_job` AND `set_app_permissions_for_volume` with the multi-app list, so a clean install provisions both SPs end-to-end.
-
 ## Layout
 
 ```
