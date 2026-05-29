@@ -62,9 +62,20 @@ WHEN NOT MATCHED THEN INSERT (key, value, module) VALUES (source.key, source.val
 # COMMAND ----------
 
 #Grant app permission to run this job
-from genesis_workbench.workbench import set_app_permissions_for_job
+from genesis_workbench.workbench import (
+    set_app_permissions_for_job,
+    set_app_permissions_for_volume,
+)
 
 set_app_permissions_for_job(job_id=run_scanpy_job_id, user_email=user_email)
+
+# The app SP reads /Volumes/{catalog}/{schema}/scanpy_reference/genesets/*
+# at pathway-enrichment time (routers/single_cell.py). Grant READ so that
+# path works without ad-hoc UC grants.
+set_app_permissions_for_volume(
+    volume_full_name=f"{catalog}.{schema}.scanpy_reference",
+    write=False,
+)
 
 # COMMAND ----------
 

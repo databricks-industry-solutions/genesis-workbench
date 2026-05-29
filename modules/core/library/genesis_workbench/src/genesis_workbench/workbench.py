@@ -300,6 +300,52 @@ def set_app_permissions_for_job(job_id:str, user_email:str):
     )
 
 
+def set_app_permissions_for_volume(volume_full_name: str, write: bool = False):
+    """Grant READ_VOLUME (and optionally WRITE_VOLUME) on a UC volume to
+    every registered Databricks Apps service principal.
+
+    Use this for any volume the application backend itself touches —
+    e.g. uploads (motif.pdb for enzyme_optimization) or downloads
+    (result PDBs, mapping JSONs). Jobs that read/write volumes still
+    run as their owner; this is only needed when the app's SP issues
+    files API calls directly.
+
+    `volume_full_name` is the three-part UC name: 'catalog.schema.volume'.
+    Idempotent — repeated calls converge to the same ACL.
+    """
+    w = WorkspaceClient()
+    privileges = ["READ_VOLUME"]
+    if write:
+        privileges.append("WRITE_VOLUME")
+    for app_name in _list_app_names():
+        try:
+            app_sp = w.apps.get(name=app_name).service_principal_client_id
+        except Exception as e:
+            print(f"⚠️  Skipping volume permission for app '{app_name}': {e}")
+            continue
+        try:
+            # The SDK's grants.update takes SecurableType + full name + a list
+            # of changes (principal + add). Volume = SecurableType.VOLUME.
+            from databricks.sdk.service.catalog import (
+                Privilege,
+                PermissionsChange,
+                SecurableType,
+            )
+            w.grants.update(
+                securable_type=SecurableType.VOLUME,
+                full_name=volume_full_name,
+                changes=[
+                    PermissionsChange(
+                        principal=app_sp,
+                        add=[Privilege[p] for p in privileges],
+                    )
+                ],
+            )
+            print(f"Granted {privileges} on volume {volume_full_name} to app '{app_name}' (sp={app_sp}).")
+        except Exception as e:
+            print(f"⚠️  Failed to grant {privileges} on volume {volume_full_name} for app '{app_name}': {e}")
+
+
 def set_app_permissions_for_endpoint(endpoint_name:str):
     w = WorkspaceClient()
     endpoint_id = w.serving_endpoints.get(endpoint_name).id

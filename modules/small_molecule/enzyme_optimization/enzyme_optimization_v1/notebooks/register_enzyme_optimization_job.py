@@ -88,9 +88,21 @@ WHEN NOT MATCHED THEN INSERT (key, value, module) VALUES (source.key, source.val
 
 # COMMAND ----------
 
-from genesis_workbench.workbench import set_app_permissions_for_job
+from genesis_workbench.workbench import (
+    set_app_permissions_for_job,
+    set_app_permissions_for_volume,
+)
 
 set_app_permissions_for_job(job_id=run_enzyme_optimization_job_id, user_email=user_email)
 set_app_permissions_for_job(job_id=run_enzyme_optimization_inprocess_ame_job_id, user_email=user_email)
 
-print("Granted app SP CAN_MANAGE_RUN on both orchestrator jobs.")
+# The app SP uploads motif.pdb to this volume before dispatching each run
+# (see services/enzyme_optimization.py::_write_motif_pdb_to_volume). Without
+# WRITE_VOLUME the dispatcher fails with "User does not have WRITE VOLUME
+# privilege on VOLUME ...".
+set_app_permissions_for_volume(
+    volume_full_name=f"{catalog}.{schema}.enzyme_optimization",
+    write=True,
+)
+
+print("Granted app SP CAN_MANAGE_RUN on both orchestrator jobs + WRITE on motif volume.")

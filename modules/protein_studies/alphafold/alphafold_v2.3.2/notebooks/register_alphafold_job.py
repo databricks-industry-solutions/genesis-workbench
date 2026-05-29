@@ -62,9 +62,21 @@ WHEN NOT MATCHED THEN INSERT (key, value, module) VALUES (source.key, source.val
 # COMMAND ----------
 
 #Grant app permission to run this job
-from genesis_workbench.workbench import set_app_permissions_for_job
+from genesis_workbench.workbench import (
+    set_app_permissions_for_job,
+    set_app_permissions_for_volume,
+)
 
 set_app_permissions_for_job(job_id=run_alphafold_job_id, user_email=user_email)
+
+# The app SP reads /Volumes/{catalog}/{schema}/alphafold/results/{run_id}/...
+# to stream the predicted PDB into the React viewer
+# (services/alphafold.py::pull_alphafold_result). Grant READ on the model
+# volume so that path works without ad-hoc UC grants.
+set_app_permissions_for_volume(
+    volume_full_name=f"{catalog}.{schema}.alphafold",
+    write=False,
+)
 
 # COMMAND ----------
 
