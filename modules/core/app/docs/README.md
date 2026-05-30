@@ -9,15 +9,15 @@ One markdown file per feature, named `<module>_<feature>.md` (snake_case). Examp
 | File | Covers |
 |---|---|
 | `single_cell_teddy_annotation.md` | TEDDY-based joint cell-type + disease annotation on the UMAP tab |
-| `protein_studies_enzyme_optimization.md` | Guided enzyme optimization (Fast / Accurate paths) |
-| `disease_biology_variant_annotation.md` | Variant annotation batch workflow |
+| `large_molecule_enzyme_optimization.md` | Guided enzyme optimization (Fast / Accurate paths) |
+| `genomics_variant_annotation.md` | Variant annotation batch workflow |
 
 ## Required sections (template)
 
 ```markdown
 # <Feature name>
 
-**Module:** single_cell | protein_studies | small_molecule | disease_biology | …
+**Module:** single_cell | large_molecule | small_molecule | genomics | …
 **Status:** GA | Beta | Experimental
 **Added:** YYYY-MM-DD
 

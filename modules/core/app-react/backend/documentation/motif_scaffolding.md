@@ -13,7 +13,7 @@ Functional Motif Scaffolding transplants a functional motif (such as an enzyme a
 
 ## How to Use
 
-1. Navigate to **Small Molecules > Motif Scaffolding** tab
+1. Navigate to **Small Molecule > Motif Scaffolding** tab
 2. Upload a motif PDB file (with optional ligand as HETATM records)
 3. Specify the motif chain ID
 4. Set scaffold length range and number of designs
@@ -58,5 +58,5 @@ Final scaffold designs
 
 ### Key Files
 
-- `modules/core/app/views/small_molecules.py` — UI (Motif Scaffolding tab)
+- `modules/core/app/views/small_molecules.py (legacy Streamlit)` — UI (Motif Scaffolding tab)
 - `modules/core/app/utils/small_molecule_tools.py` — `hit_proteina_complexa_ame()`, `_hit_proteinmpnn()`, `hit_esmfold()`

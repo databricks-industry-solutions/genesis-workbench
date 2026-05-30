@@ -13,7 +13,7 @@ Ligand Binder Design generates novel protein sequences that bind a specific smal
 
 ## How to Use
 
-1. Navigate to **Small Molecules > Ligand Binder Design** tab
+1. Navigate to **Small Molecule > Ligand Binder Design** tab
 2. Provide the ligand:
    - Enter a SMILES string, or
    - Upload a PDB file containing HETATM records

@@ -57,7 +57,7 @@ const SECTION_META: Record<Kind, { label: string; description: string; empty: st
 }
 
 export function DeployedModelsTab({ module }: { module: ModuleName }) {
-  const includeRealTime = module !== 'disease_biology'
+  const includeRealTime = module !== 'genomics'
   const [info, setInfo] = useState<Row | null>(null)
 
   const results = useQueries({

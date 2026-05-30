@@ -26,8 +26,8 @@ export function Tabs({
               className={cn(
                 'rounded-t-md px-4 py-2 text-sm transition-colors',
                 active === t.id
-                  ? 'border-b-2 border-primary text-foreground'
-                  : 'text-muted-foreground hover:text-foreground',
+                  ? 'border-b-2 border-red-600 font-bold text-red-600 dark:border-red-500 dark:text-red-500'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
               )}
             >
               {t.label}

@@ -14,7 +14,7 @@ Variant Annotation enriches genetic variants with clinical significance data fro
 
 ## How to Use
 
-1. Navigate to **Disease Biology > Variant Annotation** tab
+1. Navigate to **Genomics > Variant Annotation** tab
 2. Select a completed VCF Ingestion run (provides the variants table) or enter the table name
 3. Specify gene regions of interest (e.g., `BRCA1,BRCA2,TP53`)
 4. Optionally provide a pathogenic VCF path for additional annotation
@@ -39,9 +39,9 @@ Variant Annotation enriches genetic variants with clinical significance data fro
 
 ### Architecture
 
-1. **UI** (`modules/core/app/views/disease_biology.py`): Variant Annotation tab with VCF Ingestion run picker
-2. **Backend** (`modules/core/app/utils/disease_biology.py`): `start_variant_annotation()` creates MLflow run and triggers job
-3. **Job** (`modules/disease_biology/variant_annotation/variant_annotation_v1/resources/variant_annotation_workflow.job.yml`): Multi-task workflow
+1. **UI** (`modules/core/app/views/genomics.py (legacy Streamlit)`): Variant Annotation tab with VCF Ingestion run picker
+2. **Backend** (`modules/core/app-react/backend/app/services/genomics.py`): `start_variant_annotation()` creates MLflow run and triggers job
+3. **Job** (`modules/genomics/variant_annotation/variant_annotation_v1/resources/variant_annotation_workflow.job.yml`): Multi-task workflow
 
 ### Workflow Pipeline
 
@@ -66,8 +66,8 @@ During module initialization:
 
 ### Key Files
 
-- `modules/core/app/views/disease_biology.py` — UI (Variant Annotation tab)
-- `modules/core/app/utils/disease_biology.py` — `start_variant_annotation()`, `pull_annotation_results()`
-- `modules/disease_biology/variant_annotation/variant_annotation_v1/resources/variant_annotation_workflow.job.yml` — Job definition
-- `modules/disease_biology/variant_annotation/variant_annotation_v1/notebooks/00_download_clinvar.py` — ClinVar setup
-- `modules/disease_biology/variant_annotation/variant_annotation_v1/notebooks/02_filter_and_annotate.py` — Annotation logic
+- `modules/core/app/views/genomics.py (legacy Streamlit)` — UI (Variant Annotation tab)
+- `modules/core/app-react/backend/app/services/genomics.py` — `start_variant_annotation()`, `pull_annotation_results()`
+- `modules/genomics/variant_annotation/variant_annotation_v1/resources/variant_annotation_workflow.job.yml` — Job definition
+- `modules/genomics/variant_annotation/variant_annotation_v1/notebooks/00_download_clinvar.py` — ClinVar setup
+- `modules/genomics/variant_annotation/variant_annotation_v1/notebooks/02_filter_and_annotate.py` — Annotation logic

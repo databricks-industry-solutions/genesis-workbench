@@ -168,7 +168,7 @@ An example deploy command for `core` module in a workspace in Azure is:
 
 **Step - 3:** Now we can start installing rest of the modules. It is recommended to install one module at a time and wait for all deployment jobs to coplete before deploying the next module
 Example:
-- To deploy module `protein_studies` module in the above workspace `./deploy.sh protein_studies azure`
+- To deploy module `large_molecule` module in the above workspace `./deploy.sh large_molecule azure`
 - To deploy module `single_cell` module in the above workspace `./deploy.sh single_cell azure`
 - To deploy module `bionemo` module in the above workspace `./deploy.sh bionemo azure`
 

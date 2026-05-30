@@ -29,7 +29,7 @@ Genesis Workbench simplifies deploying GPU-accelerated biological AI models on D
 - **Trajectory Analysis** — Diffusion pseudotime with UMAP coloring and gene expression along pseudotime
 - **Perturbation Prediction** — Predict gene knockout/overexpression effects with gene selector ranked by cluster expression
 
-### Protein Studies Module
+### Large Molecule Module
 - **ESMFold** — Fast protein structure prediction from sequence
 - **AlphaFold2** — High-accuracy protein structure prediction (batch job)
 - **Boltz-1** — Multi-chain protein structure prediction (protein-protein, protein-ligand complexes)
@@ -59,7 +59,7 @@ Genesis Workbench simplifies deploying GPU-accelerated biological AI models on D
 - **Guided Enzyme Optimization** — Reward-weighted optimization loop around Proteina-Complexa-AME + ProteinMPNN + ESMFold. Scores each candidate on motif RMSD, pLDDT, optional Boltz substrate confidence, and four developability axes (solubility, half-life anchored vs reference enzyme, thermostability, immunogenicity). Form has a **Generation mode** toggle: **Fast** (default, ~30 min) — endpoint-based AME with parent resampling between iterations; **Accurate** (~30-60 min, ~$22 GPU) — in-process AME on an A10 with Feynman-Kac steering during diffusion (reward biases sampling, not just selection).
 - **ADMET & Safety** — Multi-model property profiling (BBB penetration, toxicity, ADMET)
 
-### Disease Biology Module
+### Genomics Module
 - **VCF Ingestion** — VCF-to-Delta via Glow
 - **Variant Annotation** — ClinVar annotation with gene filtering
 - **GWAS Analysis** — Genome-wide association studies pipeline

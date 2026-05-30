@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.auth import CurrentUserDep
 from app.config import get_settings
-from app.routers.protein import _build_user_info
+from app.routers.large_molecule import _build_user_info
 from app.services import scgpt as scgpt_service
 from app.services import scimilarity as scim
 from app.services import single_cell_runs as runs_service

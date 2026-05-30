@@ -1,6 +1,6 @@
 // Flashing orange dot + "N run(s) in progress" badge.
 // Mirrors the Streamlit `run-dot-in-progress` banner used above every
-// search-past-runs table (modules/core/app/views/disease_biology.py).
+// search-past-runs table (modules/core/app/views/disease_biology.py (legacy Streamlit)).
 
 type Props = {
   count: number

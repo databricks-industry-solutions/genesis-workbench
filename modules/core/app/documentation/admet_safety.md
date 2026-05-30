@@ -14,7 +14,7 @@ ADMET & Safety Profiling evaluates small molecules for drug-like properties — 
 
 ## How to Use
 
-1. Navigate to **Small Molecules > ADMET & Safety** tab
+1. Navigate to **Small Molecule > ADMET & Safety** tab
 2. Enter one or more SMILES strings (one per line)
 3. Select which models to run:
    - **BBB Penetration** (ChemProp BBBP): Binary prediction of blood-brain barrier crossing
@@ -56,6 +56,6 @@ ADMET & Safety Profiling evaluates small molecules for drug-like properties — 
 
 ### Key Files
 
-- `modules/core/app/views/small_molecules.py` — UI (ADMET & Safety tab)
+- `modules/core/app/views/small_molecules.py (legacy Streamlit)` — UI (ADMET & Safety tab)
 - `modules/core/app/utils/small_molecule_tools.py` — `hit_chemprop_bbbp()`, `hit_chemprop_clintox()`, `hit_chemprop_admet()`
 - `modules/small_molecule/chemprop/chemprop_v2/notebooks/` — Model registration notebooks

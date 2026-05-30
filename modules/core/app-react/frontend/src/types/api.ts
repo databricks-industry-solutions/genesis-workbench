@@ -144,9 +144,9 @@ export type ModuleBatchModelsResponse = { models: ModuleBatchModel[] }
 
 export type ModuleName =
   | 'single_cell'
-  | 'protein_studies'
+  | 'large_molecule'
   | 'small_molecule'
-  | 'disease_biology'
+  | 'genomics'
 
 export type StructurePredictionResponse = {
   pdb: string
@@ -394,7 +394,7 @@ export type PerturbationResponse = {
   summary_significant_count: number
 }
 
-// ─── Small Molecules ──────────────────────────────────────────────────────
+// ─── Small Molecule ──────────────────────────────────────────────────────
 
 export type DockingExampleResponse = {
   smiles: string
@@ -574,7 +574,7 @@ export type EnzymeDefaultsResponse = {
   default_references: EnzymeRefRow[]
 }
 
-// ─── Disease Biology ──────────────────────────────────────────────────────
+// ─── Genomics ──────────────────────────────────────────────────────
 
 export type DBRunRow = {
   run_id: string
@@ -703,7 +703,7 @@ export type VariantAnnotationDashboardResponse = {
   run_name: string | null
 }
 
-export type DiseaseBiologyDefaultsResponse = {
+export type GenomicsDefaultsResponse = {
   variant_calling: {
     fastq_r1: string
     fastq_r2: string

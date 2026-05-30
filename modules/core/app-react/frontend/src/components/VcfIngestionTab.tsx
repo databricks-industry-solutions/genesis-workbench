@@ -12,7 +12,7 @@ function ts(): string {
 
 export function VcfIngestionTab() {
   const defaults = useQuery({
-    queryKey: ['disease_biology', 'defaults'],
+    queryKey: ['genomics', 'defaults'],
     queryFn: api.diseaseBiologyDefaults,
     staleTime: Infinity,
   })
@@ -23,7 +23,7 @@ export function VcfIngestionTab() {
   const [runName, setRunName] = useState(`vcf_ingestion_${ts()}`)
 
   // Seed the VCF path with the BRCA pathogenic sample shipped during the
-  // disease_biology deploy — same default the Streamlit page uses for
+  // genomics deploy — same default the Streamlit page uses for
   // one-click demo runs.
   useEffect(() => {
     if (!defaults.data) return
@@ -131,7 +131,7 @@ export function VcfIngestionTab() {
       )}
 
       <RunSearchSection
-        searchKey={['disease_biology', 'vcf_ingestion', 'search'] as const}
+        searchKey={['genomics', 'vcf_ingestion', 'search'] as const}
         searchFn={api.vcfIngestionSearch}
         detailLabel="VCF path"
         initialText="vcf_ingestion"

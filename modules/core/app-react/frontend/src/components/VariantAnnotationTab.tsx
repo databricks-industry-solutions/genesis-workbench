@@ -15,7 +15,7 @@ function ts(): string {
 
 export function VariantAnnotationTab() {
   const picker = useQuery({
-    queryKey: ['disease_biology', 'vcf_ingestion', 'successful'],
+    queryKey: ['genomics', 'vcf_ingestion', 'successful'],
     queryFn: api.vcfIngestionSuccessful,
     staleTime: 60_000,
   })
@@ -221,7 +221,7 @@ export function VariantAnnotationTab() {
       )}
 
       <RunSearchSection
-        searchKey={['disease_biology', 'variant_annotation', 'search'] as const}
+        searchKey={['genomics', 'variant_annotation', 'search'] as const}
         searchFn={api.variantAnnotationSearch}
         detailLabel="Variants table"
         initialText="annotation"

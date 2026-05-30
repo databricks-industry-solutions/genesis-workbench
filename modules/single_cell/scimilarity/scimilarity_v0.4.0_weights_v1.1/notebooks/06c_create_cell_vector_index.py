@@ -7,7 +7,7 @@
 # MAGIC search against the ~23M-cell reference corpus.
 # MAGIC
 # MAGIC Mirrors the protein sequence search pattern in
-# MAGIC `modules/protein_studies/sequence_search/sequence_search_v1/notebooks/04_create_vector_index.py`.
+# MAGIC `modules/large_molecule/sequence_search/sequence_search_v1/notebooks/04_create_vector_index.py`.
 
 # COMMAND ----------
 

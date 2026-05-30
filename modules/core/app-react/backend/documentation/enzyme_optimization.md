@@ -35,7 +35,7 @@ Both modes share the same scoring axes, the same UI form, the same MLflow output
 
 ## How to Use
 
-1. Navigate to **Small Molecules → Guided Enzyme Optimization**.
+1. Navigate to **Small Molecule → Guided Enzyme Optimization**.
 2. Paste your motif PDB (catalytic site + optional ligand HETATMs); set the chain id and motif residue numbers.
 3. **Pick the Generation mode** — Fast for iteration / sanity-checking, Accurate for production runs where top-K quality matters.
 4. Set scaffold length range, K (candidates per iteration), N (iterations).

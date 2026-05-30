@@ -144,6 +144,14 @@ databricks grants update schema $core_catalog_name.$core_schema_name --json "{\"
 echo "Catalog and schema permissions granted."
 
 echo ""
+echo "▶️ Granting app permissions for endpoints, jobs, volumes, models"
+echo ""
+# Idempotent — iterates DATABRICKS_APP_NAMES (e.g. genesis-workbench,gwb-react)
+# so multi-app installs don't end up with one SP missing CAN_QUERY on existing
+# serving endpoints. Safe to re-run on every deploy.
+databricks bundle run --target $TARGET grant_app_permissions_job --var="$EXTRA_PARAMS"
+
+echo ""
 echo "▶️ Copying libraries to UC Volume"
 echo ""
 

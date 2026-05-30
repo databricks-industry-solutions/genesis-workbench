@@ -59,7 +59,7 @@ export function AdmetSafetyTab() {
       mlflow_run_name: string
     },
     AdmetResponse
-  >('/api/small_molecules/admet/stream')
+  >('/api/small_molecule/admet/stream')
 
   const smilesList = useMemo(
     () =>

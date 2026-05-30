@@ -19,10 +19,10 @@ Genesis Workbench deploys through **modules**, each containing sub-modules with 
 
 **Available modules:**
 - `core` — UI app (Streamlit-based Databricks App), shared library, initialization workflows (MUST be deployed first)
-- `protein_studies` — ESMFold, AlphaFold2, ProteinMPNN, RFDiffusion, Boltz-1, ESM2 Embeddings, Sequence Search
+- `large_molecule` — ESMFold, AlphaFold2, ProteinMPNN, RFDiffusion, Boltz-1, ESM2 Embeddings, Sequence Search
 - `single_cell` — scGPT (embeddings + perturbation), SCimilarity (3 endpoints), Scanpy, Rapids-SingleCell
 - `small_molecule` — Chemprop (BBBP, ClinTox, ADMET), DiffDock (molecular docking), Proteina-Complexa (binder design)
-- `disease_biology` — VCF Ingestion (Glow), Variant Annotation (ClinVar), GWAS Analysis
+- `genomics` — VCF Ingestion (Glow), Variant Annotation (ClinVar), GWAS Analysis
 - `bionemo` — NVIDIA BioNeMo container-based workflows (ESM2 fine-tuning)
 - `parabricks` — NVIDIA Parabricks GPU-accelerated genomics pipelines
 
@@ -128,18 +128,17 @@ Where `<cloud>` is `aws`, `azure`, or `gcp`.
 Deploy modules sequentially. Wait for all background jobs to complete before deploying the next module. Many jobs download, register, and deploy models — **this can take many hours**.
 
 ```bash
-./deploy.sh protein_studies <cloud>
+./deploy.sh large_molecule <cloud>
 ./deploy.sh single_cell <cloud>
 ./deploy.sh small_molecule <cloud>
-./deploy.sh disease_biology <cloud>
+./deploy.sh genomics <cloud>     # now includes Parabricks as a submodule
 ./deploy.sh bionemo <cloud>
-./deploy.sh parabricks <cloud>
 ```
 
 **Deployment time notes:**
 - `single_cell` — SCimilarity downloads ~2GB model weights from Zenodo on first deploy (~60 min). Re-deploys skip if files exist in Volume. scGPT downloads ~3GB from Google Drive.
 - `small_molecule` — DiffDock and Proteina-Complexa download model checkpoints from NVIDIA NGC.
-- `protein_studies` — AlphaFold2 downloads reference databases (~2TB). Boltz downloads from HuggingFace.
+- `large_molecule` — AlphaFold2 downloads reference databases (~2TB). Boltz downloads from HuggingFace.
 
 ### Step 4: Post-Deploy Verification
 
@@ -230,7 +229,7 @@ Endpoints deploy without inference tables by default. To enable, use `AiGatewayC
 8. For GCP deployments, use `gcp` as the cloud parameter and ensure `gcp.env` has correct instance types.
 9. Keep all `.env` files free of comments and blank lines.
 10. For BioNeMo, build and push the Docker container before deploying the module.
-11. The `disease_biology` module requires Glow (built from source as a JAR+WHL). The deploy script handles this.
+11. The `genomics` module requires Glow (built from source as a JAR+WHL). The deploy script handles this.
 12. The `small_molecule` module deploys 3 sub-modules: Chemprop, DiffDock, Proteina-Complexa. Open Babel is no longer deployed (replaced by rdkit in the UI).
 13. After deploying `single_cell`, the Cell Type Annotation and Cell Similarity tabs require the SCimilarity endpoints to be active (not scaled to zero). Use the "Start All Endpoints" feature in Settings if needed.
 14. The scGPT perturbation model is registered as a separate task in the same job as the embedding model. Both share the same downloaded weights.

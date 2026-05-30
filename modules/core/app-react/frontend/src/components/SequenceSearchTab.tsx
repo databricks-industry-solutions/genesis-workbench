@@ -49,7 +49,7 @@ export function SequenceSearchTab() {
   const search = useSseMutation<
     { sequence: string; top_k: number; min_coverage_pct: number },
     SequenceSearchResponse
-  >('/api/protein_studies/sequence_search/stream')
+  >('/api/large_molecule/sequence_search/stream')
 
   const runSearch = () =>
     search.start({ sequence, top_k: topK, min_coverage_pct: minCoverage })

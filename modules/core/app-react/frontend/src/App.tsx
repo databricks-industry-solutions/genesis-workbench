@@ -8,9 +8,9 @@ import { ProfilePage } from '@/pages/Profile'
 import { SettingsPage } from '@/pages/Settings'
 import { MonitoringPage } from '@/pages/Monitoring'
 import { SingleCellPage } from '@/pages/SingleCell'
-import { ProteinStudiesPage } from '@/pages/ProteinStudies'
-import { SmallMoleculesPage } from '@/pages/SmallMolecules'
-import { DiseaseBiologyPage } from '@/pages/DiseaseBiology'
+import { LargeMoleculePage } from '@/pages/LargeMolecule'
+import { SmallMoleculePage } from '@/pages/SmallMolecule'
+import { GenomicsPage } from '@/pages/Genomics'
 import { BootstrapGate } from '@/components/BootstrapGate'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useThemeStore } from '@/stores/theme'
@@ -52,9 +52,9 @@ export default function App() {
                     </ErrorBoundary>
                   }
                 />
-                <Route path="protein-studies" element={<ProteinStudiesPage />} />
-                <Route path="small-molecules" element={<SmallMoleculesPage />} />
-                <Route path="disease-biology" element={<DiseaseBiologyPage />} />
+                <Route path="large-molecule" element={<LargeMoleculePage />} />
+                <Route path="small-molecule" element={<SmallMoleculePage />} />
+                <Route path="genomics" element={<GenomicsPage />} />
                 <Route path="profile" element={<ProfilePage />} />
                 <Route path="monitoring" element={<MonitoringPage />} />
                 <Route path="settings" element={<SettingsPage />} />

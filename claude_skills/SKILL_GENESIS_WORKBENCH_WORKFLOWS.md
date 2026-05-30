@@ -7,10 +7,10 @@ description: End-to-end user guide for all Genesis Workbench UI workflows — wh
 
 Guide users through each workflow tab in the Genesis Workbench Streamlit application.
 
-## Protein Studies
+## Large Molecule
 
 ### Structure Prediction
-**Tab:** Protein Studies → Protein Structure Prediction
+**Tab:** Large Molecule → Protein Structure Prediction
 
 Three models available via pills selector:
 
@@ -34,7 +34,7 @@ Three models available via pills selector:
 - Best for: Multi-chain complexes (protein-protein, protein-ligand, protein-RNA)
 
 ### Protein Design
-**Tab:** Protein Studies → Protein Design
+**Tab:** Large Molecule → Protein Design
 
 - Input: Sequence with region to replace marked by `[brackets]`, e.g., `CASRRSG[FTYPGF]FFEQYF`
 - Also needs: MLflow experiment name and run name
@@ -43,7 +43,7 @@ Three models available via pills selector:
 - Progress: Step-by-step progress bar
 
 ### Inverse Folding
-**Tab:** Protein Studies → Inverse Folding
+**Tab:** Large Molecule → Inverse Folding
 
 - Input: PDB content (backbone structure pasted into text area, default provided)
 - Output: 3 designed amino acid sequences (selectbox to browse)
@@ -51,7 +51,7 @@ Three models available via pills selector:
 - Use case: Protein engineering — design new sequences for an existing backbone
 
 ### Sequence Search
-**Tab:** Protein Studies → Sequence Search
+**Tab:** Large Molecule → Sequence Search
 
 - Input: Protein sequence (paste or FASTA upload)
 - Pipeline: ESM2 embedding → Vector Search (top 500) → Smith-Waterman alignment → Ranked results
@@ -106,28 +106,28 @@ Three models available via pills selector:
 ## Small Molecule
 
 ### Binder Design
-**Tab:** Small Molecules → Protein Binder Design
+**Tab:** Small Molecule → Protein Binder Design
 
 - Input: Target protein (sequence or PDB) + binder length range + num samples
 - Optional validation: ESMFold structure validation
 - Output: Design selector (reward scores), Mol* viewer
 
 ### Ligand Binder Design
-**Tab:** Small Molecules → Ligand Binder Design
+**Tab:** Small Molecule → Ligand Binder Design
 
 - Input: Target protein PDB + ligand (SMILES or PDB) + binder params
 - Pipeline: SMILES → PDB conversion (rdkit) → Proteina-Complexa-Ligand → optional ESMFold + DiffDock validation
 - Output: Multi-view display (backbone, full protein, protein+ligand)
 
 ### Motif Scaffolding
-**Tab:** Small Molecules → Motif Scaffolding
+**Tab:** Small Molecule → Motif Scaffolding
 
 - Input: Motif PDB + scaffold params
 - Pipeline: Proteina-Complexa-AME → ProteinMPNN optimization → ESMFold validation
 - Output: Design selector with Mol* viewer
 
 ### Guided Enzyme Optimization
-**Tab:** Small Molecules → Guided Enzyme Optimization
+**Tab:** Small Molecule → Guided Enzyme Optimization
 
 A reward-weighted resampling loop on top of Motif Scaffolding's stack — instead of accepting whatever AME produces, it iterates and biases each round toward higher-reward parents. The form exposes a **Generation mode** toggle (Fast / Accurate, default Fast) that picks where the reward signal applies.
 
@@ -167,13 +167,13 @@ A reward-weighted resampling loop on top of Motif Scaffolding's stack — instea
 - **Smoke test:** an "Test predictors on T4 lysozyme" expander on the form runs a single sequence through all four developability endpoints — useful to sanity-check the deployment before kicking off a full loop.
 
 ### ADMET & Safety
-**Tab:** Small Molecules → ADMET & Safety
+**Tab:** Small Molecule → ADMET & Safety
 
 - Input: SMILES strings (one per line)
 - Pipeline: Chemprop BBBP + ClinTox + ADMET endpoints (independent, parallel scoring)
 - Output: Risk cards (green/orange/red) per molecule, expandable property details
 
-## Disease Biology
+## Genomics
 
 ### VCF Ingestion
 - Input: VCF file path in Volumes
@@ -197,9 +197,9 @@ A reward-weighted resampling loop on top of Motif Scaffolding's stack — instea
 
 ## Instructions
 
-1. When a user asks "how do I predict protein structure?" → guide them to Protein Studies → Structure Prediction, recommend ESMFold for quick results or AlphaFold2 for accuracy.
+1. When a user asks "how do I predict protein structure?" → guide them to Large Molecule → Structure Prediction, recommend ESMFold for quick results or AlphaFold2 for accuracy.
 2. When a user asks about cell types → guide them to Single Cell → Cell Type Annotation (requires a completed processing run first).
-3. When a user asks about drug-target interactions → guide them to Small Molecules → Ligand Binder Design or ADMET & Safety.
+3. When a user asks about drug-target interactions → guide them to Small Molecule → Ligand Binder Design or ADMET & Safety.
 4. When a user asks about gene effects → guide them to Single Cell → Perturbation Prediction.
 5. For demos, recommend starting all endpoints first (Settings → Start All Endpoints) to avoid scale-from-zero delays.
 6. Always mention that batch workflows (AlphaFold2, Scanpy/Rapids processing) take time — start them first, then demo real-time workflows while waiting.

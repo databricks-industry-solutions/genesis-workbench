@@ -19,9 +19,9 @@ type NavItem = {
 const ALL_NAV: NavItem[] = [
   { to: '/', label: 'Home', icon: 'home' },
   { to: '/single-cell', label: 'Single Cell', icon: 'microbiology', module: 'single_cell' },
-  { to: '/protein-studies', label: 'Protein Studies', icon: 'biotech', module: 'protein_studies' },
-  { to: '/small-molecules', label: 'Small Molecules', icon: 'science', module: 'small_molecule' },
-  { to: '/disease-biology', label: 'Disease Biology', icon: 'coronavirus', module: 'disease_biology' },
+  { to: '/large-molecule', label: 'Large Molecule', icon: 'biotech', module: 'large_molecule' },
+  { to: '/small-molecule', label: 'Small Molecule', icon: 'science', module: 'small_molecule' },
+  { to: '/genomics', label: 'Genomics', icon: 'coronavirus', module: 'genomics' },
   { to: '/monitoring', label: 'Monitoring', icon: 'monitoring', dividerAbove: true },
   { to: '/settings', label: 'Settings', icon: 'settings' },
 ]

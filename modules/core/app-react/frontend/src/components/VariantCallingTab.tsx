@@ -15,7 +15,7 @@ type RefMode = 'preset' | 'custom'
 
 export function VariantCallingTab() {
   const defaults = useQuery({
-    queryKey: ['disease_biology', 'defaults'],
+    queryKey: ['genomics', 'defaults'],
     queryFn: api.diseaseBiologyDefaults,
     staleTime: Infinity,
   })
@@ -194,7 +194,7 @@ export function VariantCallingTab() {
       )}
 
       <RunSearchSection
-        searchKey={['disease_biology', 'variant_calling', 'search'] as const}
+        searchKey={['genomics', 'variant_calling', 'search'] as const}
         searchFn={api.variantCallingSearch}
         detailLabel="FASTQ R1"
         initialText="variant_calling"

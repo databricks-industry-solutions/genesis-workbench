@@ -8,12 +8,12 @@ import { InProgressBadge } from '@/components/InProgressBadge'
 import type { DBRunRow, DBSearchResponse } from '@/types/api'
 import { cn } from '@/lib/utils'
 
-// Disease Biology workflow statuses that mean "the job is still running"
-// (mirrors _IN_PROGRESS in backend/app/services/disease_biology.py).
+// Genomics workflow statuses that mean "the job is still running"
+// (mirrors _IN_PROGRESS in backend/app/services/genomics.py).
 const DB_IN_PROGRESS_STATUSES = new Set(['started', 'phenotype_prepared'])
 
 /**
- * Generic "Search Past Runs" block for the Disease Biology tabs. Each tab
+ * Generic "Search Past Runs" block for the Genomics tabs. Each tab
  * supplies its own searchFn + detail-column label + result-dialog renderer.
  * View button is disabled until the run reaches one of the `viewable_statuses`.
  */

@@ -16,13 +16,13 @@ function ts(): string {
 export function GwasTab() {
   // Pick a completed variant-calling run to seed the VCF path.
   const picker = useQuery({
-    queryKey: ['disease_biology', 'variant_calling', 'successful'],
+    queryKey: ['genomics', 'variant_calling', 'successful'],
     queryFn: api.variantCallingSuccessful,
     staleTime: 60_000,
   })
 
   const defaults = useQuery({
-    queryKey: ['disease_biology', 'defaults'],
+    queryKey: ['genomics', 'defaults'],
     queryFn: api.diseaseBiologyDefaults,
     staleTime: Infinity,
   })
@@ -226,7 +226,7 @@ export function GwasTab() {
       )}
 
       <RunSearchSection
-        searchKey={['disease_biology', 'gwas', 'search'] as const}
+        searchKey={['genomics', 'gwas', 'search'] as const}
         searchFn={api.gwasSearch}
         detailLabel="VCF path"
         initialText="gwas"

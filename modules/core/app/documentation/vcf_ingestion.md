@@ -12,7 +12,7 @@ VCF Ingestion converts Variant Call Format (VCF) files into Delta tables for eff
 
 ## How to Use
 
-1. Navigate to **Disease Biology > VCF Ingestion** tab
+1. Navigate to **Genomics > VCF Ingestion** tab
 2. Enter the VCF file path on a UC Volume
 3. Specify the output Delta table name
 4. Set MLflow experiment and run names
@@ -34,9 +34,9 @@ VCF Ingestion converts Variant Call Format (VCF) files into Delta tables for eff
 
 ### Architecture
 
-1. **UI** (`modules/core/app/views/disease_biology.py`): VCF Ingestion tab
-2. **Backend** (`modules/core/app/utils/disease_biology.py`): `start_vcf_ingestion()` creates MLflow run and triggers job
-3. **Job** (`modules/disease_biology/vcf_ingestion/vcf_ingestion_v1/resources/vcf_ingestion_workflow.job.yml`): Single-task workflow with Glow JAR library
+1. **UI** (`modules/core/app/views/genomics.py (legacy Streamlit)`): VCF Ingestion tab
+2. **Backend** (`modules/core/app-react/backend/app/services/genomics.py`): `start_vcf_ingestion()` creates MLflow run and triggers job
+3. **Job** (`modules/genomics/vcf_ingestion/vcf_ingestion_v1/resources/vcf_ingestion_workflow.job.yml`): Single-task workflow with Glow JAR library
 
 ### Workflow Pipeline
 
@@ -54,7 +54,7 @@ vcf_to_delta → mark_success/mark_failure
 
 ### Key Files
 
-- `modules/core/app/views/disease_biology.py` — UI (VCF Ingestion tab)
-- `modules/core/app/utils/disease_biology.py` — `start_vcf_ingestion()`
-- `modules/disease_biology/vcf_ingestion/vcf_ingestion_v1/resources/vcf_ingestion_workflow.job.yml` — Job definition
-- `modules/disease_biology/vcf_ingestion/vcf_ingestion_v1/notebooks/01_vcf_to_delta.py` — Execution notebook
+- `modules/core/app/views/genomics.py (legacy Streamlit)` — UI (VCF Ingestion tab)
+- `modules/core/app-react/backend/app/services/genomics.py` — `start_vcf_ingestion()`
+- `modules/genomics/vcf_ingestion/vcf_ingestion_v1/resources/vcf_ingestion_workflow.job.yml` — Job definition
+- `modules/genomics/vcf_ingestion/vcf_ingestion_v1/notebooks/01_vcf_to_delta.py` — Execution notebook

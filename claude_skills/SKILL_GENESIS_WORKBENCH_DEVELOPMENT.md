@@ -95,7 +95,7 @@ much longer than typical spot reclamation intervals. The ~30% cost premium
 of on-demand is paid only for the duration of the run and is far cheaper
 than re-running an interrupted multi-hour job.
 
-**Pattern to mirror:** `modules/protein_studies/boltz/boltz_1/databricks.yml`
+**Pattern to mirror:** `modules/large_molecule/boltz/boltz_1/databricks.yml`
 — it overlays on-demand per cloud for `register_boltz`. Every new workflow
 must do the same for every job it adds. When a submodule defines multiple
 jobs (e.g. `enzyme_optimization_v1` has both Fast and Accurate jobs), each
@@ -172,7 +172,7 @@ Every model in Genesis Workbench follows this pipeline. The patterns are consist
 Follow existing structure. Example for a new protein model called `mymodel`:
 
 ```
-modules/protein_studies/mymodel/mymodel_v1/
+modules/large_molecule/mymodel/mymodel_v1/
 ├── databricks.yml          # DAB bundle config
 ├── variables.yml           # Cloud-specific variables
 ├── deploy.sh               # Deployment script
@@ -377,7 +377,7 @@ response = workspace_client.serving_endpoints.query(
 ### Step 3: Create the workflow UI file
 
 Follow the module's pattern:
-- **Protein Studies**: `views/protein_studies_workflows/myworkflow.py` with a `render()` function
+- **Large Molecule**: `views/large_molecule_workflows/myworkflow.py` with a `render()` function
 - **Single Cell**: `views/single_cell_workflows/myworkflow.py` with a `render()` function
 
 Standard structure:
@@ -417,11 +417,11 @@ def render():
 
 ### Step 4: Wire into the main page
 
-Edit the module's main view file (e.g., `views/protein_studies.py`):
+Edit the module's main view file (e.g., `views/large_molecule.py`):
 
 ```python
 # Add import
-from views.protein_studies_workflows import myworkflow
+from views.large_molecule_workflows import myworkflow
 
 # Add to tabs
 settings_tab, ..., myworkflow_tab = st.tabs(["Settings", ..., "My Workflow"])

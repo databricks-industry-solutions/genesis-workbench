@@ -42,9 +42,9 @@ Despite their expertise in biology, many highly talented life science scientists
 - Scripts to deploy Genesis Workbench core module in your workspace
 - Scripts to deploy below modules:
 	- Single Cell module that deploys and uses scGPT, SCimilarity, Scanpy, Rapids-SingleCell, and Merck's [TEDDY-G 400M](modules/core/app/docs/single_cell_teddy_annotation.md) for joint cell-type + disease annotation
-	- Protein Studies module that deploys and uses ESMFold, ESM2 Embeddings, Alphafold2, ProteinMPNN, RFDiffusion and Boltz
+	- Large Molecule module that deploys and uses ESMFold, ESM2 Embeddings, Alphafold2, ProteinMPNN, RFDiffusion and Boltz
 	- Small Molecule module that deploys and uses Chemprop, DiffDock, Proteina-Complexa, NetSolP-1.0 (protein solubility prediction), PLTNUM-ESM2 (protein half-life relative stability ranking), DeepSTABp (protein melting temperature regression), and MHCflurry 2.x (MHC-I immunogenic burden prediction); also exposes a [Guided Enzyme Optimization](modules/core/app/docs/small_molecule_enzyme_optimization.md) workflow that composes Proteina-Complexa, ProteinMPNN, ESMFold, Boltz, NetSolP, PLTNUM, DeepSTABp, and MHCflurry into an iterative scaffold-and-score loop
-	- Disease Biology module for VCF ingestion, variant annotation and GWAS analysis
+	- Genomics module for VCF ingestion, variant annotation and GWAS analysis
 	- BioNeMo container definitions and workflows
 	- Parabricks container definitions and workflows
 	- Access Management, Monitoring and Dashboards
@@ -131,7 +131,7 @@ ProteinMPNN | cloudpickle==2.2.1 | BSD-3 | https://github.com/cloudpipe/cloudpic
 ProteinMPNN | biopython==1.79 | [BioPython License Agreement](https://github.com/biopython/biopython/blob/master/LICENSE.rst) |  https://github.com/biopython/biopython
 ProteinMPNN | MODEL WEIGHTS | MIT | https://github.com/dauparas/ProteinMPNN
 Alphafold | AlphaFold (2.3.2) | Apache2.0 | https://github.com/google-deepmind/alphafold
-Alphafold | other dependencies | we provide a file of requirements per alphafold's own [repo](https://github.com/google-deepmind/alphafold), see [yml file](https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/modules/protein_studies/alphafold/alphafold_v2.3.2/envs/alphafold_env.yml) for further details |
+Alphafold | other dependencies | we provide a file of requirements per alphafold's own [repo](https://github.com/google-deepmind/alphafold), see [yml file](https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/modules/large_molecule/alphafold/alphafold_v2.3.2/envs/alphafold_env.yml) for further details |
 Alphafold | MODEL WEIGHTS | CC BY 4.0
 ESMfold | ESMFold |	MIT | https://github.com/facebookresearch/esm
 ESMfold | torch | BSD-3 | https://github.com/pytorch/pytorch
@@ -266,8 +266,8 @@ MHCflurry | cloudpickle==2.0.0 | BSD-3 | https://github.com/cloudpipe/cloudpickl
 MHCflurry | databricks-sdk==0.50.0 | Apache2.0 | https://pypi.org/project/databricks-sdk/
 MHCflurry | databricks-sql-connector==4.0.2 | Apache2.0 | https://github.com/databricks/databricks-sql-python
 MHCflurry | MODEL WEIGHTS (auto-fetched via `mhcflurry-downloads fetch models_class1_presentation`, ~150 MB) | Apache2.0 | https://github.com/openvax/mhcflurry
-Disease Biology | glow | Apache2.0 | https://github.com/projectglow/glow
-Disease Biology | pyspark | Apache2.0 | https://github.com/apache/spark
+Genomics | glow | Apache2.0 | https://github.com/projectglow/glow
+Genomics | pyspark | Apache2.0 | https://github.com/apache/spark
 BioNeMo | six==1.16.0 | MIT | https://github.com/benjaminp/six
 BioNeMo | numpy==1.26.4 | BSD-3 | https://github.com/numpy/numpy
 BioNeMo | pandas==2.2.3 | BSD-3 | https://github.com/pandas-dev/pandas

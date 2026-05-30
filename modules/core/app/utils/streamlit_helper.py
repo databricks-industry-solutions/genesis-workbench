@@ -298,10 +298,10 @@ def display_import_model_uc_dialog(success_callback = None, error_callback = Non
     user_info = get_user_info()
 
     _MODULE_OPTIONS = {
-        "Protein Studies": ModelCategory.PROTEIN_STUDIES,
-        "Small Molecules": ModelCategory.SMALL_MOLECULE,
+        "Large Molecule": ModelCategory.LARGE_MOLECULE,
+        "Small Molecule": ModelCategory.SMALL_MOLECULE,
         "Single Cell": ModelCategory.SINGLE_CELL,
-        "Disease Biology": ModelCategory.DISEASE_BIOLOGY,
+        "Genomics": ModelCategory.GENOMICS,
     }
 
     if "import_uc_model_info" in st.session_state:

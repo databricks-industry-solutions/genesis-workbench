@@ -45,7 +45,7 @@ export function EnzymeOptimizationTab() {
   // Form defaults seeded from the server so the example PDB + weight map
   // + reference enzymes stay in one place (backend).
   const defaults = useQuery({
-    queryKey: ['small_molecules', 'enzyme_opt', 'defaults'],
+    queryKey: ['small_molecule', 'enzyme_opt', 'defaults'],
     queryFn: api.enzymeOptDefaults,
     staleTime: Infinity,
   })

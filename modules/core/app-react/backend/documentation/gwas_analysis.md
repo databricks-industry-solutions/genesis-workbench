@@ -14,7 +14,7 @@ Genome-Wide Association Study (GWAS) analysis identifies statistical association
 
 ## How to Use
 
-1. Navigate to **Disease Biology > GWAS Analysis** tab
+1. Navigate to **Genomics > GWAS Analysis** tab
 2. Select VCF source: enter a path directly or pick from a completed Variant Calling run
 3. Enter the phenotype file path (CSV or TSV on a UC Volume)
 4. Configure analysis parameters:
@@ -50,9 +50,9 @@ The phenotype file must contain:
 
 ### Architecture
 
-1. **UI** (`modules/core/app/views/disease_biology.py`): GWAS Analysis tab with VCF source selector and form
-2. **Backend** (`modules/core/app/utils/disease_biology.py`): `start_gwas_analysis()` creates MLflow run and triggers job
-3. **Job** (`modules/disease_biology/gwas/gwas_v1/resources/gwas_analysis.job.yml`): Multi-task workflow
+1. **UI** (`modules/core/app/views/genomics.py (legacy Streamlit)`): GWAS Analysis tab with VCF source selector and form
+2. **Backend** (`modules/core/app-react/backend/app/services/genomics.py`): `start_gwas_analysis()` creates MLflow run and triggers job
+3. **Job** (`modules/genomics/gwas/gwas_v1/resources/gwas_analysis.job.yml`): Multi-task workflow
 
 ### Workflow Pipeline
 
@@ -72,9 +72,9 @@ prepare_phenotype → run_gwas → save_results → mark_success/mark_failure
 
 ### Key Files
 
-- `modules/core/app/views/disease_biology.py` — UI (GWAS Analysis tab)
-- `modules/core/app/utils/disease_biology.py` — `start_gwas_analysis()`, `pull_gwas_results()`
-- `modules/disease_biology/gwas/gwas_v1/resources/gwas_analysis.job.yml` — Job definition
-- `modules/disease_biology/gwas/gwas_v1/notebooks/03_prepare_phenotype.py` — Phenotype prep
-- `modules/disease_biology/gwas/gwas_v1/notebooks/04_gwas_analysis.py` — GWAS execution
-- `modules/disease_biology/gwas/gwas_v1/notebooks/05_save_results.py` — Results and MLflow
+- `modules/core/app/views/genomics.py (legacy Streamlit)` — UI (GWAS Analysis tab)
+- `modules/core/app-react/backend/app/services/genomics.py` — `start_gwas_analysis()`, `pull_gwas_results()`
+- `modules/genomics/gwas/gwas_v1/resources/gwas_analysis.job.yml` — Job definition
+- `modules/genomics/gwas/gwas_v1/notebooks/03_prepare_phenotype.py` — Phenotype prep
+- `modules/genomics/gwas/gwas_v1/notebooks/04_gwas_analysis.py` — GWAS execution
+- `modules/genomics/gwas/gwas_v1/notebooks/05_save_results.py` — Results and MLflow

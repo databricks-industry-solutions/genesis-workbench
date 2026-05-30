@@ -13,10 +13,9 @@ router = APIRouter(prefix="/api/models", tags=["models"])
 
 
 # `module` is the *bundle* module string (e.g. "single_cell"). It's a slight
-# rename from ModelCategory because Disease Biology only has batch models —
-# they live under module="disease_biology" but no ModelCategory.DISEASE_BIOLOGY
-# row is created for them.
-SUPPORTED_MODULES = {"single_cell", "protein_studies", "small_molecule", "disease_biology"}
+# rename from ModelCategory because Genomics only has batch models — they
+# live under module="genomics" but no real-time deployed models exist for it.
+SUPPORTED_MODULES = {"single_cell", "large_molecule", "small_molecule", "genomics"}
 
 
 def _module_to_category(module: str) -> ModelCategory:
@@ -96,7 +95,7 @@ def available(module: str, _: CurrentUserDep) -> AvailableModelsResponse:
 
 @router.get("/deployed", response_model=DeployedModelsResponse)
 def deployed(module: str, _: CurrentUserDep) -> DeployedModelsResponse:
-    if module == "disease_biology":
+    if module == "genomics":
         return DeployedModelsResponse(models=[])
     category = _module_to_category(module)
     df = get_deployed_models(category)

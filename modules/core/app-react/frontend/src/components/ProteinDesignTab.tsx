@@ -31,7 +31,7 @@ export function ProteinDesignTab() {
       n_rfdiffusion_hits: number
     },
     ProteinDesignResponse
-  >('/api/protein_studies/protein_design/stream')
+  >('/api/large_molecule/protein_design/stream')
 
   const runDesign = () =>
     design.start({

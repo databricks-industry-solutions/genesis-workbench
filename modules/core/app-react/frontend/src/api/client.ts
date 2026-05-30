@@ -6,7 +6,7 @@ import type {
   BootstrapResponse,
   DBSearchResponse,
   DeployedModelsResponse,
-  DiseaseBiologyDefaultsResponse,
+  GenomicsDefaultsResponse,
   DockingExampleResponse,
   DocsResponse,
   EnzymeDefaultsResponse,
@@ -137,43 +137,43 @@ export const api = {
     request<ModuleBatchModelsResponse>(`/api/models/batch?module=${module}`),
 
   esmfold: (sequence: string) =>
-    request<StructurePredictionResponse>('/api/protein_studies/esmfold', {
+    request<StructurePredictionResponse>('/api/large_molecule/esmfold', {
       method: 'POST',
       body: JSON.stringify({ sequence }),
     }),
   boltz: (sequence: string) =>
-    request<StructurePredictionResponse>('/api/protein_studies/boltz', {
+    request<StructurePredictionResponse>('/api/large_molecule/boltz', {
       method: 'POST',
       body: JSON.stringify({ sequence }),
     }),
 
   alphafoldStart: (body: { sequence: string; experiment_name: string; run_name: string }) =>
-    request<AlphaFoldStartResponse>('/api/protein_studies/alphafold/start', {
+    request<AlphaFoldStartResponse>('/api/large_molecule/alphafold/start', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
   alphafoldSearch: (by: 'experiment_name' | 'run_name', text: string) =>
     request<AlphaFoldSearchResponse>(
-      `/api/protein_studies/alphafold/search?by=${by}&text=${encodeURIComponent(text)}`,
+      `/api/large_molecule/alphafold/search?by=${by}&text=${encodeURIComponent(text)}`,
     ),
   alphafoldResult: (run_id: string, run_name: string) =>
     request<AlphaFoldResultResponse>(
-      `/api/protein_studies/alphafold/result?run_id=${encodeURIComponent(run_id)}&run_name=${encodeURIComponent(run_name)}`,
+      `/api/large_molecule/alphafold/result?run_id=${encodeURIComponent(run_id)}&run_name=${encodeURIComponent(run_name)}`,
     ),
 
   sequenceSearch: (sequence: string, top_k: number) =>
-    request<SequenceSearchResponse>('/api/protein_studies/sequence_search', {
+    request<SequenceSearchResponse>('/api/large_molecule/sequence_search', {
       method: 'POST',
       body: JSON.stringify({ sequence, top_k }),
     }),
   sequenceOrganism: (description: string) =>
-    request<OrganismResponse>('/api/protein_studies/sequence_search/organism', {
+    request<OrganismResponse>('/api/large_molecule/sequence_search/organism', {
       method: 'POST',
       body: JSON.stringify({ description }),
     }),
 
   inverseFolding: (pdb: string) =>
-    request<InverseFoldingResponse>('/api/protein_studies/inverse_folding', {
+    request<InverseFoldingResponse>('/api/large_molecule/inverse_folding', {
       method: 'POST',
       body: JSON.stringify({ pdb }),
     }),
@@ -184,7 +184,7 @@ export const api = {
     run_name: string
     n_rfdiffusion_hits: number
   }) =>
-    request<ProteinDesignResponse>('/api/protein_studies/protein_design', {
+    request<ProteinDesignResponse>('/api/large_molecule/protein_design', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
@@ -285,95 +285,95 @@ export const api = {
     }),
 
   diffdockExample: () =>
-    request<DockingExampleResponse>('/api/small_molecules/diffdock/example'),
+    request<DockingExampleResponse>('/api/small_molecule/diffdock/example'),
 
   enzymeOptDefaults: () =>
-    request<EnzymeDefaultsResponse>('/api/small_molecules/enzyme_optimization/defaults'),
+    request<EnzymeDefaultsResponse>('/api/large_molecule/enzyme_optimization/defaults'),
   enzymeOptStart: (body: EnzymeOptimizationStartRequest) =>
     request<EnzymeOptimizationStartResponse>(
-      '/api/small_molecules/enzyme_optimization/start',
+      '/api/large_molecule/enzyme_optimization/start',
       { method: 'POST', body: JSON.stringify(body) },
     ),
   enzymeOptSearch: (by: 'run_name' | 'experiment_name', text: string) =>
     request<EnzymeSearchResponse>(
-      `/api/small_molecules/enzyme_optimization/search?by=${by}&text=${encodeURIComponent(text)}`,
+      `/api/large_molecule/enzyme_optimization/search?by=${by}&text=${encodeURIComponent(text)}`,
     ),
   enzymeOptStatus: (run_id: string) =>
     request<EnzymeStatusResponse>(
-      `/api/small_molecules/enzyme_optimization/status?run_id=${encodeURIComponent(run_id)}`,
+      `/api/large_molecule/enzyme_optimization/status?run_id=${encodeURIComponent(run_id)}`,
     ),
   enzymeOptTopK: (run_id: string) =>
     request<EnzymeTopKResponse>(
-      `/api/small_molecules/enzyme_optimization/top_k?run_id=${encodeURIComponent(run_id)}`,
+      `/api/large_molecule/enzyme_optimization/top_k?run_id=${encodeURIComponent(run_id)}`,
     ),
   enzymeOptSmokeTest: () =>
     request<EnzymeSmokeTestResponse>(
-      '/api/small_molecules/enzyme_optimization/smoke_test',
+      '/api/large_molecule/enzyme_optimization/smoke_test',
       { method: 'POST' },
     ),
 
-  // ─── Disease Biology ────────────────────────────────────────────────────
+  // ─── Genomics ────────────────────────────────────────────────────
 
   variantCallingStart: (body: VariantCallingStartRequest) =>
-    request<JobDispatchResponse>('/api/disease_biology/variant_calling/start', {
+    request<JobDispatchResponse>('/api/genomics/variant_calling/start', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
   variantCallingSearch: (by: 'run_name' | 'experiment_name', text: string) =>
     request<DBSearchResponse>(
-      `/api/disease_biology/variant_calling/search?by=${by}&text=${encodeURIComponent(text)}`,
+      `/api/genomics/variant_calling/search?by=${by}&text=${encodeURIComponent(text)}`,
     ),
   variantCallingSuccessful: () =>
-    request<VariantCallingPickerResponse>('/api/disease_biology/variant_calling/successful'),
+    request<VariantCallingPickerResponse>('/api/genomics/variant_calling/successful'),
 
   gwasStart: (body: GwasStartRequest) =>
-    request<JobDispatchResponse>('/api/disease_biology/gwas/start', {
+    request<JobDispatchResponse>('/api/genomics/gwas/start', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
   gwasSearch: (by: 'run_name' | 'experiment_name', text: string) =>
     request<DBSearchResponse>(
-      `/api/disease_biology/gwas/search?by=${by}&text=${encodeURIComponent(text)}`,
+      `/api/genomics/gwas/search?by=${by}&text=${encodeURIComponent(text)}`,
     ),
   gwasResults: (run_id: string) =>
     request<GwasResultsResponse>(
-      `/api/disease_biology/gwas/results?run_id=${encodeURIComponent(run_id)}`,
+      `/api/genomics/gwas/results?run_id=${encodeURIComponent(run_id)}`,
     ),
 
   vcfIngestionStart: (body: VcfIngestionStartRequest) =>
-    request<JobDispatchResponse>('/api/disease_biology/vcf_ingestion/start', {
+    request<JobDispatchResponse>('/api/genomics/vcf_ingestion/start', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
   vcfIngestionSearch: (by: 'run_name' | 'experiment_name', text: string) =>
     request<DBSearchResponse>(
-      `/api/disease_biology/vcf_ingestion/search?by=${by}&text=${encodeURIComponent(text)}`,
+      `/api/genomics/vcf_ingestion/search?by=${by}&text=${encodeURIComponent(text)}`,
     ),
   vcfIngestionSuccessful: () =>
-    request<VcfIngestionPickerResponse>('/api/disease_biology/vcf_ingestion/successful'),
+    request<VcfIngestionPickerResponse>('/api/genomics/vcf_ingestion/successful'),
 
   variantAnnotationStart: (body: VariantAnnotationStartRequest) =>
-    request<JobDispatchResponse>('/api/disease_biology/variant_annotation/start', {
+    request<JobDispatchResponse>('/api/genomics/variant_annotation/start', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
   variantAnnotationSearch: (by: 'run_name' | 'experiment_name', text: string) =>
     request<DBSearchResponse>(
-      `/api/disease_biology/variant_annotation/search?by=${by}&text=${encodeURIComponent(text)}`,
+      `/api/genomics/variant_annotation/search?by=${by}&text=${encodeURIComponent(text)}`,
     ),
   variantAnnotationResults: (run_id: string) =>
     request<VariantAnnotationResultsResponse>(
-      `/api/disease_biology/variant_annotation/results?run_id=${encodeURIComponent(run_id)}`,
+      `/api/genomics/variant_annotation/results?run_id=${encodeURIComponent(run_id)}`,
     ),
   variantAnnotationDashboard: (run_name?: string) =>
     request<VariantAnnotationDashboardResponse>(
-      `/api/disease_biology/variant_annotation/dashboard${run_name ? `?run_name=${encodeURIComponent(run_name)}` : ''}`,
+      `/api/genomics/variant_annotation/dashboard${run_name ? `?run_name=${encodeURIComponent(run_name)}` : ''}`,
     ),
 
   diseaseBiologyRunDetails: (run_id: string) =>
     request<RunDetailsResponse>(
-      `/api/disease_biology/run/details?run_id=${encodeURIComponent(run_id)}`,
+      `/api/genomics/run/details?run_id=${encodeURIComponent(run_id)}`,
     ),
   diseaseBiologyDefaults: () =>
-    request<DiseaseBiologyDefaultsResponse>('/api/disease_biology/defaults'),
+    request<GenomicsDefaultsResponse>('/api/genomics/defaults'),
 }

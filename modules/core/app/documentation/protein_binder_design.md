@@ -13,7 +13,7 @@ Protein Binder Design generates novel protein sequences that bind to a target pr
 
 ## How to Use
 
-1. Navigate to **Small Molecules > Protein Binder Design** tab
+1. Navigate to **Small Molecule > Protein Binder Design** tab
 2. Provide the target protein:
    - Upload a PDB file, or
    - Enter a sequence (will be folded with ESMFold first)
@@ -59,6 +59,6 @@ Ranked designs with sequences and structures
 
 ### Key Files
 
-- `modules/core/app/views/small_molecules.py` — UI (Protein Binder Design tab)
+- `modules/core/app/views/small_molecules.py (legacy Streamlit)` — UI (Protein Binder Design tab)
 - `modules/core/app/utils/small_molecule_tools.py` — `hit_proteina_complexa()`, `hit_esmfold()`
 - `modules/small_molecule/proteina_complexa/proteina_complexa_v1/` — Model registration

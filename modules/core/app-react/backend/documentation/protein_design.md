@@ -14,7 +14,7 @@ Protein Design generates novel protein sequences and structures by redesigning s
 
 ## How to Use
 
-1. Navigate to **Protein Studies > Protein Design** tab
+1. Navigate to **Large Molecule > Protein Design** tab
 2. Enter a protein sequence with the region to redesign marked as `[REGION_TO_REPLACE]`
    - Example: `MKTAYIAK[REGION_TO_REPLACE]FLEEHPGG`
 3. Configure MLflow experiment and run names
@@ -74,7 +74,7 @@ Output: Designed sequence + aligned structures
 
 ### Key Files
 
-- `modules/core/app/views/protein_studies.py` — UI (Protein Design tab)
-- `modules/protein_studies/rfdiffusion/rfdiffusion_v1.1.0/notebooks/01_register_rfdiffusion.py` — RFDiffusion registration
-- `modules/protein_studies/protein_mpnn/protein_mpnn_v0.1.0/notebooks/01_register_proteinmpnn.py` — ProteinMPNN registration
-- `modules/protein_studies/esmfold/esmfold_v1/notebooks/01_register_esmfold.py` — ESMFold registration
+- `modules/core/app/views/large_molecule.py (legacy Streamlit)` — UI (Protein Design tab)
+- `modules/large_molecule/rfdiffusion/rfdiffusion_v1.1.0/notebooks/01_register_rfdiffusion.py` — RFDiffusion registration
+- `modules/large_molecule/protein_mpnn/protein_mpnn_v0.1.0/notebooks/01_register_proteinmpnn.py` — ProteinMPNN registration
+- `modules/large_molecule/esmfold/esmfold_v1/notebooks/01_register_esmfold.py` — ESMFold registration

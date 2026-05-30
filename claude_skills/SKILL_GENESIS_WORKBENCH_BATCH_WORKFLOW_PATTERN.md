@@ -9,7 +9,7 @@ When a new feature looks like:
 
 > "User fills a form → app dispatches a Databricks job → job runs for several minutes / hours → user comes back later to review results."
 
-Follow this pattern end-to-end. Don't invent a parallel approach — every batch workflow in this repo (AlphaFold, Disease Biology GWAS / Variant Annotation, Guided Enzyme Optimization, Scanpy) has converged on it. Newer implementations refine it slightly; the most complete reference is the **Guided Enzyme Optimization** stack landed on the `guided_enzyme_creation` branch.
+Follow this pattern end-to-end. Don't invent a parallel approach — every batch workflow in this repo (AlphaFold, Genomics GWAS / Variant Annotation, Guided Enzyme Optimization, Scanpy) has converged on it. Newer implementations refine it slightly; the most complete reference is the **Guided Enzyme Optimization** stack landed on the `guided_enzyme_creation` branch.
 
 ## When to apply
 
@@ -21,13 +21,13 @@ Follow this pattern end-to-end. Don't invent a parallel approach — every batch
 
 These each cost a deploy cycle when they slipped in. Read them before writing code.
 
-1. **Don't render an inline auto-polling result pane on the launch page.** It conflicts with the *Search Past Runs* dialog flow, can't survive a tab refresh, and forces awkward `st.session_state["active_run"]` plumbing. Use the AlphaFold-style success-message + Search-Past-Runs dialog instead. Reference: `modules/core/app/views/protein_studies_workflows/structure_prediction.py:104-186`.
+1. **Don't render an inline auto-polling result pane on the launch page.** It conflicts with the *Search Past Runs* dialog flow, can't survive a tab refresh, and forces awkward `st.session_state["active_run"]` plumbing. Use the AlphaFold-style success-message + Search-Past-Runs dialog instead. Reference: `modules/core/app/views/large_molecule_workflows/structure_prediction.py:104-186`.
 
 2. **Don't return `job_run.run_id` from the dispatcher and treat it as the MLflow run_id.** They are different things. `job_run.run_id` (int) is the Databricks job-run id; the MLflow run_id (str hex) is what `MlflowClient.get_run()`, `download_artifacts()`, etc. expect. The dispatcher's success message displays `job_run_id`; the *search* discovers the MLflow run via tags.
 
 3. **Don't pass `experiment.name` (the full path `/Users/<email>/mlflow_experiments/<tag>`) to the orchestrator's `mlflow_experiment` job parameter.** The orchestrator's `set_mlflow_experiment` will prepend the user-folder again, producing `/Users/.../mlflow_experiments//Users/.../mlflow_experiments/<tag>` — MLflow's REST endpoint surfaces this as `BAD_REQUEST: For input string: "None"`. Pass the *short tag* (e.g., `"gwb_enzyme_optimization"`) and let the orchestrator resolve.
 
-4. **Don't create the MLflow run only inside the orchestrator notebook.** Cluster cold-start + `pip install` takes 3-5 min; for that whole window the *Search Past Runs* table is empty even though the job is in flight. Pre-create the run from the dispatcher (Disease Biology pattern) and pass `mlflow_run_id` so the orchestrator attaches.
+4. **Don't create the MLflow run only inside the orchestrator notebook.** Cluster cold-start + `pip install` takes 3-5 min; for that whole window the *Search Past Runs* table is empty even though the job is in flight. Pre-create the run from the dispatcher (Genomics pattern) and pass `mlflow_run_id` so the orchestrator attaches.
 
 5. **Don't surface raw MLflow run lifecycle status (`RUNNING` / `FINISHED`) in the search-results status column.** Use a progressive `job_status` tag (`submitted` → `started` → stage-specific → `complete` / `failed`) so the user sees the *pipeline stage*, not the lifecycle state.
 
@@ -349,7 +349,7 @@ Module-level helpers:
 
 ### Optional but recommended — progress dots in the search table
 
-Mirror `disease_biology._PROGRESS_MAP` / `add_progress_column` (`modules/core/app/utils/disease_biology.py:23-54`). For the enzyme stack, the implementation lives at `modules/core/app/utils/enzyme_optimization_tools.py:_ENZYME_PROGRESS_MAP / _enzyme_progress / _add_progress_column`. For the scanpy stack: `modules/core/app/utils/single_cell_analysis.py:_SC_PROGRESS_MAP / add_singlecell_progress_column`. Define a fixed-width emoji scheme (e.g., `🟩🟩⬜⬜`), call from the search-helper so both search functions get it for free.
+Mirror `genomics._PROGRESS_MAP` / `add_progress_column` (`modules/core/app/utils/genomics.py:23-54`). For the enzyme stack, the implementation lives at `modules/core/app/utils/enzyme_optimization_tools.py:_ENZYME_PROGRESS_MAP / _enzyme_progress / _add_progress_column`. For the scanpy stack: `modules/core/app/utils/single_cell_analysis.py:_SC_PROGRESS_MAP / add_singlecell_progress_column`. Define a fixed-width emoji scheme (e.g., `🟩🟩⬜⬜`), call from the search-helper so both search functions get it for free.
 
 Canonical 3-stage helper (copy-paste then rename the prefix):
 
@@ -520,8 +520,8 @@ if search_btn:
 | Feature | Module | Notes |
 |---|---|---|
 | **Guided Enzyme Optimization** | `modules/small_molecule/enzyme_optimization/` + `modules/core/app/utils/enzyme_optimization_tools.py` + `modules/core/app/views/small_molecule_workflows/enzyme_optimization.py` | **Most complete reference.** Has all five layers, progress dots, dialog with metrics + collapsed expander, Fast/Accurate dual-job dispatch toggle, in-process AME failure-handling. Copy from here when adding the next batch workflow. |
-| **AlphaFold** | `modules/protein_studies/alphafold/` + `modules/core/app/utils/protein_structure.py` + `modules/core/app/views/protein_studies_workflows/structure_prediction.py:104-186` | The original Search Past Runs UX template. Simpler — single status (`fold_complete`), no progress dots. |
-| **Disease Biology — GWAS / Variant Annotation** | `modules/disease_biology/*` + `modules/core/app/utils/disease_biology.py` | Source of the **MLflow run pre-creation pattern** (`disease_biology.py:122-166`) and progress-dots helper. |
+| **AlphaFold** | `modules/large_molecule/alphafold/` + `modules/core/app/utils/protein_structure.py` + `modules/core/app/views/large_molecule_workflows/structure_prediction.py:104-186` | The original Search Past Runs UX template. Simpler — single status (`fold_complete`), no progress dots. |
+| **Genomics — GWAS / Variant Annotation** | `modules/genomics/*` + `modules/core/app/utils/genomics.py` | Source of the **MLflow run pre-creation pattern** (`genomics.py:122-166`) and progress-dots helper. |
 | **Scanpy** | `modules/single_cell/scanpy/scanpy_v0.0.1/` | Earlier batch-flow without pre-creation — useful to see what NOT to do for the run-visibility piece. |
 
 When uncertain how to wire something, start by reading the equivalent block of the enzyme_optimization stack — it's been hardened across several deploy cycles in this branch.

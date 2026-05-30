@@ -9,17 +9,17 @@ from fastapi.staticfiles import StaticFiles
 from app.routers import (
     assistant,
     bootstrap,
-    disease_biology,
     docs,
+    genomics,
     health,
+    large_molecule,
     me,
     models,
     monitoring,
     profile,
-    protein,
     settings,
     single_cell,
-    small_molecules,
+    small_molecule,
 )
 from app.services.workbench import initialize_lib
 
@@ -56,10 +56,10 @@ app.include_router(monitoring.router)
 app.include_router(assistant.router)
 app.include_router(docs.router)
 app.include_router(models.router)
-app.include_router(protein.router)
+app.include_router(large_molecule.router)
 app.include_router(single_cell.router)
-app.include_router(small_molecules.router)
-app.include_router(disease_biology.router)
+app.include_router(small_molecule.router)
+app.include_router(genomics.router)
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 

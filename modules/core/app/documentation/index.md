@@ -1,19 +1,19 @@
 # Genesis Workbench Documentation
 
-## Disease Biology
+## Genomics
 
 - [Variant Calling](variant_calling.md) — GPU-accelerated germline variant calling from FASTQ files using Parabricks
 - [GWAS Analysis](gwas_analysis.md) — Genome-wide association testing between genetic variants and phenotypes using Glow
 - [VCF Ingestion](vcf_ingestion.md) — Convert VCF files to Delta tables for querying and analysis
 - [Variant Annotation](variant_annotation.md) — Annotate variants with ClinVar clinical significance data
 
-## Protein Studies
+## Large Molecule
 
 - [Protein Structure Prediction](protein_structure_prediction.md) — Predict 3D protein structures with ESMFold (fast) or AlphaFold2 (high-accuracy)
 - [Protein Design](protein_design.md) — Design novel proteins by redesigning specified regions using RFDiffusion + ProteinMPNN
 - [Sequence Similarity Search](sequence_search.md) — Fast BLAST-like search across 150M+ sequences using ESM-2 embeddings
 
-## Small Molecules
+## Small Molecule
 
 - [Molecular Docking](molecular_docking.md) — Predict protein-ligand binding poses using DiffDock
 - [Protein Binder Design](protein_binder_design.md) — Design proteins that bind a target protein using Proteina-Complexa

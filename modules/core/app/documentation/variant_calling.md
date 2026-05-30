@@ -12,7 +12,7 @@ Variant Calling uses NVIDIA Parabricks to perform GPU-accelerated germline varia
 
 ## How to Use
 
-1. Navigate to **Disease Biology > Variant Calling** tab
+1. Navigate to **Genomics > Variant Calling** tab
 2. Enter the UC Volume paths for your paired-end FASTQ files (Read 1 and Read 2)
 3. Select the reference genome (GRCh38 is pre-staged during setup, or provide a custom path)
 4. Specify the output volume path where BAM and VCF files will be written
@@ -38,10 +38,10 @@ Variant Calling uses NVIDIA Parabricks to perform GPU-accelerated germline varia
 
 ### Architecture
 
-1. **UI** (`modules/core/app/views/disease_biology.py`): Streamlit form collects inputs and triggers the workflow
-2. **Backend** (`modules/core/app/utils/disease_biology.py`): `start_parabricks_alignment()` creates an MLflow run and triggers the Databricks job
-3. **Job** (`modules/disease_biology/gwas/gwas_v1/resources/parabricks_alignment.job.yml`): Defines the Databricks workflow with a GPU cluster
-4. **Notebook** (`modules/disease_biology/gwas/gwas_v1/notebooks/02_parabricks_germline.py`): Executes the Parabricks germline pipeline
+1. **UI** (`modules/core/app/views/genomics.py (legacy Streamlit)`): Streamlit form collects inputs and triggers the workflow
+2. **Backend** (`modules/core/app-react/backend/app/services/genomics.py`): `start_parabricks_alignment()` creates an MLflow run and triggers the Databricks job
+3. **Job** (`modules/genomics/gwas/gwas_v1/resources/parabricks_alignment.job.yml`): Defines the Databricks workflow with a GPU cluster
+4. **Notebook** (`modules/genomics/gwas/gwas_v1/notebooks/02_parabricks_germline.py`): Executes the Parabricks germline pipeline
 
 ### Workflow Pipeline
 
@@ -58,7 +58,7 @@ FASTQ R1 + R2 → Parabricks fq2bam (alignment) → BAM
 
 ### Key Files
 
-- `modules/core/app/views/disease_biology.py` — UI (Variant Calling tab)
-- `modules/core/app/utils/disease_biology.py` — `start_parabricks_alignment()`
-- `modules/disease_biology/gwas/gwas_v1/resources/parabricks_alignment.job.yml` — Job definition
-- `modules/disease_biology/gwas/gwas_v1/notebooks/02_parabricks_germline.py` — Execution notebook
+- `modules/core/app/views/genomics.py (legacy Streamlit)` — UI (Variant Calling tab)
+- `modules/core/app-react/backend/app/services/genomics.py` — `start_parabricks_alignment()`
+- `modules/genomics/gwas/gwas_v1/resources/parabricks_alignment.job.yml` — Job definition
+- `modules/genomics/gwas/gwas_v1/notebooks/02_parabricks_germline.py` — Execution notebook

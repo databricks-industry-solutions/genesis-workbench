@@ -68,7 +68,7 @@ export function MotifScaffoldingTab() {
       mlflow_run_name: string
     },
     MotifScaffoldingResponse
-  >('/api/small_molecules/motif_scaffolding/stream')
+  >('/api/small_molecule/motif_scaffolding/stream')
 
   useEffect(() => {
     if (job.data?.scaffolds?.length) setSelectedIdx(0)

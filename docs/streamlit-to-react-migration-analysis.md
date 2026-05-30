@@ -27,7 +27,7 @@ Static assets are minimal (logos, a couple of GIFs, one workflow diagram). No ex
 
 ### Ecosystem (modules/ outside core/app)
 
-The other modules (`single_cell/`, `disease_biology/`, `small_molecule/`, etc.) contain **job notebooks and deployment YAML**, not UI. They run on Databricks as jobs/model-serving endpoints. **The React rewrite does not touch these.** They continue to be invoked the same way (jobs.run_now, serving endpoint queries) — only the caller changes from a Streamlit page to a FastAPI route.
+The other modules (`single_cell/`, `genomics/`, `small_molecule/`, etc.) contain **job notebooks and deployment YAML**, not UI. They run on Databricks as jobs/model-serving endpoints. **The React rewrite does not touch these.** They continue to be invoked the same way (jobs.run_now, serving endpoint queries) — only the caller changes from a Streamlit page to a FastAPI route.
 
 ---
 
@@ -35,7 +35,7 @@ The other modules (`single_cell/`, `disease_biology/`, `small_molecule/`, etc.) 
 
 These translate cleanly with standard React patterns and require no novel work:
 
-- **Backend logic reuse (~90% of `utils/`).** 10 of 11 util files are pure Python — `enzyme_optimization_tools.py`, `disease_biology.py`, `sequence_search_tools.py`, `scimilarity_tools.py`, `small_molecule_tools.py`, `protein_design.py`, `protein_structure.py`, `structure_utils.py`, `single_cell_analysis.py`, `molstar_tools.py`. They wrap Databricks SDK, MLflow, SQL warehouse, and serving endpoint calls. Move them as-is into FastAPI routes.
+- **Backend logic reuse (~90% of `utils/`).** 10 of 11 util files are pure Python — `enzyme_optimization_tools.py`, `genomics.py`, `sequence_search_tools.py`, `scimilarity_tools.py`, `small_molecule_tools.py`, `protein_design.py`, `protein_structure.py`, `structure_utils.py`, `single_cell_analysis.py`, `molstar_tools.py`. They wrap Databricks SDK, MLflow, SQL warehouse, and serving endpoint calls. Move them as-is into FastAPI routes.
 - **Job dispatch + polling.** Pattern is already async-on-Databricks, sync-from-UI. FastAPI endpoints expose `POST /jobs/start` (returns `run_id`) and `GET /jobs/{run_id}/status`. React polls with React Query / TanStack Query.
 - **Tabs and navigation.** `st.navigation` + `st.tabs` → React Router. Trivial.
 - **Modal dialogs (~8 `@st.dialog` usages).** → Radix UI / Headless UI / shadcn Dialog.
@@ -53,7 +53,7 @@ Real work, but no unknowns:
 
 - **Cross-page state.** Streamlit's `st.session_state` carries `user_settings`, `deployed_modules`, `doc_index`, plus per-workflow caches (`available_*_models_df`, `*_run_search_result_df`, `selected_row_index`, `_last_assistant_query`, …). Total: 30+ keys. In React this becomes Zustand stores (or Redux Toolkit) + React Query for server state. Plan ~1 week to design this layer up front — getting it wrong cascades.
 - **Conditional forms.** Several pages change fields based on prior selections (`processing.py` scanpy↔rapids, `structure_prediction.py` model selector → param schema, `small_molecules.py` sub-workflow routing). Doable with React Hook Form `watch()`, but each conditional form needs its own design pass.
-- **Two heaviest screens.** `views/disease_biology.py` (995 lines, 5 tabs, 6+ dialogs, GWAS + variant-calling + VCF + annotation flows) and `views/single_cell_workflows/processing.py` (805 lines, scanpy/rapids dual mode, plotly results) — each is roughly a week on its own.
+- **Two heaviest screens.** `views/genomics.py` (995 lines, 5 tabs, 6+ dialogs, GWAS + variant-calling + VCF + annotation flows) and `views/single_cell_workflows/processing.py` (805 lines, scanpy/rapids dual mode, plotly results) — each is roughly a week on its own.
 - **Auth model shift.** Currently `streamlit_helper.get_user_info()` reads `X-Forwarded-Access-Token` from the Streamlit request and instantiates `WorkspaceClient(token=..., auth_type="pat")`. Databricks Apps injects this header at the proxy. **A FastAPI service inside the same Databricks App still receives this header**, so the auth mechanism *can* be preserved — but you should redesign it as proper FastAPI middleware that validates the token, caches `WorkspaceClient` per request, and surfaces the user to route handlers via `Depends()`. Not hard, but must be done right once.
 - **Multi-user concurrency (your stated goal).** Today, `st.session_state["__gwb_user_info"]` is per-Streamlit-session, but Streamlit's process model and rerun semantics serialize work and waste compute on every interaction. FastAPI gives you true per-request concurrency and lets you cache the `WorkspaceClient` per user. This is *the* win you're after — but it implies discipline: zero shared mutable state in FastAPI, all state lives in the React client or Lakebase.
 
@@ -115,9 +115,9 @@ Databricks App
     │   │   ├── jobs.py
     │   │   ├── models.py
     │   │   ├── single_cell.py
-    │   │   ├── protein_studies.py
+    │   │   ├── large_molecule.py
     │   │   ├── small_molecules.py
-    │   │   ├── disease_biology.py
+    │   │   ├── genomics.py
     │   │   └── settings.py
     │   └── services/                    # ← copies of modules/core/app/utils/*.py (the pure-Python ones)
     └── requirements.txt
@@ -133,7 +133,7 @@ The Databricks Apps framework supports this exact shape. The on-behalf-of-user h
 |---|---|---|
 | 0. Foundation | Project scaffold (Vite+React+FastAPI), auth middleware, design system (shadcn/ui or MUI), Zustand stores, API client codegen, CI | 1.0 wk |
 | 1. Easy pages | Settings, Monitoring, User Profile, Home | 0.5 wk |
-| 2. Tab/launcher pages | Single Cell, Protein Studies, Small Molecules, Disease Biology shells + model selectors | 0.5 wk |
+| 2. Tab/launcher pages | Single Cell, Large Molecule, Small Molecule, Genomics shells + model selectors | 0.5 wk |
 | 3. Mol* viewer (iframe approach) | Wrap `molstar_tools` HTML output in a React component | 0.5 wk |
 | 4. Protein workflows (4) | structure_prediction, sequence_search, protein_design, inverse_folding | 1.5 wk |
 | 5. Small-molecule workflows (5) | enzyme_optimization, ligand_binder_design, motif_scaffolding, admet_safety, binder_design | 1.5 wk |
@@ -154,7 +154,7 @@ Risk buffer: +20% for the heavy screens and integration debugging. Realistic: **
 
 1. Stand up the new React+FastAPI app **alongside** the existing Streamlit app as a sibling Databricks App. Don't try to replace Streamlit in-place.
 2. Pick the **smallest valuable slice first**: Settings + User Profile + Home. Validate auth, stores, deploy, theming end-to-end on something low-risk. (~1.5 weeks including foundation.)
-3. **Then port the workflow that has the most user pain** — likely one of the heavy ones (disease_biology or processing). Doing a hard one second forces all the architectural decisions early.
+3. **Then port the workflow that has the most user pain** — likely one of the heavy ones (genomics or processing). Doing a hard one second forces all the architectural decisions early.
 4. **Defer Mol* deep integration.** Use the iframe wrapper for v1. Only invest in native-React Mol* if usage data shows you need bidirectional interaction.
 5. Migrate the rest workflow-by-workflow. Users can run both apps until parity is reached.
 
@@ -170,14 +170,14 @@ Why incrementally: a big-bang rewrite of 26 screens before any goes to users is 
 - `modules/core/app/.streamlit/config.toml` — theme
 
 **Heaviest screens (port last or split across people):**
-- `modules/core/app/views/disease_biology.py` (995 lines)
+- `modules/core/app/views/genomics.py` (995 lines)
 - `modules/core/app/views/single_cell_workflows/processing.py` (805 lines)
 - `modules/core/app/views/small_molecule_workflows/enzyme_optimization.py` (595 lines)
 
 **Reusable utils (move to FastAPI services/ as-is):**
 - `modules/core/app/utils/enzyme_optimization_tools.py`
 - `modules/core/app/utils/single_cell_analysis.py`
-- `modules/core/app/utils/disease_biology.py`
+- `modules/core/app/utils/genomics.py`
 - `modules/core/app/utils/sequence_search_tools.py`
 - `modules/core/app/utils/scimilarity_tools.py`
 - `modules/core/app/utils/small_molecule_tools.py`

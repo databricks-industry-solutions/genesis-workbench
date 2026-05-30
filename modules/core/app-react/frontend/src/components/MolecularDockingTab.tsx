@@ -18,7 +18,7 @@ export function MolecularDockingTab() {
   // Defaults: SMILES + 50-residue PDB excerpt of chain A from 6agt, fetched
   // server-side so the React bundle doesn't carry a multi-KB string.
   const example = useQuery({
-    queryKey: ['small_molecules', 'diffdock', 'example'],
+    queryKey: ['small_molecule', 'diffdock', 'example'],
     queryFn: api.diffdockExample,
     staleTime: Infinity,
   })
@@ -46,7 +46,7 @@ export function MolecularDockingTab() {
       mlflow_run_name: string
     },
     MolecularDockingResponse
-  >('/api/small_molecules/diffdock/stream')
+  >('/api/small_molecule/diffdock/stream')
 
   // When a new result arrives, jump to the top-ranked pose so the viewer
   // shows something meaningful immediately.

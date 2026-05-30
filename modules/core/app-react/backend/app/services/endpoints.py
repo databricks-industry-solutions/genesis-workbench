@@ -14,7 +14,7 @@ from genesis_workbench.models import get_endpoint_name_for_uc_model
 # Display name -> UC short name. Keep in sync with the Streamlit
 # `_MODEL_ENDPOINT_MAP`. When new models register, add their entry here.
 DISPLAY_TO_UC: dict[str, str] = {
-    # Small Molecules
+    # Small Molecule
     "DiffDock ESM Embeddings": "diffdock_esm_embeddings",
     "DiffDock": "diffdock",
     "Proteina-Complexa Binder": "proteina_complexa",
@@ -30,7 +30,7 @@ DISPLAY_TO_UC: dict[str, str] = {
     # Single Cell
     "SCimilarity Gene Order": "scimilarity_gene_order",
     "SCimilarity Get Embedding": "scimilarity_get_embedding",
-    # Protein Studies
+    # Large Molecule
     "ESM2 Embeddings": "esm2_embeddings",
     "ESMFold": "esmfold",
     "ProteinMPNN": "proteinmpnn",

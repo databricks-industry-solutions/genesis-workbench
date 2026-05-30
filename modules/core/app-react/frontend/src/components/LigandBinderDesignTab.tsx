@@ -63,7 +63,7 @@ export function LigandBinderDesignTab() {
       mlflow_run_name: string
     },
     LigandBinderDesignResponse
-  >('/api/small_molecules/ligand_binder_design/stream')
+  >('/api/small_molecule/ligand_binder_design/stream')
 
   useEffect(() => {
     if (design.data?.designs?.length) setSelectedIdx(0)

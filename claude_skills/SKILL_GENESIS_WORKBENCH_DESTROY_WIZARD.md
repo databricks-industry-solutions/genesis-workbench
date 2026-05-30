@@ -46,8 +46,8 @@ So if any non-core module still has a `.deployed` marker, attempting `./destroy.
 2. bionemo
 3. small_molecule
 4. single_cell
-5. protein_studies
-6. disease_biology
+5. large_molecule
+6. genomics
 7. **core** (last)
 
 ## Per-module destroy command
@@ -64,7 +64,7 @@ Single canonical entry point:
 3. `cd modules/<module>` and calls the module-level `destroy.sh`, which runs `databricks bundle destroy --target prod_<cloud> --auto-approve`. This removes bundle-declared resources only.
 4. For non-core modules, then runs `destroy_module_job` in core via `databricks bundle run`, which executes `modules/core/notebooks/destroy_module.py`. That notebook deletes MLflow serving endpoints registered in the GWB `models` table, optionally deletes per-module Vector Search resources (see "Survivors" below), and soft-deletes module rows.
 
-Aggregator modules (`single_cell`, `protein_studies`, `small_molecule`, `disease_biology`) loop through their submodules in their own `destroy.sh` and call each leaf submodule's `destroy.sh` in turn. Atomic modules (`bionemo`, `parabricks`, `core`) destroy directly.
+Aggregator modules (`single_cell`, `large_molecule`, `small_molecule`, `genomics`) loop through their submodules in their own `destroy.sh` and call each leaf submodule's `destroy.sh` in turn. Atomic modules (`bionemo`, `parabricks`, `core`) destroy directly.
 
 `small_molecule` is the most fragmented (8 submodules as of `guided_enzyme_creation`):
 `open_babel_v3`, `diffdock_v1`, `chemprop_v2`, `proteina_complexa_v1`,

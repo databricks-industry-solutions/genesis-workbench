@@ -1,6 +1,6 @@
 # Streamlit → React+FastAPI Conversion Patterns
 
-Captured during the Single Cell + Protein Studies migration. Apply these
+Captured during the Single Cell + Large Molecule migration. Apply these
 when porting any remaining Streamlit workflow to this React+FastAPI app.
 
 ---

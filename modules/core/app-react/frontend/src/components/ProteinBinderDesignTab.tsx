@@ -25,7 +25,7 @@ export function ProteinBinderDesignTab() {
   // Reuse the docking example endpoint for the default PDB — it serves a
   // 50-residue chain-A slice of 6agt that's also a sensible binder target.
   const example = useQuery({
-    queryKey: ['small_molecules', 'diffdock', 'example'],
+    queryKey: ['small_molecule', 'diffdock', 'example'],
     queryFn: api.diffdockExample,
     staleTime: Infinity,
   })
@@ -65,7 +65,7 @@ export function ProteinBinderDesignTab() {
       mlflow_run_name: string
     },
     BinderDesignResponse
-  >('/api/small_molecules/binder_design/stream')
+  >('/api/large_molecule/binder_design/stream')
 
   useEffect(() => {
     if (design.data?.designs?.length) setSelectedIdx(0)

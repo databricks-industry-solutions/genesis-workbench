@@ -13,7 +13,7 @@ Sequence Similarity Search provides fast, BLAST-like protein sequence searching 
 
 ## How to Use
 
-1. Navigate to **Protein Studies > Sequence Search** tab
+1. Navigate to **Large Molecule > Sequence Search** tab
 2. Paste a protein sequence or upload a FASTA file
 3. Set the maximum number of results (25-500)
 4. Click **Search**
@@ -72,9 +72,9 @@ Stage 5: Ranking & Return
 
 ### Key Files
 
-- `modules/core/app/views/protein_studies.py` — UI (Sequence Search tab)
-- `modules/protein_studies/sequence_search/sequence_search_v1/notebooks/` — Setup pipeline
-- `modules/protein_studies/esm2_embeddings/esm2_embeddings_v1/` — ESM-2 embedding model
+- `modules/core/app/views/large_molecule.py (legacy Streamlit)` — UI (Sequence Search tab)
+- `modules/large_molecule/sequence_search/sequence_search_v1/notebooks/` — Setup pipeline
+- `modules/large_molecule/esm2_embeddings/esm2_embeddings_v1/` — ESM-2 embedding model
 
 ### Dependencies
 
