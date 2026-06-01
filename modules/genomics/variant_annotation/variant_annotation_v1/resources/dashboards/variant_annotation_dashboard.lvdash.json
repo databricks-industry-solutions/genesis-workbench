@@ -4,197 +4,71 @@
       "name": "ds_total_variants",
       "displayName": "Total Variants",
       "queryLines": [
-        "SELECT COUNT(*) as total_variants FROM variant_annotation_clinical_annotated WHERE run_name = :run_name"
+        "SELECT COUNT(*) as total_variants FROM variant_annotation_clinical_annotated WHERE 1=1"
       ]
     },
     {
       "name": "ds_pathogenic_count",
       "displayName": "Pathogenic Variants Count",
       "queryLines": [
-        "SELECT COUNT(*) as pathogenic_count FROM variant_annotation_pathogenic WHERE run_name = :run_name"
+        "SELECT COUNT(*) as pathogenic_count FROM variant_annotation_pathogenic WHERE 1=1"
       ]
     },
     {
       "name": "ds_pathogenic_details",
       "displayName": "Pathogenic Variant Details",
       "queryLines": [
-        "SELECT\n",
-        "  gene,\n",
-        "  COALESCE(category, 'N/A') as category,\n",
-        "  COALESCE(condition, 'N/A') as condition,\n",
-        "  chromosome,\n",
-        "  start as position,\n",
-        "  ref,\n",
-        "  alt,\n",
-        "  zygosity,\n",
-        "  array_join(clinical_significance, ', ') as clinical_significance,\n",
-        "  disease_name,\n",
-        "  array_join(variant_ids, ', ') as variant_ids\n",
-        "FROM\n",
-        "  variant_annotation_pathogenic\n",
-        "WHERE\n",
-        "  run_name = :run_name\n",
-        "ORDER BY\n",
-        "  gene,\n",
-        "  position"
+        "SELECT\n  gene,\n  COALESCE(category, 'N/A') as category,\n  COALESCE(condition, 'N/A') as condition,\n  chromosome,\n  start as position,\n  ref,\n  alt,\n  zygosity,\n  array_join(clinical_significance, ', ') as clinical_significance,\n  disease_name,\n  array_join(variant_ids, ', ') as variant_ids\nFROM\n  variant_annotation_pathogenic\nWHERE 1=1\nORDER BY\n  gene,\n  position"
       ]
     },
     {
       "name": "ds_pathogenicity_dist",
       "displayName": "Pathogenicity Distribution",
       "queryLines": [
-        "SELECT\n",
-        "  CASE\n",
-        "    WHEN p.gene IS NOT NULL THEN 'Pathogenic/Likely Pathogenic'\n",
-        "    WHEN\n",
-        "      a.clinical_significance IS NOT NULL\n",
-        "      AND array_join(a.clinical_significance, ', ') LIKE '%Benign%'\n",
-        "    THEN\n",
-        "      'Benign/Likely Benign'\n",
-        "    WHEN\n",
-        "      a.clinical_significance IS NOT NULL\n",
-        "      AND array_join(a.clinical_significance, ', ') LIKE '%Uncertain%'\n",
-        "    THEN\n",
-        "      'Uncertain Significance'\n",
-        "    ELSE 'No ClinVar Data'\n",
-        "  END as pathogenicity_category,\n",
-        "  COUNT(*) as count\n",
-        "FROM\n",
-        "  variant_annotation_clinical_annotated a\n",
-        "    LEFT JOIN variant_annotation_pathogenic p\n",
-        "      ON a.chromosome = p.chromosome\n",
-        "      AND a.start = p.start\n",
-        "      AND a.ref = p.ref\n",
-        "      AND a.alt = p.alt\n",
-        "      AND a.run_name = p.run_name\n",
-        "WHERE\n",
-        "  a.run_name = :run_name\n",
-        "GROUP BY\n",
-        "  1\n",
-        "ORDER BY\n",
-        "  count DESC"
+        "SELECT\n  CASE\n    WHEN p.gene IS NOT NULL THEN 'Pathogenic/Likely Pathogenic'\n    WHEN\n      a.clinical_significance IS NOT NULL\n      AND array_join(a.clinical_significance, ', ') LIKE '%Benign%'\n    THEN\n      'Benign/Likely Benign'\n    WHEN\n      a.clinical_significance IS NOT NULL\n      AND array_join(a.clinical_significance, ', ') LIKE '%Uncertain%'\n    THEN\n      'Uncertain Significance'\n    ELSE 'No ClinVar Data'\n  END as pathogenicity_category,\n  COUNT(*) as count\nFROM\n  variant_annotation_clinical_annotated a\n    LEFT JOIN variant_annotation_pathogenic p\n      ON a.chromosome = p.chromosome\n      AND a.start = p.start\n      AND a.ref = p.ref\n      AND a.alt = p.alt\n      AND a.run_name = p.run_name\nWHERE 1=1\nGROUP BY\n  1\nORDER BY\n  count DESC"
       ]
     },
     {
       "name": "ds_gene_distribution",
       "displayName": "Gene Distribution",
       "queryLines": [
-        "SELECT gene, COUNT(*) as variant_count FROM variant_annotation_clinical_annotated WHERE run_name = :run_name GROUP BY gene ORDER BY variant_count DESC"
+        "SELECT gene, COUNT(*) as variant_count FROM variant_annotation_clinical_annotated WHERE 1=1 GROUP BY gene ORDER BY variant_count DESC"
       ]
     },
     {
       "name": "ds_category_distribution",
       "displayName": "Category Distribution",
       "queryLines": [
-        "SELECT\n",
-        "  COALESCE(category, 'N/A') as category,\n",
-        "  COUNT(*) as variant_count\n",
-        "FROM\n",
-        "  variant_annotation_clinical_annotated\n",
-        "WHERE\n",
-        "  run_name = :run_name\n",
-        "GROUP BY\n",
-        "  category\n",
-        "ORDER BY\n",
-        "  variant_count DESC"
+        "SELECT\n  COALESCE(category, 'N/A') as category,\n  COUNT(*) as variant_count\nFROM\n  variant_annotation_clinical_annotated\nWHERE 1=1\nGROUP BY\n  category\nORDER BY\n  variant_count DESC"
       ]
     },
     {
       "name": "ds_all_variants",
       "displayName": "All Variants with Annotations",
       "queryLines": [
-        "SELECT\n",
-        "  gene,\n",
-        "  COALESCE(category, 'N/A') as category,\n",
-        "  COALESCE(condition, 'N/A') as condition,\n",
-        "  chromosome,\n",
-        "  start as position,\n",
-        "  ref,\n",
-        "  alt,\n",
-        "  zygosity,\n",
-        "  COALESCE(array_join(clinical_significance, ', '), 'Not in ClinVar') as significance,\n",
-        "  COALESCE(array_join(disease_name, ', '), 'N/A') as disease\n",
-        "FROM\n",
-        "  variant_annotation_clinical_annotated\n",
-        "WHERE\n",
-        "  run_name = :run_name\n",
-        "ORDER BY\n",
-        "  gene,\n",
-        "  position"
+        "SELECT\n  gene,\n  COALESCE(category, 'N/A') as category,\n  COALESCE(condition, 'N/A') as condition,\n  chromosome,\n  start as position,\n  ref,\n  alt,\n  zygosity,\n  COALESCE(array_join(clinical_significance, ', '), 'Not in ClinVar') as significance,\n  COALESCE(array_join(disease_name, ', '), 'N/A') as disease\nFROM\n  variant_annotation_clinical_annotated\nWHERE 1=1\nORDER BY\n  gene,\n  position"
       ]
     },
     {
       "name": "ds_zygosity_dist",
       "displayName": "Zygosity Distribution",
       "queryLines": [
-        "SELECT\n",
-        "  gene,\n",
-        "  zygosity,\n",
-        "  COUNT(*) as variant_count\n",
-        "FROM\n",
-        "  variant_annotation_clinical_annotated\n",
-        "WHERE\n",
-        "  run_name = :run_name\n",
-        "GROUP BY\n",
-        "  gene,\n",
-        "  zygosity\n",
-        "ORDER BY\n",
-        "  gene,\n",
-        "  zygosity"
+        "SELECT\n  gene,\n  zygosity,\n  COUNT(*) as variant_count\nFROM\n  variant_annotation_clinical_annotated\nWHERE 1=1\nGROUP BY\n  gene,\n  zygosity\nORDER BY\n  gene,\n  zygosity"
       ]
     },
     {
       "name": "ds_disease_assoc",
       "displayName": "Disease Associations",
       "queryLines": [
-        "SELECT\n",
-        "  disease_name,\n",
-        "  gene,\n",
-        "  COUNT(*) as variant_count\n",
-        "FROM\n",
-        "  variant_annotation_pathogenic\n",
-        "WHERE\n",
-        "  disease_name IS NOT NULL\n",
-        "  AND disease_name != ''\n",
-        "  AND run_name = :run_name\n",
-        "GROUP BY\n",
-        "  disease_name,\n",
-        "  gene\n",
-        "ORDER BY\n",
-        "  variant_count DESC"
+        "SELECT\n  disease_name,\n  gene,\n  COUNT(*) as variant_count\nFROM\n  variant_annotation_pathogenic\nWHERE\n  disease_name IS NOT NULL\n  AND disease_name != ''\nGROUP BY\n  disease_name,\n  gene\nORDER BY\n  variant_count DESC"
       ]
     },
     {
       "name": "ds_variant_quality",
       "displayName": "Variant Quality Scores",
       "queryLines": [
-        "SELECT\n",
-        "  gene,\n",
-        "  qual,\n",
-        "  zygosity\n",
-        "FROM\n",
-        "  variant_annotation_clinical_annotated\n",
-        "WHERE\n",
-        "  run_name = :run_name"
+        "SELECT\n  gene,\n  qual,\n  zygosity\nFROM\n  variant_annotation_clinical_annotated\nWHERE 1=1"
       ]
-    }
-  ],
-  "parameters": [
-    {
-      "name": "run_name",
-      "displayName": "Run Name",
-      "keyword": "run_name",
-      "dataType": "STRING",
-      "defaultSelection": {
-        "values": {
-          "dataType": "STRING",
-          "values": [
-            {
-              "value": ""
-            }
-          ]
-        }
-      }
     }
   ],
   "pages": [
