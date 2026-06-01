@@ -122,9 +122,12 @@ def annotate_clusters(
     cells_per_cluster: int = 30,
     k_neighbors: int = 100,
     progress_callback=None,
-) -> tuple[pd.DataFrame, dict[str, str]]:
+) -> tuple[pd.DataFrame, dict[str, str], list[str]]:
     """Full SCimilarity annotation pipeline. Returns (cluster_results_df,
-    cluster_to_type) — the second is a flat map for UMAP overlay.
+    cluster_to_type, warnings) — the second is a flat map for UMAP overlay;
+    `warnings` is a per-batch failure summary that callers should surface in
+    their response so the user can tell when annotation succeeded with
+    partial data.
 
     `progress_callback(pct: int, msg: str)` is invoked between phases with
     real progress (0-100). Used by the SSE route for live updates."""
@@ -161,6 +164,12 @@ def annotate_clusters(
     total_sampled = len(sampled_indices)
     _p(8, f"Sampled {total_sampled} cells across {len(clusters)} clusters")
     embedding_frames: list[pd.DataFrame] = []
+    # Parallel to embedding_frames after concat. We can't reuse sampled_indices /
+    # sampled_clusters once a batch is skipped — positions in `embeddings_result`
+    # no longer align with their slot in the original sampled list.
+    successful_indices: list = []
+    successful_clusters: list = []
+    skipped_batches: list[tuple[int, int, str]] = []
     for batch_start in range(0, total_sampled, EMBEDDING_BATCH_SIZE):
         batch_end = min(batch_start + EMBEDDING_BATCH_SIZE, total_sampled)
         batch_normed = sampled_normed.iloc[batch_start:batch_end]
@@ -169,13 +178,25 @@ def annotate_clusters(
             if batch_result.empty:
                 raise RuntimeError(f"Empty result for batch {batch_start}-{batch_end}")
             embedding_frames.append(batch_result)
+            successful_indices.extend(sampled_indices[batch_start:batch_end])
+            successful_clusters.extend(sampled_clusters[batch_start:batch_end].tolist())
         except Exception as e:
-            raise RuntimeError(f"Embedding failed for cells {batch_start}-{batch_end}: {e}") from e
+            # Per-batch skip: log + continue. Downstream cluster voting tolerates
+            # missing cells — one bad batch just removes those cells from the
+            # vote, not the whole annotation. If EVERY batch fails we still
+            # raise below.
+            msg = f"Embedding failed for cells {batch_start}-{batch_end}: {e}"
+            logger.warning(msg)
+            skipped_batches.append((batch_start, batch_end, str(e).splitlines()[0][:200]))
         # 10% → 55% spread across embedding batches.
         pct = 10 + int((batch_end / total_sampled) * 45)
         _p(pct, f"Embedded {batch_end}/{total_sampled} cells")
     if not embedding_frames:
-        raise RuntimeError("No embeddings were generated for any batch")
+        first_err = skipped_batches[0][2] if skipped_batches else "no batches"
+        raise RuntimeError(
+            f"All {len(skipped_batches)} embedding batch(es) failed; cannot annotate. "
+            f"First error: {first_err}"
+        )
 
     embeddings_result = pd.concat(embedding_frames, ignore_index=True)
 
@@ -192,8 +213,8 @@ def annotate_clusters(
             nn_meta = pd.DataFrame()
         annotations.append(
             {
-                "cell_index": sampled_indices[i] if i < len(sampled_indices) else i,
-                "cluster": sampled_clusters[i] if i < len(sampled_clusters) else "?",
+                "cell_index": successful_indices[i] if i < len(successful_indices) else i,
+                "cluster": successful_clusters[i] if i < len(successful_clusters) else "?",
                 "nn_metadata": nn_meta,
             }
         )
@@ -235,4 +256,7 @@ def annotate_clusters(
         cluster_to_type[str(cl)] = top_type
 
     _p(100, f"Annotated {len(cluster_results)} clusters")
-    return pd.DataFrame(cluster_results), cluster_to_type
+    warnings: list[str] = [
+        f"Skipped cells {s}-{e}: {err}" for s, e, err in skipped_batches
+    ]
+    return pd.DataFrame(cluster_results), cluster_to_type, warnings

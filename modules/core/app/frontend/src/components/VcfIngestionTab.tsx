@@ -3,7 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 
 import { api } from '@/api/client'
 import { RunSearchSection } from '@/components/RunSearchSection'
-import type { DBRunRow } from '@/types/api'
+import type { DBRunRow, VariantCallingPickerRow } from '@/types/api'
 
 function ts(): string {
   const d = new Date()
@@ -17,6 +17,16 @@ export function VcfIngestionTab() {
     staleTime: Infinity,
   })
 
+  // Pick a completed variant-calling run to seed the VCF path — mirrors the
+  // GwasTab pattern. Lets the user chain VCF Ingestion onto an upstream
+  // Variant Calling run without copy-pasting the output_vcf path.
+  const picker = useQuery({
+    queryKey: ['genomics', 'variant_calling', 'successful'],
+    queryFn: api.variantCallingSuccessful,
+    staleTime: 60_000,
+  })
+
+  const [selectedVcRun, setSelectedVcRun] = useState<string>('')
   const [vcfPath, setVcfPath] = useState('')
   const [tableName, setTableName] = useState(`variants_${ts()}`)
   const [experiment, setExperiment] = useState('gwb_vcf_ingestion')
@@ -29,6 +39,13 @@ export function VcfIngestionTab() {
     if (!defaults.data) return
     setVcfPath((cur) => cur || defaults.data!.vcf_ingestion.vcf_path)
   }, [defaults.data])
+
+  // When the user picks a VC run, slot its output VCF into the path field.
+  useEffect(() => {
+    if (!selectedVcRun || !picker.data) return
+    const row = picker.data.runs.find((r) => r.run_id === selectedVcRun)
+    if (row?.output_vcf) setVcfPath(row.output_vcf)
+  }, [selectedVcRun, picker.data])
 
   const start = useMutation({ mutationFn: api.vcfIngestionStart })
   const canStart =
@@ -47,10 +64,31 @@ export function VcfIngestionTab() {
       <div>
         <h3 className="text-sm font-semibold">Convert a VCF File into a Delta Table</h3>
         <p className="text-xs text-muted-foreground">
-          Loads a VCF (single- or multi-sample) into a queryable Delta table via Glow. The
+          Loads a VCF (single- or multi-sample) into a queryable Delta table via Glow. Pick a
+          completed Variant Calling run to auto-fill the VCF path, or type a custom path. The
           ingested table becomes available to the Variant Annotation workflow's input picker.
         </p>
       </div>
+
+      {picker.data && picker.data.runs.length > 0 && (
+        <label className="block text-xs">
+          <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
+            Use VCF from a completed Variant Calling run
+          </span>
+          <select
+            value={selectedVcRun}
+            onChange={(e) => setSelectedVcRun(e.target.value)}
+            className="w-full max-w-xl rounded-md border border-border bg-background px-3 py-2 text-sm"
+          >
+            <option value="">— pick a run —</option>
+            {picker.data.runs.map((r: VariantCallingPickerRow) => (
+              <option key={r.run_id} value={r.run_id}>
+                {r.run_name} · {r.experiment_name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <label className="block text-xs">

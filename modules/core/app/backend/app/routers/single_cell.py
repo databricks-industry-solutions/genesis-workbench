@@ -325,6 +325,10 @@ class UmapPoint(BaseModel):
 class AnnotateResponse(BaseModel):
     annotations: list[ClusterAnnotation]
     umap_points: list[UmapPoint]
+    # Per-batch embedding failures that were tolerated rather than fatal —
+    # the UI surfaces these as an amber banner above the cluster table so
+    # users can tell when annotation succeeded with partial data.
+    warnings: list[str] = []
 
 
 @router.post("/annotate", response_model=AnnotateResponse)
@@ -348,7 +352,7 @@ def annotate(payload: AnnotateRequest, _: CurrentUserDep) -> AnnotateResponse:
         )
 
     try:
-        results_df, cluster_to_type = scim.annotate_clusters(
+        results_df, cluster_to_type, warnings = scim.annotate_clusters(
             markers_df,
             cluster_col=cluster_col,
             cells_per_cluster=payload.cells_per_cluster,
@@ -380,7 +384,7 @@ def annotate(payload: AnnotateRequest, _: CurrentUserDep) -> AnnotateResponse:
                 )
             )
 
-    return AnnotateResponse(annotations=annotations, umap_points=umap_points)
+    return AnnotateResponse(annotations=annotations, umap_points=umap_points, warnings=warnings)
 
 
 _SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
@@ -409,7 +413,7 @@ def annotate_stream(payload: AnnotateRequest, _: CurrentUserDep):
         )
 
     def work(progress_cb):
-        results_df, cluster_to_type = scim.annotate_clusters(
+        results_df, cluster_to_type, warnings = scim.annotate_clusters(
             markers_df,
             cluster_col=cluster_col,
             cells_per_cluster=payload.cells_per_cluster,
@@ -452,7 +456,7 @@ def annotate_stream(payload: AnnotateRequest, _: CurrentUserDep):
                 "SCimilarity annotation save to MLflow run %s failed: %s",
                 payload.run_id, e,
             )
-        return {"annotations": annotations, "umap_points": umap_points}
+        return {"annotations": annotations, "umap_points": umap_points, "warnings": warnings}
 
     return StreamingResponse(
         stream_with_progress(work),
@@ -1374,26 +1378,77 @@ def run_de(payload: DERequest, _: CurrentUserDep) -> DEResponse:
             f"No cells found for one of the clusters ({payload.cluster_a} / {payload.cluster_b})",
         )
 
+    # Sanitize a value that may be NaN / +Inf / -Inf into something JSON can
+    # safely serialize. The DEResponse fields are typed `float` so we can't
+    # use None — substitute 0.0 for non-finite values. log2FC of 0 means
+    # "no fold change", which is a safe-looking default for a gene we
+    # couldn't compute properly.
+    def _finite(x: float, default: float = 0.0) -> float:
+        try:
+            xf = float(x)
+        except (TypeError, ValueError):
+            return default
+        return xf if math.isfinite(xf) else default
+
     rows: list[dict] = []
+    skipped_genes = 0
     for col in expr_cols:
         gene = col.replace("expr_", "")
-        va = a_cells[col].values
-        vb = b_cells[col].values
-        mean_a = float(va.mean())
-        mean_b = float(vb.mean())
-        log2fc = float(np.log2((mean_a + 1e-9) / (mean_b + 1e-9)))
         try:
-            _, pval = mannwhitneyu(va, vb, alternative="two-sided")
-        except ValueError:
-            pval = 1.0
-        rows.append(
-            {
-                "Gene": gene,
-                "log2FC": log2fc,
-                "p_value": float(pval),
-                "Mean A": mean_a,
-                "Mean B": mean_b,
-            }
+            va = a_cells[col].values
+            vb = b_cells[col].values
+            # If either side is all-NaN or empty after dropping NaNs,
+            # mannwhitneyu and mean() return NaN — sanitize via _finite so
+            # we still emit a row (with log2FC=0, p_value=1) instead of
+            # leaking NaN into JSON and 500'ing the whole response.
+            if np.isnan(va).any():
+                va = va[~np.isnan(va)]
+            if np.isnan(vb).any():
+                vb = vb[~np.isnan(vb)]
+            if len(va) == 0 or len(vb) == 0:
+                # Nothing meaningful to compare; emit a placeholder row so
+                # the gene shows up in the table with neutral values.
+                mean_a = mean_b = 0.0
+                log2fc = 0.0
+                pval = 1.0
+            else:
+                mean_a = _finite(va.mean())
+                mean_b = _finite(vb.mean())
+                log2fc = _finite(np.log2((mean_a + 1e-9) / (mean_b + 1e-9)))
+                try:
+                    _, pval_raw = mannwhitneyu(va, vb, alternative="two-sided")
+                    pval = _finite(pval_raw, default=1.0)
+                except (ValueError, RuntimeWarning):
+                    pval = 1.0
+            rows.append(
+                {
+                    "Gene": gene,
+                    "log2FC": log2fc,
+                    "p_value": float(pval),
+                    "Mean A": mean_a,
+                    "Mean B": mean_b,
+                }
+            )
+        except Exception as e:
+            # Per-gene skip — log + continue. A single broken column
+            # shouldn't lose the whole differential expression analysis.
+            skipped_genes += 1
+            import logging
+            logging.getLogger(__name__).warning(
+                "DE per-gene failure on %s: %s", gene, e,
+            )
+            continue
+
+    if skipped_genes:
+        import logging
+        logging.getLogger(__name__).warning(
+            "DE: skipped %d/%d genes due to per-gene errors", skipped_genes, len(expr_cols),
+        )
+
+    if not rows:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            f"DE failed on every gene (n={len(expr_cols)}). Likely the run has all-NaN expression values.",
         )
 
     # Benjamini-Hochberg-ish p-value adjustment
@@ -1402,20 +1457,21 @@ def run_de(payload: DERequest, _: CurrentUserDep) -> DEResponse:
     out: list[DEGene] = []
     n_sig = 0
     for i, r in enumerate(rows, start=1):
-        p_adj = min(r["p_value"] * n / i, 1.0)
-        neg = -math.log10(max(p_adj, 1e-300))
-        significant = (p_adj < 0.05) and (abs(r["log2FC"]) > 1)
+        p_adj = _finite(min(r["p_value"] * n / i, 1.0), default=1.0)
+        neg = _finite(-math.log10(max(p_adj, 1e-300)), default=0.0)
+        log2fc_val = _finite(r["log2FC"])
+        significant = (p_adj < 0.05) and (abs(log2fc_val) > 1)
         if significant:
             n_sig += 1
         out.append(
             DEGene(
                 gene=r["Gene"],
-                log2fc=r["log2FC"],
-                p_value=r["p_value"],
+                log2fc=log2fc_val,
+                p_value=_finite(r["p_value"], default=1.0),
                 p_adj=p_adj,
                 neg_log10_p_adj=neg,
-                mean_a=r["Mean A"],
-                mean_b=r["Mean B"],
+                mean_a=_finite(r["Mean A"]),
+                mean_b=_finite(r["Mean B"]),
                 significant=significant,
             )
         )

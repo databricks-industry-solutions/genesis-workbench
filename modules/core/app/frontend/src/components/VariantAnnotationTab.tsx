@@ -288,7 +288,8 @@ function AnnotationResultsBody({ run }: { run: DBRunRow }) {
     )
   }
 
-  const dashboardLink = dash.data?.embed_url?.replace('/embed/dashboardsv3/', '/dashboardsv3/')
+  const embedUrl = dash.data?.embed_url
+  const dashboardLink = embedUrl?.replace('/embed/dashboardsv3/', '/dashboardsv3/')
 
   return (
     <div className="space-y-3 text-xs">
@@ -309,6 +310,22 @@ function AnnotationResultsBody({ run }: { run: DBRunRow }) {
         )}
       </div>
       <DataTable columns={cols} data={results.data.variants} />
+
+      {embedUrl && (
+        <div className="space-y-2 pt-2">
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            BRCA Cancer Risk Dashboard
+          </div>
+          {/* Mirrors the prior Streamlit behaviour (`components.iframe(url, height=600)`)
+              — Databricks Lakeview dashboards expect same-origin so no `sandbox` attr.
+              The "Open dashboard ↗" link above gives users a full-page view. */}
+          <iframe
+            title="Variant Annotation Lakeview dashboard"
+            src={embedUrl}
+            className="h-[600px] w-full rounded-md border border-border bg-background"
+          />
+        </div>
+      )}
     </div>
   )
 }

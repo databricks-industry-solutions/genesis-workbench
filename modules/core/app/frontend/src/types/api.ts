@@ -335,6 +335,10 @@ export type UmapPoint = {
 export type AnnotateResponse = {
   annotations: ClusterAnnotation[]
   umap_points: UmapPoint[]
+  /** Per-batch embedding failures that were tolerated. Non-empty → some
+   * cells were skipped; clusters still annotated using the remaining
+   * neighbor data. UMAP sub-tab renders these in an amber banner. */
+  warnings?: string[]
 }
 
 export type TeddyClusterAnnotation = {

@@ -630,6 +630,20 @@ function DualAnnotationPanel({
               <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 SCimilarity — cell type
               </div>
+              {scim.data!.warnings && scim.data!.warnings.length > 0 && (
+                <details className="mb-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs">
+                  <summary className="cursor-pointer font-medium text-amber-700 dark:text-amber-400">
+                    ⚠ {scim.data!.warnings.length} embedding batch
+                    {scim.data!.warnings.length === 1 ? '' : 'es'} skipped — clusters annotated
+                    with partial data
+                  </summary>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-5 text-muted-foreground">
+                    {scim.data!.warnings.map((w, i) => (
+                      <li key={i}>{w}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
               <DataTable columns={scimColumns} data={scim.data.annotations} />
             </div>
           )}
