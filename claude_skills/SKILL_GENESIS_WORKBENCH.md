@@ -76,7 +76,7 @@ Genesis Workbench simplifies deploying GPU-accelerated biological AI models on D
 - Start All Endpoints keep-alive feature
 
 ## Key Dependencies
-- Streamlit (UI), Databricks SDK, MLflow, BioPython, PyTorch, gseapy, scipy, Plotly, parasail
+- React + FastAPI (UI), Databricks SDK, MLflow, BioPython, PyTorch, gseapy, scipy, Plotly, parasail
 
 ## Deployment
 
@@ -122,7 +122,7 @@ Genesis Workbench simplifies deploying GPU-accelerated biological AI models on D
 2. Ensure a workspace with GPU support is available. Use `databricks-fe-vm-workspace-deployment` if needed.
 3. Clone the repo and configure the cloud-specific env file for the target environment.
 4. Run `deploy.sh` to deploy all modules, or deploy individual modules as needed.
-5. The Streamlit-based UI is served as a Databricks App — use the `databricks-apps` skill for app management if needed.
+5. The React + FastAPI UI is served as a Databricks App (genesis-workbench) — use the `databricks-apps` skill for app management if needed.
 6. Use `databricks-resource-deployment` for deploying additional infrastructure (clusters, jobs, notebooks).
 7. For data generation needs (e.g., synthetic biological data for demos), reference the `databricks-data-generation` skill.
 8. Check `Installation.md` in the repo for detailed setup guidance and `CHANGELOG.md` for known issues.

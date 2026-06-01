@@ -18,7 +18,7 @@ Genesis Workbench deploys through **modules**, each containing sub-modules with 
 4. A `.deployed` lock file is created to prevent accidental removal
 
 **Available modules:**
-- `core` — UI app (Streamlit-based Databricks App), shared library, initialization workflows (MUST be deployed first)
+- `core` — UI app (React + FastAPI Databricks App named genesis-workbench), shared library, initialization workflows (MUST be deployed first)
 - `large_molecule` — ESMFold, AlphaFold2, ProteinMPNN, RFDiffusion, Boltz-1, ESM2 Embeddings, Sequence Search
 - `single_cell` — scGPT (embeddings + perturbation), SCimilarity (3 endpoints), Scanpy, Rapids-SingleCell
 - `small_molecule` — Chemprop (BBBP, ClinTox, ADMET), DiffDock (molecular docking), Proteina-Complexa (binder design)

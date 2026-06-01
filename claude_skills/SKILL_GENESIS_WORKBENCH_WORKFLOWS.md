@@ -5,7 +5,7 @@ description: End-to-end user guide for all Genesis Workbench UI workflows — wh
 
 # Genesis Workbench Workflows Skill
 
-Guide users through each workflow tab in the Genesis Workbench Streamlit application.
+Guide users through each workflow tab in the Genesis Workbench application.
 
 ## Large Molecule
 

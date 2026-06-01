@@ -348,7 +348,7 @@ for module in existing_model/existing_v1 mymodel/mymodel_v1
 
 ### Step 1: Add endpoint mapping
 
-In `modules/core/app/utils/streamlit_helper.py`, add to `_MODEL_ENDPOINT_MAP`:
+In `modules/core/app/backend/app/services/endpoints.py`, add to `_MODEL_ENDPOINT_MAP`:
 ```python
 "MyModel Display Name": "mymodel",
 ```
@@ -374,134 +374,123 @@ response = workspace_client.serving_endpoints.query(
 )
 ```
 
-### Step 3: Create the workflow UI file
+### Step 3: Add a FastAPI route
 
-Follow the module's pattern:
-- **Large Molecule**: `views/large_molecule_workflows/myworkflow.py` with a `render()` function
-- **Single Cell**: `views/single_cell_workflows/myworkflow.py` with a `render()` function
+Pick the right router under `modules/core/app/backend/app/routers/` (one of
+`large_molecule.py`, `small_molecule.py`, `single_cell.py`, `genomics.py`).
+Define your request/response models with Pydantic and add a `@router.post`
+or `@router.get` handler:
 
-Standard structure:
 ```python
-"""Module — My Workflow tab."""
-import streamlit as st
-import streamlit.components.v1 as components
+class MyWorkflowRequest(BaseModel):
+    sequence: str = Field(..., min_length=1)
 
-def render():
-    st.markdown("###### My Workflow")
+class MyWorkflowResponse(BaseModel):
+    result: str
+    viewer_html: str | None = None
 
-    # Input section
-    c1, c2 = st.columns([3, 1])
-    with c1:
-        user_input = st.text_area("Input:", ...)
-    with c2:
-        run_btn = st.button("Run", type="primary")
-
-    # Execution with spinner
-    if run_btn:
-        status_container = st.container()
-        with status_container:
-            progress = st.progress(0, text="Starting...")
-            spinner = st.empty()
-        with spinner, st.spinner("Running..."):
-            try:
-                result = call_endpoint(user_input)
-                st.session_state["my_result"] = result
-            except Exception as e:
-                st.error(f"Failed: {e}")
-
-    # Results display
-    if "my_result" in st.session_state:
-        # Show results: tables, charts, Mol* viewer, etc.
-        ...
+@router.post("/my_workflow", response_model=MyWorkflowResponse)
+def my_workflow(payload: MyWorkflowRequest, _: CurrentUserDep) -> MyWorkflowResponse:
+    w = WorkspaceClient()  # app SP for endpoint calls; OBO tokens lack model-serving scope
+    try:
+        result = hit_mymodel(w, payload.sequence)
+    except Exception as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"MyModel call failed: {e}")
+    return MyWorkflowResponse(result=result)
 ```
 
-### Step 4: Wire into the main page
+For long-running operations that should stream stage progress to the UI,
+return a `StreamingResponse(stream_with_progress(work), media_type="text/event-stream", headers=_SSE_HEADERS)`
+instead — the existing `protein_design_stream`, `binder_design_stream`, and
+`diffdock_stream` handlers are good copy-paste references.
 
-Edit the module's main view file (e.g., `views/large_molecule.py`):
+### Step 4: Add a React tab component
 
-```python
-# Add import
-from views.large_molecule_workflows import myworkflow
+Create `modules/core/app/frontend/src/components/MyWorkflowTab.tsx`:
 
-# Add to tabs
-settings_tab, ..., myworkflow_tab = st.tabs(["Settings", ..., "My Workflow"])
+```tsx
+import { useMutation } from '@tanstack/react-query'
+import { useState } from 'react'
 
-# Add tab content
-with myworkflow_tab:
-    myworkflow.render()
+export function MyWorkflowTab() {
+  const [sequence, setSequence] = useState('')
+  const run = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/large_molecule/my_workflow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sequence }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      return res.json()
+    },
+  })
+
+  return (
+    <div className="space-y-4">
+      <textarea value={sequence} onChange={(e) => setSequence(e.target.value)} />
+      <button onClick={() => run.mutate()} disabled={run.isPending}>Run</button>
+      {run.data && <pre>{run.data.result}</pre>}
+    </div>
+  )
+}
+```
+
+### Step 5: Add the tab to the page
+
+Open the relevant page under `modules/core/app/frontend/src/pages/` (e.g.
+`LargeMolecule.tsx`). Add an `import` and a new entry to the `tabs={[…]}`
+prop on `<Tabs>`:
+
+```tsx
+import { MyWorkflowTab } from '@/components/MyWorkflowTab'
+…
+<Tabs
+  tabs={[
+    …existing tabs…,
+    { id: 'my_workflow', label: 'My Workflow', content: <MyWorkflowTab /> },
+  ]}
+/>
 ```
 
 ## UI Patterns to Follow
 
-### Mol* 3D Viewer
-```python
-from utils.molstar_tools import molstar_html_multibody
-html = molstar_html_multibody(pdb_string)  # or list of PDB strings for overlay
-components.html(html, height=540)
-```
-Always use height=540 for consistency. The viewer includes dark theme CSS automatically.
-
-### Progress bar + spinner (for long operations)
-```python
-status_container = st.container()
-with status_container:
-    progress = st.progress(0, text="Starting...")
-    spinner = st.empty()
-with spinner, st.spinner("Running..."):
-    progress.progress(50, text="Halfway...")
-    # ... work ...
-    progress.progress(100, text="Done!")
-```
-
-### Design selector (for multiple results)
-```python
-design_options = [f"Design {i + 1}" for i in range(len(results))]
-selected = st.selectbox("Select design:", design_options)
-idx = design_options.index(selected)
-st.code(results[idx])
-```
-
-### Run selector (for MLflow-based workflows)
-```python
-from utils.single_cell_analysis import search_singlecell_runs, download_singlecell_markers_df
-runs_df = search_singlecell_runs(user_email=user_info.user_email, processing_mode="scanpy")
-# Build display names, selectbox, load button...
-```
-
-### Session state caching
-```python
-cache_key = f"result_{run_id}_{params}"
-if compute_btn:
-    result = expensive_computation()
-    st.session_state[cache_key] = result
-if cache_key in st.session_state:
-    display_results(st.session_state[cache_key])
-```
-
-## Adding to Results Viewer (Single Cell)
-
-To add a new analysis section to the existing results viewer:
-
-Edit `views/single_cell_workflows/processing.py`, add a new `st.expander` before the QC section:
+### Mol* 3D viewer
+The backend builds the viewer HTML and the frontend mounts it via
+`<iframe srcDoc={viewerHtml} />` or `dangerouslySetInnerHTML`. Use the
+existing helper:
 
 ```python
-st.markdown("---")
-with st.expander("My New Analysis", expanded=False):
-    cluster_col = _get_cluster_column(df)
-    if cluster_col and expr_cols:
-        # UI controls
-        # Computation
-        # Visualization (Plotly)
-    else:
-        st.warning("Data not available")
+from app.services.molstar import molstar_html_multibody, molstar_html_singlebody
+
+viewer_html = molstar_html_singlebody(pdb, name="My prediction", with_iframe=False)
+# return viewer_html in the response model
 ```
+
+### Realtime progress (SSE)
+For workflows that take more than ~5 seconds, expose a `/stream` endpoint
+and consume it from the React tab via `useSSE` (see `useSSE.ts`). The
+backend uses `stream_with_progress` which adapts a regular work function
+into stage events. The frontend's `<RealtimeProgress>` component renders
+the progress bar + per-stage messages.
+
+### Search past runs
+Mirror the existing patterns in `RunSearchSection.tsx`. The backend offers
+`/<workflow>/search?by=run_name|experiment_name&text=...` and the React
+component handles paging + the dialog that renders the View result.
+
+### React Query keys
+Use `[<module>, '<feature>', <subkey>]` as the queryKey, e.g.
+`['large_molecule', 'sequence_search', 'organism']`. Keep them stable so
+cache invalidation works across navigation.
 
 ## Model Categories
 
 When registering models, use the correct `ModelCategory`:
-- `ModelCategory.PROTEIN_STUDIES` — protein structure/design models
+- `ModelCategory.LARGE_MOLECULE` — protein structure/design models
 - `ModelCategory.SINGLE_CELL` — single cell genomics models
-- `ModelCategory.SMALL_MOLECULES` — drug discovery models
+- `ModelCategory.SMALL_MOLECULE` — drug discovery models
+- `ModelCategory.GENOMICS` — variant calling / GWAS / VCF ingestion / annotation models
 
 ## Instructions
 
@@ -509,7 +498,7 @@ When registering models, use the correct `ModelCategory`:
 2. Emphasize: always pre-load in `load_context()`, always `model.float()`, always small input_example.
 3. For endpoint input format issues, check `_MODEL_ENDPOINT_MAP` case sensitivity and use `inputs=` (never `dataframe_split=`).
 4. For UI, follow the module's existing pattern — separate workflow files with `render()` functions.
-5. Always add the endpoint mapping in `streamlit_helper.py` before the UI can call it.
+5. Always add the endpoint mapping in the endpoint map in `services/endpoints.py` before the UI can call it.
 6. Test the model locally (dry-load + predict) before registering in UC.
 
 ## When to Use This Skill

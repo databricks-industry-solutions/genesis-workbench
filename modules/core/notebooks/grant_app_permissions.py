@@ -10,7 +10,7 @@
 # MAGIC
 # MAGIC Reads `databricks_app_names` (comma-separated, e.g. "genesis-workbench,gwb-react")
 # MAGIC and falls back to `databricks_app_name` (legacy single value) when the multi-app
-# MAGIC widget is empty. Iterates every app so multi-app installs (Streamlit + React)
+# MAGIC widget is empty. Iterates every app so multi-app installs
 # MAGIC don't end up with one SP missing CAN_QUERY on serving endpoints.
 
 # COMMAND ----------

@@ -265,9 +265,8 @@ def _list_app_names() -> List[str]:
     """Returns the apps that should receive CAN_MANAGE_RUN/CAN_QUERY grants
     when models/jobs are registered.
 
-    Prefers DATABRICKS_APP_NAMES (comma-separated) for multi-app installs
-    (e.g. a Streamlit app + a React sibling). Falls back to legacy
-    DATABRICKS_APP_NAME for single-app installs."""
+    Prefers DATABRICKS_APP_NAMES (comma-separated) for multi-app installs;
+    falls back to DATABRICKS_APP_NAME for single-app installs (the default)."""
     raw = os.environ.get("DATABRICKS_APP_NAMES") or os.environ.get("DATABRICKS_APP_NAME", "")
     return [n.strip() for n in raw.split(",") if n.strip()]
 

@@ -41,9 +41,9 @@ Despite their expertise in biology, many highly talented life science scientists
 
 - Scripts to deploy Genesis Workbench core module in your workspace
 - Scripts to deploy below modules:
-	- Single Cell module that deploys and uses scGPT, SCimilarity, Scanpy, Rapids-SingleCell, and Merck's [TEDDY-G 400M](modules/core/app/docs/single_cell_teddy_annotation.md) for joint cell-type + disease annotation
-	- Large Molecule module that deploys and uses ESMFold, ESM2 Embeddings, Alphafold2, ProteinMPNN, RFDiffusion and Boltz
-	- Small Molecule module that deploys and uses Chemprop, DiffDock, Proteina-Complexa, NetSolP-1.0 (protein solubility prediction), PLTNUM-ESM2 (protein half-life relative stability ranking), DeepSTABp (protein melting temperature regression), and MHCflurry 2.x (MHC-I immunogenic burden prediction); also exposes a [Guided Enzyme Optimization](modules/core/app/docs/small_molecule_enzyme_optimization.md) workflow that composes Proteina-Complexa, ProteinMPNN, ESMFold, Boltz, NetSolP, PLTNUM, DeepSTABp, and MHCflurry into an iterative scaffold-and-score loop
+	- Single Cell module that deploys and uses scGPT, SCimilarity, Scanpy, Rapids-SingleCell, and Merck's [TEDDY-G 400M](modules/core/app/backend/documentation/single_cell_analysis.md) for joint cell-type + disease annotation
+	- Large Molecule module that deploys and uses ESMFold, ESM2 Embeddings, Alphafold2, ProteinMPNN, RFDiffusion and Boltz; also exposes a [Guided Enzyme Optimization](modules/core/app/backend/documentation/enzyme_optimization.md) workflow that composes Proteina-Complexa, ProteinMPNN, ESMFold, Boltz, NetSolP, PLTNUM, DeepSTABp, and MHCflurry into an iterative scaffold-and-score loop
+	- Small Molecule module that deploys and uses Chemprop, DiffDock, Proteina-Complexa, NetSolP-1.0 (protein solubility prediction), PLTNUM-ESM2 (protein half-life relative stability ranking), DeepSTABp (protein melting temperature regression), and MHCflurry 2.x (MHC-I immunogenic burden prediction)
 	- Genomics module for VCF ingestion, variant annotation and GWAS analysis
 	- BioNeMo container definitions and workflows
 	- Parabricks container definitions and workflows
@@ -69,7 +69,16 @@ NVIDIA GPUs and cudatoolkit may be used in multiple places so you should conside
 
 Module | Package | License | Source
 -------- | ------- | ------- | --------
-core | streamlit | Apache2.0 | https://github.com/streamlit
+core | fastapi==0.115.5 | MIT | https://github.com/tiangolo/fastapi
+core | uvicorn[standard]==0.32.1 | BSD-3 | https://github.com/encode/uvicorn
+core | react==19.x | MIT | https://github.com/facebook/react
+core | vite | MIT | https://github.com/vitejs/vite
+core | tailwindcss | MIT | https://github.com/tailwindlabs/tailwindcss
+core | tanstack/react-query | MIT | https://github.com/tanstack/query
+core | tanstack/react-table | MIT | https://github.com/tanstack/table
+core | zustand | MIT | https://github.com/pmndrs/zustand
+core | molstar | MIT | https://github.com/molstar/molstar
+core | plotly.js | MIT | https://github.com/plotly/plotly.js
 core | databricks-sdk==0.50.0 | Apache2.0 | https://pypi.org/project/databricks-sdk/
 core | databricks-sql-connector | Apache2.0 | https://github.com/databricks/databricks-sql-python
 core | py3Dmol==2.4.0 | MIT | TOBEREMOVED (https://pypi.org/project/py3Dmol/)

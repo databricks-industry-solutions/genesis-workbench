@@ -200,7 +200,7 @@ The `small_molecule` module is the most fragmented (now 8 submodules). Use `--on
 
 **NetSolP one-time setup:** before the first deploy of `netsolp/netsolp_v1`, the upstream weight tarball must be extracted into `modules/small_molecule/netsolp/netsolp_v1/weights/` and committed (BSD-3-Clause, see the `weights/README.md` for the helper script). Subsequent clones of the repo deploy without any manual step.
 
-**Orchestrator deploy** does NOT auto-run a registration job — it just installs the bundle. It creates **two** jobs: `run_enzyme_optimization_gwb` (Fast path, CPU cluster) and `run_enzyme_optimization_gwb_inprocess_ame` (Accurate path, A10 GPU cluster). Both are dispatched on demand by the Streamlit page based on the **Generation mode** toggle. The Accurate path also requires `proteina_complexa/proteina_complexa_v1` to be deployed first — its registered UC model is the source of truth for the AME checkpoints (no NGC fallback). If you skip proteina_complexa, the Accurate path fails fast at job start with a clear "deploy proteina_complexa first" message.
+**Orchestrator deploy** does NOT auto-run a registration job — it just installs the bundle. It creates **two** jobs: `run_enzyme_optimization_gwb` (Fast path, CPU cluster) and `run_enzyme_optimization_gwb_inprocess_ame` (Accurate path, A10 GPU cluster). Both are dispatched on demand by the UI based on the **Generation mode** toggle. The Accurate path also requires `proteina_complexa/proteina_complexa_v1` to be deployed first — its registered UC model is the source of truth for the AME checkpoints (no NGC fallback). If you skip proteina_complexa, the Accurate path fails fast at job start with a clear "deploy proteina_complexa first" message.
 
 ## Error auto-handlers
 
