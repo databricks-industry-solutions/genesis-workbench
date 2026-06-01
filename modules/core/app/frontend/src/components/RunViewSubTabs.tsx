@@ -902,6 +902,20 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
         </div>
       )}
 
+      {de.data && de.data.warnings && de.data.warnings.length > 0 && (
+        <details className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs">
+          <summary className="cursor-pointer font-medium text-amber-700 dark:text-amber-400">
+            ⚠ Differential expression result has {de.data.warnings.length} data-quality
+            note{de.data.warnings.length === 1 ? '' : 's'} — click to expand
+          </summary>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
+            {de.data.warnings.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+
       {de.data && <VolcanoPlot genes={de.data.genes} a={a} b={b} />}
 
       {de.data && (

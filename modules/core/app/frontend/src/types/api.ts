@@ -290,7 +290,16 @@ export type DEGene = {
   mean_b: number
   significant: boolean
 }
-export type DEResponse = { genes: DEGene[]; n_significant: number }
+export type DEResponse = {
+  genes: DEGene[]
+  n_significant: number
+  /** Human-readable notes about data quality — empty on a clean run.
+   * Populated when NaN values were dropped, genes were placeholdered, or
+   * mannwhitneyu fell back to p=1. The UI surfaces these as an amber
+   * banner above the volcano plot so '0' values aren't misread as real
+   * signal. */
+  warnings?: string[]
+}
 
 export type EnrichmentTerm = {
   term: string

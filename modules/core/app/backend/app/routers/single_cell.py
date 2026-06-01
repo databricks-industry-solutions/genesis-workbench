@@ -1342,6 +1342,10 @@ class DEGene(BaseModel):
 class DEResponse(BaseModel):
     genes: list[DEGene]
     n_significant: int
+    # Human-readable notes about data quality (NaN expression values, genes
+    # placeholdered with log2FC=0, errored genes). The UI renders these as
+    # an amber banner so the user can tell when the result is partial.
+    warnings: list[str] = []
 
 
 @router.post("/run-de", response_model=DEResponse)
@@ -1392,25 +1396,34 @@ def run_de(payload: DERequest, _: CurrentUserDep) -> DEResponse:
 
     rows: list[dict] = []
     skipped_genes = 0
+    n_with_nan_input = 0       # genes where va or vb had NaN values dropped
+    n_placeholdered = 0        # genes that ended up with the log2FC=0,p=1 placeholder
+    n_pval_fallback = 0        # genes where mannwhitneyu errored → p=1 fallback
     for col in expr_cols:
         gene = col.replace("expr_", "")
         try:
             va = a_cells[col].values
             vb = b_cells[col].values
+            had_nan = False
             # If either side is all-NaN or empty after dropping NaNs,
             # mannwhitneyu and mean() return NaN — sanitize via _finite so
             # we still emit a row (with log2FC=0, p_value=1) instead of
             # leaking NaN into JSON and 500'ing the whole response.
             if np.isnan(va).any():
                 va = va[~np.isnan(va)]
+                had_nan = True
             if np.isnan(vb).any():
                 vb = vb[~np.isnan(vb)]
+                had_nan = True
+            if had_nan:
+                n_with_nan_input += 1
             if len(va) == 0 or len(vb) == 0:
                 # Nothing meaningful to compare; emit a placeholder row so
                 # the gene shows up in the table with neutral values.
                 mean_a = mean_b = 0.0
                 log2fc = 0.0
                 pval = 1.0
+                n_placeholdered += 1
             else:
                 mean_a = _finite(va.mean())
                 mean_b = _finite(vb.mean())
@@ -1420,6 +1433,7 @@ def run_de(payload: DERequest, _: CurrentUserDep) -> DEResponse:
                     pval = _finite(pval_raw, default=1.0)
                 except (ValueError, RuntimeWarning):
                     pval = 1.0
+                    n_pval_fallback += 1
             rows.append(
                 {
                     "Gene": gene,
@@ -1451,6 +1465,34 @@ def run_de(payload: DERequest, _: CurrentUserDep) -> DEResponse:
             f"DE failed on every gene (n={len(expr_cols)}). Likely the run has all-NaN expression values.",
         )
 
+    # Human-readable warnings for the UI banner. Only emit a line per
+    # category that actually fired — keep the banner quiet on clean runs.
+    total = len(expr_cols)
+    warnings: list[str] = []
+    if n_with_nan_input:
+        pct = round(100 * n_with_nan_input / total, 1)
+        warnings.append(
+            f"{n_with_nan_input} of {total} genes ({pct}%) had NaN expression values in one or "
+            "both clusters; NaNs were dropped before the Mann-Whitney test. "
+            "Affected genes are still in the table — their stats reflect only the non-NaN cells."
+        )
+    if n_placeholdered:
+        warnings.append(
+            f"{n_placeholdered} gene(s) had no non-NaN cells in at least one cluster and were "
+            "placeholdered with log2FC=0, p=1. These rows are present in the table but carry no "
+            "real signal — treat any '0' you see as 'could not compute'."
+        )
+    if n_pval_fallback:
+        warnings.append(
+            f"{n_pval_fallback} gene(s) hit a degenerate Mann-Whitney input (all equal values, "
+            "or zero variance after NaN drop) — their p-value defaulted to 1."
+        )
+    if skipped_genes:
+        warnings.append(
+            f"{skipped_genes} gene(s) skipped entirely due to per-column errors — see app logs "
+            "for details."
+        )
+
     # Benjamini-Hochberg-ish p-value adjustment
     rows.sort(key=lambda r: r["p_value"])
     n = len(rows)
@@ -1475,7 +1517,7 @@ def run_de(payload: DERequest, _: CurrentUserDep) -> DEResponse:
                 significant=significant,
             )
         )
-    return DEResponse(genes=out, n_significant=n_sig)
+    return DEResponse(genes=out, n_significant=n_sig, warnings=warnings)
 
 
 # ─── Pathway Enrichment (GMT + Fisher's exact) ─────────────────────────────

@@ -503,7 +503,12 @@ def variant_annotation_dashboard(
     _: CurrentUserDep, run_name: Optional[str] = Query(None)
 ) -> VariantAnnotationDashboardResponse:
     dash_id = workbench.get_app_setting("variant_annotation_dashboard_id")
-    params = {"run_name": run_name} if run_name else None
+    # Always include the run_name keyword in the URL — even as an empty
+    # string — because Lakeview embed mode does NOT apply a dashboard's
+    # defaultSelection. Without the keyword, every widget's SQL raises
+    # `UNBOUND_SQL_PARAMETER` for `:run_name`. `dashboard_embed_url`
+    # preserves empty values for this reason.
+    params = {"run_name": run_name or ""}
     return VariantAnnotationDashboardResponse(
         embed_url=dashboard_embed_url(dash_id, params),
         run_name=run_name,

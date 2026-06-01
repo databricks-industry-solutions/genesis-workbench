@@ -37,7 +37,12 @@ def dashboard_embed_url(dashboard_id: str | None, params: dict[str, str] | None 
     """Lakeview (dashboardsv3) embed URL. Optional `params` are passed as
     raw `?<keyword>=<value>` query string entries — Lakeview matches each
     against the dashboard parameter declared with that `keyword` and binds
-    it into the SQL queries' `:name` placeholders."""
+    it into the SQL queries' `:name` placeholders.
+
+    Empty values are *retained* (rendered as `?run_name=`). Lakeview's
+    default-selection logic does NOT apply on embed loads, so a missing
+    parameter raises UNBOUND_SQL_PARAMETER at query time. Passing the
+    keyword with an empty value still binds it (to '') and lets SQL run."""
     if not dashboard_id:
         return ""
     host = workspace_host()
@@ -46,5 +51,6 @@ def dashboard_embed_url(dashboard_id: str | None, params: dict[str, str] | None 
     url = f"{host}/embed/dashboardsv3/{dashboard_id}"
     if params:
         from urllib.parse import urlencode
-        url += "?" + urlencode({k: v for k, v in params.items() if v})
+        # Keep empty values; only drop None — see docstring above.
+        url += "?" + urlencode({k: (v or "") for k, v in params.items() if v is not None})
     return url
