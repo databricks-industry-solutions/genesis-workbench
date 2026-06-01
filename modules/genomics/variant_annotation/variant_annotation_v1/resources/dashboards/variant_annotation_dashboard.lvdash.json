@@ -60,7 +60,7 @@
       "name": "ds_disease_assoc",
       "displayName": "Disease Associations",
       "queryLines": [
-        "SELECT\n  disease_name,\n  gene,\n  COUNT(*) as variant_count\nFROM\n  variant_annotation_pathogenic\nWHERE\n  disease_name IS NOT NULL\n  AND disease_name != ''\nGROUP BY\n  disease_name,\n  gene\nORDER BY\n  variant_count DESC"
+        "SELECT\n  array_join(disease_name, ', ') as disease_name,\n  gene,\n  COUNT(*) as variant_count\nFROM\n  variant_annotation_pathogenic\nWHERE\n  disease_name IS NOT NULL\n  AND size(disease_name) > 0\nGROUP BY\n  array_join(disease_name, ', '),\n  gene\nORDER BY\n  variant_count DESC"
       ]
     },
     {
