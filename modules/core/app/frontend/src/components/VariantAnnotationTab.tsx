@@ -4,6 +4,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 
 import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
+import { PlotlyChart as Plot } from '@/components/PlotlyChart'
 import { RunSearchSection } from '@/components/RunSearchSection'
 import type { AnnotationVariant, DBRunRow, VcfIngestionPickerRow } from '@/types/api'
 import { cn } from '@/lib/utils'
@@ -239,12 +240,6 @@ function AnnotationResultsBody({ run }: { run: DBRunRow }) {
     staleTime: 60_000,
   })
 
-  const dash = useQuery({
-    queryKey: ['db', 'annotation_dashboard', run.run_name],
-    queryFn: () => api.variantAnnotationDashboard(run.run_name),
-    staleTime: 60_000,
-  })
-
   const cols = useMemo<ColumnDef<AnnotationVariant, unknown>[]>(
     () => [
       { id: 'gene', header: 'Gene', accessorKey: 'gene' },
@@ -288,37 +283,156 @@ function AnnotationResultsBody({ run }: { run: DBRunRow }) {
     )
   }
 
-  // Dashboard is opened in a new tab rather than embedded inline. Lakeview
-  // embed mode does NOT bind the dashboard's `:run_name` SQL parameter from
-  // the iframe URL — even after declaring it in the lvdash.json, the
-  // Lakeview API (POST, PATCH, bundle-sync) silently strips the
-  // `parameters` block on its way to the workspace, so every widget's SQL
-  // raises UNBOUND_SQL_PARAMETER. Opening the dashboard in a fresh tab
-  // routes through the regular Databricks UI which DOES apply default
-  // selections and URL params correctly. Per-run filtering is also already
-  // surfaced via the variants table above.
-  const embedUrl = dash.data?.embed_url
-  const dashboardLink = embedUrl?.replace('/embed/dashboardsv3/', '/dashboardsv3/')
-
   return (
     <div className="space-y-3 text-xs">
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-sm">
-          <strong>{results.data.total.toLocaleString()}</strong> pathogenic variants
-        </div>
-        {dashboardLink && (
-          <a
-            href={dashboardLink}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-md border border-primary bg-primary/10 px-3 py-1.5 text-xs text-primary hover:bg-primary/20"
-            title="Open the Variant Annotation Lakeview dashboard in a new tab"
-          >
-            Open dashboard ↗
-          </a>
-        )}
+      <div className="text-sm">
+        <strong>{results.data.total.toLocaleString()}</strong> pathogenic variants
       </div>
       <DataTable columns={cols} data={results.data.variants} />
+      <VariantAnnotationCharts variants={results.data.variants} />
+    </div>
+  )
+}
+
+/**
+ * Inline per-run charts computed client-side from the already-fetched
+ * pathogenic-variants list. Replaces the prior Lakeview dashboard iframe —
+ * the dashboard couldn't scope per-run (parameter binding stripped on every
+ * Lakeview API path), so this component computes the three most useful
+ * per-run aggregates locally and avoids the entire embed pipeline.
+ *
+ * Kept intentionally minimal: top-genes bar, clinical-significance pie,
+ * zygosity pie. Add more panels here when product asks for them — the
+ * variants array already carries `category`, `condition`, `disease_name`,
+ * etc., so most additional aggregates are 10–20 lines apiece.
+ */
+function VariantAnnotationCharts({ variants }: { variants: AnnotationVariant[] }) {
+  const charts = useMemo(() => {
+    // Top genes by variant count, top 15.
+    const geneCounts = new Map<string, number>()
+    for (const v of variants) {
+      const g = (v.gene || 'Unknown').trim() || 'Unknown'
+      geneCounts.set(g, (geneCounts.get(g) ?? 0) + 1)
+    }
+    const topGenes = [...geneCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15)
+
+    // Clinical-significance buckets — the backend stores ClinVar
+    // significance as a comma-joined string of array items, so we scan
+    // each variant's string for the canonical category keywords. A
+    // variant tagged "Pathogenic, Likely_pathogenic" lands in
+    // "Pathogenic" (the strongest category wins). Falls back to
+    // "Other / No ClinVar Data" so the chart is exhaustive.
+    const sigCounts = new Map<string, number>()
+    for (const v of variants) {
+      const s = (v.clinical_significance ?? '').toLowerCase()
+      let bucket: string
+      if (!s) bucket = 'No ClinVar Data'
+      else if (s.includes('pathogenic')) bucket = 'Pathogenic / Likely Pathogenic'
+      else if (s.includes('benign')) bucket = 'Benign / Likely Benign'
+      else if (s.includes('uncertain')) bucket = 'Uncertain Significance'
+      else if (s.includes('conflicting')) bucket = 'Conflicting Interpretations'
+      else bucket = 'Other'
+      sigCounts.set(bucket, (sigCounts.get(bucket) ?? 0) + 1)
+    }
+    const sigEntries = [...sigCounts.entries()].sort((a, b) => b[1] - a[1])
+
+    // Zygosity breakdown — usually 2-3 categories (HET, HOM, etc).
+    const zygCounts = new Map<string, number>()
+    for (const v of variants) {
+      const z = (v.zygosity || 'Unknown').trim() || 'Unknown'
+      zygCounts.set(z, (zygCounts.get(z) ?? 0) + 1)
+    }
+    const zygEntries = [...zygCounts.entries()].sort((a, b) => b[1] - a[1])
+
+    return { topGenes, sigEntries, zygEntries }
+  }, [variants])
+
+  const commonLayout = {
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { size: 11 },
+    margin: { l: 50, r: 20, t: 40, b: 60 },
+    height: 280,
+  }
+
+  return (
+    <div className="space-y-3 pt-2">
+      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Per-run summary
+      </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="rounded-md border border-border bg-card p-2">
+          <Plot
+            data={[
+              {
+                type: 'bar',
+                x: charts.topGenes.map((g) => g[1]),
+                y: charts.topGenes.map((g) => g[0]),
+                orientation: 'h',
+                marker: { color: '#60a5fa' },
+                hovertemplate: '%{y}: %{x}<extra></extra>',
+              } as never,
+            ]}
+            layout={{
+              ...commonLayout,
+              title: { text: `Top genes (n=${charts.topGenes.length})` },
+              xaxis: { title: { text: 'Variant count' }, gridcolor: '#333' },
+              yaxis: { automargin: true, autorange: 'reversed' },
+              margin: { l: 100, r: 20, t: 40, b: 40 },
+            }}
+            config={{ displaylogo: false, responsive: true }}
+            style={{ width: '100%' }}
+            useResizeHandler
+          />
+        </div>
+        <div className="rounded-md border border-border bg-card p-2">
+          <Plot
+            data={[
+              {
+                type: 'pie',
+                labels: charts.sigEntries.map((e) => e[0]),
+                values: charts.sigEntries.map((e) => e[1]),
+                hole: 0.35,
+                textinfo: 'label+percent',
+                hovertemplate: '%{label}: %{value}<extra></extra>',
+              } as never,
+            ]}
+            layout={{
+              ...commonLayout,
+              title: { text: 'Clinical significance' },
+              showlegend: false,
+            }}
+            config={{ displaylogo: false, responsive: true }}
+            style={{ width: '100%' }}
+            useResizeHandler
+          />
+        </div>
+        <div className="rounded-md border border-border bg-card p-2 md:col-span-2">
+          <Plot
+            data={[
+              {
+                type: 'pie',
+                labels: charts.zygEntries.map((e) => e[0]),
+                values: charts.zygEntries.map((e) => e[1]),
+                hole: 0.35,
+                textinfo: 'label+percent',
+                hovertemplate: '%{label}: %{value}<extra></extra>',
+              } as never,
+            ]}
+            layout={{
+              ...commonLayout,
+              title: { text: 'Zygosity' },
+              showlegend: false,
+              height: 240,
+            }}
+            config={{ displaylogo: false, responsive: true }}
+            style={{ width: '100%' }}
+            useResizeHandler
+          />
+        </div>
+      </div>
     </div>
   )
 }
