@@ -298,45 +298,90 @@ function AnnotationResultsBody({ run }: { run: DBRunRow }) {
  * Inline per-run charts computed client-side from the already-fetched
  * pathogenic-variants list. Replaces the prior Lakeview dashboard iframe —
  * the dashboard couldn't scope per-run (parameter binding stripped on every
- * Lakeview API path), so this component computes the three most useful
+ * Lakeview API path), so this component computes the four most useful
  * per-run aggregates locally and avoids the entire embed pipeline.
  *
- * Kept intentionally minimal: top-genes bar, clinical-significance pie,
- * zygosity pie. Add more panels here when product asks for them — the
- * variants array already carries `category`, `condition`, `disease_name`,
- * etc., so most additional aggregates are 10–20 lines apiece.
+ * Four panels in a 2x2 grid:
+ *   1. Genes by clinical significance (stacked horizontal bar) —
+ *      double-axis chart: each bar is a gene, stacked segments show how
+ *      many of that gene's variants are Pathogenic / Benign / Uncertain /
+ *      etc. Replaces a flat top-genes count chart because the stacking
+ *      adds clinical-actionability info "for free".
+ *   2. ACMG Category (donut) — variant.category groups variants by
+ *      clinical domain (Cancer Risk, Inherited Disease, ...). Orthogonal
+ *      to the gene/significance axes — useful for triage.
+ *   3. Clinical significance totals (donut) — same buckets as #1 but
+ *      summed across all genes. Quick read on overall pathogenicity mix.
+ *   4. Zygosity (donut) — HET / HOM / Unknown.
+ *
+ * Add more panels here when product asks for them. The variants array
+ * also carries `condition`, `disease_name`, `chromosome` — all viable
+ * axes for future visualizations.
  */
 function VariantAnnotationCharts({ variants }: { variants: AnnotationVariant[] }) {
   const charts = useMemo(() => {
-    // Top genes by variant count, top 15.
-    const geneCounts = new Map<string, number>()
-    for (const v of variants) {
-      const g = (v.gene || 'Unknown').trim() || 'Unknown'
-      geneCounts.set(g, (geneCounts.get(g) ?? 0) + 1)
+    // Strongest-category-wins bucketing on the comma-joined ClinVar
+    // significance string. A variant tagged "Pathogenic, Likely_pathogenic"
+    // lands in "Pathogenic / Likely Pathogenic" — the strongest category
+    // wins so the donut + the stacked bar agree.
+    const sigBucket = (raw: string | null | undefined): string => {
+      const s = (raw ?? '').toLowerCase()
+      if (!s) return 'No ClinVar Data'
+      if (s.includes('pathogenic')) return 'Pathogenic / Likely Pathogenic'
+      if (s.includes('benign')) return 'Benign / Likely Benign'
+      if (s.includes('uncertain')) return 'Uncertain Significance'
+      if (s.includes('conflicting')) return 'Conflicting Interpretations'
+      return 'Other'
     }
-    const topGenes = [...geneCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 15)
 
-    // Clinical-significance buckets — the backend stores ClinVar
-    // significance as a comma-joined string of array items, so we scan
-    // each variant's string for the canonical category keywords. A
-    // variant tagged "Pathogenic, Likely_pathogenic" lands in
-    // "Pathogenic" (the strongest category wins). Falls back to
-    // "Other / No ClinVar Data" so the chart is exhaustive.
+    // Total per significance bucket (used by both the donut and the
+    // stacked-bar segment ordering).
     const sigCounts = new Map<string, number>()
     for (const v of variants) {
-      const s = (v.clinical_significance ?? '').toLowerCase()
-      let bucket: string
-      if (!s) bucket = 'No ClinVar Data'
-      else if (s.includes('pathogenic')) bucket = 'Pathogenic / Likely Pathogenic'
-      else if (s.includes('benign')) bucket = 'Benign / Likely Benign'
-      else if (s.includes('uncertain')) bucket = 'Uncertain Significance'
-      else if (s.includes('conflicting')) bucket = 'Conflicting Interpretations'
-      else bucket = 'Other'
-      sigCounts.set(bucket, (sigCounts.get(bucket) ?? 0) + 1)
+      const b = sigBucket(v.clinical_significance)
+      sigCounts.set(b, (sigCounts.get(b) ?? 0) + 1)
     }
     const sigEntries = [...sigCounts.entries()].sort((a, b) => b[1] - a[1])
+    const sigBuckets = sigEntries.map(([k]) => k)
+
+    // Per-gene per-significance matrix for the stacked bar. Pick the
+    // top 15 genes by total variant count first, then fill in segment
+    // counts.
+    const geneTotal = new Map<string, number>()
+    const geneBySig = new Map<string, Map<string, number>>() // gene -> bucket -> count
+    for (const v of variants) {
+      const g = (v.gene || 'Unknown').trim() || 'Unknown'
+      const b = sigBucket(v.clinical_significance)
+      geneTotal.set(g, (geneTotal.get(g) ?? 0) + 1)
+      let inner = geneBySig.get(g)
+      if (!inner) {
+        inner = new Map<string, number>()
+        geneBySig.set(g, inner)
+      }
+      inner.set(b, (inner.get(b) ?? 0) + 1)
+    }
+    const topGenes = [...geneTotal.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15)
+      .map(([g]) => g)
+    // For each significance bucket, build the parallel x-array of
+    // counts across the top genes (in the same order).
+    const stackedByBucket: { bucket: string; values: number[] }[] = sigBuckets.map(
+      (bucket) => ({
+        bucket,
+        values: topGenes.map((g) => geneBySig.get(g)?.get(bucket) ?? 0),
+      }),
+    )
+
+    // ACMG category donut — variant.category is the clinical-domain
+    // grouping. Falls back to 'Unspecified' so the chart is exhaustive
+    // and shows when a run lacks category labels at all.
+    const catCounts = new Map<string, number>()
+    for (const v of variants) {
+      const c = (v.category ?? '').trim() || 'Unspecified'
+      catCounts.set(c, (catCounts.get(c) ?? 0) + 1)
+    }
+    const catEntries = [...catCounts.entries()].sort((a, b) => b[1] - a[1])
 
     // Zygosity breakdown — usually 2-3 categories (HET, HOM, etc).
     const zygCounts = new Map<string, number>()
@@ -346,8 +391,21 @@ function VariantAnnotationCharts({ variants }: { variants: AnnotationVariant[] }
     }
     const zygEntries = [...zygCounts.entries()].sort((a, b) => b[1] - a[1])
 
-    return { topGenes, sigEntries, zygEntries }
+    return { topGenes, stackedByBucket, sigEntries, catEntries, zygEntries }
   }, [variants])
+
+  // Color palette keyed on significance bucket. Red = most severe, green
+  // = benign, amber = uncertain, blue = conflicting interpretations,
+  // gray fallback for the unknowns. Consistent across the stacked bar
+  // and the donut so users can mentally pattern-match.
+  const SIG_COLORS: Record<string, string> = {
+    'Pathogenic / Likely Pathogenic': '#ef4444',
+    'Benign / Likely Benign': '#22c55e',
+    'Uncertain Significance': '#f59e0b',
+    'Conflicting Interpretations': '#3b82f6',
+    Other: '#a3a3a3',
+    'No ClinVar Data': '#737373',
+  }
 
   const commonLayout = {
     paper_bgcolor: 'rgba(0,0,0,0)',
@@ -365,22 +423,49 @@ function VariantAnnotationCharts({ variants }: { variants: AnnotationVariant[] }
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="rounded-md border border-border bg-card p-2">
           <Plot
+            data={
+              charts.stackedByBucket.map((b) => ({
+                type: 'bar',
+                orientation: 'h',
+                name: b.bucket,
+                x: b.values,
+                y: charts.topGenes,
+                marker: { color: SIG_COLORS[b.bucket] ?? '#a3a3a3' },
+                hovertemplate: `%{y} — ${b.bucket}: %{x}<extra></extra>`,
+              })) as never[]
+            }
+            layout={{
+              ...commonLayout,
+              title: { text: `Genes by clinical significance (top ${charts.topGenes.length})` },
+              barmode: 'stack',
+              xaxis: { title: { text: 'Variant count' }, gridcolor: '#333' },
+              yaxis: { automargin: true, autorange: 'reversed' },
+              legend: { orientation: 'h', y: -0.2, font: { size: 9 } },
+              margin: { l: 100, r: 20, t: 40, b: 80 },
+              height: 320,
+            }}
+            config={{ displaylogo: false, responsive: true }}
+            style={{ width: '100%' }}
+            useResizeHandler
+          />
+        </div>
+        <div className="rounded-md border border-border bg-card p-2">
+          <Plot
             data={[
               {
-                type: 'bar',
-                x: charts.topGenes.map((g) => g[1]),
-                y: charts.topGenes.map((g) => g[0]),
-                orientation: 'h',
-                marker: { color: '#60a5fa' },
-                hovertemplate: '%{y}: %{x}<extra></extra>',
+                type: 'pie',
+                labels: charts.catEntries.map((e) => e[0]),
+                values: charts.catEntries.map((e) => e[1]),
+                hole: 0.35,
+                textinfo: 'label+percent',
+                hovertemplate: '%{label}: %{value}<extra></extra>',
               } as never,
             ]}
             layout={{
               ...commonLayout,
-              title: { text: `Top genes (n=${charts.topGenes.length})` },
-              xaxis: { title: { text: 'Variant count' }, gridcolor: '#333' },
-              yaxis: { automargin: true, autorange: 'reversed' },
-              margin: { l: 100, r: 20, t: 40, b: 40 },
+              title: { text: 'ACMG Category' },
+              showlegend: false,
+              height: 320,
             }}
             config={{ displaylogo: false, responsive: true }}
             style={{ width: '100%' }}
@@ -394,6 +479,11 @@ function VariantAnnotationCharts({ variants }: { variants: AnnotationVariant[] }
                 type: 'pie',
                 labels: charts.sigEntries.map((e) => e[0]),
                 values: charts.sigEntries.map((e) => e[1]),
+                marker: {
+                  colors: charts.sigEntries.map(
+                    (e) => SIG_COLORS[e[0]] ?? '#a3a3a3',
+                  ),
+                },
                 hole: 0.35,
                 textinfo: 'label+percent',
                 hovertemplate: '%{label}: %{value}<extra></extra>',
@@ -401,7 +491,7 @@ function VariantAnnotationCharts({ variants }: { variants: AnnotationVariant[] }
             ]}
             layout={{
               ...commonLayout,
-              title: { text: 'Clinical significance' },
+              title: { text: 'Clinical significance (totals)' },
               showlegend: false,
             }}
             config={{ displaylogo: false, responsive: true }}
@@ -409,7 +499,7 @@ function VariantAnnotationCharts({ variants }: { variants: AnnotationVariant[] }
             useResizeHandler
           />
         </div>
-        <div className="rounded-md border border-border bg-card p-2 md:col-span-2">
+        <div className="rounded-md border border-border bg-card p-2">
           <Plot
             data={[
               {
@@ -425,7 +515,6 @@ function VariantAnnotationCharts({ variants }: { variants: AnnotationVariant[] }
               ...commonLayout,
               title: { text: 'Zygosity' },
               showlegend: false,
-              height: 240,
             }}
             config={{ displaylogo: false, responsive: true }}
             style={{ width: '100%' }}
