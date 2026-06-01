@@ -22,6 +22,14 @@ def workspace_host() -> str:
     return host
 
 
+def workspace_id() -> str:
+    """Numeric workspace ID, used as `?o=<id>` on Databricks UI/embed URLs.
+    The Apps runtime sets DATABRICKS_WORKSPACE_ID automatically. Returns
+    empty string when missing — callers should treat it as optional and
+    just skip the query param."""
+    return os.environ.get("DATABRICKS_WORKSPACE_ID", "").strip()
+
+
 def job_run_url(job_id: str | int | None, job_run_id: str | int | None) -> str:
     """Modern Jobs UI run-page URL. Returns empty string when any required
     piece is missing — callers should guard the render."""
@@ -42,15 +50,27 @@ def dashboard_embed_url(dashboard_id: str | None, params: dict[str, str] | None 
     Empty values are *retained* (rendered as `?run_name=`). Lakeview's
     default-selection logic does NOT apply on embed loads, so a missing
     parameter raises UNBOUND_SQL_PARAMETER at query time. Passing the
-    keyword with an empty value still binds it (to '') and lets SQL run."""
+    keyword with an empty value still binds it (to '') and lets SQL run.
+
+    Always includes `?o=<workspace_id>` first when DATABRICKS_WORKSPACE_ID
+    is set in the runtime env — without it, some same-origin iframe flows
+    fail auth silently and fall back to a degraded mode that ignores any
+    further URL params.
+    """
     if not dashboard_id:
         return ""
     host = workspace_host()
     if not host:
         return ""
     url = f"{host}/embed/dashboardsv3/{dashboard_id}"
+    query_parts: dict[str, str] = {}
+    wid = workspace_id()
+    if wid:
+        query_parts["o"] = wid
     if params:
-        from urllib.parse import urlencode
         # Keep empty values; only drop None — see docstring above.
-        url += "?" + urlencode({k: (v or "") for k, v in params.items() if v is not None})
+        query_parts.update({k: (v or "") for k, v in params.items() if v is not None})
+    if query_parts:
+        from urllib.parse import urlencode
+        url += "?" + urlencode(query_parts)
     return url

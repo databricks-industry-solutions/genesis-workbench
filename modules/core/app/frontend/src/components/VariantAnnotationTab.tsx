@@ -288,6 +288,15 @@ function AnnotationResultsBody({ run }: { run: DBRunRow }) {
     )
   }
 
+  // Dashboard is opened in a new tab rather than embedded inline. Lakeview
+  // embed mode does NOT bind the dashboard's `:run_name` SQL parameter from
+  // the iframe URL — even after declaring it in the lvdash.json, the
+  // Lakeview API (POST, PATCH, bundle-sync) silently strips the
+  // `parameters` block on its way to the workspace, so every widget's SQL
+  // raises UNBOUND_SQL_PARAMETER. Opening the dashboard in a fresh tab
+  // routes through the regular Databricks UI which DOES apply default
+  // selections and URL params correctly. Per-run filtering is also already
+  // surfaced via the variants table above.
   const embedUrl = dash.data?.embed_url
   const dashboardLink = embedUrl?.replace('/embed/dashboardsv3/', '/dashboardsv3/')
 
@@ -310,22 +319,6 @@ function AnnotationResultsBody({ run }: { run: DBRunRow }) {
         )}
       </div>
       <DataTable columns={cols} data={results.data.variants} />
-
-      {embedUrl && (
-        <div className="space-y-2 pt-2">
-          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            BRCA Cancer Risk Dashboard
-          </div>
-          {/* Mirrors the prior Streamlit behaviour (`components.iframe(url, height=600)`)
-              — Databricks Lakeview dashboards expect same-origin so no `sandbox` attr.
-              The "Open dashboard ↗" link above gives users a full-page view. */}
-          <iframe
-            title="Variant Annotation Lakeview dashboard"
-            src={embedUrl}
-            className="h-[600px] w-full rounded-md border border-border bg-background"
-          />
-        </div>
-      )}
     </div>
   )
 }
