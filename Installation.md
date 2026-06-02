@@ -35,7 +35,13 @@ The primary pattern followed in Genesis Workbench is given below
 
 Deploy gets initiated by running the `deploy.sh` script in the root folder using the syntax `./deploy.sh <module> <cloud>` . This script should be called after the Prerequisites given below are completed
 
-<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deploy_process.png" alt="Deploy Process" width="700"/>
+**Architecture view** — how the deploy scripts and Asset Bundles are organized:
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deploy_process.png" alt="Deploy Architecture" width="700"/>
+
+**Sequence view** — what happens when you run `./deploy.sh`:
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deploy_process_flow.png" alt="Deploy Sequence" width="900"/>
 
 The deploy script does the following:
 - Checks if `core` is deployed before modules
@@ -52,7 +58,13 @@ The deploy script does the following:
 
 Destroy gets initiated by running the `destroy.sh` script in the root folder using the syntax `./destroy.sh <module> <cloud>` . This script should be called after the Prerequisites given below are completed
 
-<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/destroy_process.png" alt="Deploy Process" width="700"/>
+**Architecture view** — how the destroy scripts cascade through modules and sub-modules:
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/destroy_process.png" alt="Destroy Architecture" width="700"/>
+
+**Sequence view** — what happens when you run `./destroy.sh`:
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/destroy_process_flow.png" alt="Destroy Sequence" width="900"/>
 
 The destroy script does the following:
 - Before `core` is destroyed, checks if all modules are destroyed 
