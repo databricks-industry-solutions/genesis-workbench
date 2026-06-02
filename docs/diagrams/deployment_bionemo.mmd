@@ -1,0 +1,36 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#fef3c7",
+    "primaryTextColor": "#78350f",
+    "primaryBorderColor": "#92400e",
+    "lineColor": "#d97706",
+    "edgeLabelBackground": "#ffffff",
+    "fontFamily": "ui-sans-serif, system-ui, sans-serif",
+    "fontSize": "14px"
+  }
+}}%%
+flowchart LR
+
+  subgraph COL1["  Sub-modules / Models  "]
+    direction TB
+    SM1("BioNeMo Finetune ESM")
+    SM2("BioNeMo Inference ESM")
+  end
+
+  subgraph COL2["  Workflows  (batch only — no serving endpoints)  "]
+    direction TB
+    WF1("BioNeMo Setup")
+    WF2("BioNeMo Finetune ESM")
+    WF3("BioNeMo Inference ESM")
+  end
+
+  SM1 --> WF1
+  SM1 --> WF2
+  SM2 --> WF3
+
+  classDef submod fill:#fef3c7,stroke:#92400e,color:#78350f,font-weight:bold,rx:6
+  classDef wflow  fill:#fde68a,stroke:#92400e,color:#78350f,rx:6
+
+  class SM1,SM2 submod
+  class WF1,WF2,WF3 wflow

@@ -1,0 +1,37 @@
+flowchart LR
+    START(["`**./destroy.sh**
+    &lt;module&gt; &lt;cloud&gt;`"]):::startend
+
+    CONFIRM{"`confirm
+    y/n?`"}:::decision
+
+    ABORT(["Aborted"]):::fail
+
+    DEP_CHECK{"`core + other
+    modules deployed?`"}:::decision
+
+    FAIL_DEP(["FAIL: destroy other modules first"]):::fail
+
+    MODULE_DESTROY["`**cd modules/&lt;module&gt;**
+    ./destroy.sh &lt;cloud&gt;
+    ─────────────────
+    bundle destroy · remove .deployed`"]:::action
+
+    DESTROY_JOB["`**destroy_module_job**
+    *(if non-core)*
+    ─────────────────
+    remove endpoints · archive
+    inference tables · clean settings`"]:::action
+
+    SUCCESS(["`**Done**`"]):::startend
+
+    START --> CONFIRM
+    CONFIRM -->|n| ABORT
+    CONFIRM -->|y| DEP_CHECK
+    DEP_CHECK -->|yes| FAIL_DEP
+    DEP_CHECK -->|no| MODULE_DESTROY --> DESTROY_JOB --> SUCCESS
+
+    classDef startend fill:#fee2e2,stroke:#991b1b,stroke-width:2px,color:#7f1d1d,font-weight:bold
+    classDef action fill:#fff1f2,stroke:#991b1b,stroke-width:1.5px,color:#7f1d1d
+    classDef decision fill:#fee2e2,stroke:#991b1b,stroke-width:1.5px,color:#7f1d1d
+    classDef fail fill:#fca5a5,stroke:#7f1d1d,stroke-width:2px,color:#450a0a,font-weight:bold

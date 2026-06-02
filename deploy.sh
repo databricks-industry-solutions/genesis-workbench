@@ -40,7 +40,7 @@ esac
 
 if [[ -n "$ONLY_SUBMODULE" && ! -d "modules/$CWD/$ONLY_SUBMODULE" ]]; then
     echo "🚫 Submodule '$ONLY_SUBMODULE' not found in modules/$CWD/"
-    echo "    (atomic modules like core, bionemo, parabricks have no submodules)"
+    echo "    (atomic modules like core, bionemo have no submodules)"
     exit 1
 fi
 

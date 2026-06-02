@@ -1,12 +1,9 @@
-command: [
-  "streamlit", 
-  "run",
-  "home.py"
-]
+command:
+  - "sh"
+  - "-c"
+  - "uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port ${DATABRICKS_APP_PORT:-8000}"
 
 env:
-  - name: STREAMLIT_BROWSER_GATHER_USAGE_STATS
-    value: "false"
   - name: SQL_WAREHOUSE
     valueFrom: "sql_warehouse"
   - name: CORE_CATALOG_NAME
@@ -17,9 +14,5 @@ env:
     valueFrom: "llm_endpoint"
   - name: DEV_USER_PREFIX
     valueFrom: "dev_user_prefix"
-
-    
-
-
-
-
+  - name: DATABRICKS_APP_NAME
+    value: "genesis-workbench"

@@ -43,6 +43,8 @@ resources:
           default: none
         - name: databricks_app_name
           default: ${var.app_name}
-      
+        - name: databricks_app_names
+          default: ${var.app_names}
+
       tags: ${var.common_resource_tags}
 

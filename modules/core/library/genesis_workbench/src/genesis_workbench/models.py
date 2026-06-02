@@ -43,9 +43,9 @@ class ModelSource(StrEnum):
 
 class ModelCategory(StrEnum):
     SINGLE_CELL = auto()
-    PROTEIN_STUDIES = auto()
+    LARGE_MOLECULE = auto()
     SMALL_MOLECULE = auto()
-    DISEASE_BIOLOGY = auto()
+    GENOMICS = auto()
 
 class ModelDeployPlatform(StrEnum):
     MODEL_SERVING = auto()

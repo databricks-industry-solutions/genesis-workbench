@@ -190,7 +190,7 @@ databricks jobs reset --json '<updated_spec>'
 2. Check if the error matches one of the patterns above.
 3. For model registration failures, the traceback usually points to the `predict()` or `load_context()` method — look for dtype mismatches, missing attributes, or wrong input formats.
 4. For endpoint failures, check the endpoint logs in the Databricks workspace (Serving → endpoint name → Logs tab).
-5. For UI errors, check the Streamlit app logs in the Databricks App logs.
+5. For UI errors, check the genesis-workbench app logs in the Databricks App logs.
 6. Always check `CHANGELOG.md` for the latest known issues and fixes.
 
 ## When to Use This Skill

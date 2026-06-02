@@ -8,7 +8,7 @@
 # MAGIC ## Overview
 # MAGIC
 # MAGIC The permissions system manages access to modules and submodules:
-# MAGIC - **protein_studies**: Protein folding and analysis workflows
+# MAGIC - **large_molecule**: Protein folding and analysis workflows
 # MAGIC - **nvidia_bionemo**: NVIDIA BioNeMo model workflows
 # MAGIC - **single_cell**: Single cell analysis workflows
 # MAGIC - **monitoring_alerts**: Monitoring and alerting workflows
@@ -126,7 +126,7 @@ if permissions_manager:
 if not permissions_manager:
     table_sql = f"""
     CREATE OR REPLACE TABLE {catalog_name}.{schema_name}.{PERMISSIONS_TABLE_NAME} (
-        module_name STRING NOT NULL COMMENT 'Module name (e.g., protein_studies, nvidia_bionemo)',
+        module_name STRING NOT NULL COMMENT 'Module name (e.g., large_molecule, nvidia_bionemo)',
         submodule_name STRING COMMENT 'Submodule name (null for module-level access)',
         permission_type STRING NOT NULL COMMENT 'Type of permission (module_access, submodule_access)',
         user_type STRING NOT NULL COMMENT 'User type (admin, user)',

@@ -319,7 +319,7 @@ A **strategy interface** is shipped now so Phase 2 can drop in `EvolutionaryStra
 - **Cell Similarity Search**: Standalone tab to search the 23M-cell reference for cells similar to a selected cluster. Shows neighbor cell type distribution (bar chart), disease distribution (bar chart), study sources, and full results table.
 - **Differential Expression Viewer**: Pairwise DE between any two user-selected clusters in the results viewer. Mann-Whitney U test with Benjamini-Hochberg correction. Interactive volcano plot with labeled significant genes and sortable results table.
 - **Pathway Enrichment Analysis**: Enrichr-based GO/KEGG/Reactome enrichment of cluster marker genes via gseapy. Bar chart of top enriched pathways and full results table with overlap, p-values, and gene lists.
-- **Trajectory / Pseudotime Analysis**: Optional diffusion pseudotime computation added to both Scanpy and Rapids-SingleCell processing pipelines (new "Compute Pseudotime" checkbox). Results viewer shows UMAP colored by pseudotime and gene expression along pseudotime with LOWESS trendline.
+- **Trajectory / Pseudotime Analysis**: Optional diffusion pseudotime computation added to both Scanpy and rapids-singlecell (part of scverse) processing pipelines (new "Compute Pseudotime" checkbox). Results viewer shows UMAP colored by pseudotime and gene expression along pseudotime with LOWESS trendline.
 - **Gene Perturbation Prediction (scGPT)**: New scGPT perturbation model for zero-shot prediction of gene knockout/overexpression effects. New registration notebook (`03_register_scgpt_perturbation.py`), deployment notebook (`04_import_perturbation_gwb.py`), and job YAML tasks. UI tab with gene selector ranked by cluster expression, perturbation type radio, bar chart of top affected genes, scatter plot (original vs predicted), and summary metrics.
 
 ### Deployment optimizations
@@ -478,7 +478,7 @@ Deployment to `fe-vm-hls-amer` (AWS) — all modules verified working (51/51 che
 - `deploy.sh` copies wheels to UC Volume after `databricks bundle deploy`. If the script fails mid-run, the wheel copy step may not execute. **Fixed in code** — wheel copy is now in the deploy flow with `set -e`.
 
 #### Job tags
-- `download_gene_references_gwb` was missing standard GWB tags on initial deploy. **Fixed in code** — both scanpy and rapids-singlecell `download_gene_references.yml` now include `tags: application: genesis_workbench, module: single_cell`.
+- `download_gene_references_gwb` was missing standard GWB tags on initial deploy. **Fixed in code** — both scanpy and rapids-singlecell (part of scverse) `download_gene_references.yml` now include `tags: application: genesis_workbench, module: single_cell`.
 
 #### application.env
 - `deploy.sh` uses `paste -sd,` which breaks on comments/blank lines. **Fixed in code** — env file cleaned of all comments and blanks. Deployers should keep env files comment-free.
@@ -505,7 +505,7 @@ Files changed: `download_setup.py`, `download_pdb_mmcif.py`
 
 ---
 
-### Single Cell (scanpy + rapids-singlecell)
+### Single Cell (scanpy + rapids-singlecell (part of scverse))
 
 #### Dependency pins
 - `scikit-learn==1.5.*` — cuml 25.10 wraps `BaseEstimator._get_default_requests` removed in newer scikit-learn
@@ -518,7 +518,7 @@ Files changed: `download_setup.py`, `download_pdb_mmcif.py`
 
 #### Gene mapping — dataset compatibility
 
-Both `analyze_single_h5ad.py` notebooks (scanpy + rapids-singlecell) have two paths for gene names:
+Both `analyze_single_h5ad.py` notebooks (scanpy + rapids-singlecell (part of scverse)) have two paths for gene names:
 
 **Path 1: `gene_name_column` is provided**
 - Uses the specified column directly as gene names
