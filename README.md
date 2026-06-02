@@ -1,35 +1,69 @@
 # Genesis Workbench
-### **A Blue print for a Life Sciences application on Databricks**
-## Introduction
+### **A Blueprint for a Life Sciences application on Databricks**
 
-### $${\color{orange}Opportunity}$$
+## $${\color{orange}Opportunity}$$
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/genai_ls.png" alt="Generative AI in Life Sciences" width="700"/>
 
-Generative AI is revolutionizing the life sciences by harnessing multiple foundational models tailored to various biological domains. These models, trained on vast biological datasets including genomic sequences, protein structures, molecular interactions, and cellular behaviors, enable advanced capabilities such as predictive modeling, drug discovery, and synthetic biology design. By integrating diverse biological data into unified frameworks, foundational models can generate novel hypotheses, simulate complex biochemical pathways, and predict molecular folding with unprecedented accuracy. This accelerates the identification of therapeutic targets, optimizes compound screening, and personalizes medicine by modeling patient-specific responses. Additionally, the synergy of large-scale language models specialized in biological text mining facilitates the extraction and synthesis of biomedical knowledge from the growing scientific literature.
+Generative AI is reshaping the life sciences. Foundational models trained on genomic sequences, protein structures, molecular interactions, and cellular behaviors are accelerating predictive modeling, drug discovery, and synthetic biology design. They can generate novel hypotheses, simulate complex biochemical pathways, and predict molecular folding with unprecedented accuracy — collapsing months of wet-lab iteration into hours of in-silico work, optimizing compound screening, and enabling patient-specific therapeutic models.
 
-### $${\color{orange}Challenges}$$
-<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/sad_scientists.png" alt="Generative AI in Life Sciences" width="700"/>
+## $${\color{orange}Challenges}$$
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/sad_scientists.png" alt="Scientists struggling with non-biological tasks" width="700"/>
 
-Despite their expertise in biology, many highly talented life science scientists find themselves struggling to set up advanced biological models due to the burden of non-biological tasks. These challenges include technical complexities such as configuring CUDA environments for GPU acceleration, which is essential for efficiently training large models. Additionally, scientists often need to create and manage complex workflows that automate data processing, model training, and validation—a task that requires skills outside traditional biological training. Data engineering also poses a significant hurdle, involving the collection, cleaning, and integration of diverse biological datasets while ensuring compliance with data governance policies to maintain privacy and reproducibility. These non-biological demands divert valuable time and focus away from the core scientific research, slowing down progress and innovation in applying generative AI models in life sciences. Addressing this gap requires interdisciplinary collaboration and improved tool accessibility that lowers the technical barriers for biological researchers.
+Despite their expertise in biology, life sciences scientists spend a disproportionate amount of time on tasks far from their training: configuring CUDA environments for GPU acceleration, orchestrating multi-step workflows for data prep, training, and validation, integrating heterogeneous biological datasets under governance constraints, and standing up infrastructure to serve models. These non-biological demands divert focus from the actual science. Lowering that technical barrier is the only way to put generative AI into the hands of the people who can do the most with it.
 
-### $${\color{orange}Genesis}$$ $${\color{orange}Workbench}$$
-<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/gwb.png" alt="Generative AI in Life Sciences" width="700"/>
+## $${\color{orange}Genesis}$$ $${\color{orange}Workbench}$$
 
-- Genesis Workbench offers a blueprint for using Databricks capabilities—like automated workflows, GPU clusters, model serving, and MLflow—to accelerate AI-driven life sciences research.
+Genesis Workbench is an open-source, Databricks-native blueprint that packages biological foundation models behind an intuitive UI — so scientists can run them without managing GPU clusters, CUDA, model registries, or serving endpoints.
 
-- It features an intuitive Databricks Apps interface with pre-packaged biological models and tailored workflows, enabling scientists to start quickly without complex setup.
+- **Pre-packaged biological models** ready to deploy: ESMFold, AlphaFold2, ProteinMPNN, RFDiffusion, scGPT, SCimilarity, Scanpy, RAPIDS-SingleCell, ChemProp, DiffDock, Boltz, NVIDIA Parabricks, NVIDIA BioNeMo and more.
+- **Tailored workflows** for protein design, drug discovery, single-cell analysis, and variant analysis — each surfaced as a UI tab with sane defaults.
+- **Built on Databricks primitives**: Asset Bundles, Workflows, Model Serving, MLflow, Unity Catalog, and Databricks Apps — so everything you run is governed, reproducible, and traceable.
+- **Modular and extensible**: each capability is an independent module that can be deployed and destroyed independently.
 
-- In collaboration with NVIDIA, BioNeMo—a generative AI framework for digital biology—is integrated for easy access to advanced pre-trained models.The BioNeMo models are optimized for NVIDIA hardware, delivering high performance and scalability for enterprise workloads.
+## $${\color{orange}Modules}$$
 
-- Being open source, Genesis Workbench provides extensible templates for AI engineers, reducing non-biological workload and promoting rapid innovation in generative AI for biology.
+Each module is independently deployable with `./deploy.sh <module> <cloud>`. Click through to the workflow deep-dives for inputs, outputs, models, and example runs.
 
-<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/happy_scientists.png" alt="Generative AI in Life Sciences" width="700"/>
+### Single Cell
+Single-cell RNA-seq at scale. Run end-to-end pipelines on millions of cells with Scanpy or GPU-accelerated RAPIDS-SingleCell. Annotate cell types per cluster against SCimilarity's 23M-cell reference database, search published studies for similar cells, and predict the effect of gene knockouts or overexpression with scGPT. The interactive results viewer offers UMAP exploration, differential expression, pathway enrichment, and trajectory analysis on the same run.
+
+**Models bundled:** scGPT, SCimilarity, Scanpy, RAPIDS-SingleCell, Merck TEDDY-G 400M (joint cell-type + disease annotation)
+
+📖 [Single Cell Analysis](modules/core/app/backend/documentation/single_cell_analysis.md) · [Cell Type Annotation](modules/core/app/backend/documentation/cell_type_annotation.md) · [Cell Similarity Search](modules/core/app/backend/documentation/cell_similarity.md) · [Gene Perturbation Prediction](modules/core/app/backend/documentation/perturbation_prediction.md)
+
+### Large Molecule
+Protein structure prediction, design, and engineering. Fold proteins in seconds with ESMFold or at high accuracy with AlphaFold2; design novel sequences for a target backbone with RFDiffusion + ProteinMPNN; run BLAST-like searches across 150M+ sequences using ESM-2 embeddings. The **Guided Enzyme Optimization** workflow chains Proteina-Complexa, ProteinMPNN, ESMFold, Boltz, NetSolP, PLTNUM, DeepSTABp, and MHCflurry into a reward-weighted scaffold-and-score loop that surfaces variants ranked on motif fidelity, fold confidence, optional substrate complex, and four developability axes (solubility, anchor-relative half-life, melting temperature, immunogenic burden).
+
+**Models bundled:** ESMFold, ESM-2 Embeddings, AlphaFold2, ProteinMPNN, RFDiffusion, Boltz
+
+📖 [Protein Structure Prediction](modules/core/app/backend/documentation/protein_structure_prediction.md) · [Protein Design](modules/core/app/backend/documentation/protein_design.md) · [Sequence Similarity Search](modules/core/app/backend/documentation/sequence_search.md) · [Guided Enzyme Optimization](modules/core/app/backend/documentation/enzyme_optimization.md)
+
+### Small Molecule
+Drug-discovery essentials. Profile candidates for drug-like properties and toxicity with ChemProp, predict protein-ligand binding poses with DiffDock, design protein binders to a target protein or small molecule with Proteina-Complexa, and transplant functional motifs into new scaffolds. Each generated candidate can be scored on developability through NetSolP (solubility), PLTNUM-ESM2 (relative half-life), DeepSTABp (melting temperature), and MHCflurry (immunogenic burden).
+
+**Models bundled:** ChemProp, DiffDock, Proteina-Complexa, NetSolP-1.0, PLTNUM-ESM2, DeepSTABp, MHCflurry 2.x
+
+📖 [Molecular Docking](modules/core/app/backend/documentation/molecular_docking.md) · [Protein Binder Design](modules/core/app/backend/documentation/protein_binder_design.md) · [Ligand Binder Design](modules/core/app/backend/documentation/ligand_binder_design.md) · [Motif Scaffolding](modules/core/app/backend/documentation/motif_scaffolding.md) · [ADMET & Safety](modules/core/app/backend/documentation/admet_safety.md)
+
+### Genomics
+Variant analysis at population scale. Call germline variants from FASTQ files with GPU-accelerated NVIDIA Parabricks, ingest VCFs into Delta tables for fast SQL/Spark queries, run genome-wide association studies (GWAS) using Glow, and annotate variants with ClinVar clinical-significance data. Inline interactive charts in the UI break down findings by gene, ACMG category, clinical significance, and zygosity.
+
+**Components:** NVIDIA Parabricks variant calling, Glow GWAS, Spark VCF→Delta ingestion, ClinVar annotation
+
+📖 [Variant Calling](modules/core/app/backend/documentation/variant_calling.md) · [VCF Ingestion](modules/core/app/backend/documentation/vcf_ingestion.md) · [GWAS Analysis](modules/core/app/backend/documentation/gwas_analysis.md) · [Variant Annotation](modules/core/app/backend/documentation/variant_annotation.md)
+
+### NVIDIA BioNeMo
+NVIDIA's generative AI framework for digital biology. The optional BioNeMo module ships container definitions and workflows that expose pre-trained BioNeMo models, starting with ESM-2 fine-tuning and inference. Containers are optimized for NVIDIA hardware and integrated into Genesis Workbench's job system, MLflow registry, and model-serving infrastructure.
+
+📖 [ESM2 Fine-tuning & Inference](modules/core/app/backend/documentation/bionemo_esm2.md)
+
+📚 **Full workflow catalog:** [documentation index](modules/core/app/backend/documentation/index.md)
 
 ## $${\color{orange}Architecture}$$ $${\color{orange}Diagram}$$
 
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/architecture.png" alt="Architecture" width="700"/>
 
-### $${\color{orange}Important}$$ $${\color{orange}Disclaimer}$$
+## $${\color{orange}Important}$$ $${\color{orange}Disclaimer}$$
 
 **NVIDIA, the NVIDIA logo, and NVIDIA BioNeMo are trademarks or registered trademarks of NVIDIA Corporation in the United States and other countries. All other product names, trademarks, and registered trademarks are the property of their respective owners.**
 
@@ -37,33 +71,41 @@ Despite their expertise in biology, many highly talented life science scientists
 
 **Use of NVIDIA BioNeMo and related technologies should comply with all relevant licensing terms, trademarks, and applicable regulations.**
 
-## $${\color{orange}Inside}$$ $${\color{orange}Genesis}$$ $${\color{orange}Workbench}$$
-
-- Scripts to deploy Genesis Workbench core module in your workspace
-- Scripts to deploy below modules:
-	- Single Cell module that deploys and uses scGPT, SCimilarity, Scanpy, Rapids-SingleCell, and Merck's [TEDDY-G 400M](modules/core/app/backend/documentation/single_cell_analysis.md) for joint cell-type + disease annotation
-	- Large Molecule module that deploys and uses ESMFold, ESM2 Embeddings, Alphafold2, ProteinMPNN, RFDiffusion and Boltz; also exposes a [Guided Enzyme Optimization](modules/core/app/backend/documentation/enzyme_optimization.md) workflow that composes Proteina-Complexa, ProteinMPNN, ESMFold, Boltz, NetSolP, PLTNUM, DeepSTABp, and MHCflurry into an iterative scaffold-and-score loop
-	- Small Molecule module that deploys and uses Chemprop, DiffDock, Proteina-Complexa, NetSolP-1.0 (protein solubility prediction), PLTNUM-ESM2 (protein half-life relative stability ranking), DeepSTABp (protein melting temperature regression), and MHCflurry 2.x (MHC-I immunogenic burden prediction)
-	- Genomics module for VCF ingestion, variant annotation and GWAS analysis
-	- BioNeMo container definitions and workflows
-	- Parabricks container definitions and workflows
-	- Access Management, Monitoring and Dashboards
-
 ## $${\color{orange}Installation}$$
-Read the [Installation Guide](https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/Installation.md)
+
+Full step-by-step setup is in the [Installation Guide](Installation.md). Quick path (assumes Databricks CLI authenticated to the target workspace as DEFAULT profile):
+
+```bash
+# 1. Deploy core first (UI, infrastructure, settings tables)
+./deploy.sh core <aws|azure|gcp>
+
+# 2. Deploy each module — one at a time, wait for jobs to finish before the next
+./deploy.sh large_molecule  <aws|azure|gcp>
+./deploy.sh single_cell     <aws|azure|gcp>
+./deploy.sh small_molecule  <aws|azure|gcp>
+./deploy.sh genomics        <aws|azure|gcp>
+./deploy.sh bionemo         <aws|azure|gcp>   # optional, requires BioNeMo container build
+```
+
+For UI-only redeploys after the initial install (preserves all settings tables — never use `deploy.sh core` on a populated install):
+
+```bash
+cd modules/core
+./update.sh <cloud> --ui-only   # rebuilds frontend, redeploys app, skips secret refresh / grants / UC volume copy
+```
 
 ## $${\color{orange}Changelog}$$
 See [CHANGELOG.md](CHANGELOG.md) for deployment fixes, known issues, and configuration notes.
 
 ## $${\color{orange}Troubleshooting}$$
-Read the Troubleshooting guide
+The repo ships [Claude Code skills](claude_skills/) covering installation, deployment, troubleshooting, workflows, and development. These are designed to be loaded into Claude Code; they also serve as the canonical reference for common deployment failures and fixes.
 
 ## $${\color{orange}License}$$
-Please see LICENSE for the details of the license. 
+Please see LICENSE for the details of the license.
 
-Some packages, tools, and code used inside individual tutorials are under their own licenses as described therein. Please ensure you read the details and licensing of individual tools. Other thrid party packages are used in tutorials within this accelerator and have their own licensing, as laid out in the table below. 
+Some packages, tools, and code used inside individual tutorials are under their own licenses as described therein. Please ensure you read the details and licensing of individual tools. Other third party packages are used in tutorials within this accelerator and have their own licensing, as laid out in the table below.
 
-We are adding a script to build your own Databricks compatible container for NVIDIA BioNeMo. If you want to use NVIDIA BioNeMo in Genesis Workbench, please follow the instructions to build the container and push the image to your container repository. 
+We are adding a script to build your own Databricks compatible container for NVIDIA BioNeMo. If you want to use NVIDIA BioNeMo in Genesis Workbench, please follow the instructions to build the container and push the image to your container repository.
 
 NVIDIA GPUs and cudatoolkit may be used in multiple places so you should consider the NVIDIA EULA(link) when using code in this package.
 
@@ -106,9 +148,9 @@ SCimilarity | Mlflow	| Apache2.0 | https://github.com/mlflow/mlflow
 SCimilarity | 'torch' / PyTorch | BSD-3-Clause | https://pypi.org/project/torch/2.7.1/
 SCimilarity | scanpy |	BSD 3-Clause | https://github.com/scverse/scanpy
 SCimilarity | numcodecs |	MIT | https://github.com/zarr-developers/numcodecs
-SCimilarity | tbb	| Apache2.0 | https://github.com/uxlfoundation/oneTBB 
+SCimilarity | tbb	| Apache2.0 | https://github.com/uxlfoundation/oneTBB
 SCimilarity | typing_extensions	| PSF | https://github.com/python/typing_extensions
-SCimilarity | numpy  |	BSD | https://github.com/numpy/numpy 
+SCimilarity | numpy  |	BSD | https://github.com/numpy/numpy
 SCimilarity | pandas | BSD 3-Clause | https://github.com/pandas-dev/pandas
 SCimilarity | uv | Apache2.0 | https://github.com/astral-sh/uv
 SCimilarity | cloudpickle==2.0.0 | BSD-3 | https://github.com/cloudpipe/cloudpickle
@@ -121,7 +163,7 @@ RFDiffusion | pyrsistent |	MIT | https://github.com/tobgu/pyrsistent
 RFDiffusion | e3nn	| MIT | https://github.com/e3nn/e3nn
 RFDiffusion | Wandb |	MIT | https://github.com/wandb/wandb
 RFDiffusion | Pynvml	| BSD-3 | https://github.com/gpuopenanalytics/pynvml
-RFDiffusion | Decorator	| BSD-2 | https://github.com/micheles/decorator 
+RFDiffusion | Decorator	| BSD-2 | https://github.com/micheles/decorator
 RFDiffusion | Torch |	BSD-3 | https://github.com/pytorch/pytorch
 RFDiffusion | Torchvision |	BSD-3 | https://github.com/pytorch/vision
 RFDiffusion | torchaudio==0.11.0 |	BSD-2 | https://github.com/pytorch/audio
@@ -133,7 +175,7 @@ RFDiffusion | MODEL WEIGHTS |	BSD | https://github.com/RosettaCommons/RFdiffusio
 ProteinMPNN | ProteinMPNN 	| MIT | https://github.com/dauparas/ProteinMPNN
 ProteinMPNN | Numpy |	BSD-3 | https://github.com/numpy/numpy
 ProteinMPNN | torch==1.11.0+cu113 |	BSD-3 | https://github.com/pytorch/pytorch
-ProteinMPNN | torchvision==0.12.0+cu113 |	BSD-3 |  https://github.com/pytorch/vision 
+ProteinMPNN | torchvision==0.12.0+cu113 |	BSD-3 |  https://github.com/pytorch/vision
 ProteinMPNN | torchaudio==0.11.0 | BSD-2 | https://github.com/pytorch/audio
 ProteinMPNN | mlflow==2.15.1 | Apache2.0 | https://github.com/mlflow/mlflow
 ProteinMPNN | cloudpickle==2.2.1 | BSD-3 | https://github.com/cloudpipe/cloudpickle
@@ -292,5 +334,3 @@ BioNeMo | pynvml | BSD-3 | https://github.com/gpuopenanalytics/pynvml
 Parabricks | see BioNeMo (same docker base dependencies) | |
 ESM2 Embeddings | torch==2.3.1 | BSD-3 | https://github.com/pytorch/pytorch
 ESM2 Embeddings | transformers==4.41.2 | Apache2.0 | https://github.com/huggingface/transformers
-
-

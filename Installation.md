@@ -166,14 +166,28 @@ Any module can be installed by using the provided `deploy` script. The syntax to
 An example deploy command for `core` module in a workspace in Azure is:
  - `./deploy.sh core azure`
 
-**Step - 3:** Now we can start installing rest of the modules. It is recommended to install one module at a time and wait for all deployment jobs to coplete before deploying the next module
+**Step - 3:** Now we can start installing rest of the modules. It is recommended to install one module at a time and wait for all deployment jobs to complete before deploying the next module.
 Example:
-- To deploy module `large_molecule` module in the above workspace `./deploy.sh large_molecule azure`
-- To deploy module `single_cell` module in the above workspace `./deploy.sh single_cell azure`
-- To deploy module `bionemo` module in the above workspace `./deploy.sh bionemo azure`
+- `./deploy.sh large_molecule azure`
+- `./deploy.sh single_cell azure`
+- `./deploy.sh small_molecule azure`
+- `./deploy.sh genomics azure`
+- `./deploy.sh bionemo azure` (optional — requires BioNeMo container build)
 
 
 **IMPORTANT NOTE:**
-Many jobs run in the background to download, register and deploy the models. This process can take many hours to complete. 
+Many jobs run in the background to download, register and deploy the models. This process can take many hours to complete.
+
+### Redeploying the UI after the initial install
+
+For UI-only changes (frontend, FastAPI backend, app config), use `update.sh` from inside `modules/core/`. It rebuilds the React frontend, wheel, and bundle, then redeploys the app without touching the `settings`, `model_deployments`, `models`, or `batch_models` Delta tables — so existing model registrations and configuration are preserved.
+
+```
+cd modules/core
+./update.sh <cloud>              # full redeploy (wheel rebuild + bundle deploy + grants + UC volume copy)
+./update.sh <cloud> --ui-only    # fastest path: skips secret refresh / grants / UC volume copy
+```
+
+**Never run `./deploy.sh core <cloud>` on a populated install** — its `initialize_core_job` drops and recreates the settings/models tables and you will lose all configuration. 
 
 
