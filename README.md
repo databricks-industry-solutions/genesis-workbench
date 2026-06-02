@@ -4,12 +4,24 @@
 ## $${\color{orange}Opportunity}$$
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/genai_ls.png" alt="Generative AI in Life Sciences" width="700"/>
 
-Generative AI is reshaping the life sciences. Foundational models trained on genomic sequences, protein structures, molecular interactions, and cellular behaviors are accelerating predictive modeling, drug discovery, and synthetic biology design. They can generate novel hypotheses, simulate complex biochemical pathways, and predict molecular folding with unprecedented accuracy — collapsing months of wet-lab iteration into hours of in-silico work, optimizing compound screening, and enabling patient-specific therapeutic models.
+Generative AI is reshaping the life sciences. Foundation models trained on genomics, protein structures, molecular interactions, and cellular behaviors are unlocking capabilities that weren't possible a few years ago:
+
+- **Foundation models across every domain** — From DNA to proteins to single cells to small molecules, there's now a pretrained model for almost every biological modality. Teams can start from these and fine-tune on their own data instead of training from scratch.
+- **Drug discovery acceleration** — Generative AI compresses months of wet-lab iteration into hours of in-silico screening, candidate ranking, and hypothesis generation. Lead time on early-stage discovery drops by an order of magnitude.
+- **Higher-accuracy structure prediction** — Tools like AlphaFold, ESMFold, and Boltz predict 3D structure from sequence with previously unattainable accuracy, opening up targets that were structurally inaccessible.
+- **Personalized medicine** — Patient-specific modeling of therapeutic responses is moving from research curiosity to clinical reality, enabling precision treatment decisions at the individual level.
+- **Knowledge synthesis at scale** — LLMs specialized in biomedical literature surface insights buried in millions of papers, accelerating hypothesis generation and reducing duplicated work.
 
 ## $${\color{orange}Challenges}$$
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/sad_scientists.png" alt="Scientists struggling with non-biological tasks" width="700"/>
 
-Despite their expertise in biology, life sciences scientists spend a disproportionate amount of time on tasks far from their training: configuring CUDA environments for GPU acceleration, orchestrating multi-step workflows for data prep, training, and validation, integrating heterogeneous biological datasets under governance constraints, and standing up infrastructure to serve models. These non-biological demands divert focus from the actual science. Lowering that technical barrier is the only way to put generative AI into the hands of the people who can do the most with it.
+Despite the breakthroughs, the experts who can apply these models — biologists, geneticists, biochemists — spend most of their time on tasks far outside their training:
+
+- **GPU and CUDA infrastructure** — Days spent configuring drivers, toolkits, and CUDA-compatible PyTorch builds before a single inference can run.
+- **Workflow orchestration** — Stitching together data prep, training, evaluation, and serving pipelines requires software-engineering skills the biology curriculum doesn't cover.
+- **Data engineering and governance** — Collecting, cleaning, and integrating heterogeneous biological datasets under privacy and reproducibility constraints is a full-time job in itself.
+- **Model serving and lifecycle** — Even after training, productionizing a model — registry, endpoints, monitoring, retraining — is yet another discipline the scientist has to pick up.
+- **Time stolen from the science** — Every hour spent on infrastructure is an hour not spent on biology. The slower the loop, the slower the innovation.
 
 ## $${\color{orange}Genesis}$$ $${\color{orange}Workbench}$$
 
