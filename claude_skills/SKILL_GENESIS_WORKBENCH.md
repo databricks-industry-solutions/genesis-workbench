@@ -18,7 +18,7 @@ Genesis Workbench simplifies deploying GPU-accelerated biological AI models on D
 - **scGPT Perturbation** — Zero-shot gene knockout/overexpression effect prediction using scGPT's transformer
 - **SCimilarity** — Cell similarity search and cell type annotation against a 23M-cell reference database (3 endpoints: GeneOrder, GetEmbedding, SearchNearest)
 - **Scanpy** — CPU-based single-cell QC, clustering, UMAP, marker gene detection, optional diffusion pseudotime
-- **Rapids-SingleCell** — GPU-accelerated single-cell analysis (CUDA-optimized version of Scanpy pipeline)
+- **rapids-singlecell (part of scverse)** — GPU-accelerated single-cell analysis (CUDA-optimized version of Scanpy pipeline)
 
 **UI Workflows:**
 - **Raw Processing** — QC → normalize → HVG → PCA → cluster → UMAP → markers (Scanpy or Rapids)

@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Single Cell Analysis provides end-to-end processing of single-cell RNA sequencing (scRNA-seq) data. Two processing backends are available: **Scanpy** (CPU-based, standard) and **RAPIDS-SingleCell** (GPU-accelerated, for large datasets). Both produce the same outputs: quality-filtered, normalized, and clustered cell populations with marker gene identification.
+Single Cell Analysis provides end-to-end processing of single-cell RNA sequencing (scRNA-seq) data. Two processing backends are available: **Scanpy** (CPU-based, standard) and **rapids-singlecell (part of scverse)** (GPU-accelerated, for large datasets). Both produce the same outputs: quality-filtered, normalized, and clustered cell populations with marker gene identification.
 
 ## What It Achieves
 
@@ -19,7 +19,7 @@ Single Cell Analysis provides end-to-end processing of single-cell RNA sequencin
 ### Processing
 
 1. Navigate to **Single Cell Studies > Raw Single Cell Processing** tab
-2. Select processing mode: **Scanpy** (CPU) or **RAPIDS-SingleCell** (GPU)
+2. Select processing mode: **Scanpy** (CPU) or **rapids-singlecell (part of scverse)** (GPU)
 3. Enter the h5ad file path on a UC Volume
 4. Configure gene name mapping (column name or species reference)
 5. Set filtering parameters:

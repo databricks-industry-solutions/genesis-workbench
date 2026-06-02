@@ -65,7 +65,7 @@ Three models available via pills selector:
 
 - Input: Path to h5ad file in Unity Catalog Volumes
 - Parameters: Gene name column (or species for Ensembl mapping), QC thresholds (min_genes, min_cells, pct_mt, n_genes_by_counts), normalization (target_sum, n_top_genes), clustering (n_pcs, resolution), optional pseudotime
-- Modes: Scanpy (CPU) or Rapids-SingleCell (GPU-accelerated)
+- Modes: Scanpy (CPU) or rapids-singlecell (part of scverse) (GPU-accelerated)
 - Output: MLflow run with markers_flat.parquet, UMAP, marker genes, QC plots
 
 **View Analysis Results** (sub-tab):

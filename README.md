@@ -27,7 +27,7 @@ Despite the breakthroughs, the experts who can apply these models — biologists
 
 Genesis Workbench is an open-source, Databricks-native blueprint that packages biological foundation models behind an intuitive UI — so scientists can run them without managing GPU clusters, CUDA, model registries, or serving endpoints.
 
-- **Pre-packaged biological models** ready to deploy: ESMFold, AlphaFold2, ProteinMPNN, RFDiffusion, scGPT, SCimilarity, Scanpy, RAPIDS-SingleCell, ChemProp, DiffDock, Boltz, NVIDIA Parabricks, NVIDIA BioNeMo and more.
+- **Pre-packaged biological models** ready to deploy: ESMFold, AlphaFold2, ProteinMPNN, RFDiffusion, scGPT, SCimilarity, Scanpy, rapids-singlecell (part of scverse), ChemProp, DiffDock, Boltz, NVIDIA Parabricks, NVIDIA BioNeMo and more.
 - **Tailored workflows** for protein design, drug discovery, single-cell analysis, and variant analysis — each surfaced as a UI tab with sane defaults.
 - **Built on Databricks primitives**: Asset Bundles, Workflows, Model Serving, MLflow, Unity Catalog, and Databricks Apps — so everything you run is governed, reproducible, and traceable.
 - **Modular and extensible**: each capability is an independent module that can be deployed and destroyed independently.
@@ -37,9 +37,9 @@ Genesis Workbench is an open-source, Databricks-native blueprint that packages b
 Each module is independently deployable with `./deploy.sh <module> <cloud>`. Click through to the workflow deep-dives for inputs, outputs, models, and example runs.
 
 ### Single Cell
-Single-cell RNA-seq at scale. Run end-to-end pipelines on millions of cells with Scanpy or GPU-accelerated RAPIDS-SingleCell. Annotate cell types per cluster against SCimilarity's 23M-cell reference database, search published studies for similar cells, and predict the effect of gene knockouts or overexpression with scGPT. The interactive results viewer offers UMAP exploration, differential expression, pathway enrichment, and trajectory analysis on the same run.
+Single-cell RNA-seq at scale. Run end-to-end pipelines on millions of cells with Scanpy or GPU-accelerated rapids-singlecell (part of scverse). Annotate cell types per cluster against SCimilarity's 23M-cell reference database, search published studies for similar cells, and predict the effect of gene knockouts or overexpression with scGPT. The interactive results viewer offers UMAP exploration, differential expression, pathway enrichment, and trajectory analysis on the same run.
 
-**Models bundled:** scGPT, SCimilarity, Scanpy, RAPIDS-SingleCell, Merck TEDDY-G 400M (joint cell-type + disease annotation)
+**Models bundled:** scGPT, SCimilarity, Scanpy, rapids-singlecell (part of scverse), Merck TEDDY-G 400M (joint cell-type + disease annotation)
 
 📖 [Single Cell Analysis](modules/core/app/backend/documentation/single_cell_analysis.md) · [Cell Type Annotation](modules/core/app/backend/documentation/cell_type_annotation.md) · [Cell Similarity Search](modules/core/app/backend/documentation/cell_similarity.md) · [Gene Perturbation Prediction](modules/core/app/backend/documentation/perturbation_prediction.md)
 
@@ -226,20 +226,20 @@ Scanpy | pybiomart | BSD-3 | https://github.com/jrderuiter/pybiomart
 Scanpy | Numpy | BSD-3 | https://github.com/numpy/numpy
 Scanpy | pandas | BSD-3 | https://github.com/pandas-dev/pandas
 Scanpy | scipy | BSD-3 | https://github.com/scipy/scipy
-Rapids-SingleCell | rapids-singlecell | MIT | https://github.com/scverse/rapids_singlecell
-Rapids-SingleCell | cudf-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
-Rapids-SingleCell | cuml-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
-Rapids-SingleCell | cugraph-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
-Rapids-SingleCell | cucim-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
-Rapids-SingleCell | dask-cudf-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
-Rapids-SingleCell | nx-cugraph-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
-Rapids-SingleCell | cuxfilter-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
-Rapids-SingleCell | pylibraft-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
-Rapids-SingleCell | raft-dask-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
-Rapids-SingleCell | cuvs-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
-Rapids-SingleCell | cupy-cuda12x | MIT | https://github.com/cupy/cupy/
-Rapids-SingleCell | scikit-learn==1.5.* | BSD-3 | https://github.com/scikit-learn/scikit-learn
-Rapids-SingleCell | rmm (RAPIDS Memory Manager) | Apache-2.0 | https://github.com/rapidsai/rmm
+rapids-singlecell (part of scverse) | rapids-singlecell | MIT | https://github.com/scverse/rapids_singlecell
+rapids-singlecell (part of scverse) | cudf-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
+rapids-singlecell (part of scverse) | cuml-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
+rapids-singlecell (part of scverse) | cugraph-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
+rapids-singlecell (part of scverse) | cucim-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
+rapids-singlecell (part of scverse) | dask-cudf-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
+rapids-singlecell (part of scverse) | nx-cugraph-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
+rapids-singlecell (part of scverse) | cuxfilter-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
+rapids-singlecell (part of scverse) | pylibraft-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
+rapids-singlecell (part of scverse) | raft-dask-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
+rapids-singlecell (part of scverse) | cuvs-cu12==25.10.* | Apache-2.0 | https://rapids.ai/
+rapids-singlecell (part of scverse) | cupy-cuda12x | MIT | https://github.com/cupy/cupy/
+rapids-singlecell (part of scverse) | scikit-learn==1.5.* | BSD-3 | https://github.com/scikit-learn/scikit-learn
+rapids-singlecell (part of scverse) | rmm (RAPIDS Memory Manager) | Apache-2.0 | https://github.com/rapidsai/rmm
 Chemprop | chemprop>=2.0.0 | MIT | https://github.com/chemprop/chemprop
 Chemprop | lightning | Apache2.0 | https://github.com/Lightning-AI/pytorch-lightning
 Chemprop | scikit-learn>=1.3 | BSD-3 | https://github.com/scikit-learn/scikit-learn

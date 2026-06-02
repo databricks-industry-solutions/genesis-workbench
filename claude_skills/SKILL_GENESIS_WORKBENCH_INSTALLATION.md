@@ -20,7 +20,7 @@ Genesis Workbench deploys through **modules**, each containing sub-modules with 
 **Available modules:**
 - `core` — UI app (React + FastAPI Databricks App named genesis-workbench), shared library, initialization workflows (MUST be deployed first)
 - `large_molecule` — ESMFold, AlphaFold2, ProteinMPNN, RFDiffusion, Boltz-1, ESM2 Embeddings, Sequence Search
-- `single_cell` — scGPT (embeddings + perturbation), SCimilarity (3 endpoints), Scanpy, Rapids-SingleCell
+- `single_cell` — scGPT (embeddings + perturbation), SCimilarity (3 endpoints), Scanpy, rapids-singlecell (part of scverse)
 - `small_molecule` — Chemprop (BBBP, ClinTox, ADMET), DiffDock (molecular docking), Proteina-Complexa (binder design)
 - `genomics` — VCF Ingestion (Glow), Variant Annotation (ClinVar), GWAS Analysis
 - `bionemo` — NVIDIA BioNeMo container-based workflows (ESM2 fine-tuning)
