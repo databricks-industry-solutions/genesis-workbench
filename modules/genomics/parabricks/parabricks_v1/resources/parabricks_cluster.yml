@@ -1,0 +1,25 @@
+resources:
+  clusters:
+    parabricks_cluster:
+      cluster_name: parabricks_cluster      
+      num_workers: 0
+      node_type_id: ${var.a10_node_type}
+      driver_node_type_id: ${var.a10_node_type}
+      spark_version: 15.4.x-scala2.12
+      enable_elastic_disk: true
+      data_security_mode: SINGLE_USER
+      single_user_name: ${workspace.current_user.userName}
+      docker_image:
+        url: ${var.parabricks_docker_image}  
+        basic_auth:
+          username: ${var.parabricks_docker_userid}
+          password: ${var.parabricks_docker_token}
+      spark_conf:
+        spark.databricks.cluster.profile: singleNode
+        spark.databricks.unityCatalog.volumes.enabled: true
+        spark.master: local[*]
+      custom_tags:
+        ResourceClass: SingleNode
+        #tags: ${var.common_resource_tags}
+
+

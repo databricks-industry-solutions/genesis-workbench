@@ -261,21 +261,36 @@ def save_user_settings(user_email:str, user_settings:dict):
     execute_non_select_query(insert_query)
 
 
+def _list_app_names() -> List[str]:
+    """Returns the apps that should receive CAN_MANAGE_RUN/CAN_QUERY grants
+    when models/jobs are registered.
+
+    Prefers DATABRICKS_APP_NAMES (comma-separated) for multi-app installs;
+    falls back to DATABRICKS_APP_NAME for single-app installs (the default)."""
+    raw = os.environ.get("DATABRICKS_APP_NAMES") or os.environ.get("DATABRICKS_APP_NAME", "")
+    return [n.strip() for n in raw.split(",") if n.strip()]
+
+
 def set_app_permissions_for_job(job_id:str, user_email:str):
     w = WorkspaceClient()
-    app_name = os.environ["DATABRICKS_APP_NAME"]
-    app = w.apps.get(name=app_name)
-    app_service_principal_id = app.service_principal_client_id
     acl = [
         JobAccessControlRequest(
             user_name=user_email,
             permission_level=JobPermissionLevel.IS_OWNER
-        ),
-        JobAccessControlRequest(
-            user_name=app_service_principal_id,
-            permission_level=JobPermissionLevel.CAN_MANAGE_RUN
         )
     ]
+    for app_name in _list_app_names():
+        try:
+            app_sp = w.apps.get(name=app_name).service_principal_client_id
+        except Exception as e:
+            print(f"⚠️  Skipping job permission for app '{app_name}': {e}")
+            continue
+        acl.append(
+            JobAccessControlRequest(
+                user_name=app_sp,
+                permission_level=JobPermissionLevel.CAN_MANAGE_RUN
+            )
+        )
 
     # Set permissions on the job, replacing any previous ACL
     w.jobs.set_permissions(
@@ -284,20 +299,71 @@ def set_app_permissions_for_job(job_id:str, user_email:str):
     )
 
 
+def set_app_permissions_for_volume(volume_full_name: str, write: bool = False):
+    """Grant READ_VOLUME (and optionally WRITE_VOLUME) on a UC volume to
+    every registered Databricks Apps service principal.
+
+    Use this for any volume the application backend itself touches —
+    e.g. uploads (motif.pdb for enzyme_optimization) or downloads
+    (result PDBs, mapping JSONs). Jobs that read/write volumes still
+    run as their owner; this is only needed when the app's SP issues
+    files API calls directly.
+
+    `volume_full_name` is the three-part UC name: 'catalog.schema.volume'.
+    Idempotent — repeated calls converge to the same ACL.
+    """
+    w = WorkspaceClient()
+    privileges = ["READ_VOLUME"]
+    if write:
+        privileges.append("WRITE_VOLUME")
+    for app_name in _list_app_names():
+        try:
+            app_sp = w.apps.get(name=app_name).service_principal_client_id
+        except Exception as e:
+            print(f"⚠️  Skipping volume permission for app '{app_name}': {e}")
+            continue
+        try:
+            # The SDK's grants.update takes SecurableType + full name + a list
+            # of changes (principal + add). Volume = SecurableType.VOLUME.
+            from databricks.sdk.service.catalog import (
+                Privilege,
+                PermissionsChange,
+                SecurableType,
+            )
+            w.grants.update(
+                securable_type=SecurableType.VOLUME,
+                full_name=volume_full_name,
+                changes=[
+                    PermissionsChange(
+                        principal=app_sp,
+                        add=[Privilege[p] for p in privileges],
+                    )
+                ],
+            )
+            print(f"Granted {privileges} on volume {volume_full_name} to app '{app_name}' (sp={app_sp}).")
+        except Exception as e:
+            print(f"⚠️  Failed to grant {privileges} on volume {volume_full_name} for app '{app_name}': {e}")
+
+
 def set_app_permissions_for_endpoint(endpoint_name:str):
     w = WorkspaceClient()
     endpoint_id = w.serving_endpoints.get(endpoint_name).id
-    app_name = os.environ["DATABRICKS_APP_NAME"]
-    app = w.apps.get(name=app_name)
 
-    acl = [
-        ServingEndpointAccessControlRequest(
-            user_name=app.service_principal_client_id,
-            permission_level=ServingEndpointPermissionLevel.CAN_QUERY  
+    acl: List[ServingEndpointAccessControlRequest] = []
+    for app_name in _list_app_names():
+        try:
+            app_sp = w.apps.get(name=app_name).service_principal_client_id
+        except Exception as e:
+            print(f"⚠️  Skipping endpoint permission for app '{app_name}': {e}")
+            continue
+        acl.append(
+            ServingEndpointAccessControlRequest(
+                user_name=app_sp,
+                permission_level=ServingEndpointPermissionLevel.CAN_QUERY
+            )
         )
-    ]
 
-    # Grant the permission (this sets, or use update_permissions to update)
+    # Replaces the existing ACL with the listed apps' grants.
     w.serving_endpoints.update_permissions(
         serving_endpoint_id=endpoint_id,
         access_control_list=acl

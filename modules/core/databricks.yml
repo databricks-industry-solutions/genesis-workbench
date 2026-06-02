@@ -13,6 +13,16 @@ include:
 sync:
   paths:
     - .
+  include:
+    # The React frontend's dist/ is gitignored (build artifact), but the
+    # genesis_workbench_app resource needs it uploaded so the FastAPI app
+    # can serve the SPA at /. core/deploy.sh runs `npm run build` before
+    # `bundle deploy`, so this directory is fresh when bundle sync picks it up.
+    - app/frontend/dist/**
+    # The genesis_workbench wheel is also gitignored in app/backend/lib/, but
+    # the app's requirements.txt references it by filename. core/deploy.sh
+    # copies the freshly-built wheel here before bundle deploy.
+    - app/backend/lib/*.whl
 
 targets:
   prod_aws:

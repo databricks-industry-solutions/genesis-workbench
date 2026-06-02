@@ -18,9 +18,9 @@ class ModuleConfig:
 
 
 MODULES = {
-    "protein_studies": ModuleConfig(
-        name="protein_studies",
-        display_name="Protein Studies",
+    "large_molecule": ModuleConfig(
+        name="large_molecule",
+        display_name="Large Molecule",
         description="Protein folding and analysis workflows",
         submodules=["settings", "protein_structure_prediction", "protein_design"],
     ),

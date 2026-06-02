@@ -26,6 +26,8 @@ resources:
           default: ${var.core_schema_name}
         - name: databricks_app_name
           default: ${var.app_name}
+        - name: databricks_app_names
+          default: ${var.app_names}
         - name: sql_warehouse_id
           default: ${var.sql_warehouse_id}
 

@@ -103,3 +103,16 @@ run_id = deploy_model(
 
 result = wait_for_job_run_completion(run_id, timeout=3600)
 result
+
+# COMMAND ----------
+
+# The app SP reads /Volumes/{catalog}/{schema}/teddy/gene_mapping.json
+# at startup (services/teddy.py) to translate HGNC symbols to ENSG ids
+# before querying the TEDDY embedder. Grant READ so that load works
+# without ad-hoc UC grants.
+from genesis_workbench.workbench import set_app_permissions_for_volume
+
+set_app_permissions_for_volume(
+    volume_full_name=f"{catalog}.{schema}.teddy",
+    write=False,
+)

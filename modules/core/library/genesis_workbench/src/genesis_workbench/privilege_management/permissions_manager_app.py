@@ -197,7 +197,7 @@ class AppPermissionsManager:
 
         create_table_sql = f"""
         CREATE OR REPLACE TABLE {catalog}.{schema}.{table} (
-            module_name STRING NOT NULL COMMENT 'Module name (e.g., protein_studies, nvidia_bionemo)',
+            module_name STRING NOT NULL COMMENT 'Module name (e.g., large_molecule, nvidia_bionemo)',
             submodule_name STRING COMMENT 'Submodule name (null for module-level access)',
             permission_type STRING NOT NULL COMMENT 'Type of permission (module_access, submodule_access)',
             user_type STRING NOT NULL COMMENT 'User type (admin, user)',
@@ -389,7 +389,7 @@ class AppPermissionsManager:
 
         Returns:
             Dictionary with module names as keys and dicts of submodules with access levels as values
-            Example: {"protein_studies": {"settings": "full", "prediction": "view"}}
+            Example: {"large_molecule": {"settings": "full", "prediction": "view"}}
         """
         accessible = {}
 

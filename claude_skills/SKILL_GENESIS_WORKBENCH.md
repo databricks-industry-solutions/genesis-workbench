@@ -18,7 +18,7 @@ Genesis Workbench simplifies deploying GPU-accelerated biological AI models on D
 - **scGPT Perturbation** — Zero-shot gene knockout/overexpression effect prediction using scGPT's transformer
 - **SCimilarity** — Cell similarity search and cell type annotation against a 23M-cell reference database (3 endpoints: GeneOrder, GetEmbedding, SearchNearest)
 - **Scanpy** — CPU-based single-cell QC, clustering, UMAP, marker gene detection, optional diffusion pseudotime
-- **Rapids-SingleCell** — GPU-accelerated single-cell analysis (CUDA-optimized version of Scanpy pipeline)
+- **rapids-singlecell (part of scverse)** — GPU-accelerated single-cell analysis (CUDA-optimized version of Scanpy pipeline)
 
 **UI Workflows:**
 - **Raw Processing** — QC → normalize → HVG → PCA → cluster → UMAP → markers (Scanpy or Rapids)
@@ -29,7 +29,7 @@ Genesis Workbench simplifies deploying GPU-accelerated biological AI models on D
 - **Trajectory Analysis** — Diffusion pseudotime with UMAP coloring and gene expression along pseudotime
 - **Perturbation Prediction** — Predict gene knockout/overexpression effects with gene selector ranked by cluster expression
 
-### Protein Studies Module
+### Large Molecule Module
 - **ESMFold** — Fast protein structure prediction from sequence
 - **AlphaFold2** — High-accuracy protein structure prediction (batch job)
 - **Boltz-1** — Multi-chain protein structure prediction (protein-protein, protein-ligand complexes)
@@ -59,7 +59,7 @@ Genesis Workbench simplifies deploying GPU-accelerated biological AI models on D
 - **Guided Enzyme Optimization** — Reward-weighted optimization loop around Proteina-Complexa-AME + ProteinMPNN + ESMFold. Scores each candidate on motif RMSD, pLDDT, optional Boltz substrate confidence, and four developability axes (solubility, half-life anchored vs reference enzyme, thermostability, immunogenicity). Form has a **Generation mode** toggle: **Fast** (default, ~30 min) — endpoint-based AME with parent resampling between iterations; **Accurate** (~30-60 min, ~$22 GPU) — in-process AME on an A10 with Feynman-Kac steering during diffusion (reward biases sampling, not just selection).
 - **ADMET & Safety** — Multi-model property profiling (BBB penetration, toxicity, ADMET)
 
-### Disease Biology Module
+### Genomics Module
 - **VCF Ingestion** — VCF-to-Delta via Glow
 - **Variant Annotation** — ClinVar annotation with gene filtering
 - **GWAS Analysis** — Genome-wide association studies pipeline
@@ -76,7 +76,7 @@ Genesis Workbench simplifies deploying GPU-accelerated biological AI models on D
 - Start All Endpoints keep-alive feature
 
 ## Key Dependencies
-- Streamlit (UI), Databricks SDK, MLflow, BioPython, PyTorch, gseapy, scipy, Plotly, parasail
+- React + FastAPI (UI), Databricks SDK, MLflow, BioPython, PyTorch, gseapy, scipy, Plotly, parasail
 
 ## Deployment
 
@@ -122,7 +122,7 @@ Genesis Workbench simplifies deploying GPU-accelerated biological AI models on D
 2. Ensure a workspace with GPU support is available. Use `databricks-fe-vm-workspace-deployment` if needed.
 3. Clone the repo and configure the cloud-specific env file for the target environment.
 4. Run `deploy.sh` to deploy all modules, or deploy individual modules as needed.
-5. The Streamlit-based UI is served as a Databricks App — use the `databricks-apps` skill for app management if needed.
+5. The React + FastAPI UI is served as a Databricks App (genesis-workbench) — use the `databricks-apps` skill for app management if needed.
 6. Use `databricks-resource-deployment` for deploying additional infrastructure (clusters, jobs, notebooks).
 7. For data generation needs (e.g., synthetic biological data for demos), reference the `databricks-data-generation` skill.
 8. Check `Installation.md` in the repo for detailed setup guidance and `CHANGELOG.md` for known issues.

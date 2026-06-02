@@ -50,7 +50,8 @@ dbutils.widgets.text("workload_type", "CPU", "Endpoint Workload Type")
 dbutils.widgets.text("workload_size", "Medium", "Endpoint Workload Size")
 dbutils.widgets.text("deploy_user", "a@b.com", "User Id")
 dbutils.widgets.text("dev_user_prefix", "abc", "Prefix for resources")
-dbutils.widgets.text("databricks_app_name", "dev-scn-genesis-workbench", "UI Application name")
+dbutils.widgets.text("databricks_app_name", "dev-scn-genesis-workbench", "UI Application name (legacy single)")
+dbutils.widgets.text("databricks_app_names", "", "UI Application names (comma-separated, multi-app)")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
@@ -94,6 +95,15 @@ workload_size = dbutils.widgets.get("workload_size")
 deploy_user = dbutils.widgets.get("deploy_user")
 dev_user_prefix = dbutils.widgets.get("dev_user_prefix")
 databricks_app_name = dbutils.widgets.get("databricks_app_name")
+databricks_app_names = dbutils.widgets.get("databricks_app_names") or databricks_app_name
+
+# Normalise to comma-separated (the lib expects ','). We accept ':' too because
+# `databricks bundle --var foo=a,bar=b` uses ',' as its own separator and
+# would break on a value that itself contains ','.
+import os
+_csv = ",".join([n.strip() for n in databricks_app_names.replace(":", ",").split(",") if n.strip()])
+os.environ["DATABRICKS_APP_NAMES"] = _csv
+os.environ["DATABRICKS_APP_NAME"] = databricks_app_name
 
 dev_user_prefix = None if dev_user_prefix.strip() == "" or dev_user_prefix.strip().lower()=="none" else dev_user_prefix
 

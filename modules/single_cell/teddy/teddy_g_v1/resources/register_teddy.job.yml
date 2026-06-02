@@ -104,15 +104,18 @@ resources:
             custom_tags:
               ResourceClass: SingleNode
 
-        # Multi-node A10 cluster for the reembed task. 8 workers × 1 A10 = 8
-        # GPUs in parallel via pandas_udf / mapInPandas — ~8× the throughput
+        # Multi-node A10 cluster for the reembed task. 4 workers × 1 A10 = 4
+        # GPUs in parallel via pandas_udf / mapInPandas — ~4× the throughput
         # of the original single-node A10 setup. Driver does Census obs query
         # + Spark coordination only; workers do all GPU embedding.
         # `spark.task.resource.gpu.amount=1` pins one Spark task per GPU so
         # we don't fight for the same CUDA context.
+        # Sized for ~320 vCPU (5 × g5.16xlarge @ 64 vCPU) to stay well under
+        # the AWS G/VT-family vCPU quota of 768 — the 8-worker sizing tipped
+        # over when other G-family clusters were running concurrently.
         - job_cluster_key: job_cluster_teddy_a10_multinode
           new_cluster:
-            num_workers: 8
+            num_workers: 4
             node_type_id: ${var.a10_node_type}
             driver_node_type_id: ${var.a10_node_type}
             spark_version: '15.4.x-gpu-ml-scala2.12'

@@ -1,6 +1,6 @@
 ---
 name: genesis-workbench-batch-workflow-pattern
-description: Canonical pattern for adding a long-running batch workflow to Genesis Workbench — orchestrator job, registration, app-side dispatcher, MLflow run pre-creation, search past runs, and result dialog. Use this for any new feature where the user clicks Launch in Streamlit, a Databricks job runs for minutes-to-hours, and results are reviewed later.
+description: Canonical pattern for adding a long-running batch workflow to Genesis Workbench — orchestrator job, registration, app-side dispatcher, MLflow run pre-creation, search past runs, and result dialog. Use this for any new feature where the user clicks Launch in the React UI, a Databricks job runs for minutes-to-hours, and results are reviewed later.
 ---
 
 # Batch-Workflow Pattern
@@ -9,7 +9,7 @@ When a new feature looks like:
 
 > "User fills a form → app dispatches a Databricks job → job runs for several minutes / hours → user comes back later to review results."
 
-Follow this pattern end-to-end. Don't invent a parallel approach — every batch workflow in this repo (AlphaFold, Disease Biology GWAS / Variant Annotation, Guided Enzyme Optimization, Scanpy) has converged on it. Newer implementations refine it slightly; the most complete reference is the **Guided Enzyme Optimization** stack landed on the `guided_enzyme_creation` branch.
+Follow this pattern end-to-end. Don't invent a parallel approach — every batch workflow in this repo (AlphaFold, Genomics GWAS / Variant Annotation, Guided Enzyme Optimization, Scanpy) has converged on it. Newer implementations refine it slightly; the most complete reference is the **Guided Enzyme Optimization** stack landed on the `guided_enzyme_creation` branch.
 
 ## When to apply
 
@@ -21,13 +21,13 @@ Follow this pattern end-to-end. Don't invent a parallel approach — every batch
 
 These each cost a deploy cycle when they slipped in. Read them before writing code.
 
-1. **Don't render an inline auto-polling result pane on the launch page.** It conflicts with the *Search Past Runs* dialog flow, can't survive a tab refresh, and forces awkward `st.session_state["active_run"]` plumbing. Use the AlphaFold-style success-message + Search-Past-Runs dialog instead. Reference: `modules/core/app/views/protein_studies_workflows/structure_prediction.py:104-186`.
+1. **Don't render an inline auto-polling result pane on the launch page.** It conflicts with the *Search Past Runs* dialog flow, can't survive a tab refresh, and forces awkward `st.session_state["active_run"]` plumbing. Use the AlphaFold-style success-message + Search-Past-Runs dialog instead. Reference: `modules/core/app/views/large_molecule_workflows/structure_prediction.py:104-186`.
 
 2. **Don't return `job_run.run_id` from the dispatcher and treat it as the MLflow run_id.** They are different things. `job_run.run_id` (int) is the Databricks job-run id; the MLflow run_id (str hex) is what `MlflowClient.get_run()`, `download_artifacts()`, etc. expect. The dispatcher's success message displays `job_run_id`; the *search* discovers the MLflow run via tags.
 
 3. **Don't pass `experiment.name` (the full path `/Users/<email>/mlflow_experiments/<tag>`) to the orchestrator's `mlflow_experiment` job parameter.** The orchestrator's `set_mlflow_experiment` will prepend the user-folder again, producing `/Users/.../mlflow_experiments//Users/.../mlflow_experiments/<tag>` — MLflow's REST endpoint surfaces this as `BAD_REQUEST: For input string: "None"`. Pass the *short tag* (e.g., `"gwb_enzyme_optimization"`) and let the orchestrator resolve.
 
-4. **Don't create the MLflow run only inside the orchestrator notebook.** Cluster cold-start + `pip install` takes 3-5 min; for that whole window the *Search Past Runs* table is empty even though the job is in flight. Pre-create the run from the dispatcher (Disease Biology pattern) and pass `mlflow_run_id` so the orchestrator attaches.
+4. **Don't create the MLflow run only inside the orchestrator notebook.** Cluster cold-start + `pip install` takes 3-5 min; for that whole window the *Search Past Runs* table is empty even though the job is in flight. Pre-create the run from the dispatcher (Genomics pattern) and pass `mlflow_run_id` so the orchestrator attaches.
 
 5. **Don't surface raw MLflow run lifecycle status (`RUNNING` / `FINISHED`) in the search-results status column.** Use a progressive `job_status` tag (`submitted` → `started` → stage-specific → `complete` / `failed`) so the user sees the *pipeline stage*, not the lifecycle state.
 
@@ -259,7 +259,7 @@ The else-branch keeps the notebook runnable directly from the Databricks Jobs UI
 
 c) **Set the experiment tag** so it's discoverable by `mlflow.search_experiments(filter_string="tags.used_by_genesis_workbench='yes'")`. This is automatic when you call `set_mlflow_experiment(experiment_tag, user_email)` from `genesis_workbench.models` (it sets the tag internally). Just make sure the orchestrator passes the **short tag** (received via the `mlflow_experiment` widget), NOT the full path.
 
-### Layer 5 — Streamlit view (`modules/core/app/views/<module>_workflows/<feature>.py`)
+### Layer 5 — React tab component (`modules/core/app/frontend/src/components/<Feature>Tab.tsx`) + FastAPI router (`modules/core/app/backend/app/routers/<module>.py`)
 
 Three sections, in order:
 
@@ -349,7 +349,7 @@ Module-level helpers:
 
 ### Optional but recommended — progress dots in the search table
 
-Mirror `disease_biology._PROGRESS_MAP` / `add_progress_column` (`modules/core/app/utils/disease_biology.py:23-54`). For the enzyme stack, the implementation lives at `modules/core/app/utils/enzyme_optimization_tools.py:_ENZYME_PROGRESS_MAP / _enzyme_progress / _add_progress_column`. For the scanpy stack: `modules/core/app/utils/single_cell_analysis.py:_SC_PROGRESS_MAP / add_singlecell_progress_column`. Define a fixed-width emoji scheme (e.g., `🟩🟩⬜⬜`), call from the search-helper so both search functions get it for free.
+Mirror `genomics._PROGRESS_MAP` / `add_progress_column` (`modules/core/app/utils/genomics.py:23-54`). For the enzyme stack, the implementation lives at `modules/core/app/utils/enzyme_optimization_tools.py:_ENZYME_PROGRESS_MAP / _enzyme_progress / _add_progress_column`. For the scanpy stack: `modules/core/app/utils/single_cell_analysis.py:_SC_PROGRESS_MAP / add_singlecell_progress_column`. Define a fixed-width emoji scheme (e.g., `🟩🟩⬜⬜`), call from the search-helper so both search functions get it for free.
 
 Canonical 3-stage helper (copy-paste then rename the prefix):
 
@@ -407,7 +407,6 @@ if not in_progress.empty:
     )
 ```
 
-Streamlit does NOT auto-refresh; the banner explicitly tells the user to click Search again. Don't add `st.experimental_rerun()` on a timer — it kills cluster start-up cost amortization and creates jittery selection state in the dataframe.
 
 **View button gating.** When the search table has in-progress rows, the View button should be disabled for those rows so the user can't click into a run that hasn't logged `markers_flat.parquet` (or whatever the result artifact is) yet. Use the PRIOR render's selection (live in session_state via the dataframe's `key`) to decide button state BEFORE the widget is drawn:
 
@@ -435,71 +434,6 @@ view_btn = st.button(
 
 The button is drawn ABOVE the dataframe; its state derives from session_state populated by the previous render's selection. The `on_select="rerun"` on the dataframe re-fires the script on row click so the button updates immediately.
 
-### Programmatic "tab" switch — segmented_control + pending flag
-
-**Background.** `st.tabs(...)` in Streamlit 1.44 has **no programmatic activate API**. You cannot make View-button click navigate to the results tab. JS workarounds (clicking `button[data-baseweb="tab"]` inside `window.parent.document` from a `components.html` iframe) are fragile — selectors change between Streamlit versions, the iframe's parent-DOM access is sandboxed, and timing race with hydration is hard to get right.
-
-**The fix.** Use `st.segmented_control` (added in 1.41) as the outer "tab" strip instead. It looks like a horizontal pill toggle, behaves like tabs for the user, and is fully session-state controllable. Then conditionally render the active panel.
-
-**Gotcha — widget-key write rule.** Streamlit forbids writing to a widget's session_state key *after* the widget is instantiated in this script run:
-
-```
-streamlit.errors.StreamlitAPIException:
-st.session_state.<key> cannot be modified after the widget with key <key> is instantiated.
-```
-
-The View-button handler runs *inside* the form/search panel (which is rendered *after* the outer segmented_control). So the handler cannot write to the segmented_control's key directly. Use a **separate pending-flag key**: the handler writes to that flag (legal — it's not a widget key), then `st.rerun()`. At the top of the next render — *before* the segmented_control instantiates — consume the flag and write to the widget key (legal — widget not yet drawn).
-
-**Reference implementation** (`modules/core/app/views/single_cell_workflows/processing.py:render()`):
-
-```python
-def render():
-    st.markdown("### Raw Single Cell Analysis")
-
-    _VIEW_KEY = "scanpy_active_view_widget"
-    # Consume any pending programmatic switch BEFORE the widget renders.
-    pending = st.session_state.pop("_scanpy_pending_view", None)
-    if pending:
-        st.session_state[_VIEW_KEY] = pending
-    elif _VIEW_KEY not in st.session_state:
-        st.session_state[_VIEW_KEY] = "Run New Analysis"
-
-    st.segmented_control(
-        label="View",
-        options=["Run New Analysis", "View Analysis Results"],
-        key=_VIEW_KEY,
-        label_visibility="collapsed",
-    )
-
-    active = st.session_state.get(_VIEW_KEY) or "Run New Analysis"
-    if active == "Run New Analysis":
-        _display_run_analysis()
-    else:
-        _display_results_viewer()
-```
-
-And inside the View-button handler (which runs from `_display_run_analysis()`):
-
-```python
-if view_btn and prior_rows:
-    selected_run_id = search_df.iloc[prior_rows[0]]["run_id"]
-    try:
-        _load_run_into_session(selected_run_id)
-    except Exception as e:
-        st.error(f"Error loading run: {e}")
-    else:
-        st.session_state["_scanpy_pending_view"] = "View Analysis Results"
-        st.rerun()
-```
-
-Direct user clicks on the segmented_control are unaffected — Streamlit handles them natively via the widget key. The pending flag is set only by programmatic flows (View button, Back-to-search button, etc.).
-
-**Anti-patterns to avoid:**
-- ❌ `components.html("<script>document.querySelector(...).click()</script>")` — DOM-selector hack, breaks on Streamlit upgrades.
-- ❌ Writing to the widget key from inside the View handler — `StreamlitAPIException` (widget already instantiated).
-- ❌ Keeping `st.tabs` and trying to "force" the active tab — there's no API; just use `st.segmented_control`.
-- ❌ Syncing widget key from canonical state at the TOP of every render unconditionally — this wipes the user's direct widget click before Streamlit can apply it.
-
 ### Clear-state-on-search
 
 When the user clicks Search, the View Analysis Results panel may have a previously-loaded run still in session_state (markers, annotations, UMAP overlays). Wipe it so a stale run doesn't leak across the search → view boundary:
@@ -520,8 +454,8 @@ if search_btn:
 | Feature | Module | Notes |
 |---|---|---|
 | **Guided Enzyme Optimization** | `modules/small_molecule/enzyme_optimization/` + `modules/core/app/utils/enzyme_optimization_tools.py` + `modules/core/app/views/small_molecule_workflows/enzyme_optimization.py` | **Most complete reference.** Has all five layers, progress dots, dialog with metrics + collapsed expander, Fast/Accurate dual-job dispatch toggle, in-process AME failure-handling. Copy from here when adding the next batch workflow. |
-| **AlphaFold** | `modules/protein_studies/alphafold/` + `modules/core/app/utils/protein_structure.py` + `modules/core/app/views/protein_studies_workflows/structure_prediction.py:104-186` | The original Search Past Runs UX template. Simpler — single status (`fold_complete`), no progress dots. |
-| **Disease Biology — GWAS / Variant Annotation** | `modules/disease_biology/*` + `modules/core/app/utils/disease_biology.py` | Source of the **MLflow run pre-creation pattern** (`disease_biology.py:122-166`) and progress-dots helper. |
+| **AlphaFold** | `modules/large_molecule/alphafold/` + `modules/core/app/utils/protein_structure.py` + `modules/core/app/views/large_molecule_workflows/structure_prediction.py:104-186` | The original Search Past Runs UX template. Simpler — single status (`fold_complete`), no progress dots. |
+| **Genomics — GWAS / Variant Annotation** | `modules/genomics/*` + `modules/core/app/utils/genomics.py` | Source of the **MLflow run pre-creation pattern** (`genomics.py:122-166`) and progress-dots helper. |
 | **Scanpy** | `modules/single_cell/scanpy/scanpy_v0.0.1/` | Earlier batch-flow without pre-creation — useful to see what NOT to do for the run-visibility piece. |
 
 When uncertain how to wire something, start by reading the equivalent block of the enzyme_optimization stack — it's been hardened across several deploy cycles in this branch.

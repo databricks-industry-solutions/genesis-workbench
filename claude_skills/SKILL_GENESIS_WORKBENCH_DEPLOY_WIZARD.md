@@ -70,7 +70,7 @@ Ask: deploy the `bionemo` module? If yes, collect:
 Remind the user: the BioNeMo container must be pre-built and pushed (see `modules/bionemo/docker/build_docker.sh`).
 
 ### 8. Which additional modules to deploy
-After `core`, ask the user to pick from: `protein_studies`, `single_cell`, `small_molecule`, `disease_biology`, `parabricks`, `bionemo`. Deploy one at a time; each triggers long-running background jobs.
+After `core`, ask the user to pick from: `large_molecule`, `single_cell`, `small_molecule`, `genomics`, `parabricks`, `bionemo`. Deploy one at a time; each triggers long-running background jobs.
 
 **Treat the approved module order as a contract.** Once the user confirms the list in step 8, deploy in exactly that order. If a module is blocked (e.g., waiting on docker creds from step 7) do NOT jump over it to a later unblocked module without first asking the user to explicitly re-approve the swap. Past user feedback: silent reordering has been rejected.
 
@@ -168,7 +168,7 @@ Then loop through the modules the user chose in step 8, **in the exact order the
 
 Wait for each `deploy.sh` to return (it drives `databricks bundle deploy` + an `initialize_module_job` run). That's fast (minutes). What runs *after* is module-specific:
 
-- `small_molecule`, `protein_studies`, `single_cell`, `disease_biology` — spawn multiple `register_*` jobs against GPU clusters. These are the ones that can hit quota at cluster-create time.
+- `small_molecule`, `large_molecule`, `single_cell`, `genomics` — spawn multiple `register_*` jobs against GPU clusters. These are the ones that can hit quota at cluster-create time.
 - `bionemo` — spawns `dbx_bionemo_initial_setup`, then registers on-demand finetune/inference jobs (no `register_*` jobs).
 - `parabricks` — primarily builds a docker-backed cluster template; actual compute runs on-demand from the app.
 
@@ -200,7 +200,7 @@ The `small_molecule` module is the most fragmented (now 8 submodules). Use `--on
 
 **NetSolP one-time setup:** before the first deploy of `netsolp/netsolp_v1`, the upstream weight tarball must be extracted into `modules/small_molecule/netsolp/netsolp_v1/weights/` and committed (BSD-3-Clause, see the `weights/README.md` for the helper script). Subsequent clones of the repo deploy without any manual step.
 
-**Orchestrator deploy** does NOT auto-run a registration job — it just installs the bundle. It creates **two** jobs: `run_enzyme_optimization_gwb` (Fast path, CPU cluster) and `run_enzyme_optimization_gwb_inprocess_ame` (Accurate path, A10 GPU cluster). Both are dispatched on demand by the Streamlit page based on the **Generation mode** toggle. The Accurate path also requires `proteina_complexa/proteina_complexa_v1` to be deployed first — its registered UC model is the source of truth for the AME checkpoints (no NGC fallback). If you skip proteina_complexa, the Accurate path fails fast at job start with a clear "deploy proteina_complexa first" message.
+**Orchestrator deploy** does NOT auto-run a registration job — it just installs the bundle. It creates **two** jobs: `run_enzyme_optimization_gwb` (Fast path, CPU cluster) and `run_enzyme_optimization_gwb_inprocess_ame` (Accurate path, A10 GPU cluster). Both are dispatched on demand by the UI based on the **Generation mode** toggle. The Accurate path also requires `proteina_complexa/proteina_complexa_v1` to be deployed first — its registered UC model is the source of truth for the AME checkpoints (no NGC fallback). If you skip proteina_complexa, the Accurate path fails fast at job start with a clear "deploy proteina_complexa first" message.
 
 ## Error auto-handlers
 

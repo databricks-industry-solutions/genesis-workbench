@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Light theme (default). Applied when `html` has no `dark` class. */
+:root {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 12%;
+  --card: 0 0% 98%;
+  --card-foreground: 0 0% 12%;
+  --muted: 0 0% 94%;
+  --muted-foreground: 0 0% 40%;
+  --border: 0 0% 85%;
+  --accent: 0 0% 90%;
+  --primary: 212 95% 45%;
+  --primary-foreground: 0 0% 100%;
+  --destructive: 0 75% 50%;
+  --success: 132 50% 38%;
+}
+
+/* Dark theme. Applied when `html` has class `dark`. The Settings →
+ * Appearance toggle adds/removes this class via the user Zustand store. */
+html.dark {
+  --background: 0 0% 12%;
+  --foreground: 0 0% 90%;
+  --card: 0 0% 15%;
+  --card-foreground: 0 0% 90%;
+  --muted: 0 0% 18%;
+  --muted-foreground: 0 0% 60%;
+  --border: 0 0% 25%;
+  --accent: 0 0% 22%;
+  --primary: 212 100% 60%;
+  --primary-foreground: 0 0% 100%;
+  --destructive: 0 75% 60%;
+  --success: 132 50% 50%;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}

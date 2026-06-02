@@ -55,7 +55,11 @@ variables:
     description: The schema where core components will be installed.
 
   app_name:
-    description: Name of the databricks app for UI
+    description: Name of the databricks app for UI (default "genesis-workbench").
+
+  app_names:
+    description: Colon-separated list of databricks app names. Single-app installs (the default) just inherit ${var.app_name}; the multi-app form ("a:b") exists so a sibling app can be added later without touching the grant-permissions notebook. Colon (not comma) because `databricks bundle --var foo=a,bar=b` already uses commas as its own separator.
+    default: ${var.app_name}
 
   llm_endpoint_name:
     description: Name of the LLM serving endpoint (Claude Sonnet) used by the home page assistant

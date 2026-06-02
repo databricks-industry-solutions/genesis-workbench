@@ -90,7 +90,7 @@ for index, row in deployed_models[["model_id", "deployment_id", "model_endpoint_
 #             "index": f"{catalog}.{schema}.scimilarity_cell_index",
 #         },
 #     ],
-#     "protein_studies": [
+#     "large_molecule": [
 #         {
 #             "endpoint": "gwb_sequence_search_vs_endpoint",
 #             "index": f"{catalog}.{schema}.sequence_embedding_index",
@@ -132,17 +132,34 @@ spark.sql(f"""
      UPDATE {catalog}.{schema}.models SET
         is_active = 'false',
         deactivated_timestamp = current_timestamp()
-     WHERE 
-        model_category = '{module}'  AND 
-        is_active = 'true'  
+     WHERE
+        model_category = '{module}'  AND
+        is_active = 'true'
+""")
+
+# COMMAND ----------
+
+# Deactivate batch_models rows for this module too. Keyed by `module` (the
+# bundle module string), not `model_category` — a batch model can live under
+# model_category='genomics' while module='parabricks' (e.g. before the Phase B
+# move when Parabricks was its own top-level module), and a destroy of
+# 'parabricks' should retire that row even though its category says genomics.
+# Without this, redeploying the module under a new name leaves the old row
+# active and the UI ends up listing the model twice on the category page.
+spark.sql(f"""
+     UPDATE {catalog}.{schema}.batch_models SET
+        is_active = false
+     WHERE
+        module = '{module}' AND
+        is_active = true
 """)
 
 # COMMAND ----------
 
 #Remove all module settings
 spark.sql(f"""
-     DELETE FROM {catalog}.{schema}.settings 
-     WHERE 
-        module = '{module}' 
+     DELETE FROM {catalog}.{schema}.settings
+     WHERE
+        module = '{module}'
 """)
 

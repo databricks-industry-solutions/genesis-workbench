@@ -1,0 +1,34 @@
+flowchart LR
+    START(["`**./deploy.sh**
+    &lt;module&gt; &lt;cloud&gt;`"]):::startend
+
+    VALIDATE["Validate args
+    map cloud → bundle target"]:::action
+
+    CORE_CHECK{"`core
+    ready?`"}:::decision
+
+    FAIL_CORE(["FAIL: deploy core first"]):::fail
+
+    MODULE_DEPLOY["`**cd modules/&lt;module&gt;**
+    ./deploy.sh &lt;cloud&gt;
+    ─────────────────
+    build wheel · build frontend
+    bundle deploy · register endpoints
+    write .deployed marker`"]:::action
+
+    INIT_JOB["`**initialize_module_job**
+    ─────────────────
+    writes module entries to
+    settings table · marks .deployed`"]:::action
+
+    SUCCESS(["`**Done**`"]):::startend
+
+    START --> VALIDATE --> CORE_CHECK
+    CORE_CHECK -->|no| FAIL_CORE
+    CORE_CHECK -->|yes| MODULE_DEPLOY --> INIT_JOB --> SUCCESS
+
+    classDef startend fill:#dcfce7,stroke:#166534,stroke-width:2px,color:#14532d,font-weight:bold
+    classDef action fill:#f0fdf4,stroke:#166534,stroke-width:1.5px,color:#14532d
+    classDef decision fill:#dcfce7,stroke:#166534,stroke-width:1.5px,color:#14532d
+    classDef fail fill:#fee2e2,stroke:#991b1b,stroke-width:2px,color:#7f1d1d,font-weight:bold

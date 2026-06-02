@@ -1,0 +1,58 @@
+bundle:
+  name: genesis_workbench_parabricks
+  databricks_cli_version: ">=0.295.*"
+
+include:
+  - variables.yml
+  - resources/*.yml
+
+sync:
+  paths:
+    - .
+
+targets:
+  prod_aws:
+    mode: production
+    default: true
+    workspace:
+      root_path: ${var.current_working_directory}
+    permissions:
+      - user_name: ${var.current_user}
+        level: CAN_MANAGE
+    run_as:
+      user_name: ${var.current_user}
+    resources:
+      clusters:
+        parabricks_cluster:
+          aws_attributes:
+            availability: ON_DEMAND
+
+  prod_azure:
+    mode: production
+    workspace:
+      root_path: ${var.current_working_directory}
+    permissions:
+      - user_name: ${var.current_user}
+        level: CAN_MANAGE
+    run_as:
+      user_name: ${var.current_user}
+    resources:
+      clusters:
+        parabricks_cluster:
+          azure_attributes:
+            availability: ON_DEMAND_AZURE
+
+  prod_gcp:
+    mode: production
+    workspace:
+      root_path: ${var.current_working_directory}
+    permissions:
+      - user_name: ${var.current_user}
+        level: CAN_MANAGE
+    run_as:
+      user_name: ${var.current_user}
+    resources:
+      clusters:
+        parabricks_cluster:
+          gcp_attributes:
+            availability: ON_DEMAND_GCP

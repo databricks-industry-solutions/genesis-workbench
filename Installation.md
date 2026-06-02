@@ -35,7 +35,13 @@ The primary pattern followed in Genesis Workbench is given below
 
 Deploy gets initiated by running the `deploy.sh` script in the root folder using the syntax `./deploy.sh <module> <cloud>` . This script should be called after the Prerequisites given below are completed
 
-<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deploy_process.png" alt="Deploy Process" width="700"/>
+**Architecture view** — how the deploy scripts and Asset Bundles are organized:
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deploy_process.png" alt="Deploy Architecture" width="700"/>
+
+**Sequence view** — what happens when you run `./deploy.sh`:
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deploy_process_flow.png" alt="Deploy Sequence" width="900"/>
 
 The deploy script does the following:
 - Checks if `core` is deployed before modules
@@ -52,7 +58,13 @@ The deploy script does the following:
 
 Destroy gets initiated by running the `destroy.sh` script in the root folder using the syntax `./destroy.sh <module> <cloud>` . This script should be called after the Prerequisites given below are completed
 
-<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/destroy_process.png" alt="Deploy Process" width="700"/>
+**Architecture view** — how the destroy scripts cascade through modules and sub-modules:
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/destroy_process.png" alt="Destroy Architecture" width="700"/>
+
+**Sequence view** — what happens when you run `./destroy.sh`:
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/destroy_process_flow.png" alt="Destroy Sequence" width="900"/>
 
 The destroy script does the following:
 - Before `core` is destroyed, checks if all modules are destroyed 
@@ -67,10 +79,35 @@ The destroy script does the following:
   - Remove module specific values from `settings` table
   - Deletes the `.deployed` file in the module
 
-In order to install Genesis Workbench you'll clone the repo locally and then use the provided scripts to install the Workbench to a Databricks Workspace. The below diagram shows the resources being deployed into the workspace.
-<br>
+In order to install Genesis Workbench you'll clone the repo locally and then use the provided scripts to install the Workbench to a Databricks Workspace.
 
-<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment.png" alt="Generative AI in Life Sciences" width="700"/>
+### What each module deploys
+
+The diagrams below show the sub-modules, Databricks workflows, and model-serving endpoints that each module creates when deployed.
+
+#### Core
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment_core.png" alt="Core module deployment" width="900"/>
+
+#### Single Cell
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment_single_cell.png" alt="Single Cell module deployment" width="900"/>
+
+#### Large Molecule
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment_large_molecule.png" alt="Large Molecule module deployment" width="900"/>
+
+#### Small Molecule
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment_small_molecule.png" alt="Small Molecule module deployment" width="900"/>
+
+#### Genomics
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment_genomics.png" alt="Genomics module deployment" width="900"/>
+
+#### BioNeMo
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment_bionemo.png" alt="BioNeMo module deployment" width="900"/>
 
 ### **IMPORTANT NOTE:**
 ** ⚠️ Do not manually delete the resources that are created by the script, using the workspace UI.**
@@ -166,14 +203,28 @@ Any module can be installed by using the provided `deploy` script. The syntax to
 An example deploy command for `core` module in a workspace in Azure is:
  - `./deploy.sh core azure`
 
-**Step - 3:** Now we can start installing rest of the modules. It is recommended to install one module at a time and wait for all deployment jobs to coplete before deploying the next module
+**Step - 3:** Now we can start installing rest of the modules. It is recommended to install one module at a time and wait for all deployment jobs to complete before deploying the next module.
 Example:
-- To deploy module `protein_studies` module in the above workspace `./deploy.sh protein_studies azure`
-- To deploy module `single_cell` module in the above workspace `./deploy.sh single_cell azure`
-- To deploy module `bionemo` module in the above workspace `./deploy.sh bionemo azure`
+- `./deploy.sh large_molecule azure`
+- `./deploy.sh single_cell azure`
+- `./deploy.sh small_molecule azure`
+- `./deploy.sh genomics azure`
+- `./deploy.sh bionemo azure` (optional — requires BioNeMo container build)
 
 
 **IMPORTANT NOTE:**
-Many jobs run in the background to download, register and deploy the models. This process can take many hours to complete. 
+Many jobs run in the background to download, register and deploy the models. This process can take many hours to complete.
+
+### Redeploying the UI after the initial install
+
+For UI-only changes (frontend, FastAPI backend, app config), use `update.sh` from inside `modules/core/`. It rebuilds the React frontend, wheel, and bundle, then redeploys the app without touching the `settings`, `model_deployments`, `models`, or `batch_models` Delta tables — so existing model registrations and configuration are preserved.
+
+```
+cd modules/core
+./update.sh <cloud>              # full redeploy (wheel rebuild + bundle deploy + grants + UC volume copy)
+./update.sh <cloud> --ui-only    # fastest path: skips secret refresh / grants / UC volume copy
+```
+
+**Never run `./deploy.sh core <cloud>` on a populated install** — its `initialize_core_job` drops and recreates the settings/models tables and you will lose all configuration. 
 
 
