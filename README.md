@@ -2,7 +2,7 @@
 ### **A Blueprint for a Life Sciences application on Databricks**
 
 ## $${\color{orange}Opportunity}$$
-<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/genai_ls.png" alt="Generative AI in Life Sciences" width="700"/>
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/opportunity.png" alt="Generative AI reshaping life sciences" width="700"/>
 
 Generative AI is reshaping the life sciences. Foundation models trained on genomics, protein structures, molecular interactions, and cellular behaviors are unlocking capabilities that weren't possible a few years ago:
 
@@ -13,7 +13,7 @@ Generative AI is reshaping the life sciences. Foundation models trained on genom
 - **Knowledge synthesis at scale** — LLMs specialized in biomedical literature surface insights buried in millions of papers, accelerating hypothesis generation and reducing duplicated work.
 
 ## $${\color{orange}Challenges}$$
-<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/sad_scientists.png" alt="Scientists struggling with non-biological tasks" width="700"/>
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/challenges.png" alt="Scientists overwhelmed by AI/infrastructure challenges" width="700"/>
 
 Despite the breakthroughs, the experts who can apply these models — biologists, geneticists, biochemists — spend most of their time on tasks far outside their training:
 
