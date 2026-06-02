@@ -59,13 +59,10 @@ export function ProfilePage() {
 
   return (
     <div className="space-y-6 px-8 py-8">
-      <header>
-        <h1 className="text-2xl font-semibold">Profile</h1>
-        <p className="text-sm text-muted-foreground">
-          One-time setup: pick a display name and an MLflow experiment folder that the app service
-          principal can write to.
-        </p>
-      </header>
+      <p className="text-sm text-muted-foreground">
+        One-time setup: pick a display name and an MLflow experiment folder that the app service
+        principal can write to.
+      </p>
 
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <section className="rounded-lg border border-border bg-card p-5">

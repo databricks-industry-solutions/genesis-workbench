@@ -8,9 +8,6 @@ import { MotifScaffoldingTab } from '@/components/MotifScaffoldingTab'
 export function SmallMoleculePage() {
   return (
     <div className="space-y-6 px-8 py-8">
-      <header>
-        <h1 className="text-2xl font-semibold">Small Molecule</h1>
-      </header>
       <Tabs
         rightAccessory={<DeployedModelsButton module="small_molecule" />}
         tabs={[

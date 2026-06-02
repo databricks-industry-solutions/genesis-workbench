@@ -267,9 +267,6 @@ function BatchModelsTab() {
 export function SettingsPage() {
   return (
     <div className="space-y-6 px-8 py-8">
-      <header>
-        <h1 className="text-2xl font-semibold">Settings</h1>
-      </header>
       <Tabs
         tabs={[
           { id: 'general', label: 'General', content: <GeneralTab /> },

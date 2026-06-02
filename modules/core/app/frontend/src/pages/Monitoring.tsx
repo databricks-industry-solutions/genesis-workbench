@@ -181,9 +181,6 @@ function DashboardTab() {
 export function MonitoringPage() {
   return (
     <div className="space-y-6 px-8 py-8">
-      <header>
-        <h1 className="text-2xl font-semibold">Monitoring</h1>
-      </header>
       <Tabs
         tabs={[
           { id: 'runs', label: 'Workflow Runs', content: <WorkflowRunsTab /> },

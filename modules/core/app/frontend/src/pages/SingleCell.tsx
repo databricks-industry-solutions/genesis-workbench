@@ -6,9 +6,6 @@ import { Tabs } from '@/components/Tabs'
 export function SingleCellPage() {
   return (
     <div className="space-y-6 px-8 py-8">
-      <header>
-        <h1 className="text-2xl font-semibold">Single Cell Studies</h1>
-      </header>
       <Tabs
         rightAccessory={<DeployedModelsButton module="single_cell" />}
         tabs={[

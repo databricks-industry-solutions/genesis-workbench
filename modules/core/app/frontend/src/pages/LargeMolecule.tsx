@@ -10,9 +10,6 @@ import { StructurePredictionTab } from '@/components/StructurePredictionTab'
 export function LargeMoleculePage() {
   return (
     <div className="space-y-6 px-8 py-8">
-      <header>
-        <h1 className="text-2xl font-semibold">Large Molecule</h1>
-      </header>
       <Tabs
         rightAccessory={<DeployedModelsButton module="large_molecule" />}
         tabs={[

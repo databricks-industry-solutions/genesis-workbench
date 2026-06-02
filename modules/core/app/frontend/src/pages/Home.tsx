@@ -266,10 +266,6 @@ export function HomePage() {
 
   return (
     <div className="space-y-6 px-8 py-8">
-      <header>
-        <h1 className="text-2xl font-semibold">Home</h1>
-      </header>
-
       {bootstrap && !setupDone && (
         <div className={cn('rounded-md border p-4 text-sm', 'border-destructive/40 bg-destructive/10')}>
           <div className="font-semibold text-destructive">⚠️ Profile setup is incomplete.</div>
