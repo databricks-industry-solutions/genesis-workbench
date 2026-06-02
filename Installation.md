@@ -67,10 +67,35 @@ The destroy script does the following:
   - Remove module specific values from `settings` table
   - Deletes the `.deployed` file in the module
 
-In order to install Genesis Workbench you'll clone the repo locally and then use the provided scripts to install the Workbench to a Databricks Workspace. The below diagram shows the resources being deployed into the workspace.
-<br>
+In order to install Genesis Workbench you'll clone the repo locally and then use the provided scripts to install the Workbench to a Databricks Workspace.
 
-<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment.png" alt="Generative AI in Life Sciences" width="700"/>
+### What each module deploys
+
+The diagrams below show the sub-modules, Databricks workflows, and model-serving endpoints that each module creates when deployed.
+
+#### Core
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment_core.png" alt="Core module deployment" width="900"/>
+
+#### Single Cell
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment_single_cell.png" alt="Single Cell module deployment" width="900"/>
+
+#### Large Molecule
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment_large_molecule.png" alt="Large Molecule module deployment" width="900"/>
+
+#### Small Molecule
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment_small_molecule.png" alt="Small Molecule module deployment" width="900"/>
+
+#### Genomics
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment_genomics.png" alt="Genomics module deployment" width="900"/>
+
+#### BioNeMo
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment_bionemo.png" alt="BioNeMo module deployment" width="900"/>
 
 ### **IMPORTANT NOTE:**
 ** ⚠️ Do not manually delete the resources that are created by the script, using the workspace UI.**

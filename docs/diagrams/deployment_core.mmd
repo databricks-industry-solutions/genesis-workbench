@@ -1,0 +1,55 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#dbeafe",
+    "primaryTextColor": "#1e3a5f",
+    "primaryBorderColor": "#1e40af",
+    "lineColor": "#3b82f6",
+    "edgeLabelBackground": "#ffffff",
+    "fontFamily": "ui-sans-serif, system-ui, sans-serif",
+    "fontSize": "14px"
+  }
+}}%%
+flowchart LR
+
+  subgraph COL1["  Sub-modules / Models  "]
+    direction TB
+    SM_CORE("Core Infrastructure")
+    SM_APP("Genesis Workbench App")
+    SM_UC("Unity Catalog")
+  end
+
+  subgraph COL2["  Workflows  "]
+    direction TB
+    WF1("initialize_core")
+    WF2("deploy_model")
+    WF3("start_all_endpoints")
+    WF4("grant_app_permissions")
+  end
+
+  subgraph COL3["  App & Catalog Resources  "]
+    direction TB
+    APP["Genesis Workbench App\n(React + FastAPI)"]
+    UC["Unity Catalog Schema\n+ Tables + Volumes"]
+  end
+
+  SM_CORE --> WF1
+  SM_CORE --> WF2
+  SM_CORE --> WF3
+  SM_CORE --> WF4
+  SM_APP  --> APP
+  SM_UC   --> UC
+
+  WF1 --> UC
+  WF2 --> APP
+  WF3 --> APP
+  WF4 --> APP
+
+  classDef submod fill:#dbeafe,stroke:#1e40af,color:#1e3a5f,font-weight:bold,rx:6
+  classDef wflow  fill:#bfdbfe,stroke:#1e40af,color:#1e3a5f,rx:6
+  classDef res    fill:#eff6ff,stroke:#1e40af,color:#1e3a5f,font-weight:bold,rx:6
+  classDef colBox fill:#f0f7ff,stroke:#93c5fd
+
+  class SM_CORE,SM_APP,SM_UC submod
+  class WF1,WF2,WF3,WF4 wflow
+  class APP,UC res

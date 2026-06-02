@@ -1,0 +1,77 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#fce7f3",
+    "primaryTextColor": "#831843",
+    "primaryBorderColor": "#9d174d",
+    "lineColor": "#db2777",
+    "edgeLabelBackground": "#ffffff",
+    "fontFamily": "ui-sans-serif, system-ui, sans-serif",
+    "fontSize": "14px"
+  }
+}}%%
+flowchart LR
+
+  subgraph COL1["  Sub-modules / Models  "]
+    direction TB
+    SM1("ESMFold")
+    SM2("AlphaFold2")
+    SM3("Boltz")
+    SM4("ESM2 Embeddings")
+    SM5("ProteinMPNN")
+    SM6("RFDiffusion")
+    SM7("Sequence Search")
+    SM8("Enzyme Optimization")
+  end
+
+  subgraph COL2["  Workflows  "]
+    direction TB
+    WF1("Register ESMFold")
+    WF2("AlphaFold2 Register & Download")
+    WF3("Run AlphaFold2\n(batch only)")
+    WF4("Register Boltz")
+    WF5("Register ESM2 Embeddings")
+    WF6("Register ProteinMPNN")
+    WF7("Register RFDiffusion")
+    WF8("Sequence Search\n(uses ESM2 + Vector Search)")
+    WF9("Register Enzyme Optimization")
+    WF10("Run Enzyme Optimization\n(batch only)")
+  end
+
+  subgraph COL3["  Model Serving Endpoints  "]
+    direction TB
+    EP1("ESMFold")
+    EP2("Boltz-1")
+    EP3("ESM2 Embeddings")
+    EP4("ProteinMPNN")
+    EP5("RFDiffusion Unconditional")
+    EP6("RFDiffusion Inpainting")
+  end
+
+  SM1 --> WF1
+  SM2 --> WF2
+  SM2 --> WF3
+  SM3 --> WF4
+  SM4 --> WF5
+  SM5 --> WF6
+  SM6 --> WF7
+  SM7 --> WF8
+  SM8 --> WF9
+  SM8 --> WF10
+
+  WF1 --> EP1
+  WF4 --> EP2
+  WF5 --> EP3
+  WF6 --> EP4
+  WF7 --> EP5
+  WF7 --> EP6
+
+  classDef submod fill:#fce7f3,stroke:#9d174d,color:#831843,font-weight:bold,rx:6
+  classDef wflow  fill:#fbcfe8,stroke:#9d174d,color:#831843,rx:6
+  classDef wbatch fill:#fdf2f8,stroke:#9d174d,color:#831843,stroke-dasharray:4 3,rx:6
+  classDef endpt  fill:#fff0f7,stroke:#9d174d,color:#831843,rx:6
+
+  class SM1,SM2,SM3,SM4,SM5,SM6,SM7,SM8 submod
+  class WF1,WF4,WF5,WF6,WF7,WF8,WF9 wflow
+  class WF2,WF3,WF10 wbatch
+  class EP1,EP2,EP3,EP4,EP5,EP6 endpt

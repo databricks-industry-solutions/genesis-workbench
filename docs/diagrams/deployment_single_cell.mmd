@@ -1,0 +1,60 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#dcfce7",
+    "primaryTextColor": "#14532d",
+    "primaryBorderColor": "#166534",
+    "lineColor": "#16a34a",
+    "edgeLabelBackground": "#ffffff",
+    "fontFamily": "ui-sans-serif, system-ui, sans-serif",
+    "fontSize": "14px"
+  }
+}}%%
+flowchart LR
+
+  subgraph COL1["  Sub-modules / Models  "]
+    direction TB
+    SM1("scGPT")
+    SM2("SCimilarity")
+    SM3("Scanpy")
+    SM4("rapids-singlecell\n(part of scverse)")
+    SM5("TEDDY-G\nCell Encoder")
+  end
+
+  subgraph COL2["  Workflows  "]
+    direction TB
+    WF1("Register scGPT")
+    WF2("Register SCimilarity")
+    WF3("Register Scanpy")
+    WF4("Register RAPIDS SingleCell")
+    WF5("Register TEDDY-G Job")
+  end
+
+  subgraph COL3["  Model Serving Endpoints  "]
+    direction TB
+    EP1("scGPT Get Embedding")
+    EP2("scGPT Perturbation Predictor")
+    EP3("SCimilarity Gene Order")
+    EP4("SCimilarity Get Embedding")
+    EP5("TEDDY-G Cell Embeddings")
+  end
+
+  SM1 --> WF1
+  SM2 --> WF2
+  SM3 --> WF3
+  SM4 --> WF4
+  SM5 --> WF5
+
+  WF1 --> EP1
+  WF1 --> EP2
+  WF2 --> EP3
+  WF2 --> EP4
+  WF5 --> EP5
+
+  classDef submod fill:#dcfce7,stroke:#166534,color:#14532d,font-weight:bold,rx:6
+  classDef wflow  fill:#bbf7d0,stroke:#166534,color:#14532d,rx:6
+  classDef endpt  fill:#f0fdf4,stroke:#166534,color:#14532d,rx:6
+
+  class SM1,SM2,SM3,SM4,SM5 submod
+  class WF1,WF2,WF3,WF4,WF5 wflow
+  class EP1,EP2,EP3,EP4,EP5 endpt

@@ -1,0 +1,46 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#ede9fe",
+    "primaryTextColor": "#3b0764",
+    "primaryBorderColor": "#5b21b6",
+    "lineColor": "#7c3aed",
+    "edgeLabelBackground": "#ffffff",
+    "fontFamily": "ui-sans-serif, system-ui, sans-serif",
+    "fontSize": "14px"
+  }
+}}%%
+flowchart LR
+
+  subgraph COL1["  Sub-modules / Models  "]
+    direction TB
+    SM1("Parabricks\n(Variant Calling)")
+    SM2("VCF Ingestion")
+    SM3("GWAS")
+    SM4("Variant Annotation")
+  end
+
+  subgraph COL2["  Workflows  (batch only — no serving endpoints)  "]
+    direction TB
+    WF1("Parabricks Setup")
+    WF2("VCF Ingestion")
+    WF3("GWAS Setup")
+    WF4("GWAS Alignment")
+    WF5("GWAS Analysis")
+    WF6("Variant Annotation Setup")
+    WF7("Variant Annotation Run")
+  end
+
+  SM1 --> WF1
+  SM2 --> WF2
+  SM3 --> WF3
+  SM3 --> WF4
+  SM3 --> WF5
+  SM4 --> WF6
+  SM4 --> WF7
+
+  classDef submod fill:#ede9fe,stroke:#5b21b6,color:#3b0764,font-weight:bold,rx:6
+  classDef wflow  fill:#ddd6fe,stroke:#5b21b6,color:#3b0764,rx:6
+
+  class SM1,SM2,SM3,SM4 submod
+  class WF1,WF2,WF3,WF4,WF5,WF6,WF7 wflow

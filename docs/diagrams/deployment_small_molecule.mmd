@@ -1,0 +1,80 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#ffedd5",
+    "primaryTextColor": "#7c2d12",
+    "primaryBorderColor": "#9a3412",
+    "lineColor": "#ea580c",
+    "edgeLabelBackground": "#ffffff",
+    "fontFamily": "ui-sans-serif, system-ui, sans-serif",
+    "fontSize": "14px"
+  }
+}}%%
+flowchart LR
+
+  subgraph COL1["  Sub-modules / Models  "]
+    direction TB
+    SM1("Chemprop")
+    SM2("DeepSTABp")
+    SM3("DiffDock")
+    SM4("MHCflurry")
+    SM5("NetSolP")
+    SM6("PLTNUM")
+    SM7("Proteina-Complexa")
+  end
+
+  subgraph COL2["  Workflows  "]
+    direction TB
+    WF1("Register Chemprop")
+    WF2("Register DeepSTABp")
+    WF3("Register DiffDock")
+    WF4("Register MHCflurry")
+    WF5("Register NetSolP")
+    WF6("Register PLTNUM")
+    WF7("Register Proteina-Complexa")
+  end
+
+  subgraph COL3["  Model Serving Endpoints  "]
+    direction TB
+    EP1("Chemprop BBBP")
+    EP2("Chemprop ClinTox")
+    EP3("Chemprop ADMET")
+    EP4("DeepSTABp")
+    EP5("DiffDock ESM2 Embeddings")
+    EP6("DiffDock Docking")
+    EP7("MHCflurry MHC-I")
+    EP8("NetSolP Solubility")
+    EP9("PLTNUM Half-Life")
+    EP10("Proteina Protein Binder")
+    EP11("Proteina Small-Mol Ligand")
+    EP12("Proteina Motif Scaffolding\n(AME)")
+  end
+
+  SM1 --> WF1
+  SM2 --> WF2
+  SM3 --> WF3
+  SM4 --> WF4
+  SM5 --> WF5
+  SM6 --> WF6
+  SM7 --> WF7
+
+  WF1 --> EP1
+  WF1 --> EP2
+  WF1 --> EP3
+  WF2 --> EP4
+  WF3 --> EP5
+  WF3 --> EP6
+  WF4 --> EP7
+  WF5 --> EP8
+  WF6 --> EP9
+  WF7 --> EP10
+  WF7 --> EP11
+  WF7 --> EP12
+
+  classDef submod fill:#ffedd5,stroke:#9a3412,color:#7c2d12,font-weight:bold,rx:6
+  classDef wflow  fill:#fed7aa,stroke:#9a3412,color:#7c2d12,rx:6
+  classDef endpt  fill:#fff7ed,stroke:#9a3412,color:#7c2d12,rx:6
+
+  class SM1,SM2,SM3,SM4,SM5,SM6,SM7 submod
+  class WF1,WF2,WF3,WF4,WF5,WF6,WF7 wflow
+  class EP1,EP2,EP3,EP4,EP5,EP6,EP7,EP8,EP9,EP10,EP11,EP12 endpt
