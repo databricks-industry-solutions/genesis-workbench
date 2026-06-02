@@ -25,7 +25,7 @@ Despite the breakthroughs, the experts who can apply these models — biologists
 
 ## $${\color{orange}Genesis}$$ $${\color{orange}Workbench}$$
 
-<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/genesis_workbench.png" alt="Genesis Workbench: Blueprint for life sciences application on Databricks" width="800"/>
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/diagrams/genesis_workbench.png" alt="Genesis Workbench: Blueprint for life sciences application on Databricks" width="800"/>
 
 Genesis Workbench is an open-source, Databricks-native blueprint that packages biological foundation models behind an intuitive UI — so scientists can run them without managing GPU clusters, CUDA, model registries, or serving endpoints.
 
