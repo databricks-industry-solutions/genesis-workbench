@@ -240,33 +240,36 @@ if len(all_endpoint_names) == 0:
     print("No active endpoints found. Nothing to do.")
     dbutils.notebook.exit("No endpoints to start")
 
-num_mins_to_ping = 15
+# Ping every 5 min (was 15): comfortably under model serving's scale-to-zero
+# idle window so endpoints — especially slow-cold-start GPU ones — don't dip to
+# zero between pings.
+num_mins_to_ping = 5
 
 # Start every active endpoint, one by one.
 print(f"Starting all {len(all_endpoint_names)} endpoints...")
 for ep_name in all_endpoint_names:
     start_endpoint(db_host, ep_name, db_token)
 
-# Wait for all to be ready (bounded so a stuck endpoint can't hang the job).
-print("\nWaiting for endpoints to become ready...")
-wait_until_endpoints_ready(db_host, all_endpoint_names, db_token,
-                           check_interval=60, max_wait_minutes=45)
-
 if not endpoint_payloads:
     print("\nNo endpoints have a usable input_example; started them but skipping keep-alive pings.")
     dbutils.notebook.exit("Started endpoints; no payloads to ping")
 
-# Initial ping — query ALL payload endpoints at once (one worker per endpoint).
-print(f"\nSending initial ping to all {len(endpoint_payloads)} endpoints...")
-send_pings_parallel(db_host, endpoint_payloads, db_token)
-
-# Keep alive loop
-total_pings = num_hours * 60 // num_mins_to_ping
-print(f"\nKeeping endpoints alive for {num_hours} hours ({total_pings} pings every {num_mins_to_ping} minutes)")
+# Keep-alive: ping ALL payload endpoints continuously, starting with the very
+# first cycle. We deliberately do NOT block on a "wait for every endpoint READY"
+# gate first — that previously delayed the first ping by many minutes while slow
+# GPU endpoints (proteina_complexa, deepstabp, scgpt, ...) provisioned, during
+# which already-up endpoints received no traffic and scaled back to zero. Each
+# ping is an invocation that wakes a scaled-to-zero endpoint and resets its idle
+# timer; endpoints still provisioning simply error this cycle and get kept warm
+# as soon as they come online.
+total_pings = max(1, num_hours * 60 // num_mins_to_ping)
+print(f"\nKeeping {len(endpoint_payloads)} endpoints warm for {num_hours} hours "
+      f"({total_pings} pings every {num_mins_to_ping} minutes)")
 
 for i in range(total_pings):
     print(f"\n--- Ping {i+1}/{total_pings} ---")
-    time.sleep(num_mins_to_ping * 60)
     send_pings_parallel(db_host, endpoint_payloads, db_token)
+    if i < total_pings - 1:
+        time.sleep(num_mins_to_ping * 60)
 
 print("\nKeep-alive period complete.")
