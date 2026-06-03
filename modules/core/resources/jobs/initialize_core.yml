@@ -50,6 +50,8 @@ resources:
           default: ${resources.jobs.deploy_model_job.id}
         - name: start_all_endpoints_job_id
           default: ${resources.jobs.start_all_endpoints_job.id}
+        - name: run_ai_canvas_workflow_job_id
+          default: ${resources.jobs.run_ai_canvas_workflow_job.id}
         - name: databricks_app_name
           default: ${var.app_name}
         - name: dev_user_prefix

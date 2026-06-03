@@ -7,6 +7,7 @@ import type { Components } from 'react-markdown'
 import { api } from '@/api/client'
 import { DnaLoader } from '@/components/DnaLoader'
 import { Tabs } from '@/components/Tabs'
+import { VortexTab } from '@/components/ai_canvas/VortexTab'
 import { useUserStore, selectIsSetupDone } from '@/stores/user'
 import { cn } from '@/lib/utils'
 
@@ -283,6 +284,7 @@ export function HomePage() {
         tabs={[
           { id: 'assistant', label: 'AI Assistant', content: <AssistantTab /> },
           { id: 'search', label: 'Search Documentation', content: <SearchTab /> },
+          { id: 'vortex', label: 'Vortex', content: <VortexTab /> },
         ]}
       />
     </div>

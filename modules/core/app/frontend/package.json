@@ -16,6 +16,7 @@
     "@tanstack/react-query": "^5.100.11",
     "@tanstack/react-table": "^8.21.3",
     "@types/react-plotly.js": "^2.6.4",
+    "@xyflow/react": "^12.10.2",
     "openapi-fetch": "^0.17.0",
     "plotly.js": "^3.5.1",
     "react": "^19.2.6",

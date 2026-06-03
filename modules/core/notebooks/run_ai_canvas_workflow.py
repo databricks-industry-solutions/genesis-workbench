@@ -1,0 +1,235 @@
+# Databricks notebook source
+# MAGIC %md
+# MAGIC ### Vortex (ai_canvas) — generic workflow orchestrator
+# MAGIC Interprets a user-composed canvas graph and runs it node-by-node.
+# MAGIC
+# MAGIC The graph is **pre-enriched by the app dispatcher**: every node carries an
+# MAGIC `exec` block (`kind`, resolved `endpoint_name` / `job_id` / `io_kind`,
+# MAGIC `invoke_style`, input/output port names). This notebook therefore needs no
+# MAGIC copy of the node registry — it is a pure interpreter. Adding a new node
+# MAGIC kind only means teaching the dispatcher to emit its `exec` block and adding
+# MAGIC a branch in `run_node()` below.
+# MAGIC
+# MAGIC Everything is logged to a single pre-created MLflow run (one run per
+# MAGIC execution); per-node progress is surfaced as `node:<id>:status` tags.
+
+# COMMAND ----------
+
+dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
+dbutils.widgets.text("schema", "genesis_schema", "Schema")
+dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id")
+dbutils.widgets.text("user_email", "", "User email")
+dbutils.widgets.text("mlflow_experiment", "gwb_ai_canvas", "MLflow experiment tag")
+dbutils.widgets.text("mlflow_run_name", "ai_canvas_run", "MLflow run name")
+dbutils.widgets.text("mlflow_run_id", "", "Pre-created MLflow run id")
+dbutils.widgets.text("graph_path", "", "UC Volume path to graph.json")
+
+catalog = dbutils.widgets.get("catalog")
+schema = dbutils.widgets.get("schema")
+sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
+user_email = dbutils.widgets.get("user_email")
+mlflow_experiment = dbutils.widgets.get("mlflow_experiment")
+mlflow_run_name = dbutils.widgets.get("mlflow_run_name")
+mlflow_run_id = dbutils.widgets.get("mlflow_run_id") or None
+graph_path = dbutils.widgets.get("graph_path")
+
+# COMMAND ----------
+
+gwb_library_path = None
+libraries = dbutils.fs.ls(f"/Volumes/{catalog}/{schema}/libraries")
+for lib in libraries:
+    if lib.name.startswith("genesis_workbench"):
+        gwb_library_path = lib.path.replace("dbfs:", "")
+print(gwb_library_path)
+
+# COMMAND ----------
+
+# MAGIC %pip install {gwb_library_path} --force-reinstall
+# MAGIC %pip install databricks-sdk==0.50.0 mlflow==2.22.0
+# MAGIC dbutils.library.restartPython()
+
+# COMMAND ----------
+
+catalog = dbutils.widgets.get("catalog")
+schema = dbutils.widgets.get("schema")
+sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
+user_email = dbutils.widgets.get("user_email")
+mlflow_experiment = dbutils.widgets.get("mlflow_experiment")
+mlflow_run_name = dbutils.widgets.get("mlflow_run_name")
+mlflow_run_id = dbutils.widgets.get("mlflow_run_id") or None
+graph_path = dbutils.widgets.get("graph_path")
+
+from genesis_workbench.workbench import initialize, execute_workflow, wait_for_job_run_completion
+
+databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
+initialize(core_catalog_name=catalog, core_schema_name=schema, sql_warehouse_id=sql_warehouse_id, token=databricks_token)
+
+# COMMAND ----------
+
+import json
+import tempfile
+import os
+
+import mlflow
+from databricks.sdk import WorkspaceClient
+from mlflow.tracking import MlflowClient
+from genesis_workbench.models import set_mlflow_experiment
+
+w = WorkspaceClient()
+
+# Load the enriched graph the dispatcher uploaded.
+with open(graph_path) as f:
+    graph = json.load(f)
+
+nodes = {n["id"]: n for n in graph.get("nodes", [])}
+edges = graph.get("edges", [])
+print(f"Loaded graph: {len(nodes)} nodes, {len(edges)} edges")
+
+# COMMAND ----------
+
+# ── topological order (Kahn) ─────────────────────────────────────────────────
+succ = {nid: [] for nid in nodes}
+indeg = {nid: 0 for nid in nodes}
+incoming = {nid: [] for nid in nodes}  # (src_id, src_port, dst_port)
+for e in edges:
+    s, t = e.get("source"), e.get("target")
+    if s in nodes and t in nodes:
+        succ[s].append(t)
+        indeg[t] += 1
+        incoming[t].append((s, e.get("sourceHandle"), e.get("targetHandle")))
+
+order, queue = [], [nid for nid, d in indeg.items() if d == 0]
+while queue:
+    nid = queue.pop(0)
+    order.append(nid)
+    for s in succ[nid]:
+        indeg[s] -= 1
+        if indeg[s] == 0:
+            queue.append(s)
+if len(order) != len(nodes):
+    raise RuntimeError("Workflow graph has a cycle — cannot execute.")
+print("Execution order:", order)
+
+# COMMAND ----------
+
+# ── node executors ───────────────────────────────────────────────────────────
+results = {}        # node_id -> {output_port: value}
+final_outputs = {}  # output_sink label -> value
+
+
+def gather_inputs(node_id):
+    """Map this node's input-port names to upstream output values."""
+    node = nodes[node_id]
+    in_ports = node.get("exec", {}).get("inputs", [])
+    collected = {}
+    for src_id, src_port, dst_port in incoming.get(node_id, []):
+        src_out = results.get(src_id, {})
+        value = src_out.get(src_port) if src_port else (next(iter(src_out.values()), None))
+        key = dst_port or (in_ports[0] if in_ports else "input")
+        collected[key] = value
+    return collected
+
+
+def run_node(node_id):
+    node = nodes[node_id]
+    ex = node.get("exec", {})
+    kind = ex.get("kind")
+    params = node.get("params", {}) or {}
+    inputs = gather_inputs(node_id)
+    out_ports = ex.get("outputs", []) or ["output"]
+    first_out = out_ports[0]
+
+    if kind == "io":
+        io_kind = ex.get("io_kind")
+        if io_kind == "text_input":
+            return {first_out: params.get("value", "")}
+        if io_kind == "volume_input":
+            return {first_out: params.get("path", "")}
+        if io_kind == "delta_input":
+            return {first_out: params.get("table", "")}
+        if io_kind == "output_sink":
+            final_outputs[node.get("label", node_id)] = inputs
+            return {}
+        raise RuntimeError(f"Unknown io_kind '{io_kind}'")
+
+    if kind == "endpoint":
+        endpoint_name = ex.get("endpoint_name")
+        if not endpoint_name:
+            raise RuntimeError(f"Node {node_id}: endpoint not resolved (not deployed?).")
+        if ex.get("invoke_style") == "inputs":
+            value = next(iter(inputs.values()), "")
+            resp = w.serving_endpoints.query(name=endpoint_name, inputs=[value])
+        else:
+            record = {**inputs, **params}
+            resp = w.serving_endpoints.query(name=endpoint_name, dataframe_records=[record])
+        preds = resp.predictions
+        value = preds[0] if isinstance(preds, list) and len(preds) == 1 else preds
+        return {first_out: value}
+
+    if kind == "batch":
+        job_id = ex.get("job_id")
+        if not job_id:
+            raise RuntimeError(f"Node {node_id}: batch job id not resolved.")
+        job_params = {k: str(v) for k, v in {**params, **inputs}.items()}
+        run_id = execute_workflow(int(job_id), job_params)
+        wait_for_job_run_completion(int(run_id), timeout=21600, poll_interval=30)
+        return {first_out: {"job_run_id": run_id}}
+
+    raise RuntimeError(f"Node {node_id}: unknown exec kind '{kind}'")
+
+# COMMAND ----------
+
+# ── run inside the pre-created MLflow run ────────────────────────────────────
+experiment = set_mlflow_experiment(
+    experiment_tag=mlflow_experiment, user_email=user_email, shared=True
+)
+
+if mlflow_run_id:
+    run_ctx = mlflow.start_run(run_id=mlflow_run_id)
+else:
+    run_ctx = mlflow.start_run(run_name=mlflow_run_name, experiment_id=experiment.experiment_id)
+
+active_run_id = None
+try:
+    with run_ctx as run:
+        active_run_id = run.info.run_id
+        mlflow.set_tag("origin", "genesis_workbench")
+        mlflow.set_tag("feature", "ai_canvas")
+        mlflow.set_tag("created_by", user_email)
+        mlflow.set_tag("job_status", "started")
+        mlflow.log_param("node_count", len(nodes))
+        mlflow.log_param("edge_count", len(edges))
+        for nid in order:
+            mlflow.set_tag(f"node:{nid}:status", "pending")
+
+        mlflow.set_tag("job_status", "running")
+        for nid in order:
+            label = nodes[nid].get("label", nid)
+            print(f"▶ {nid} ({label})")
+            mlflow.set_tag(f"node:{nid}:status", "running")
+            try:
+                results[nid] = run_node(nid)
+                mlflow.set_tag(f"node:{nid}:status", "complete")
+            except Exception as node_exc:  # noqa: BLE001
+                mlflow.set_tag(f"node:{nid}:status", "failed")
+                mlflow.set_tag(f"node:{nid}:error", str(node_exc)[:500])
+                raise
+
+        # Persist the full result set as an artifact.
+        with tempfile.TemporaryDirectory() as tmp:
+            local = os.path.join(tmp, "workflow_results.json")
+            with open(local, "w") as f:
+                json.dump(
+                    {"node_outputs": results, "final_outputs": final_outputs},
+                    f, default=str, indent=2,
+                )
+            mlflow.log_artifact(local, artifact_path="results")
+
+        mlflow.set_tag("job_status", "complete")
+        print("✅ Workflow complete")
+except Exception as exc:  # noqa: BLE001
+    if active_run_id:
+        client = MlflowClient()
+        client.set_tag(active_run_id, "job_status", "failed")
+        client.set_tag(active_run_id, "failure_reason", str(exc)[:500])
+    raise

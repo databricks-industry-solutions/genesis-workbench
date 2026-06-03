@@ -9,6 +9,7 @@ dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("deploy_model_job_id", "1234", "Deploy Model Job ID")
 dbutils.widgets.text("start_all_endpoints_job_id", "1234", "Start All Endpoints Job ID")
+dbutils.widgets.text("run_ai_canvas_workflow_job_id", "1234", "Vortex (ai_canvas) Orchestrator Job ID")
 dbutils.widgets.text("admin_usage_dashboard_id", "1234", "ID of usage dashboard")
 dbutils.widgets.text("application_secret_scope", "dbx_genesis_workbench", "Secret Scope used by application")
 dbutils.widgets.text("databricks_app_name", "dev-scn-genesis-workbench", "UI Application name")
@@ -19,6 +20,7 @@ catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 deploy_model_job_id = dbutils.widgets.get("deploy_model_job_id")
 start_all_endpoints_job_id = dbutils.widgets.get("start_all_endpoints_job_id")
+run_ai_canvas_workflow_job_id = dbutils.widgets.get("run_ai_canvas_workflow_job_id")
 admin_usage_dashboard_id = dbutils.widgets.get("admin_usage_dashboard_id")
 secret_scope = dbutils.widgets.get("application_secret_scope")
 databricks_app_name = dbutils.widgets.get("databricks_app_name")
@@ -138,6 +140,7 @@ query= f"""
     ('databricks_app_name', '{databricks_app_name}','core'),    
     ('deploy_model_job_id', '{deploy_model_job_id}', 'core'),
     ('start_all_endpoints_job_id', '{start_all_endpoints_job_id}', 'core'),
+    ('run_ai_canvas_workflow_job_id', '{run_ai_canvas_workflow_job_id}', 'core'),
     ('secret_scope', '{secret_scope}', 'core')
 """
 
@@ -155,6 +158,25 @@ CREATE TABLE user_settings (
     user_email STRING,
     key STRING,
     value STRING
+)
+""")
+
+# COMMAND ----------
+
+# Vortex (ai_canvas) saved workflow definitions. CREATE IF NOT EXISTS — unlike
+# the registry tables above this holds USER data (composed graphs), so it must
+# survive redeploys instead of being dropped + recreated.
+spark.sql(f"""
+CREATE TABLE IF NOT EXISTS ai_canvas_workflows (
+    workflow_id BIGINT,
+    workflow_name STRING,
+    workflow_description STRING,
+    created_by STRING,
+    created_date TIMESTAMP,
+    updated_date TIMESTAMP,
+    graph_json STRING,
+    is_active BOOLEAN,
+    deactivated_timestamp TIMESTAMP
 )
 """)
 
