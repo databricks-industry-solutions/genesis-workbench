@@ -482,7 +482,7 @@ def deploy_model_endpoint(catalog_name: str,
         endpoint_details = w.serving_endpoints.update_config_and_wait(
             name=endpoint_name,
             served_entities=served_entities,
-            timeout = timedelta(minutes=180)
+            timeout = timedelta(minutes=360) #wait up to six hours; large/GPU models can provision past 3h
         )
         # [Uncomment to enable AI Gateway inference tables on update]
         # w.serving_endpoints.put_ai_gateway(
@@ -504,7 +504,7 @@ def deploy_model_endpoint(catalog_name: str,
                 EndpointTag(key="application", value="genesis_workbench"),
                 EndpointTag(key="created_by", value=creating_user_email)
             ],
-            timeout = timedelta(minutes=180) #wait upto three hours. some models take very long
+            timeout = timedelta(minutes=360) #wait up to six hours. some large/GPU models take very long to provision
         )
 
         

@@ -108,6 +108,8 @@ export function Layout() {
           ))}
         </nav>
 
+        {/* Transparent over the SVG — the background animation is kept out of this
+            profile area by clustering objects in the sidebar's blank middle band. */}
         <div className="relative z-10 space-y-2 border-t border-white/15 px-5 py-3 text-xs text-white/80">
           {bootstrap ? (
             <>

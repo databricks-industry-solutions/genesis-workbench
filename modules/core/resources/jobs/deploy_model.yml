@@ -20,6 +20,13 @@ resources:
 
       max_concurrent_runs: 5
 
+      # The Genesis Workbench app triggers this job via jobs.run_now (Deploy
+      # Model). Grant the app service principal run permission declaratively so
+      # it survives every deploy (same rationale as start_all_endpoints_job).
+      permissions:
+        - level: CAN_MANAGE_RUN
+          service_principal_name: ${resources.apps.genesis_workbench_app.service_principal_client_id}
+
       parameters:
         - name: catalog
           default: ${var.core_catalog_name}
