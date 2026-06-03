@@ -136,6 +136,31 @@ echo ""
 databricks bundle deploy --target $TARGET --var="$EXTRA_PARAMS"
 
 echo ""
+echo "▶️ Copying libraries to UC Volume"
+echo ""
+
+# Copied right after `bundle deploy` (which ensures the `libraries` Volume exists)
+# and BEFORE grant_app_permissions_job, which %pip-installs the genesis_workbench
+# wheel from this Volume. Copying it afterwards would install a stale wheel, or
+# fail with "ModuleNotFoundError: No module named 'genesis_workbench'" on a fresh
+# Volume. Each module's notebooks also %pip install from here.
+for file in library/genesis_workbench/dist/*.whl; do
+  if [ -f "$file" ]; then
+    filename=$(basename "$file")
+    echo "Copying $filename to dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename"
+    databricks fs cp library/genesis_workbench/dist/$filename dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename --overwrite
+  fi
+done
+
+for file in library/glow/*; do
+  if [ -f "$file" ]; then
+    filename=$(basename "$file")
+    echo "Copying $filename to dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename"
+    databricks fs cp "$file" dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename --overwrite
+  fi
+done
+
+echo ""
 echo "▶️ Deploying UI Application (genesis-workbench)"
 echo ""
 
@@ -157,27 +182,9 @@ if [ "$UI_ONLY" = "false" ]; then
     echo ""
     echo "▶️ Granting app permissions for endpoints, jobs, volumes, models"
     echo ""
+    # NOTE: the genesis_workbench wheel is copied to the UC Volume earlier (right
+    # after `bundle deploy`) because this serverless job %pip-installs it from there.
     databricks bundle run --target $TARGET grant_app_permissions_job --var="$EXTRA_PARAMS"
-
-    echo ""
-    echo "▶️ Copying libraries to UC Volume"
-    echo ""
-
-    for file in library/genesis_workbench/dist/*.whl; do
-      if [ -f "$file" ]; then
-        filename=$(basename "$file")
-        echo "Copying $filename to dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename"
-        databricks fs cp library/genesis_workbench/dist/$filename dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename --overwrite
-      fi
-    done
-
-    for file in library/glow/*; do
-      if [ -f "$file" ]; then
-        filename=$(basename "$file")
-        echo "Copying $filename to dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename"
-        databricks fs cp "$file" dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename --overwrite
-      fi
-    done
 
     echo ""
     echo "▶️ Cleaning up local build artifacts"

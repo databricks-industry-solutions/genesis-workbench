@@ -128,6 +128,35 @@ echo ""
 
 databricks bundle deploy --target $TARGET --var="$EXTRA_PARAMS"
 
+echo ""
+echo "▶️ Copying libraries to UC Volume"
+echo ""
+
+# IMPORTANT: this copy must run right after `bundle deploy` (which creates the
+# `libraries` Volume) and BEFORE any job runs. Serverless jobs such as
+# grant_app_permissions_job %pip-install the genesis_workbench wheel from this
+# Volume at runtime — on a fresh deploy the Volume is empty until this step, so
+# copying it later fails with "ModuleNotFoundError: No module named
+# 'genesis_workbench'". Each module's notebooks also %pip install from here.
+for file in library/genesis_workbench/dist/*.whl; do
+  if [ -f "$file" ]; then
+    filename=$(basename "$file")
+    echo "Copying $filename to dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename"
+    databricks fs cp library/genesis_workbench/dist/$filename dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename --overwrite
+  fi
+done
+
+# Glow library (JAR + wheel) is consumed by the GWAS submodule's job-cluster
+# init scripts. Lives outside the python wheel so it can be downloaded by
+# Spark drivers via spark.jars.packages without a venv install round-trip.
+for file in library/glow/*; do
+  if [ -f "$file" ]; then
+    filename=$(basename "$file")
+    echo "Copying $filename to dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename"
+    databricks fs cp "$file" dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename --overwrite
+  fi
+done
+
 #Run init job only if not deployed before
 if [[ ! -e ".deployed" ]]; then
 
@@ -163,32 +192,9 @@ echo ""
 # any sibling app if app_names is set to a colon-separated list) ends up with
 # CAN_QUERY / CAN_MANAGE_RUN / READ+WRITE VOLUME / EXECUTE on every existing
 # resource. Safe to re-run on every deploy; new resources get reconciled then.
+# NOTE: the genesis_workbench wheel is copied to the UC Volume earlier (right
+# after `bundle deploy`) because this serverless job %pip-installs it from there.
 databricks bundle run --target $TARGET grant_app_permissions_job --var="$EXTRA_PARAMS"
-
-echo ""
-echo "▶️ Copying libraries to UC Volume"
-echo ""
-
-# Each module's notebooks `%pip install` the genesis_workbench wheel from this
-# Volume path at the top of their cells. Keep it in sync with the dist/ build.
-for file in library/genesis_workbench/dist/*.whl; do
-  if [ -f "$file" ]; then
-    filename=$(basename "$file")
-    echo "Copying $filename to dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename"
-    databricks fs cp library/genesis_workbench/dist/$filename dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename --overwrite
-  fi
-done
-
-# Glow library (JAR + wheel) is consumed by the GWAS submodule's job-cluster
-# init scripts. Lives outside the python wheel so it can be downloaded by
-# Spark drivers via spark.jars.packages without a venv install round-trip.
-for file in library/glow/*; do
-  if [ -f "$file" ]; then
-    filename=$(basename "$file")
-    echo "Copying $filename to dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename"
-    databricks fs cp "$file" dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename --overwrite
-  fi
-done
 
 echo ""
 echo "▶️ Cleaning up local build artifacts"
