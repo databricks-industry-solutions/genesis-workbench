@@ -144,14 +144,20 @@ set_app_permissions_for_job(job_id=variant_annotation_job_id, user_email=user_em
 
 # COMMAND ----------
 
-# Download sample FASTQ files from 1000 Genomes for Variant Calling demo
+# Download sample FASTQ files from 1000 Genomes for Variant Calling demo.
+# Use HTTPS, not FTP: this task runs on serverless, whose egress does not reliably
+# allow FTP, so the old `ftp://` wget would stall with no progress until the task
+# timeout (the cause of the variant_annotation_init timeouts). curl over HTTPS with
+# retries + stall detection (--speed-limit/--speed-time) pulls the ~3.6 GB reliably
+# in a few minutes. On failure the partial file is removed so a re-run doesn't treat
+# a truncated download as complete (the os.path.exists guard would otherwise skip it).
 import subprocess
 import os
 
 sample_fastq_dir = f"/Volumes/{catalog}/{schema}/gwas_data/sample_fastq"
 os.makedirs(sample_fastq_dir, exist_ok=True)
 
-fastq_base_url = "ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/data/HG00096/sequence_read"
+fastq_base_url = "https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/data/HG00096/sequence_read"
 fastq_files = {
     "sample_1.fq.gz": f"{fastq_base_url}/SRR062634_1.filt.fastq.gz",
     "sample_2.fq.gz": f"{fastq_base_url}/SRR062634_2.filt.fastq.gz",
@@ -159,12 +165,22 @@ fastq_files = {
 
 for dest_name, url in fastq_files.items():
     dest_path = os.path.join(sample_fastq_dir, dest_name)
-    if not os.path.exists(dest_path):
-        print(f"Downloading {dest_name}...")
-        subprocess.run(["wget", "-q", "-O", dest_path, url], check=True)
-        print(f"Downloaded {dest_name}")
-    else:
+    if os.path.exists(dest_path):
         print(f"{dest_name} already exists, skipping")
+        continue
+    print(f"Downloading {dest_name} from {url} ...")
+    try:
+        subprocess.run(
+            ["curl", "-L", "--fail", "--retry", "5", "--retry-delay", "10",
+             "--connect-timeout", "30", "--speed-limit", "10000", "--speed-time", "60",
+             "-o", dest_path, url],
+            check=True,
+        )
+    except Exception:
+        if os.path.exists(dest_path):
+            os.remove(dest_path)  # don't leave a partial a re-run would treat as complete
+        raise
+    print(f"Downloaded {dest_name}")
 
 # COMMAND ----------
 
