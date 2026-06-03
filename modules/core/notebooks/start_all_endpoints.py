@@ -56,16 +56,25 @@ from concurrent.futures import ThreadPoolExecutor
 db_host = spark.conf.get("spark.databricks.workspaceUrl")
 db_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
 
-def start_endpoint(databricks_instance, endpoint_name, token):
+def start_endpoint(databricks_instance, endpoint_name, token, max_attempts=3):
     url = f"https://{databricks_instance}/api/2.0/serving-endpoints/{endpoint_name}/config:start"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    response = requests.post(url, headers=headers)
-    if response.status_code == 200:
-        print(f"Successfully started endpoint: {endpoint_name}")
-    elif response.status_code == 400 and "already" in response.text.lower():
-        print(f"Endpoint {endpoint_name} is already running.")
-    else:
+    for attempt in range(1, max_attempts + 1):
+        response = requests.post(url, headers=headers)
+        if response.status_code == 200:
+            print(f"Successfully started endpoint: {endpoint_name}")
+            return
+        if response.status_code == 400 and "already" in response.text.lower():
+            print(f"Endpoint {endpoint_name} is already running.")
+            return
+        # Retry transient throttling / server errors so a start isn't silently lost.
+        if response.status_code in (429, 500, 502, 503, 504) and attempt < max_attempts:
+            wait = 5 * attempt
+            print(f"  start {endpoint_name} got {response.status_code} (attempt {attempt}/{max_attempts}); retrying in {wait}s")
+            time.sleep(wait)
+            continue
         print(f"Failed to start endpoint: {endpoint_name}, Status Code: {response.status_code}, Response: {response.text[:200]}")
+        return
 
 def check_endpoint_status(databricks_instance, endpoint_name, token):
     url = f"https://{databricks_instance}/api/2.0/serving-endpoints/{endpoint_name}"
@@ -79,19 +88,22 @@ def check_endpoint_status(databricks_instance, endpoint_name, token):
         print(f"Failed to check status of endpoint: {endpoint_name}, Status Code: {response.status_code}")
         return "Unknown"
 
-def wait_until_endpoints_ready(databricks_instance, endpoints, token, check_interval=60):
-    all_ready = False
-    while not all_ready:
-        all_ready = True
-        for endpoint in endpoints:
-            status = check_endpoint_status(databricks_instance, endpoint, token)
-            if status != "READY":
-                all_ready = False
-                print(f"Endpoint {endpoint} is not ready yet. Checking again in {check_interval} seconds...")
-                break
-        if not all_ready:
-            time.sleep(check_interval)
-    print("All endpoints are ready!")
+def wait_until_endpoints_ready(databricks_instance, endpoints, token, check_interval=60, max_wait_minutes=45):
+    # Bounded wait: a single endpoint that never reaches READY must not hang the
+    # whole job until its run timeout. Poll all endpoints each round so the log
+    # shows every straggler, and give up after max_wait_minutes.
+    deadline = time.time() + max_wait_minutes * 60
+    while True:
+        not_ready = [ep for ep in endpoints
+                     if check_endpoint_status(databricks_instance, ep, token) != "READY"]
+        if not not_ready:
+            print("All endpoints are ready!")
+            return
+        if time.time() >= deadline:
+            print(f"Timed out after {max_wait_minutes} min waiting for: {not_ready}. Proceeding anyway.")
+            return
+        print(f"{len(not_ready)} endpoint(s) not ready yet: {not_ready}. Checking again in {check_interval}s...")
+        time.sleep(check_interval)
 
 def send_request(databricks_instance, endpoint_name, payload, token):
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
@@ -107,7 +119,12 @@ def send_request(databricks_instance, endpoint_name, payload, token):
         print(f"Error sending request to endpoint {endpoint_name}: {e}")
 
 def send_pings_parallel(databricks_instance, endpoint_payloads, token):
-    with ThreadPoolExecutor() as executor:
+    # One worker per endpoint (capped) so ALL endpoints are queried at once.
+    # The default ThreadPoolExecutor() caps workers at ~os.cpu_count()+4, which
+    # on serverless is tiny — that is why only a few endpoints were queried at a
+    # time. Size the pool to the number of endpoints instead.
+    max_workers = min(max(len(endpoint_payloads), 1), 64)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [
             executor.submit(send_request, databricks_instance, ep_name, payload, token)
             for ep_name, payload in endpoint_payloads.items()
@@ -139,10 +156,18 @@ query = f"""
 endpoints_df = execute_select_query(query)
 
 endpoint_payloads = {}
-endpoint_names = []
+all_endpoint_names = []   # every active endpoint — these all get started
 
 for _, row in endpoints_df.iterrows():
     ep_name = row['model_endpoint_name']
+    if not ep_name:
+        continue
+    # Every active endpoint is started, regardless of whether we can build a ping
+    # payload. The input_example below is only needed for the keep-alive ping,
+    # NOT to start the endpoint.
+    if ep_name not in all_endpoint_names:
+        all_endpoint_names.append(ep_name)
+
     model_uc_name = row['deploy_model_uc_name']
     model_uc_version = row['deploy_model_uc_version']
 
@@ -177,7 +202,7 @@ for _, row in endpoints_df.iterrows():
                     pass
 
             if local_path is None:
-                print(f"WARNING: Could not download input_example for {ep_name}. Skipping.")
+                print(f"WARNING: Could not download input_example for {ep_name}. Will start it but not ping it.")
                 continue
 
             with open(local_path, 'r') as f:
@@ -195,14 +220,14 @@ for _, row in endpoints_df.iterrows():
                 payload = {"inputs": [raw_example]}
 
             endpoint_payloads[ep_name] = payload
-            endpoint_names.append(ep_name)
             print(f"Loaded input_example for endpoint: {ep_name} (type: {input_example_type}, format: {list(payload.keys())})")
         else:
-            print(f"WARNING: No input_example found for {ep_name} (model: {model_uc_name}/{model_uc_version}). Skipping.")
+            print(f"WARNING: No input_example found for {ep_name} (model: {model_uc_name}/{model_uc_version}). Will start it but not ping it.")
     except Exception as e:
-        print(f"WARNING: Could not load input_example for {ep_name}: {e}. Skipping.")
+        print(f"WARNING: Could not load input_example for {ep_name}: {e}. Will start it but not ping it.")
 
-print(f"\nTotal endpoints to keep alive: {len(endpoint_names)}")
+print(f"\nTotal active endpoints to start: {len(all_endpoint_names)}")
+print(f"Endpoints with input_example (will be kept warm via ping): {len(endpoint_payloads)}")
 
 # COMMAND ----------
 
@@ -211,23 +236,28 @@ print(f"\nTotal endpoints to keep alive: {len(endpoint_names)}")
 
 # COMMAND ----------
 
-if len(endpoint_names) == 0:
-    print("No endpoints with valid input_example found. Nothing to do.")
+if len(all_endpoint_names) == 0:
+    print("No active endpoints found. Nothing to do.")
     dbutils.notebook.exit("No endpoints to start")
 
 num_mins_to_ping = 15
 
-# Start all endpoints
-print("Starting all endpoints...")
-for ep_name in endpoint_names:
+# Start every active endpoint, one by one.
+print(f"Starting all {len(all_endpoint_names)} endpoints...")
+for ep_name in all_endpoint_names:
     start_endpoint(db_host, ep_name, db_token)
 
-# Wait for all to be ready
+# Wait for all to be ready (bounded so a stuck endpoint can't hang the job).
 print("\nWaiting for endpoints to become ready...")
-wait_until_endpoints_ready(db_host, endpoint_names, db_token, check_interval=60)
+wait_until_endpoints_ready(db_host, all_endpoint_names, db_token,
+                           check_interval=60, max_wait_minutes=45)
 
-# Initial ping
-print("\nSending initial ping to all endpoints...")
+if not endpoint_payloads:
+    print("\nNo endpoints have a usable input_example; started them but skipping keep-alive pings.")
+    dbutils.notebook.exit("Started endpoints; no payloads to ping")
+
+# Initial ping — query ALL payload endpoints at once (one worker per endpoint).
+print(f"\nSending initial ping to all {len(endpoint_payloads)} endpoints...")
 send_pings_parallel(db_host, endpoint_payloads, db_token)
 
 # Keep alive loop
