@@ -17,8 +17,18 @@
 
 # COMMAND ----------
 
-from pybiomart import Dataset
 import os
+import tempfile
+
+# pybiomart's base.py runs requests_cache.install_cache('.pybiomart') at import
+# time, which creates .pybiomart.sqlite in the current working directory. On
+# Databricks the notebook's CWD is the read-only Workspace files path, so the
+# import fails intermittently with "OperationalError: unable to open database
+# file" (RESOURCE_DOES_NOT_EXIST on the .bundle/.../files path). chdir to a
+# writable local temp dir first so the HTTP cache lands on real local disk.
+os.chdir(tempfile.mkdtemp(prefix="pybiomart_cache_"))
+
+from pybiomart import Dataset
 import time
 
 # COMMAND ----------
