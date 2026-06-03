@@ -64,8 +64,12 @@ def start_endpoint(databricks_instance, endpoint_name, token, max_attempts=3):
         if response.status_code == 200:
             print(f"Successfully started endpoint: {endpoint_name}")
             return
-        if response.status_code == 400 and "already" in response.text.lower():
-            print(f"Endpoint {endpoint_name} is already running.")
+        # Already-running endpoints return 400 with "...because it is not stopped."
+        # (no "already" in the text), so match that phrasing too and log cleanly.
+        if response.status_code == 400 and (
+            "already" in response.text.lower() or "not stopped" in response.text.lower()
+        ):
+            print(f"Endpoint {endpoint_name} is already started")
             return
         # Retry transient throttling / server errors so a start isn't silently lost.
         if response.status_code in (429, 500, 502, 503, 504) and attempt < max_attempts:
