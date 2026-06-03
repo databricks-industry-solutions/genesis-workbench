@@ -188,7 +188,10 @@ def start_endpoints_status(_: CurrentUserDep) -> StartEndpointsStatusResponse:
                 for p in run.get("job_parameters", []):
                     if p.get("name") == "num_hours":
                         try:
-                            num_hours = int(p.get("value"))
+                            # Runs started with the job default carry "default"
+                            # but no "value" — fall back so duration/remaining
+                            # don't render as "h"/"unknown".
+                            num_hours = int(p.get("value") or p.get("default"))
                         except (TypeError, ValueError):
                             num_hours = None
                         break
