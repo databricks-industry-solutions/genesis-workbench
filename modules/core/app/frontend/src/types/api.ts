@@ -290,6 +290,9 @@ export type DEGene = {
   mean_b: number
   significant: boolean
 }
+export type GenesetDbsResponse = { dbs: string[] }
+export type GenesetTerm = { term: string; size: number; genes: string[] }
+export type GenesetTermsResponse = { terms: GenesetTerm[] }
 export type DEResponse = {
   genes: DEGene[]
   n_significant: number

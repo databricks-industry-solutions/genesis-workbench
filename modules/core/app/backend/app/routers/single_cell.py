@@ -1572,6 +1572,83 @@ def _load_gmt(path: str) -> dict[str, set[str]]:
     return out
 
 
+# ─── Gene-set libraries (DE highlight picker) ──────────────────────────────
+
+
+class GenesetDbsResponse(BaseModel):
+    dbs: list[str]
+
+
+class GenesetTerm(BaseModel):
+    term: str
+    size: int
+    genes: list[str]
+
+
+class GenesetTermsResponse(BaseModel):
+    terms: list[GenesetTerm]
+
+
+from functools import lru_cache as _lru_cache
+
+
+@_lru_cache(maxsize=8)
+def _geneset_gmt(db_name: str) -> dict:
+    """Load + cache a GMT library ({term: set(genes)}) from the genesets volume."""
+    s = get_settings()
+    return _load_gmt(
+        f"/Volumes/{s.catalog}/{s.schema}/scanpy_reference/genesets/{db_name}.gmt"
+    )
+
+
+@router.get("/geneset-dbs", response_model=GenesetDbsResponse)
+def geneset_dbs(_: CurrentUserDep) -> GenesetDbsResponse:
+    """List gene-set libraries (*.gmt) available to the DE highlight picker."""
+    import os
+
+    s = get_settings()
+    gmt_dir = f"/Volumes/{s.catalog}/{s.schema}/scanpy_reference/genesets"
+    w = WorkspaceClient()
+    dbs: list[str] = []
+    try:
+        for entry in w.files.list_directory_contents(gmt_dir):
+            name = entry.name or os.path.basename(entry.path or "")
+            if name.endswith(".gmt"):
+                dbs.append(name[:-4])
+    except Exception as e:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, f"Could not list gene-set libraries: {e}"
+        )
+    return GenesetDbsResponse(dbs=sorted(dbs))
+
+
+@router.get("/geneset-terms", response_model=GenesetTermsResponse)
+def geneset_terms(
+    _: CurrentUserDep, db: str, q: str = "", limit: int = 30
+) -> GenesetTermsResponse:
+    """Search terms within a gene-set library, returning each term's genes
+    inline so the DE highlight picker applies a selection in one round-trip."""
+    import re
+
+    if not re.fullmatch(r"[A-Za-z0-9_.\-]+", db):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid db name")
+    try:
+        gmt = _geneset_gmt(db)
+    except Exception as e:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, f"Could not load gene-set library '{db}': {e}"
+        )
+    ql = q.strip().lower()
+    matched = [(term, genes) for term, genes in gmt.items() if not ql or ql in term.lower()]
+    # Shorter term names first — concise terms ("DNA repair") tend to be the
+    # canonical ones the user is reaching for.
+    matched.sort(key=lambda t: (len(t[0]), t[0]))
+    limit = max(1, min(limit, 100))
+    return GenesetTermsResponse(
+        terms=[GenesetTerm(term=t, size=len(g), genes=sorted(g)) for t, g in matched[:limit]]
+    )
+
+
 @router.post("/run-enrichment", response_model=EnrichmentResponse)
 def run_enrichment(payload: EnrichmentRequest, _: CurrentUserDep) -> EnrichmentResponse:
     import logging

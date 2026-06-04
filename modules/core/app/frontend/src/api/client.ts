@@ -52,6 +52,8 @@ import type {
   ProteinDesignResponse,
   ColorPointsResponse,
   DEResponse,
+  GenesetDbsResponse,
+  GenesetTermsResponse,
   DotplotResponse,
   EnrichmentResponse,
   RawDataResponse,
@@ -225,6 +227,11 @@ export const api = {
   singleCellSavedAnnotations: (run_id: string) =>
     request<SavedAnnotationsResponse>(
       `/api/single_cell/annotations?run_id=${encodeURIComponent(run_id)}`,
+    ),
+  singleCellGenesetDbs: () => request<GenesetDbsResponse>('/api/single_cell/geneset-dbs'),
+  singleCellGenesetTerms: (db: string, q: string) =>
+    request<GenesetTermsResponse>(
+      `/api/single_cell/geneset-terms?db=${encodeURIComponent(db)}&q=${encodeURIComponent(q)}`,
     ),
   singleCellRunInfo: (run_id: string, top_genes_per_cluster = 50) =>
     request<RunInfoResponse>('/api/single_cell/run-info', {

@@ -15,8 +15,8 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { api } from '@/api/client'
-import { isCancerGene } from '@/lib/cancerGenes'
 import { DataTable } from '@/components/DataTable'
+import { GeneHighlightPicker, type Highlight } from '@/components/GeneHighlightPicker'
 import { PlotlyChart as Plot } from '@/components/PlotlyChart'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
 import { Tabs } from '@/components/Tabs'
@@ -790,7 +790,7 @@ function Dotplot({ data }: { data: DotplotResponse }) {
 
 // ─── Differential Expression ───────────────────────────────────────────────
 
-type ScoredGene = DEGene & { score: number; isCancer: boolean }
+type ScoredGene = DEGene & { score: number; isHighlighted: boolean }
 
 export function DESubTab({ runId, summary }: { runId: string; summary: RunSummaryResponse }) {
   const [a, setA] = useState(summary.clusters[0] ?? '')
@@ -834,24 +834,29 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
 
   // Rank significant hits by a directional score = log2FC × -log10(p_adj):
   // effect size weighted by significance, signed so genes most strongly (and
-  // significantly) enriched in cluster A sort to the top. Set A to the tumour
-  // cluster and the malignant-enriched genes lead the table.
-  const [cancerFirst, setCancerFirst] = useState(false)
+  // significantly) enriched in cluster A sort to the top. Domain-agnostic; the
+  // optional highlight set just flags + can float genes the user cares about.
+  const [highlight, setHighlight] = useState<Highlight | null>(null)
+  const [highlightFirst, setHighlightFirst] = useState(false)
   const scoredGenes = useMemo<ScoredGene[]>(() => {
+    const hl = highlight?.genes ?? null
     const rows = (de.data?.genes ?? [])
       .filter((g) => g.significant)
       .map((g) => ({
         ...g,
         score: g.log2fc * g.neg_log10_p_adj,
-        isCancer: isCancerGene(g.gene),
+        isHighlighted: hl ? hl.has(g.gene.toUpperCase()) : false,
       }))
     rows.sort((x, y) => {
-      if (cancerFirst && x.isCancer !== y.isCancer) return x.isCancer ? -1 : 1
+      if (highlightFirst && x.isHighlighted !== y.isHighlighted) return x.isHighlighted ? -1 : 1
       return y.score - x.score
     })
     return rows
-  }, [de.data, cancerFirst])
-  const nCancer = useMemo(() => scoredGenes.filter((g) => g.isCancer).length, [scoredGenes])
+  }, [de.data, highlight, highlightFirst])
+  const nHighlighted = useMemo(
+    () => scoredGenes.filter((g) => g.isHighlighted).length,
+    [scoredGenes],
+  )
 
   const dirClass = (up: boolean) =>
     up ? 'text-rose-600 dark:text-rose-400' : 'text-sky-600 dark:text-sky-400'
@@ -866,12 +871,12 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
           return (
             <span className="flex items-center gap-1.5">
               <span className="font-medium">{g.gene}</span>
-              {g.isCancer && (
+              {g.isHighlighted && (
                 <span
-                  title="Known cancer-associated gene (curated COSMIC + HGSOC marker set)"
+                  title={highlight ? `In gene set: ${highlight.label}` : 'In highlighted gene set'}
                   className="rounded bg-yellow-400/20 px-1 text-[10px] font-semibold text-yellow-700 dark:text-yellow-400"
                 >
-                  ◆ cancer
+                  ◆
                 </span>
               )}
             </span>
@@ -920,7 +925,7 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
         cell: (ctx) => ctx.row.original.mean_b.toFixed(3),
       },
     ],
-    [a, b],
+    [a, b, highlight],
   )
 
   return (
@@ -1055,7 +1060,17 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
         </details>
       )}
 
-      {de.data && <VolcanoPlot genes={de.data.genes} a={a} b={b} />}
+      <GeneHighlightPicker highlight={highlight} onChange={setHighlight} />
+
+      {de.data && (
+        <VolcanoPlot
+          genes={de.data.genes}
+          a={a}
+          b={b}
+          highlight={highlight?.genes ?? null}
+          highlightLabel={highlight?.label ?? ''}
+        />
+      )}
 
       {de.data && (
         <div>
@@ -1063,21 +1078,29 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
             <div className="text-xs text-muted-foreground">
               {de.data.n_significant} significant genes (|log2 FC| &gt; 1, p_adj &lt; 0.05) · sorted
               by <strong>score</strong> = log2FC × −log10(p_adj), so genes most enriched in{' '}
-              <span className={dirClass(true)}>↑ {a}</span> lead. {nCancer} are{' '}
-              <span className="text-yellow-700 dark:text-yellow-400">◆ cancer-associated</span>.
+              <span className={dirClass(true)}>↑ {a}</span> lead.
+              {highlight && (
+                <>
+                  {' '}
+                  {nHighlighted} are in{' '}
+                  <span className="text-yellow-700 dark:text-yellow-400">◆ {highlight.label}</span>.
+                </>
+              )}
             </div>
-            <label className="flex cursor-pointer items-center gap-1.5 text-xs">
-              <input
-                type="checkbox"
-                checked={cancerFirst}
-                onChange={(e) => setCancerFirst(e.target.checked)}
-              />
-              Cancer-associated genes first
-            </label>
+            {highlight && (
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs">
+                <input
+                  type="checkbox"
+                  checked={highlightFirst}
+                  onChange={(e) => setHighlightFirst(e.target.checked)}
+                />
+                Highlighted genes first
+              </label>
+            )}
           </div>
           <p className="mb-2 text-[11px] text-muted-foreground">
-            Tip: set <strong>Cluster A</strong> to the tumour cluster — the malignant-enriched
-            genes then carry the highest positive scores and appear at the top.
+            Tip: set <strong>Cluster A</strong> to the cell population you’re studying — its
+            enriched genes then carry the highest positive scores and appear at the top.
           </p>
           <DataTable
             columns={tableColumns}
@@ -1090,13 +1113,26 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
   )
 }
 
-function VolcanoPlot({ genes, a, b }: { genes: DEGene[]; a: string; b: string }) {
+function VolcanoPlot({
+  genes,
+  a,
+  b,
+  highlight,
+  highlightLabel,
+}: {
+  genes: DEGene[]
+  a: string
+  b: string
+  highlight: Set<string> | null
+  highlightLabel: string
+}) {
   if (genes.length === 0) return null
-  const sig = genes.filter((g) => g.significant && !isCancerGene(g.gene))
-  const nonsig = genes.filter((g) => !g.significant && !isCancerGene(g.gene))
-  // Cancer-associated genes get their own labelled trace so they pop out of
-  // the cloud regardless of significance.
-  const cancer = genes.filter((g) => isCancerGene(g.gene))
+  const isHl = (g: DEGene) => (highlight ? highlight.has(g.gene.toUpperCase()) : false)
+  const sig = genes.filter((g) => g.significant && !isHl(g))
+  const nonsig = genes.filter((g) => !g.significant && !isHl(g))
+  // Highlighted genes get their own labelled trace so they pop out of the
+  // cloud regardless of significance.
+  const cancer = genes.filter(isHl)
   const traces = [
     {
       type: 'scattergl' as const,
@@ -1121,7 +1157,7 @@ function VolcanoPlot({ genes, a, b }: { genes: DEGene[]; a: string; b: string })
     {
       type: 'scattergl' as const,
       mode: 'markers+text' as const,
-      name: '◆ Cancer-associated',
+      name: `◆ ${highlightLabel || 'Highlighted'}`,
       x: cancer.map((g) => g.log2fc),
       y: cancer.map((g) => g.neg_log10_p_adj),
       marker: {
@@ -1134,13 +1170,13 @@ function VolcanoPlot({ genes, a, b }: { genes: DEGene[]; a: string; b: string })
       textposition: 'top center' as const,
       textfont: { size: 9 },
       hovertemplate:
-        '<b>%{text}</b> (cancer-associated)<br>log2FC %{x:.2f}<br>-log10 p_adj %{y:.2f}<extra></extra>',
+        '<b>%{text}</b> (highlighted)<br>log2FC %{x:.2f}<br>-log10 p_adj %{y:.2f}<extra></extra>',
     },
   ]
   return (
     <div className="rounded-md border border-border bg-card p-2">
       <Plot
-        data={traces as never}
+        data={traces.filter((t) => t.x.length > 0) as never}
         layout={{
           title: { text: `Volcano: Cluster ${a} vs ${b}` },
           height: 460,
