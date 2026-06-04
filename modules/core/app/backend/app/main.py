@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.routers import (
     assistant,
+    bionemo,
     bootstrap,
     docs,
     genomics,
@@ -60,6 +61,7 @@ app.include_router(large_molecule.router)
 app.include_router(single_cell.router)
 app.include_router(small_molecule.router)
 app.include_router(genomics.router)
+app.include_router(bionemo.router)
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 

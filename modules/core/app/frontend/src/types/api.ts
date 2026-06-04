@@ -735,3 +735,49 @@ export type GenomicsDefaultsResponse = {
     vcf_path: string
   }
 }
+
+// ─── NVIDIA BioNeMo ──────────────────────────────────────────────────────────
+
+export type BionemoVariantsResponse = { esm2: string[] }
+
+export type BionemoWeight = {
+  ft_id: number
+  ft_label: string
+  variant: string
+  model_type: string
+  experiment_name: string | null
+  run_id: string | null
+  created_by: string | null
+  created_datetime: string | null
+}
+export type BionemoWeightsResponse = { weights: BionemoWeight[] }
+
+export type BionemoDispatchResponse = { job_run_id: number; run_url: string }
+
+export type BionemoFinetuneRequest = {
+  esm_variant: string
+  train_data: string
+  evaluation_data: string
+  finetune_label: string
+  experiment_name: string
+  should_use_lora: boolean
+  task_type: string
+  num_steps: number
+  micro_batch_size: number
+  precision: string
+  mlp_ft_dropout: number
+  mlp_hidden_size: number
+  mlp_target_size: number
+  mlp_lr: number
+  mlp_lr_multiplier: number
+}
+
+export type BionemoInferenceRequest = {
+  esm_variant: string
+  is_base_model: boolean
+  finetune_run_id: number
+  task_type: string
+  data_location: string
+  sequence_column_name: string
+  result_location: string
+}

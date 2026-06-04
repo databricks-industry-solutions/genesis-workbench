@@ -3,6 +3,11 @@ import type {
   AssistantQueryResponse,
   AvailableModelsResponse,
   BatchModelsResponse,
+  BionemoDispatchResponse,
+  BionemoFinetuneRequest,
+  BionemoInferenceRequest,
+  BionemoVariantsResponse,
+  BionemoWeightsResponse,
   BootstrapResponse,
   DBSearchResponse,
   DeployedModelsResponse,
@@ -376,4 +381,18 @@ export const api = {
     ),
   diseaseBiologyDefaults: () =>
     request<GenomicsDefaultsResponse>('/api/genomics/defaults'),
+
+  // NVIDIA BioNeMo
+  bionemoVariants: () => request<BionemoVariantsResponse>('/api/bionemo/variants'),
+  bionemoWeights: () => request<BionemoWeightsResponse>('/api/bionemo/weights'),
+  bionemoFinetune: (body: BionemoFinetuneRequest) =>
+    request<BionemoDispatchResponse>('/api/bionemo/finetune', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  bionemoInference: (body: BionemoInferenceRequest) =>
+    request<BionemoDispatchResponse>('/api/bionemo/inference', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 }
