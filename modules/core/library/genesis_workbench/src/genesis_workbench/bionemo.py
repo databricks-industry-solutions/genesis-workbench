@@ -48,8 +48,9 @@ def start_esm2_finetuning(user_info: UserInfo,
             mlp_hidden_size:int,
             mlp_target_size:int,
             mlp_lr:float,
-            mlp_lr_multiplier:float):
-    
+            mlp_lr_multiplier:float,
+            mlflow_run_id:str = ""):
+
     print(f"Starting a finetune run with label: {finetune_label}")
     bionemo_finetune_job_id = os.environ["BIONEMO_ESM_FINETUNE_JOB_ID"]
     params = {
@@ -68,7 +69,11 @@ def start_esm2_finetuning(user_info: UserInfo,
         "lr" : mlp_lr,
         "lr_multiplier" : mlp_lr_multiplier,
         "micro_batch_size" : micro_batch_size,
-        "precision" : precision
+        "precision" : precision,
+        # When set, the notebook logs into this pre-created MLflow run (so the
+        # UI can show "submitted" status immediately). Empty → notebook creates
+        # its own run (back-compat).
+        "mlflow_run_id" : mlflow_run_id or "",
     }
     print(params)
     run_id = execute_workflow(bionemo_finetune_job_id,params)

@@ -25,6 +25,7 @@ dbutils.widgets.text("lr_multiplier", "1e2" , "Learning rate multiplier")
 dbutils.widgets.text("micro_batch_size", "2" , "Micro batch size")
 dbutils.widgets.text("precision", "bf16-mixed", "Precision")
 dbutils.widgets.text("user_email", "a@b.com", "User Email")
+dbutils.widgets.text("mlflow_run_id", "", "Pre-created MLflow run id (from the app dispatcher)")
 
 catalog = dbutils.widgets.get("core_catalog")
 schema = dbutils.widgets.get("core_schema")
@@ -37,7 +38,11 @@ schema = dbutils.widgets.get("core_schema")
 
 # COMMAND ----------
 
-# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0 psutil==7.2.2 pynvml==11.0.0
+# psutil + pynvml are only needed for MLflow system/GPU metrics logging and are
+# already present in the BioNeMo NGC container — pinning them to exact versions
+# (psutil==7.2.2, pynvml==11.0.0) made pip's resolver fail against the image's
+# own pins. Leave them unpinned so the container's compatible versions stand.
+# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0 psutil pynvml
 
 # COMMAND ----------
 
@@ -92,6 +97,7 @@ scale_lr_layer = "regression_head" if task_type=="regression" else "classificati
 micro_batch_size = int(dbutils.widgets.get("micro_batch_size"))
 precision = dbutils.widgets.get("precision")
 user_email = dbutils.widgets.get("user_email")
+mlflow_run_id = dbutils.widgets.get("mlflow_run_id") or None
 model_volume =  dbutils.widgets.get("model_volume")
 sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
 
@@ -210,8 +216,21 @@ is_finetune_success = False
 os.environ["MLFLOW_ENABLE_SYSTEM_METRICS_LOGGING"] = "true"
 
 experiment = set_mlflow_experiment(experiment_tag=experiment_name, user_email=user_email)
-run_info = mlflow.start_run(experiment_id=experiment.experiment_id, run_name=finetune_label)
+# When the app dispatcher pre-created the run (status already "submitted"),
+# resume it so the UI sees one continuous run; otherwise create a fresh one.
+if mlflow_run_id:
+    run_info = mlflow.start_run(run_id=mlflow_run_id)
+else:
+    run_info = mlflow.start_run(experiment_id=experiment.experiment_id, run_name=finetune_label)
 run_id = run_info.info.run_id
+
+# Standard genesis_workbench search tags + progressive status (mirrors the
+# genomics/enzyme batch workflows so the Fine Tune tab's Search Past Runs works).
+mlflow.set_tag("origin", "genesis_workbench")
+mlflow.set_tag("feature", "bionemo_esm_finetune")
+mlflow.set_tag("created_by", user_email)
+mlflow.set_tag("result_location", ft_weights_volume_location)
+mlflow.set_tag("job_status", "training")
 
 ft_params = {
     "esm_variant": esm_variant,
@@ -336,6 +355,11 @@ if is_finetune_success:
             true,
             NULL
         )
-    """) 
+    """)
+
+    # Mark the run complete so the UI's Search Past Runs enables "View results".
+    # The run was already ended above, so tag via the client.
+    from mlflow.tracking import MlflowClient
+    MlflowClient().set_tag(run_id, "job_status", "complete")
 else:
     print("No deployments made")

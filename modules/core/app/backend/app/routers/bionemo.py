@@ -19,13 +19,13 @@ from genesis_workbench.bionemo import (
     BionemoModelType,
     get_variants,
     list_finetuned_weights,
-    start_esm2_finetuning,
     start_esm2_inference,
 )
 from genesis_workbench.workbench import UserInfo
 from pydantic import BaseModel, Field
 
 from app.auth import CurrentUser, CurrentUserDep
+from app.services import bionemo as svc
 from app.services.databricks_links import job_run_url
 from app.services.workbench import get_job_id
 
@@ -172,11 +172,11 @@ def finetune(payload: FinetuneRequest, user: CurrentUserDep) -> DispatchResponse
     _require_volume_csv(payload.train_data, "Train data")
     _require_volume_csv(payload.evaluation_data, "Evaluation data")
     try:
-        run_id = start_esm2_finetuning(
+        result = svc.start_finetune(
             user_info=_build_user_info(user),
             esm_variant=payload.esm_variant,
-            train_data_volume_location=payload.train_data.strip(),
-            validation_data_volume_location=payload.evaluation_data.strip(),
+            train_data=payload.train_data.strip(),
+            evaluation_data=payload.evaluation_data.strip(),
             should_use_lora=payload.should_use_lora,
             finetune_label=payload.finetune_label.strip(),
             experiment_name=payload.experiment_name.strip(),
@@ -192,10 +192,51 @@ def finetune(payload: FinetuneRequest, user: CurrentUserDep) -> DispatchResponse
         )
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Failed to launch fine-tuning job: {e}")
-    return DispatchResponse(
-        job_run_id=int(run_id),
-        run_url=job_run_url(get_job_id(_FINETUNE_JOB_SETTING), run_id),
-    )
+    return DispatchResponse(job_run_id=result.job_run_id, run_url=result.run_url)
+
+
+# ─── Fine-tune: search past runs + run details ───────────────────────────────
+
+
+class DBRunRow(BaseModel):
+    run_id: str
+    run_name: str
+    experiment_name: str
+    status: str
+    progress: str
+    start_time_ms: int | None = None
+    detail: str
+    run_url: str = ""
+
+
+class DBSearchResponse(BaseModel):
+    runs: list[DBRunRow]
+
+
+class FinetuneRunDetails(BaseModel):
+    run_name: str
+    status: str
+    job_status: str
+    result_location: str
+    job_run_id: str
+    params: dict[str, str]
+    metrics: dict[str, float]
+
+
+@router.get("/finetune/search", response_model=DBSearchResponse)
+def finetune_search(user: CurrentUserDep, by: str = "run_name", text: str = "") -> DBSearchResponse:
+    if not user.email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "User email unavailable")
+    rows = svc.search_finetune_runs(user.email, by, text.strip())
+    return DBSearchResponse(runs=[DBRunRow(**r) for r in rows])
+
+
+@router.get("/finetune/run-details", response_model=FinetuneRunDetails)
+def finetune_run_details(run_id: str, _: CurrentUserDep) -> FinetuneRunDetails:
+    try:
+        return FinetuneRunDetails(**svc.get_finetune_run_details(run_id))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Could not load run {run_id}: {e}")
 
 
 class InferenceRequest(BaseModel):

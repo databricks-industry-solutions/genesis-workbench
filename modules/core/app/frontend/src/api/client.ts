@@ -6,6 +6,7 @@ import type {
   BionemoDefaultsResponse,
   BionemoDispatchResponse,
   BionemoFinetuneRequest,
+  BionemoFinetuneRunDetails,
   BionemoInferenceRequest,
   BionemoVariantsResponse,
   BionemoWeightsResponse,
@@ -397,4 +398,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  bionemoFinetuneSearch: (by: 'run_name' | 'experiment_name', text: string) =>
+    request<DBSearchResponse>(
+      `/api/bionemo/finetune/search?by=${by}&text=${encodeURIComponent(text)}`,
+    ),
+  bionemoFinetuneRunDetails: (run_id: string) =>
+    request<BionemoFinetuneRunDetails>(
+      `/api/bionemo/finetune/run-details?run_id=${encodeURIComponent(run_id)}`,
+    ),
 }

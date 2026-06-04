@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 
 import { api } from '@/api/client'
+import { RunSearchSection } from '@/components/RunSearchSection'
+import type { DBRunRow } from '@/types/api'
 
 const TASK_TYPES = ['regression', 'classification']
 const PRECISIONS = ['bf16-mixed', 'fp16', 'bf16', 'fp32', 'fp32-mixed', '16-mixed', 'fp16-mixed']
@@ -147,6 +149,65 @@ export function BionemoFinetuneTab() {
           {String(start.error)}
         </div>
       )}
+
+      <div className="border-t border-border pt-4">
+        <h3 className="mb-2 text-sm font-semibold">Search past runs</h3>
+        <RunSearchSection
+          searchKey={['bionemo', 'finetune', 'search'] as const}
+          searchFn={api.bionemoFinetuneSearch}
+          detailLabel="Variant"
+          viewableStatuses={['complete']}
+          renderDialog={(run) => <FinetuneResultBody run={run} />}
+        />
+      </div>
+    </div>
+  )
+}
+
+// Result dialog body: fine-tune run metrics + weights (result) location.
+function FinetuneResultBody({ run }: { run: DBRunRow }) {
+  const details = useQuery({
+    queryKey: ['bionemo', 'finetune', 'details', run.run_id],
+    queryFn: () => api.bionemoFinetuneRunDetails(run.run_id),
+  })
+  if (details.isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>
+  if (details.error) return <p className="text-sm text-destructive">{String(details.error)}</p>
+  const d = details.data
+  if (!d) return null
+  const metrics = Object.entries(d.metrics)
+  return (
+    <div className="space-y-4 text-sm">
+      <div>
+        <div className="text-xs font-medium text-muted-foreground">Weights (result) location</div>
+        <code className="break-all text-xs">{d.result_location || '—'}</code>
+      </div>
+      <div>
+        <div className="mb-1 text-xs font-medium text-muted-foreground">Metrics</div>
+        {metrics.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No metrics logged.</p>
+        ) : (
+          <div className="max-h-72 overflow-auto rounded-md border border-border">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/50 uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-1 text-left">Metric</th>
+                  <th className="px-3 py-1 text-right">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {metrics.map(([k, v]) => (
+                  <tr key={k} className="border-t border-border">
+                    <td className="px-3 py-1">{k}</td>
+                    <td className="px-3 py-1 text-right font-mono">
+                      {typeof v === 'number' ? v.toFixed(4) : String(v)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

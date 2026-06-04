@@ -789,3 +789,13 @@ export type BionemoDefaultsResponse = {
   sequence_column: string
   result_location: string
 }
+
+export type BionemoFinetuneRunDetails = {
+  run_name: string
+  status: string
+  job_status: string
+  result_location: string
+  job_run_id: string
+  params: Record<string, string>
+  metrics: Record<string, number>
+}
