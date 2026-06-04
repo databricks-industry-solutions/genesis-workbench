@@ -53,10 +53,12 @@ import type {
   ColorPointsResponse,
   DENarrativeRequest,
   DEResponse,
+  EnrichmentNarrativeRequest,
   GenesetDbsResponse,
   GenesetTermsResponse,
   NarrativeResponse,
   PerturbationNarrativeRequest,
+  TrajectoryNarrativeRequest,
   DotplotResponse,
   EnrichmentResponse,
   RawDataResponse,
@@ -238,6 +240,16 @@ export const api = {
     }),
   singleCellDENarrative: (body: DENarrativeRequest) =>
     request<NarrativeResponse>('/api/single_cell/de/narrative', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  singleCellEnrichmentNarrative: (body: EnrichmentNarrativeRequest) =>
+    request<NarrativeResponse>('/api/single_cell/enrichment/narrative', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  singleCellTrajectoryNarrative: (body: TrajectoryNarrativeRequest) =>
+    request<NarrativeResponse>('/api/single_cell/trajectory/narrative', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

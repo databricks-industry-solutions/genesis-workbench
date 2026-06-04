@@ -407,6 +407,26 @@ export type PerturbationNarrativeRequest = {
   top_genes: PerturbationNarrativeGene[]
 }
 export type NarrativeResponse = { narrative: string; model: string }
+export type EnrichmentNarrativeTerm = {
+  term: string
+  gene_set: string
+  p_adj: number
+  overlap: string
+  genes: string
+}
+export type EnrichmentNarrativeRequest = {
+  cluster: string
+  cell_type?: string | null
+  terms: EnrichmentNarrativeTerm[]
+}
+export type TrajectoryNarrativeRequest = {
+  gene: string
+  n_cells?: number
+  pseudotime_min?: number
+  pseudotime_max?: number
+  early_mean?: number
+  late_mean?: number
+}
 export type DENarrativeGene = { gene: string; log2fc: number; p_adj: number }
 export type DENarrativeRequest = {
   cluster_a: string

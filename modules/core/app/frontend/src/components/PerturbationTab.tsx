@@ -5,6 +5,7 @@ import { PlotlyChart as Plot } from '@/components/PlotlyChart'
 
 import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
+import { DiscoveryNote } from '@/components/DiscoveryNote'
 import { NarrativePanel } from '@/components/NarrativePanel'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
 import { useSseMutation } from '@/hooks/useSseMutation'
@@ -168,6 +169,13 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
           mean expression profile using scGPT.
         </p>
       </div>
+
+      <DiscoveryNote>
+        Ask “what if?” <em>in silico</em> — remove or boost a gene and predict the downstream shift
+        across the cluster, no wet-lab needed. Use it to test dependencies and nominate targets
+        (genes you marked in DE/Enrichment/Trajectory are one click away) before committing bench
+        resources.
+      </DiscoveryNote>
 
       <div className="flex flex-col gap-3 md:flex-row md:items-end">
         <label className="block text-xs">

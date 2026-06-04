@@ -16,8 +16,10 @@ import type { ColumnDef } from '@tanstack/react-table'
 
 import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
-import { GeneHighlightPicker, type Highlight } from '@/components/GeneHighlightPicker'
+import { DiscoveryNote } from '@/components/DiscoveryNote'
+import { GeneHighlightPicker } from '@/components/GeneHighlightPicker'
 import { NarrativePanel } from '@/components/NarrativePanel'
+import { useDeHighlight } from '@/stores/deHighlight'
 import { useGeneClipboard } from '@/stores/geneClipboard'
 import { PlotlyChart as Plot } from '@/components/PlotlyChart'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
@@ -720,6 +722,12 @@ export function MarkerDotplotSubTab({
         </p>
       </header>
 
+      <DiscoveryNote>
+        Recognise what each cluster <em>is</em> at a glance — the genes that define and distinguish
+        every population. Spot clusters with a distinctive program before drilling in, and hover any
+        cluster to see its predicted cell type.
+      </DiscoveryNote>
+
       <div className="flex flex-wrap items-end gap-3">
         <label className="block text-xs">
           <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
@@ -881,7 +889,8 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
   // effect size weighted by significance, signed so genes most strongly (and
   // significantly) enriched in cluster A sort to the top. Domain-agnostic; the
   // optional highlight set just flags + can float genes the user cares about.
-  const [highlight, setHighlight] = useState<Highlight | null>(null)
+  const highlight = useDeHighlight((s) => s.highlight)
+  const setHighlight = useDeHighlight((s) => s.setHighlight)
   const [highlightFirst, setHighlightFirst] = useState(false)
   const scoredGenes = useMemo<ScoredGene[]>(() => {
     const hl = highlight?.genes ?? null
@@ -1077,6 +1086,12 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
           Significant = |log2FC| &gt; 1 and p_adj &lt; 0.05.
         </p>
       </header>
+
+      <DiscoveryNote>
+        Pin down exactly which genes separate two populations (e.g. tumour vs normal), ranked by
+        effect size × significance. Surfaces the genes driving a phenotype — candidates to mark for
+        study, highlight by pathway, or carry into a perturbation experiment.
+      </DiscoveryNote>
 
       <details open={hasAnno} className="rounded-md border border-border">
         <summary className="cursor-pointer px-4 py-2 text-sm font-medium">
@@ -1396,6 +1411,14 @@ const ENRICHMENT_DBS = [
   'GO_Cellular_Component_2023',
 ]
 
+/** Split an enrichment term's comma-joined leading-edge gene string. */
+function parseTermGenes(genes: string): string[] {
+  return genes
+    .split(',')
+    .map((g) => g.trim().toUpperCase())
+    .filter(Boolean)
+}
+
 export function EnrichmentSubTab({
   runId,
   summary,
@@ -1414,6 +1437,40 @@ export function EnrichmentSubTab({
     mutationFn: () => api.singleCellEnrichment({ run_id: runId, cluster, dbs }),
   })
 
+  const clipAdd = useGeneClipboard((s) => s.add)
+  const setDeHighlight = useDeHighlight((s) => s.setHighlight)
+
+  // Predicted cell type for the cluster (if annotated) — context for the narrative.
+  const annoQ = useQuery({
+    queryKey: ['sc', 'enrich-anno', runId],
+    queryFn: () => api.singleCellSavedAnnotations(runId),
+  })
+  const cellType = useMemo(() => {
+    const s = annoQ.data?.scimilarity?.annotations.find((a) => a.cluster === cluster)
+    const t = annoQ.data?.teddy?.annotations.find((a) => a.cluster === cluster)
+    return s?.predicted_cell_type || t?.predicted_cell_type || null
+  }, [annoQ.data, cluster])
+
+  // Auto AI interpretation of the enrichment result.
+  const narrative = useMutation({
+    mutationFn: () =>
+      api.singleCellEnrichmentNarrative({
+        cluster,
+        cell_type: cellType,
+        terms: (enrich.data?.terms ?? []).slice(0, 15).map((t) => ({
+          term: t.term,
+          gene_set: t.gene_set,
+          p_adj: t.p_adj,
+          overlap: t.overlap,
+          genes: t.genes,
+        })),
+      }),
+  })
+  useEffect(() => {
+    if (enrich.data && enrich.data.terms.length > 0) narrative.mutate()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enrich.data])
+
   const tableColumns = useMemo<ColumnDef<EnrichmentTerm, unknown>[]>(
     () => [
       { id: 'term', header: 'Term', accessorKey: 'term' },
@@ -1427,8 +1484,36 @@ export function EnrichmentSubTab({
             ? ctx.row.original.p_adj.toExponential(2)
             : ctx.row.original.p_adj.toFixed(4),
       },
+      {
+        id: 'actions',
+        header: '',
+        cell: (ctx) => {
+          const genes = parseTermGenes(ctx.row.original.genes)
+          if (genes.length === 0) return null
+          return (
+            <div className="flex gap-1">
+              <button
+                type="button"
+                title="Add this term's genes to the study list"
+                onClick={() => clipAdd(genes)}
+                className="rounded border border-border px-1.5 text-xs hover:border-primary hover:text-primary"
+              >
+                + study
+              </button>
+              <button
+                type="button"
+                title="Highlight these genes in Differential Expression"
+                onClick={() => setDeHighlight({ genes: new Set(genes), label: ctx.row.original.term })}
+                className="rounded border border-yellow-400/50 bg-yellow-400/10 px-1.5 text-xs text-yellow-700 hover:bg-yellow-400/20 dark:text-yellow-400"
+              >
+                ◆ DE
+              </button>
+            </div>
+          )
+        },
+      },
     ],
-    [],
+    [clipAdd, setDeHighlight],
   )
 
   const topTerms = (enrich.data?.terms ?? []).slice(0, 15)
@@ -1443,6 +1528,12 @@ export function EnrichmentSubTab({
           (loaded from <code>{gmtDir}</code>).
         </p>
       </header>
+
+      <DiscoveryNote>
+        Move from a gene list to the biological <em>programs</em> a cluster is running — invasion,
+        proliferation, DNA repair, immune signalling. Names the druggable processes behind the
+        markers; send any pathway's genes to your study list or highlight them back in DE.
+      </DiscoveryNote>
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="block text-xs">
@@ -1514,6 +1605,14 @@ export function EnrichmentSubTab({
           No enriched terms.
         </div>
       )}
+      {enrich.data && enrich.data.terms.length > 0 && (
+        <NarrativePanel
+          isPending={narrative.isPending}
+          data={narrative.data}
+          error={narrative.error}
+          onRegenerate={() => narrative.mutate()}
+        />
+      )}
       {enrich.data && topTerms.length > 0 && <EnrichmentBar terms={topTerms} cluster={cluster} />}
       {enrich.data && enrich.data.terms.length > 0 && (
         <DataTable columns={tableColumns} data={enrich.data.terms.slice(0, 30)} />
@@ -1576,6 +1675,34 @@ export function TrajectorySubTab({
     staleTime: 60_000,
   })
 
+  const clipAdd = useGeneClipboard((s) => s.add)
+
+  // Auto AI interpretation of the selected gene's dynamics along pseudotime.
+  const trajNarrative = useMutation({
+    mutationFn: () => {
+      const pts = traj.data?.gene_points ?? []
+      const ts = pts.map((p) => p.pseudotime)
+      const sorted = [...pts].sort((a, b) => a.pseudotime - b.pseudotime)
+      const half = Math.floor(sorted.length / 2) || 1
+      const mean = (arr: number[]) =>
+        arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0
+      const early = mean(sorted.slice(0, half).map((p) => p.expression))
+      const late = mean(sorted.slice(-half).map((p) => p.expression))
+      return api.singleCellTrajectoryNarrative({
+        gene: gene!,
+        n_cells: pts.length,
+        pseudotime_min: ts.length ? ts.reduce((a, b) => Math.min(a, b), Infinity) : undefined,
+        pseudotime_max: ts.length ? ts.reduce((a, b) => Math.max(a, b), -Infinity) : undefined,
+        early_mean: Number(early.toFixed(4)),
+        late_mean: Number(late.toFixed(4)),
+      })
+    },
+  })
+  useEffect(() => {
+    if (gene && (traj.data?.gene_points?.length ?? 0) > 0) trajNarrative.mutate()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [traj.data, gene])
+
   if (!summary.has_pseudotime) {
     return (
       <div className="rounded-md border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
@@ -1590,6 +1717,12 @@ export function TrajectorySubTab({
       <header>
         <h4 className="text-sm font-medium">Trajectory (diffusion pseudotime)</h4>
       </header>
+
+      <DiscoveryNote>
+        Reconstruct how cells progress along a continuum (e.g. normal → malignant) and watch a
+        gene rise or fall across it. Reveals the <em>dynamics</em> of a transition and separates
+        early, driver-like changes from late ones — then mark a gene of interest for study.
+      </DiscoveryNote>
 
       {traj.isLoading && <div className="text-sm text-muted-foreground">Loading…</div>}
       {traj.error && (
@@ -1635,23 +1768,44 @@ export function TrajectorySubTab({
         </div>
       )}
 
-      <label className="block text-xs">
-        <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
-          Plot gene expression along pseudotime
-        </span>
-        <select
-          value={gene ?? ''}
-          onChange={(e) => setGene(e.target.value || null)}
-          className="w-56 rounded-md border border-border bg-background px-3 py-2 text-sm"
-        >
-          <option value="">— pick a gene —</option>
-          {summary.expr_genes.map((g) => (
-            <option key={g} value={g}>
-              {g}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="flex items-end gap-2">
+        <label className="block text-xs">
+          <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
+            Plot gene expression along pseudotime
+          </span>
+          <select
+            value={gene ?? ''}
+            onChange={(e) => setGene(e.target.value || null)}
+            className="w-56 rounded-md border border-border bg-background px-3 py-2 text-sm"
+          >
+            <option value="">— pick a gene —</option>
+            {summary.expr_genes.map((g) => (
+              <option key={g} value={g}>
+                {g}
+              </option>
+            ))}
+          </select>
+        </label>
+        {gene && (
+          <button
+            type="button"
+            onClick={() => clipAdd(gene)}
+            title="Add this gene to the study list"
+            className="rounded-md border border-border px-2.5 py-2 text-xs hover:border-primary hover:text-primary"
+          >
+            + study
+          </button>
+        )}
+      </div>
+
+      {gene && (traj.data?.gene_points?.length ?? 0) > 0 && (
+        <NarrativePanel
+          isPending={trajNarrative.isPending}
+          data={trajNarrative.data}
+          error={trajNarrative.error}
+          onRegenerate={() => trajNarrative.mutate()}
+        />
+      )}
 
       {traj.data && traj.data.gene_points.length > 0 && gene && (
         <div className="rounded-md border border-border bg-card p-2">

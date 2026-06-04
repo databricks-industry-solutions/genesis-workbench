@@ -1313,6 +1313,89 @@ Do NOT claim clinical or therapeutic effect."""
     return _run_narrative(system_prompt, context)
 
 
+class EnrichmentNarrativeTerm(BaseModel):
+    term: str
+    gene_set: str
+    p_adj: float
+    overlap: str
+    genes: str
+
+
+class EnrichmentNarrativeRequest(BaseModel):
+    cluster: str
+    cell_type: str | None = None
+    terms: list[EnrichmentNarrativeTerm] = Field(default_factory=list)
+
+
+@router.post("/enrichment/narrative", response_model=NarrativeResponse)
+def enrichment_narrative(
+    payload: EnrichmentNarrativeRequest, _: CurrentUserDep
+) -> NarrativeResponse:
+    """Plain-language interpretation of a pathway-enrichment result."""
+    ct = f" (annotated cell type: {payload.cell_type})" if payload.cell_type else ""
+    lines = [
+        f"- {t.term} [{t.gene_set}] — p_adj {t.p_adj:.1e}, overlap {t.overlap}; "
+        f"leading-edge genes: {t.genes}"
+        for t in payload.terms[:15]
+    ]
+    context = f"""Pathway / gene-set enrichment (Fisher's exact on the cluster's top marker genes vs GO/KEGG/Reactome).
+- Cluster: {payload.cluster}{ct}
+- Top enriched terms (most significant first):
+{chr(10).join(lines) if lines else '(none)'}"""
+
+    system_prompt = f"""You are a computational biologist helping a bench scientist interpret a pathway-enrichment result for a single-cell cluster.
+
+{_NARRATIVE_FORMAT}
+
+Detailed-explanation sections (bold headings):
+- **Dominant programs** — group the enriched terms into 2-3 biological themes; name the leading-edge genes that drive them.
+- **What it says about this cluster** — the cell state / identity / behaviour these programs imply.
+- **Caveats** — enrichment is computed over the highly-variable marker genes (not the whole transcriptome); overlap-based significance is association, not causation; redundant/overlapping terms are expected.
+
+Do NOT claim clinical or therapeutic effect."""
+
+    return _run_narrative(system_prompt, context)
+
+
+class TrajectoryNarrativeRequest(BaseModel):
+    gene: str
+    n_cells: int | None = None
+    pseudotime_min: float | None = None
+    pseudotime_max: float | None = None
+    early_mean: float | None = None
+    late_mean: float | None = None
+
+
+@router.post("/trajectory/narrative", response_model=NarrativeResponse)
+def trajectory_narrative(
+    payload: TrajectoryNarrativeRequest, _: CurrentUserDep
+) -> NarrativeResponse:
+    """Plain-language interpretation of a gene's dynamics along pseudotime."""
+    direction = "flat"
+    if payload.early_mean is not None and payload.late_mean is not None:
+        diff = payload.late_mean - payload.early_mean
+        direction = "rising" if diff > 0.05 else "falling" if diff < -0.05 else "roughly flat"
+    context = f"""Diffusion-pseudotime trajectory analysis. Expression of one gene plotted along the inferred ordering.
+- Gene: {payload.gene}
+- Cells: {payload.n_cells}
+- Pseudotime range: {payload.pseudotime_min} – {payload.pseudotime_max}
+- Mean expression early (low pseudotime): {payload.early_mean}; late (high pseudotime): {payload.late_mean}
+- Overall trend along pseudotime: {direction}"""
+
+    system_prompt = f"""You are a computational biologist helping a bench scientist interpret a single gene's expression dynamics along an inferred diffusion-pseudotime trajectory.
+
+{_NARRATIVE_FORMAT}
+
+Detailed-explanation sections (bold headings):
+- **The dynamic** — restate whether {payload.gene} rises or falls along pseudotime and roughly where.
+- **What it could mean** — what a gene with this role behaving this way suggests for a differentiation / state-transition continuum (e.g. loss of a normal program, gain of an activated/malignant program). Ground it in the gene's known biology only if well established.
+- **Caveats** — pseudotime is an INFERRED ordering, not real time; the root/direction can be arbitrary; this is a single gene and one trajectory model.
+
+Do NOT claim clinical or therapeutic effect."""
+
+    return _run_narrative(system_prompt, context)
+
+
 # ─── UMAP color-points ──────────────────────────────────────────────────────
 
 
