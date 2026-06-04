@@ -782,4 +782,10 @@ export type BionemoInferenceRequest = {
   result_location: string
 }
 
-export type BionemoDefaultsResponse = { train_data: string; evaluation_data: string }
+export type BionemoDefaultsResponse = {
+  train_data: string
+  evaluation_data: string
+  inference_data: string
+  sequence_column: string
+  result_location: string
+}

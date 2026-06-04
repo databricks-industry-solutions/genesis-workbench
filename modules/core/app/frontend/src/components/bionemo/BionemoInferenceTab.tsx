@@ -12,15 +12,20 @@ export function BionemoInferenceTab() {
   const variants = useQuery({ queryKey: ['bionemo', 'variants'], queryFn: api.bionemoVariants })
   const esm2 = variants.data?.esm2 ?? []
   const weights = useQuery({ queryKey: ['bionemo', 'weights'], queryFn: api.bionemoWeights })
+  const defaults = useQuery({ queryKey: ['bionemo', 'defaults'], queryFn: api.bionemoDefaults })
 
   const [esmVariantSel, setEsmVariant] = useState('')
   const esmVariant = esmVariantSel || esm2[0] || ''
   const [useBaseModel, setUseBaseModel] = useState(true)
   const [selectedFtId, setSelectedFtId] = useState<number | null>(null)
   const [taskType, setTaskType] = useState('regression')
-  const [dataLocation, setDataLocation] = useState('')
-  const [seqColumn, setSeqColumn] = useState('')
-  const [resultLocation, setResultLocation] = useState('')
+  // Effective values fall back to the sample-data defaults (derived, not stored).
+  const [dataLocationSel, setDataLocation] = useState('')
+  const dataLocation = dataLocationSel || defaults.data?.inference_data || ''
+  const [seqColumnSel, setSeqColumn] = useState('')
+  const seqColumn = seqColumnSel || defaults.data?.sequence_column || ''
+  const [resultLocationSel, setResultLocation] = useState('')
+  const resultLocation = resultLocationSel || defaults.data?.result_location || ''
 
   const start = useMutation({
     mutationFn: () =>

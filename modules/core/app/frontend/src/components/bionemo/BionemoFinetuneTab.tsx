@@ -7,6 +7,12 @@ import { api } from '@/api/client'
 const TASK_TYPES = ['regression', 'classification']
 const PRECISIONS = ['bf16-mixed', 'fp16', 'bf16', 'fp32', 'fp32-mixed', '16-mixed', 'fp16-mixed']
 
+// Compact timestamp for default run/experiment labels (matches the other tabs).
+function ts(): string {
+  const d = new Date()
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}_${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`
+}
+
 export function BionemoFinetuneTab() {
   const variants = useQuery({ queryKey: ['bionemo', 'variants'], queryFn: api.bionemoVariants })
   const esm2 = variants.data?.esm2 ?? []
@@ -22,8 +28,8 @@ export function BionemoFinetuneTab() {
   const [evalDataSel, setEvalData] = useState('')
   const evalData = evalDataSel || defaults.data?.evaluation_data || ''
   const [useLora, setUseLora] = useState(false)
-  const [label, setLabel] = useState('')
-  const [experiment, setExperiment] = useState('')
+  const [label, setLabel] = useState(`esm2_finetune_${ts()}`)
+  const [experiment, setExperiment] = useState('gwb_bionemo_esm2_finetune')
   const [taskType, setTaskType] = useState('regression')
   const [numSteps, setNumSteps] = useState(50)
   const [microBatch, setMicroBatch] = useState(2)

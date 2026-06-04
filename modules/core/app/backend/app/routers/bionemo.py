@@ -61,18 +61,28 @@ def variants(_: CurrentUserDep) -> VariantsResponse:
 class DefaultsResponse(BaseModel):
     train_data: str
     evaluation_data: str
+    inference_data: str
+    sequence_column: str
+    result_location: str
 
 
 @router.get("/defaults", response_model=DefaultsResponse)
 def defaults(_: CurrentUserDep) -> DefaultsResponse:
-    """Pre-fill paths for the BLAT_ECOLX sample fine-tuning data that the
-    bionemo module's initialize.py stages, so demos work out of the box."""
+    """Pre-fill paths for the BLAT_ECOLX sample data that the bionemo module's
+    initialize.py stages, so demos work out of the box. The sample CSVs have a
+    `sequence` column; inference reuses the eval split and writes results.csv
+    into the existing esm2 volume dir."""
     catalog = os.environ["CORE_CATALOG_NAME"]
     schema = os.environ["CORE_SCHEMA_NAME"]
-    base = f"/Volumes/{catalog}/{schema}/bionemo/esm2/ft_data"
+    esm2 = f"/Volumes/{catalog}/{schema}/bionemo/esm2"
+    ft_data = f"{esm2}/ft_data"
+    eval_csv = f"{ft_data}/BLAT_ECOLX_Tenaillon2013_metadata_eval.csv"
     return DefaultsResponse(
-        train_data=f"{base}/BLAT_ECOLX_Tenaillon2013_metadata_train.csv",
-        evaluation_data=f"{base}/BLAT_ECOLX_Tenaillon2013_metadata_eval.csv",
+        train_data=f"{ft_data}/BLAT_ECOLX_Tenaillon2013_metadata_train.csv",
+        evaluation_data=eval_csv,
+        inference_data=eval_csv,
+        sequence_column="sequence",
+        result_location=esm2,
     )
 
 
