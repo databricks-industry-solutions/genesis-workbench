@@ -19,20 +19,14 @@ from genesis_workbench.bionemo import (
     BionemoModelType,
     get_variants,
     list_finetuned_weights,
-    start_esm2_inference,
 )
 from genesis_workbench.workbench import UserInfo
 from pydantic import BaseModel, Field
 
 from app.auth import CurrentUser, CurrentUserDep
 from app.services import bionemo as svc
-from app.services.databricks_links import job_run_url
-from app.services.workbench import get_job_id
 
 router = APIRouter(prefix="/api/bionemo", tags=["bionemo"])
-
-_FINETUNE_JOB_SETTING = "bionemo_esm_finetune_job_id"
-_INFERENCE_JOB_SETTING = "bionemo_esm_inference_job_id"
 
 
 def _build_user_info(user: CurrentUser) -> UserInfo:
@@ -247,6 +241,8 @@ class InferenceRequest(BaseModel):
     data_location: str = Field(..., min_length=1)
     sequence_column_name: str = Field(..., min_length=1)
     result_location: str = Field(..., min_length=1)
+    experiment_name: str = Field("gwb_bionemo_esm2_inference", min_length=1)
+    run_name: str = Field("esm2_inference", min_length=1)
 
 
 @router.post("/inference", response_model=DispatchResponse)
@@ -265,19 +261,34 @@ def inference(payload: InferenceRequest, user: CurrentUserDep) -> DispatchRespon
             "Select a fine-tuned weight, or use the base model.",
         )
     try:
-        run_id = start_esm2_inference(
+        result = svc.start_inference(
             user_info=_build_user_info(user),
             esm_variant=payload.esm_variant,
             is_base_model=payload.is_base_model,
             finetune_run_id=int(payload.finetune_run_id),
             task_type=payload.task_type,
-            data_volume_location=payload.data_location.strip(),
+            data_location=payload.data_location.strip(),
             sequence_column_name=payload.sequence_column_name.strip(),
             result_location=payload.result_location.strip(),
+            experiment_name=payload.experiment_name.strip(),
+            run_name=payload.run_name.strip(),
         )
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Failed to launch inference job: {e}")
-    return DispatchResponse(
-        job_run_id=int(run_id),
-        run_url=job_run_url(get_job_id(_INFERENCE_JOB_SETTING), run_id),
-    )
+    return DispatchResponse(job_run_id=result.job_run_id, run_url=result.run_url)
+
+
+@router.get("/inference/search", response_model=DBSearchResponse)
+def inference_search(user: CurrentUserDep, by: str = "run_name", text: str = "") -> DBSearchResponse:
+    if not user.email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "User email unavailable")
+    rows = svc.search_inference_runs(user.email, by, text.strip())
+    return DBSearchResponse(runs=[DBRunRow(**r) for r in rows])
+
+
+@router.get("/inference/run-details", response_model=FinetuneRunDetails)
+def inference_run_details(run_id: str, _: CurrentUserDep) -> FinetuneRunDetails:
+    try:
+        return FinetuneRunDetails(**svc.get_run_details(run_id))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Could not load run {run_id}: {e}")

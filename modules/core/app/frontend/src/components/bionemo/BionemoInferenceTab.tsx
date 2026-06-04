@@ -4,9 +4,17 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 
 import { api } from '@/api/client'
 import { cn } from '@/lib/utils'
+import { RunSearchSection } from '@/components/RunSearchSection'
+import type { DBRunRow } from '@/types/api'
 import { Field, Section, Select, Text } from './BionemoFinetuneTab'
 
 const TASK_TYPES = ['regression', 'classification']
+
+// Compact timestamp for default run labels (matches the other tabs).
+function ts(): string {
+  const d = new Date()
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}_${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`
+}
 
 export function BionemoInferenceTab() {
   const variants = useQuery({ queryKey: ['bionemo', 'variants'], queryFn: api.bionemoVariants })
@@ -26,6 +34,8 @@ export function BionemoInferenceTab() {
   const seqColumn = seqColumnSel || defaults.data?.sequence_column || ''
   const [resultLocationSel, setResultLocation] = useState('')
   const resultLocation = resultLocationSel || defaults.data?.result_location || ''
+  const [experiment, setExperiment] = useState('gwb_bionemo_esm2_inference')
+  const [runName, setRunName] = useState(`esm2_inference_${ts()}`)
 
   const start = useMutation({
     mutationFn: () =>
@@ -37,6 +47,8 @@ export function BionemoInferenceTab() {
         data_location: dataLocation,
         sequence_column_name: seqColumn,
         result_location: resultLocation,
+        experiment_name: experiment,
+        run_name: runName,
       }),
   })
 
@@ -140,6 +152,12 @@ export function BionemoInferenceTab() {
           <Field label="Result location (UC Volume folder)" error={resultLocation && !resultOk ? 'Must be a /Volumes/… folder' : ''}>
             <Text value={resultLocation} onChange={setResultLocation} placeholder="/Volumes/cat/schema/vol/results" />
           </Field>
+          <Field label="MLflow experiment name">
+            <Text value={experiment} onChange={setExperiment} placeholder="gwb_bionemo_esm2_inference" />
+          </Field>
+          <Field label="Run name">
+            <Text value={runName} onChange={setRunName} placeholder="esm2_inference_…" />
+          </Field>
         </Section>
       </div>
 
@@ -165,6 +183,59 @@ export function BionemoInferenceTab() {
       {start.error && (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
           {String(start.error)}
+        </div>
+      )}
+
+      <div className="border-t border-border pt-4">
+        <h3 className="mb-2 text-sm font-semibold">Search past runs</h3>
+        <RunSearchSection
+          searchKey={['bionemo', 'inference', 'search'] as const}
+          searchFn={api.bionemoInferenceSearch}
+          detailLabel="Variant"
+          initialText="esm2"
+          viewableStatuses={['complete']}
+          renderDialog={(run) => <InferenceResultBody run={run} />}
+        />
+      </div>
+    </div>
+  )
+}
+
+// Result dialog body: inference run status + result (predictions) location.
+function InferenceResultBody({ run }: { run: DBRunRow }) {
+  const details = useQuery({
+    queryKey: ['bionemo', 'inference', 'details', run.run_id],
+    queryFn: () => api.bionemoInferenceRunDetails(run.run_id),
+  })
+  if (details.isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>
+  if (details.error) return <p className="text-sm text-destructive">{String(details.error)}</p>
+  const d = details.data
+  if (!d) return null
+  const metrics = Object.entries(d.metrics)
+  return (
+    <div className="space-y-4 text-sm">
+      <div>
+        <div className="text-xs font-medium text-muted-foreground">Predictions (result) location</div>
+        <code className="break-all text-xs">{d.result_location || '—'}</code>
+        <div className="mt-1 text-[11px] text-muted-foreground">Predictions written to results.csv in this folder.</div>
+      </div>
+      {metrics.length > 0 && (
+        <div>
+          <div className="mb-1 text-xs font-medium text-muted-foreground">Metrics</div>
+          <div className="rounded-md border border-border">
+            <table className="w-full text-xs">
+              <tbody>
+                {metrics.map(([k, v]) => (
+                  <tr key={k} className="border-t border-border first:border-t-0">
+                    <td className="px-3 py-1">{k}</td>
+                    <td className="px-3 py-1 text-right font-mono">
+                      {typeof v === 'number' ? v.toString() : String(v)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

@@ -406,4 +406,12 @@ export const api = {
     request<BionemoFinetuneRunDetails>(
       `/api/bionemo/finetune/run-details?run_id=${encodeURIComponent(run_id)}`,
     ),
+  bionemoInferenceSearch: (by: 'run_name' | 'experiment_name', text: string) =>
+    request<DBSearchResponse>(
+      `/api/bionemo/inference/search?by=${by}&text=${encodeURIComponent(text)}`,
+    ),
+  bionemoInferenceRunDetails: (run_id: string) =>
+    request<BionemoFinetuneRunDetails>(
+      `/api/bionemo/inference/run-details?run_id=${encodeURIComponent(run_id)}`,
+    ),
 }

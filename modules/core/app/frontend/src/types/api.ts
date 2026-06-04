@@ -780,6 +780,8 @@ export type BionemoInferenceRequest = {
   data_location: string
   sequence_column_name: string
   result_location: string
+  experiment_name: string
+  run_name: string
 }
 
 export type BionemoDefaultsResponse = {

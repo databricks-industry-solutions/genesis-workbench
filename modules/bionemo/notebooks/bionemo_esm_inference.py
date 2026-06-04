@@ -18,6 +18,9 @@ dbutils.widgets.text("data_location", "", "Training data location")
 dbutils.widgets.text("sequence_column_name", "sequence", "Column name containing the sequence")
 dbutils.widgets.text("result_location", "", "Result Location in UC Volume")
 dbutils.widgets.text("user_email", "a@b.com", "User Email")
+dbutils.widgets.text("experiment_name", "gwb_bionemo_esm2_inference", "MLflow experiment name")
+dbutils.widgets.text("run_name", "esm2_inference", "MLflow run name")
+dbutils.widgets.text("mlflow_run_id", "", "Pre-created MLflow run id (from the app dispatcher)")
 
 catalog = dbutils.widgets.get("core_catalog")
 schema = dbutils.widgets.get("core_schema")
@@ -71,6 +74,43 @@ sequence_column_name = dbutils.widgets.get("sequence_column_name")
 result_location = dbutils.widgets.get("result_location")
 user_email = dbutils.widgets.get("user_email")
 sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
+experiment_name = dbutils.widgets.get("experiment_name")
+run_name = dbutils.widgets.get("run_name")
+mlflow_run_id = dbutils.widgets.get("mlflow_run_id") or None
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### MLflow run (status + search)
+
+# COMMAND ----------
+
+# Resume the app dispatcher's pre-created run (status already "submitted"), or
+# create one if launched standalone — then advance job_status as inference runs.
+# Mirrors the Fine Tune notebook so the Inference tab's Search Past Runs works.
+import mlflow
+from genesis_workbench.workbench import initialize
+from genesis_workbench.models import set_mlflow_experiment
+
+_db_host = spark.conf.get("spark.databricks.workspaceUrl")
+_db_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
+os.environ["DATABRICKS_HOST"] = _db_host
+os.environ["DATABRICKS_TOKEN"] = _db_token
+initialize(core_catalog_name=catalog, core_schema_name=schema, sql_warehouse_id=sql_warehouse_id, token=_db_token)
+
+experiment = set_mlflow_experiment(experiment_tag=experiment_name, user_email=user_email)
+if mlflow_run_id:
+    mlflow.start_run(run_id=mlflow_run_id)
+else:
+    mlflow.start_run(run_name=run_name or "esm2_inference", experiment_id=experiment.experiment_id)
+mlflow.set_tag("origin", "genesis_workbench")
+mlflow.set_tag("feature", "bionemo_esm_inference")
+mlflow.set_tag("created_by", user_email)
+mlflow.set_tag("result_location", result_location)
+mlflow.log_param("esm_variant", esm_variant)
+mlflow.log_param("is_base_model", str(is_base_model))
+mlflow.set_tag("job_status", "running")
+
 # COMMAND ----------
 
 if os.path.exists(work_dir):
@@ -232,3 +272,11 @@ results_file_name = f"{result_location}/results.csv"
 os.makedirs(result_location, exist_ok=True)
 print(f"Writing to {results_file_name}")
 results_df.to_csv(results_file_name, index=False)
+
+# COMMAND ----------
+
+# Mark the run complete so the Inference tab's Search Past Runs enables "View results".
+mlflow.log_metric("num_sequences", int(len(results_df)))
+mlflow.set_tag("results_file", results_file_name)
+mlflow.set_tag("job_status", "complete")
+mlflow.end_run()

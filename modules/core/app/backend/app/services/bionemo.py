@@ -18,7 +18,7 @@ from dataclasses import dataclass
 import mlflow
 from mlflow.tracking import MlflowClient
 
-from genesis_workbench.bionemo import start_esm2_finetuning
+from genesis_workbench.bionemo import start_esm2_finetuning, start_esm2_inference
 from genesis_workbench.models import set_mlflow_experiment
 from genesis_workbench.workbench import UserInfo
 
@@ -29,12 +29,15 @@ logger = logging.getLogger(__name__)
 
 FEATURE_TAG = "bionemo_esm_finetune"
 FINETUNE_JOB_SETTING = "bionemo_esm_finetune_job_id"
+INFERENCE_FEATURE_TAG = "bionemo_esm_inference"
+INFERENCE_JOB_SETTING = "bionemo_esm_inference_job_id"
 
-_IN_PROGRESS = {"submitted", "started", "training"}
+_IN_PROGRESS = {"submitted", "started", "training", "running"}
 _PROGRESS_MAP = {
     "submitted": "🟩⬜⬜⬜",
     "started": "🟩🟩⬜⬜",
     "training": "🟩🟩🟩⬜",
+    "running": "🟩🟩🟩⬜",
     "complete": "🟩🟩🟩🟩",
     "failed": "🟥",
 }
@@ -129,6 +132,62 @@ def start_finetune(
     )
 
 
+def start_inference(
+    *,
+    user_info: UserInfo,
+    esm_variant: str,
+    is_base_model: bool,
+    finetune_run_id: int,
+    task_type: str,
+    data_location: str,
+    sequence_column_name: str,
+    result_location: str,
+    experiment_name: str,
+    run_name: str,
+) -> FinetuneDispatch:
+    """Pre-create the MLflow run (status 'submitted'), then dispatch the inference
+    job with that run id — same arch as start_finetune."""
+    experiment = set_mlflow_experiment(
+        experiment_tag=experiment_name, user_email=user_info.user_email
+    )
+    with mlflow.start_run(
+        run_name=run_name, experiment_id=experiment.experiment_id
+    ) as pre_run:
+        mlflow_run_id = pre_run.info.run_id
+        mlflow.set_tag("origin", "genesis_workbench")
+        mlflow.set_tag("feature", INFERENCE_FEATURE_TAG)
+        mlflow.set_tag("created_by", user_info.user_email)
+        mlflow.set_tag("job_status", "submitted")
+        mlflow.log_param("esm_variant", esm_variant)
+        mlflow.log_param("task_type", task_type)
+        mlflow.log_param("is_base_model", str(is_base_model))
+        try:
+            run_id = start_esm2_inference(
+                user_info=user_info,
+                esm_variant=esm_variant,
+                is_base_model=is_base_model,
+                finetune_run_id=int(finetune_run_id),
+                task_type=task_type,
+                data_volume_location=data_location,
+                sequence_column_name=sequence_column_name,
+                result_location=result_location,
+                experiment_name=experiment_name,
+                run_name=run_name,
+                mlflow_run_id=mlflow_run_id,
+            )
+        except Exception as e:
+            mlflow.set_tag("job_status", "failed")
+            mlflow.set_tag("error", str(e)[:500])
+            raise
+        mlflow.set_tag("job_run_id", str(run_id))
+
+    return FinetuneDispatch(
+        job_run_id=int(run_id),
+        mlflow_run_id=mlflow_run_id,
+        run_url=job_run_url(get_job_id(INFERENCE_JOB_SETTING), run_id),
+    )
+
+
 # ─── Search past runs ────────────────────────────────────────────────────────
 
 
@@ -139,8 +198,9 @@ def _experiment_map() -> dict[str, str]:
     return {e.experiment_id: e.name.split("/")[-1] for e in exps}
 
 
-def search_finetune_runs(user_email: str, by: str, text: str) -> list[dict]:
-    """`by` is 'run_name' or 'experiment_name'; case-insensitive contains."""
+def _search_runs(feature: str, job_setting: str, user_email: str, by: str, text: str) -> list[dict]:
+    """Generic MLflow run search for a bionemo feature. `by` is 'run_name' or
+    'experiment_name'; case-insensitive contains."""
     exp_map = _experiment_map()
     if not exp_map:
         return []
@@ -152,7 +212,7 @@ def search_finetune_runs(user_email: str, by: str, text: str) -> list[dict]:
 
     runs = mlflow.search_runs(
         filter_string=(
-            f"tags.feature='{FEATURE_TAG}' AND "
+            f"tags.feature='{feature}' AND "
             f"tags.created_by='{user_email}' AND "
             f"tags.origin='genesis_workbench'"
         ),
@@ -169,7 +229,7 @@ def search_finetune_runs(user_email: str, by: str, text: str) -> list[dict]:
             return []
 
     runs["experiment_name"] = runs["experiment_id"].map(exp_map)
-    job_id = get_job_id(FINETUNE_JOB_SETTING)
+    job_id = get_job_id(job_setting)
     out: list[dict] = []
     for _, r in runs.iterrows():
         status = str(r.get("tags.job_status", "") or "")
@@ -190,8 +250,17 @@ def search_finetune_runs(user_email: str, by: str, text: str) -> list[dict]:
     return out
 
 
-def get_finetune_run_details(run_id: str) -> dict:
-    """Metrics + result location + params/status for the View dialog."""
+def search_finetune_runs(user_email: str, by: str, text: str) -> list[dict]:
+    return _search_runs(FEATURE_TAG, FINETUNE_JOB_SETTING, user_email, by, text)
+
+
+def search_inference_runs(user_email: str, by: str, text: str) -> list[dict]:
+    return _search_runs(INFERENCE_FEATURE_TAG, INFERENCE_JOB_SETTING, user_email, by, text)
+
+
+def get_run_details(run_id: str) -> dict:
+    """Metrics + result location + params/status for the View dialog. Generic
+    across fine-tune and inference runs."""
     run = MlflowClient().get_run(run_id)
     tags = run.data.tags
     return {
@@ -203,3 +272,7 @@ def get_finetune_run_details(run_id: str) -> dict:
         "params": {k: str(v) for k, v in run.data.params.items()},
         "metrics": {k: float(v) for k, v in run.data.metrics.items()},
     }
+
+
+# Back-compat alias (the finetune router imports this name).
+get_finetune_run_details = get_run_details

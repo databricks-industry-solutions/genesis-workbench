@@ -5,4 +5,4 @@ databricks-sql-connector==4.0.2
 pydantic==2.10.3
 mlflow==2.22.0
 mlflow[databricks]
-./lib/genesis_workbench-0.1.4-py3-none-any.whl
+./lib/genesis_workbench-0.1.5-py3-none-any.whl
