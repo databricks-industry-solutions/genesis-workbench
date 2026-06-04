@@ -781,3 +781,5 @@ export type BionemoInferenceRequest = {
   sequence_column_name: string
   result_location: string
 }
+
+export type BionemoDefaultsResponse = { train_data: string; evaluation_data: string }

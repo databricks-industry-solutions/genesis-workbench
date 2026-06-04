@@ -10,14 +10,17 @@ const PRECISIONS = ['bf16-mixed', 'fp16', 'bf16', 'fp32', 'fp32-mixed', '16-mixe
 export function BionemoFinetuneTab() {
   const variants = useQuery({ queryKey: ['bionemo', 'variants'], queryFn: api.bionemoVariants })
   const esm2 = variants.data?.esm2 ?? []
+  const defaults = useQuery({ queryKey: ['bionemo', 'defaults'], queryFn: api.bionemoDefaults })
 
-  // User's explicit choice (empty until they pick); the effective variant
-  // falls back to the first option once the list loads — derived, not stored,
-  // so we never setState during render/effect.
+  // User's explicit choice (empty until they pick/type); effective values fall
+  // back to the loaded defaults — derived, not stored, so we never setState
+  // during render/effect. Train/eval default to the BLAT_ECOLX sample data.
   const [esmVariantSel, setEsmVariant] = useState('')
   const esmVariant = esmVariantSel || esm2[0] || ''
-  const [trainData, setTrainData] = useState('')
-  const [evalData, setEvalData] = useState('')
+  const [trainDataSel, setTrainData] = useState('')
+  const trainData = trainDataSel || defaults.data?.train_data || ''
+  const [evalDataSel, setEvalData] = useState('')
+  const evalData = evalDataSel || defaults.data?.evaluation_data || ''
   const [useLora, setUseLora] = useState(false)
   const [label, setLabel] = useState('')
   const [experiment, setExperiment] = useState('')
@@ -25,7 +28,6 @@ export function BionemoFinetuneTab() {
   const [numSteps, setNumSteps] = useState(50)
   const [microBatch, setMicroBatch] = useState(2)
   const [precision, setPrecision] = useState('bf16-mixed')
-  const [showAdvanced, setShowAdvanced] = useState(false)
   const [dropout, setDropout] = useState(0.25)
   const [hiddenSize, setHiddenSize] = useState(256)
   const [targetSize, setTargetSize] = useState(1)
@@ -107,22 +109,11 @@ export function BionemoFinetuneTab() {
 
         {/* Column 3 — advanced */}
         <Section title="Advanced">
-          <button
-            type="button"
-            onClick={() => setShowAdvanced((s) => !s)}
-            className="text-xs text-primary hover:underline"
-          >
-            {showAdvanced ? 'Hide' : 'Show'} advanced parameters
-          </button>
-          {showAdvanced && (
-            <div className="space-y-3 pt-1">
-              <Field label="Dropout"><Num value={dropout} onChange={setDropout} step="any" /></Field>
-              <Field label="Hidden size"><Num value={hiddenSize} onChange={setHiddenSize} /></Field>
-              <Field label="Target size"><Num value={targetSize} onChange={setTargetSize} /></Field>
-              <Field label="Learning rate"><Num value={lr} onChange={setLr} step="any" /></Field>
-              <Field label="LR multiplier"><Num value={lrMult} onChange={setLrMult} step="any" /></Field>
-            </div>
-          )}
+          <Field label="Dropout"><Num value={dropout} onChange={setDropout} step="any" /></Field>
+          <Field label="Hidden size"><Num value={hiddenSize} onChange={setHiddenSize} /></Field>
+          <Field label="Target size"><Num value={targetSize} onChange={setTargetSize} /></Field>
+          <Field label="Learning rate"><Num value={lr} onChange={setLr} step="any" /></Field>
+          <Field label="LR multiplier"><Num value={lrMult} onChange={setLrMult} step="any" /></Field>
         </Section>
       </div>
 

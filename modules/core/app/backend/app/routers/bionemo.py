@@ -12,6 +12,8 @@ writes `bionemo_esm_finetune_job_id` / `bionemo_esm_inference_job_id` into the
 """
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter, HTTPException, status
 from genesis_workbench.bionemo import (
     BionemoModelType,
@@ -54,6 +56,24 @@ class VariantsResponse(BaseModel):
 @router.get("/variants", response_model=VariantsResponse)
 def variants(_: CurrentUserDep) -> VariantsResponse:
     return VariantsResponse(esm2=get_variants(BionemoModelType.ESM2))
+
+
+class DefaultsResponse(BaseModel):
+    train_data: str
+    evaluation_data: str
+
+
+@router.get("/defaults", response_model=DefaultsResponse)
+def defaults(_: CurrentUserDep) -> DefaultsResponse:
+    """Pre-fill paths for the BLAT_ECOLX sample fine-tuning data that the
+    bionemo module's initialize.py stages, so demos work out of the box."""
+    catalog = os.environ["CORE_CATALOG_NAME"]
+    schema = os.environ["CORE_SCHEMA_NAME"]
+    base = f"/Volumes/{catalog}/{schema}/bionemo/esm2/ft_data"
+    return DefaultsResponse(
+        train_data=f"{base}/BLAT_ECOLX_Tenaillon2013_metadata_train.csv",
+        evaluation_data=f"{base}/BLAT_ECOLX_Tenaillon2013_metadata_eval.csv",
+    )
 
 
 class FinetunedWeight(BaseModel):

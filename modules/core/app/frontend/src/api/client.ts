@@ -3,6 +3,7 @@ import type {
   AssistantQueryResponse,
   AvailableModelsResponse,
   BatchModelsResponse,
+  BionemoDefaultsResponse,
   BionemoDispatchResponse,
   BionemoFinetuneRequest,
   BionemoInferenceRequest,
@@ -384,6 +385,7 @@ export const api = {
 
   // NVIDIA BioNeMo
   bionemoVariants: () => request<BionemoVariantsResponse>('/api/bionemo/variants'),
+  bionemoDefaults: () => request<BionemoDefaultsResponse>('/api/bionemo/defaults'),
   bionemoWeights: () => request<BionemoWeightsResponse>('/api/bionemo/weights'),
   bionemoFinetune: (body: BionemoFinetuneRequest) =>
     request<BionemoDispatchResponse>('/api/bionemo/finetune', {
