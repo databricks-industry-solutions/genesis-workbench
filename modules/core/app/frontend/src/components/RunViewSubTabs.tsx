@@ -16,7 +16,6 @@ import type { ColumnDef } from '@tanstack/react-table'
 
 import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
-import { DiscoveryNote } from '@/components/DiscoveryNote'
 import { GeneHighlightPicker } from '@/components/GeneHighlightPicker'
 import { NarrativePanel } from '@/components/NarrativePanel'
 import { useDeHighlight } from '@/stores/deHighlight'
@@ -721,13 +720,6 @@ export function MarkerDotplotSubTab({
           |expression|; colour encodes signed value.
         </p>
       </header>
-
-      <DiscoveryNote>
-        Recognise what each cluster <em>is</em> at a glance — the genes that define and distinguish
-        every population. Spot clusters with a distinctive program before drilling in, and hover any
-        cluster to see its predicted cell type.
-      </DiscoveryNote>
-
       <div className="flex flex-wrap items-end gap-3">
         <label className="block text-xs">
           <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
@@ -1086,13 +1078,6 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
           Significant = |log2FC| &gt; 1 and p_adj &lt; 0.05.
         </p>
       </header>
-
-      <DiscoveryNote>
-        Pin down exactly which genes separate two populations (e.g. tumour vs normal), ranked by
-        effect size × significance. Surfaces the genes driving a phenotype — candidates to mark for
-        study, highlight by pathway, or carry into a perturbation experiment.
-      </DiscoveryNote>
-
       <details open={hasAnno} className="rounded-md border border-border">
         <summary className="cursor-pointer px-4 py-2 text-sm font-medium">
           Cell-type annotation by cluster{hasAnno ? '' : ' — none yet'}
@@ -1528,13 +1513,6 @@ export function EnrichmentSubTab({
           (loaded from <code>{gmtDir}</code>).
         </p>
       </header>
-
-      <DiscoveryNote>
-        Move from a gene list to the biological <em>programs</em> a cluster is running — invasion,
-        proliferation, DNA repair, immune signalling. Names the druggable processes behind the
-        markers; send any pathway's genes to your study list or highlight them back in DE.
-      </DiscoveryNote>
-
       <div className="flex flex-wrap items-end gap-3">
         <label className="block text-xs">
           <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
@@ -1717,13 +1695,6 @@ export function TrajectorySubTab({
       <header>
         <h4 className="text-sm font-medium">Trajectory (diffusion pseudotime)</h4>
       </header>
-
-      <DiscoveryNote>
-        Reconstruct how cells progress along a continuum (e.g. normal → malignant) and watch a
-        gene rise or fall across it. Reveals the <em>dynamics</em> of a transition and separates
-        early, driver-like changes from late ones — then mark a gene of interest for study.
-      </DiscoveryNote>
-
       {traj.isLoading && <div className="text-sm text-muted-foreground">Loading…</div>}
       {traj.error && (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
