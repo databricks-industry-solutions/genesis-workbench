@@ -797,6 +797,38 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
     mutationFn: () => api.singleCellDE({ run_id: runId, cluster_a: a, cluster_b: b }),
   })
 
+  // Saved cluster annotations (if the user already ran Cell Type Annotation),
+  // surfaced here as a reference so you can tell which numbered cluster is
+  // which cell type when picking A vs B.
+  const annotations = useQuery({
+    queryKey: ['de_saved_annotations', runId],
+    queryFn: () => api.singleCellSavedAnnotations(runId),
+  })
+  const annoRows = useMemo(() => {
+    const data = annotations.data
+    const byCluster = new Map<
+      string,
+      { cluster: string; scim?: string; scimConf?: number; teddy?: string; teddyConf?: number; disease?: string }
+    >()
+    for (const r of data?.scimilarity?.annotations ?? []) {
+      const row = byCluster.get(r.cluster) ?? { cluster: r.cluster }
+      row.scim = r.predicted_cell_type
+      row.scimConf = r.confidence_pct
+      byCluster.set(r.cluster, row)
+    }
+    for (const r of data?.teddy?.annotations ?? []) {
+      const row = byCluster.get(r.cluster) ?? { cluster: r.cluster }
+      row.teddy = r.predicted_cell_type
+      row.teddyConf = r.cell_type_confidence_pct
+      row.disease = r.predicted_disease
+      byCluster.set(r.cluster, row)
+    }
+    return [...byCluster.values()].sort(
+      (x, y) => Number(x.cluster) - Number(y.cluster) || x.cluster.localeCompare(y.cluster),
+    )
+  }, [annotations.data])
+  const hasAnno = annoRows.length > 0
+
   const tableColumns = useMemo<ColumnDef<DEGene, unknown>[]>(
     () => [
       { id: 'gene', header: 'Gene', accessorKey: 'gene' },
@@ -841,6 +873,54 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
           Significant = |log2FC| &gt; 1 and p_adj &lt; 0.05.
         </p>
       </header>
+
+      <details open={hasAnno} className="rounded-md border border-border">
+        <summary className="cursor-pointer px-4 py-2 text-sm font-medium">
+          Cell-type annotation by cluster{hasAnno ? '' : ' — none yet'}
+        </summary>
+        <div className="p-3">
+          {annotations.isLoading ? (
+            <p className="text-xs text-muted-foreground">Loading saved annotations…</p>
+          ) : !hasAnno ? (
+            <p className="text-xs text-muted-foreground">
+              No saved annotation for this run yet. Run <strong>Cell Type Annotation</strong> first —
+              the predicted cell type per cluster will appear here so you can tell which numbered
+              cluster is which when choosing A and B.
+            </p>
+          ) : (
+            <div className="max-h-72 overflow-auto">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-card text-muted-foreground">
+                  <tr className="text-left">
+                    <th className="px-2 py-1">Cluster</th>
+                    <th className="px-2 py-1">SCimilarity</th>
+                    <th className="px-2 py-1">TEDDY</th>
+                    <th className="px-2 py-1">TEDDY disease</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {annoRows.map((r) => (
+                    <tr key={r.cluster} className="border-t border-border">
+                      <td className="px-2 py-1 font-medium">{r.cluster}</td>
+                      <td className="px-2 py-1">
+                        {r.scim
+                          ? `${r.scim}${r.scimConf != null ? ` (${r.scimConf.toFixed(0)}%)` : ''}`
+                          : '—'}
+                      </td>
+                      <td className="px-2 py-1">
+                        {r.teddy
+                          ? `${r.teddy}${r.teddyConf != null ? ` (${r.teddyConf.toFixed(0)}%)` : ''}`
+                          : '—'}
+                      </td>
+                      <td className="px-2 py-1">{r.disease ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </details>
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="block text-xs">
