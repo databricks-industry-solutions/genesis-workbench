@@ -15,6 +15,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { api } from '@/api/client'
+import { isCancerGene } from '@/lib/cancerGenes'
 import { DataTable } from '@/components/DataTable'
 import { PlotlyChart as Plot } from '@/components/PlotlyChart'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
@@ -789,6 +790,8 @@ function Dotplot({ data }: { data: DotplotResponse }) {
 
 // ─── Differential Expression ───────────────────────────────────────────────
 
+type ScoredGene = DEGene & { score: number; isCancer: boolean }
+
 export function DESubTab({ runId, summary }: { runId: string; summary: RunSummaryResponse }) {
   const [a, setA] = useState(summary.clusters[0] ?? '')
   const [b, setB] = useState(summary.clusters[1] ?? summary.clusters[0] ?? '')
@@ -829,9 +832,70 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
   }, [annotations.data])
   const hasAnno = annoRows.length > 0
 
-  const tableColumns = useMemo<ColumnDef<DEGene, unknown>[]>(
+  // Rank significant hits by a directional score = log2FC × -log10(p_adj):
+  // effect size weighted by significance, signed so genes most strongly (and
+  // significantly) enriched in cluster A sort to the top. Set A to the tumour
+  // cluster and the malignant-enriched genes lead the table.
+  const [cancerFirst, setCancerFirst] = useState(false)
+  const scoredGenes = useMemo<ScoredGene[]>(() => {
+    const rows = (de.data?.genes ?? [])
+      .filter((g) => g.significant)
+      .map((g) => ({
+        ...g,
+        score: g.log2fc * g.neg_log10_p_adj,
+        isCancer: isCancerGene(g.gene),
+      }))
+    rows.sort((x, y) => {
+      if (cancerFirst && x.isCancer !== y.isCancer) return x.isCancer ? -1 : 1
+      return y.score - x.score
+    })
+    return rows
+  }, [de.data, cancerFirst])
+  const nCancer = useMemo(() => scoredGenes.filter((g) => g.isCancer).length, [scoredGenes])
+
+  const dirClass = (up: boolean) =>
+    up ? 'text-rose-600 dark:text-rose-400' : 'text-sky-600 dark:text-sky-400'
+
+  const tableColumns = useMemo<ColumnDef<ScoredGene, unknown>[]>(
     () => [
-      { id: 'gene', header: 'Gene', accessorKey: 'gene' },
+      {
+        id: 'gene',
+        header: 'Gene',
+        cell: (ctx) => {
+          const g = ctx.row.original
+          return (
+            <span className="flex items-center gap-1.5">
+              <span className="font-medium">{g.gene}</span>
+              {g.isCancer && (
+                <span
+                  title="Known cancer-associated gene (curated COSMIC + HGSOC marker set)"
+                  className="rounded bg-rose-500/15 px-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400"
+                >
+                  ★ cancer
+                </span>
+              )}
+            </span>
+          )
+        },
+      },
+      {
+        id: 'direction',
+        header: 'Enriched in',
+        cell: (ctx) => {
+          const up = ctx.row.original.log2fc > 0
+          return <span className={dirClass(up)}>{up ? `↑ ${a}` : `↑ ${b}`}</span>
+        },
+      },
+      {
+        id: 'score',
+        header: 'Score',
+        cell: (ctx) => {
+          const s = ctx.row.original.score
+          return (
+            <span className={`font-medium tabular-nums ${dirClass(s > 0)}`}>{s.toFixed(2)}</span>
+          )
+        },
+      },
       {
         id: 'log2fc',
         header: 'log2 FC',
@@ -847,21 +911,16 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
       },
       {
         id: 'mean_a',
-        header: 'Mean A',
+        header: `Mean ${a}`,
         cell: (ctx) => ctx.row.original.mean_a.toFixed(3),
       },
       {
         id: 'mean_b',
-        header: 'Mean B',
+        header: `Mean ${b}`,
         cell: (ctx) => ctx.row.original.mean_b.toFixed(3),
       },
     ],
-    [],
-  )
-
-  const significantOnly = useMemo(
-    () => (de.data?.genes ?? []).filter((g) => g.significant),
-    [de.data],
+    [a, b],
   )
 
   return (
@@ -1000,12 +1059,29 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
 
       {de.data && (
         <div>
-          <div className="mb-2 text-xs text-muted-foreground">
-            {de.data.n_significant} significant genes (|log2 FC| &gt; 1, p_adj &lt; 0.05)
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="text-xs text-muted-foreground">
+              {de.data.n_significant} significant genes (|log2 FC| &gt; 1, p_adj &lt; 0.05) · sorted
+              by <strong>score</strong> = log2FC × −log10(p_adj), so genes most enriched in{' '}
+              <span className={dirClass(true)}>↑ {a}</span> lead. {nCancer} are{' '}
+              <span className="text-rose-600 dark:text-rose-400">★ cancer-associated</span>.
+            </div>
+            <label className="flex cursor-pointer items-center gap-1.5 text-xs">
+              <input
+                type="checkbox"
+                checked={cancerFirst}
+                onChange={(e) => setCancerFirst(e.target.checked)}
+              />
+              Cancer-associated genes first
+            </label>
           </div>
+          <p className="mb-2 text-[11px] text-muted-foreground">
+            Tip: set <strong>Cluster A</strong> to the tumour cluster — the malignant-enriched
+            genes then carry the highest positive scores and appear at the top.
+          </p>
           <DataTable
             columns={tableColumns}
-            data={significantOnly.slice(0, 100)}
+            data={scoredGenes.slice(0, 100)}
             emptyText="No genes meet the significance threshold."
           />
         </div>
@@ -1016,8 +1092,11 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
 
 function VolcanoPlot({ genes, a, b }: { genes: DEGene[]; a: string; b: string }) {
   if (genes.length === 0) return null
-  const sig = genes.filter((g) => g.significant)
-  const nonsig = genes.filter((g) => !g.significant)
+  const sig = genes.filter((g) => g.significant && !isCancerGene(g.gene))
+  const nonsig = genes.filter((g) => !g.significant && !isCancerGene(g.gene))
+  // Cancer-associated genes get their own labelled trace so they pop out of
+  // the cloud regardless of significance.
+  const cancer = genes.filter((g) => isCancerGene(g.gene))
   const traces = [
     {
       type: 'scattergl' as const,
@@ -1038,6 +1117,24 @@ function VolcanoPlot({ genes, a, b }: { genes: DEGene[]; a: string; b: string })
       marker: { size: 5, color: '#E74C3C', opacity: 0.85 },
       text: sig.map((g) => g.gene),
       hovertemplate: '<b>%{text}</b><br>log2FC %{x:.2f}<br>-log10 p_adj %{y:.2f}<extra></extra>',
+    },
+    {
+      type: 'scattergl' as const,
+      mode: 'markers+text' as const,
+      name: '★ Cancer-associated',
+      x: cancer.map((g) => g.log2fc),
+      y: cancer.map((g) => g.neg_log10_p_adj),
+      marker: {
+        size: 11,
+        color: '#F1C40F',
+        symbol: 'star',
+        line: { width: 1, color: '#7A5C00' },
+      },
+      text: cancer.map((g) => g.gene),
+      textposition: 'top center' as const,
+      textfont: { size: 9 },
+      hovertemplate:
+        '<b>%{text}</b> (cancer-associated)<br>log2FC %{x:.2f}<br>-log10 p_adj %{y:.2f}<extra></extra>',
     },
   ]
   return (
