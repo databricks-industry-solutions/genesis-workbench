@@ -1200,9 +1200,15 @@ def _run_narrative(system_prompt: str, context: str) -> NarrativeResponse:
             ],
             max_tokens=800,
         )
-        return NarrativeResponse(
-            narrative=response.choices[0].message.content, model=endpoint
-        )
+        content = response.choices[0].message.content if response.choices else None
+        if not content or not content.strip():
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                "The model returned an empty response — try Regenerate.",
+            )
+        return NarrativeResponse(narrative=content, model=endpoint)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, f"Narrative generation failed: {e}"
