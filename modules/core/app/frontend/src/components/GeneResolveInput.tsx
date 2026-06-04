@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 
 import { api } from '@/api/client'
+import { TargetFromRunPicker } from '@/components/TargetFromRunPicker'
 
 export function GeneResolveInput({ onResolved }: { onResolved: (sequence: string) => void }) {
   const [gene, setGene] = useState('')
@@ -15,6 +16,11 @@ export function GeneResolveInput({ onResolved }: { onResolved: (sequence: string
     },
   })
   const data = resolve.data
+
+  const pickGene = (g: string) => {
+    setGene(g)
+    resolve.mutate(g)
+  }
 
   return (
     <div className="rounded-md border border-border bg-muted/20 p-2">
@@ -37,6 +43,7 @@ export function GeneResolveInput({ onResolved }: { onResolved: (sequence: string
         >
           {resolve.isPending ? 'Resolving…' : 'Resolve'}
         </button>
+        <TargetFromRunPicker onPickGene={pickGene} />
       </div>
       {data?.found && (
         <div className="mt-1 text-[11px] text-success">
