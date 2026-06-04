@@ -12,6 +12,8 @@ env:
     valueFrom: "core_schema_name"
   - name: LLM_ENDPOINT_NAME
     valueFrom: "llm_endpoint"
+  - name: NARRATIVE_LLM_ENDPOINT_NAME
+    valueFrom: "narrative_llm_endpoint"
   - name: DEV_USER_PREFIX
     valueFrom: "dev_user_prefix"
   - name: DATABRICKS_APP_NAME

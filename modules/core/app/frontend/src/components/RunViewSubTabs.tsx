@@ -17,6 +17,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
 import { GeneHighlightPicker, type Highlight } from '@/components/GeneHighlightPicker'
+import { useGeneClipboard } from '@/stores/geneClipboard'
 import { PlotlyChart as Plot } from '@/components/PlotlyChart'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
 import { Tabs } from '@/components/Tabs'
@@ -861,8 +862,37 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
   const dirClass = (up: boolean) =>
     up ? 'text-rose-600 dark:text-rose-400' : 'text-sky-600 dark:text-sky-400'
 
+  // Session-scoped "study list" — mark genes here, use them in Perturbation.
+  const clipGenes = useGeneClipboard((s) => s.genes)
+  const clipToggle = useGeneClipboard((s) => s.toggle)
+  const clipClear = useGeneClipboard((s) => s.clear)
+  const clipSet = useMemo(() => new Set(clipGenes), [clipGenes])
+
   const tableColumns = useMemo<ColumnDef<ScoredGene, unknown>[]>(
     () => [
+      {
+        id: 'study',
+        header: '',
+        cell: (ctx) => {
+          const g = ctx.row.original.gene
+          const inClip = clipSet.has(g.toUpperCase())
+          return (
+            <button
+              type="button"
+              onClick={() => clipToggle(g)}
+              title={inClip ? 'In study list — click to remove' : 'Add to study list'}
+              className={
+                'rounded border px-1.5 text-xs leading-5 ' +
+                (inClip
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border text-muted-foreground hover:border-primary hover:text-primary')
+              }
+            >
+              {inClip ? '✓' : '+'}
+            </button>
+          )
+        },
+      },
       {
         id: 'gene',
         header: 'Gene',
@@ -925,7 +955,7 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
         cell: (ctx) => ctx.row.original.mean_b.toFixed(3),
       },
     ],
-    [a, b, highlight],
+    [a, b, highlight, clipSet, clipToggle],
   )
 
   return (
@@ -1100,8 +1130,33 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
           </div>
           <p className="mb-2 text-[11px] text-muted-foreground">
             Tip: set <strong>Cluster A</strong> to the cell population you’re studying — its
-            enriched genes then carry the highest positive scores and appear at the top.
+            enriched genes then carry the highest positive scores and appear at the top. Use the{' '}
+            <strong>+</strong> column to mark genes for your <strong>study list</strong> — they’re
+            available in the Perturbation tab.
           </p>
+          {clipGenes.length > 0 && (
+            <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 p-2 text-xs">
+              <span className="font-medium text-primary">Study list ({clipGenes.length}):</span>
+              {clipGenes.map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => clipToggle(g)}
+                  title="Remove from study list"
+                  className="rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-primary hover:bg-primary/20"
+                >
+                  {g} ✕
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={clipClear}
+                className="ml-auto text-muted-foreground hover:text-destructive"
+              >
+                Clear all
+              </button>
+            </div>
+          )}
           <DataTable
             columns={tableColumns}
             data={scoredGenes.slice(0, 100)}

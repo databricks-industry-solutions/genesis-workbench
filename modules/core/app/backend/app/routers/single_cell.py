@@ -1148,6 +1148,92 @@ def _safe_float(value) -> float | None:
         return None
 
 
+# ─── Perturbation AI narrative (Claude Opus 4.8) ───────────────────────────
+
+
+class PerturbationNarrativeGene(BaseModel):
+    gene: str
+    delta: float
+
+
+class PerturbationNarrativeRequest(BaseModel):
+    cluster: str
+    perturbation_type: str
+    genes_to_perturb: list[str]
+    cell_type: str | None = None
+    summary_total_genes: int | None = None
+    summary_significant_count: int | None = None
+    summary_max_abs_delta: float | None = None
+    top_genes: list[PerturbationNarrativeGene] = Field(default_factory=list)
+
+
+class NarrativeResponse(BaseModel):
+    narrative: str
+    model: str
+
+
+@router.post("/perturbation/narrative", response_model=NarrativeResponse)
+def perturbation_narrative(
+    payload: PerturbationNarrativeRequest, _: CurrentUserDep
+) -> NarrativeResponse:
+    """Generate a plain-language interpretation of a perturbation result with a
+    premium foundation model (default Claude Opus 4.8). Reads only the data the
+    user is looking at; the prompt forbids inventing genes/numbers or claiming
+    viability/efficacy."""
+    from databricks.sdk.service.serving import ChatMessage, ChatMessageRole
+
+    endpoint = get_settings().narrative_llm_endpoint_name
+    if not endpoint:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Narrative LLM endpoint not configured (NARRATIVE_LLM_ENDPOINT_NAME)",
+        )
+
+    ptype = "knockout" if payload.perturbation_type == "knockout" else "overexpression"
+    up = [g for g in payload.top_genes if g.delta > 0][:15]
+    dn = [g for g in payload.top_genes if g.delta < 0][:15]
+
+    def _fmt(rows: list[PerturbationNarrativeGene]) -> str:
+        return ", ".join(f"{g.gene} ({g.delta:+.4f})" for g in rows) or "none"
+
+    ct = f" (annotated cell type: {payload.cell_type})" if payload.cell_type else ""
+    context = f"""In-silico scGPT perturbation prediction.
+- Perturbation: {ptype} of {', '.join(payload.genes_to_perturb)}
+- Cluster: {payload.cluster}{ct}
+- Genes evaluated: {payload.summary_total_genes}; significantly changed: {payload.summary_significant_count}; max |delta|: {payload.summary_max_abs_delta}
+- Top genes UP after perturbation: {_fmt(up)}
+- Top genes DOWN after perturbation: {_fmt(dn)}
+(delta = predicted change in scGPT expression units; small absolute values are expected — scGPT is conservative.)"""
+
+    system_prompt = """You are a computational biologist helping a bench scientist interpret an in-silico single-cell perturbation prediction from scGPT.
+
+Write a concise, rigorous interpretation in markdown (~180-260 words) with short bold sections:
+- **What was tested** — one line restating the perturbation.
+- **What the model predicts** — name the notable up/down genes and the biological program/pathway they belong to; state what the direction implies.
+- **So what** — the biological takeaway, grounded ONLY in the data shown.
+- **Caveats** — scGPT predicts a transcriptional response, NOT cell viability or death; magnitudes are model estimates; a gene absent from the panel cannot be perturbed (a flat/near-zero result means no coverage, not no effect).
+
+Be specific to the genes provided. Do NOT invent genes or numbers. Do NOT overstate — never claim cell death, efficacy, or clinical effect."""
+
+    w = WorkspaceClient()
+    try:
+        response = w.serving_endpoints.query(
+            name=endpoint,
+            messages=[
+                ChatMessage(role=ChatMessageRole.SYSTEM, content=system_prompt),
+                ChatMessage(role=ChatMessageRole.USER, content=context),
+            ],
+            max_tokens=700,
+        )
+        return NarrativeResponse(
+            narrative=response.choices[0].message.content, model=endpoint
+        )
+    except Exception as e:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, f"Narrative generation failed: {e}"
+        )
+
+
 # ─── UMAP color-points ──────────────────────────────────────────────────────
 
 

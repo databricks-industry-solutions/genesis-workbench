@@ -54,6 +54,8 @@ import type {
   DEResponse,
   GenesetDbsResponse,
   GenesetTermsResponse,
+  NarrativeResponse,
+  PerturbationNarrativeRequest,
   DotplotResponse,
   EnrichmentResponse,
   RawDataResponse,
@@ -228,6 +230,11 @@ export const api = {
     request<SavedAnnotationsResponse>(
       `/api/single_cell/annotations?run_id=${encodeURIComponent(run_id)}`,
     ),
+  singleCellPerturbationNarrative: (body: PerturbationNarrativeRequest) =>
+    request<NarrativeResponse>('/api/single_cell/perturbation/narrative', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   singleCellGenesetDbs: () => request<GenesetDbsResponse>('/api/single_cell/geneset-dbs'),
   singleCellGenesetTerms: (db: string, q: string) =>
     request<GenesetTermsResponse>(

@@ -395,6 +395,18 @@ export type SimilarityResponse = {
   sources: CategoryCount[]
 }
 
+export type PerturbationNarrativeGene = { gene: string; delta: number }
+export type PerturbationNarrativeRequest = {
+  cluster: string
+  perturbation_type: string
+  genes_to_perturb: string[]
+  cell_type?: string | null
+  summary_total_genes?: number
+  summary_significant_count?: number
+  summary_max_abs_delta?: number
+  top_genes: PerturbationNarrativeGene[]
+}
+export type NarrativeResponse = { narrative: string; model: string }
 export type PerturbationGene = {
   gene_name: string
   original_expression: number | null
