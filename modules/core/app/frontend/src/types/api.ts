@@ -802,3 +802,13 @@ export type BionemoFinetuneRunDetails = {
   params: Record<string, string>
   metrics: Record<string, number>
 }
+
+export type ResolveGeneResponse = {
+  found: boolean
+  gene?: string
+  accession?: string
+  protein_name?: string
+  organism?: string
+  sequence?: string
+  length?: number
+}

@@ -18,6 +18,7 @@ from app.services import enzyme_optimization as enzyme_pipeline
 from app.services import protein_binder_design as binder_pipeline
 from app.services import protein_design as pd_pipeline
 from app.services import sequence_search as seq_search
+from app.services import target_resolver
 from app.services.molstar import molstar_html_multibody, molstar_html_singlebody
 from app.services.protein import hit_boltz, hit_esmfold, hit_proteinmpnn
 from app.services.sse import stream_with_progress
@@ -33,6 +34,27 @@ class StructurePredictionResponse(BaseModel):
     pdb: str
     viewer_html: str
     model: str
+
+
+class ResolveGeneResponse(BaseModel):
+    found: bool
+    gene: str | None = None
+    accession: str | None = None
+    protein_name: str | None = None
+    organism: str | None = None
+    sequence: str | None = None
+    length: int | None = None
+
+
+@router.get("/resolve_gene", response_model=ResolveGeneResponse)
+def resolve_gene(_: CurrentUserDep, gene: str = Query(..., min_length=1)) -> ResolveGeneResponse:
+    """Gene symbol → canonical reviewed human protein sequence (self-contained
+    lookup against the gene_sequences table). Lets the user turn a target gene
+    from Single Cell / Genomics into a sequence without leaving the app."""
+    hit = target_resolver.resolve_gene(gene)
+    if not hit:
+        return ResolveGeneResponse(found=False)
+    return ResolveGeneResponse(found=True, **hit)
 
 
 def _viewer_html(pdb: str, name: str) -> str:

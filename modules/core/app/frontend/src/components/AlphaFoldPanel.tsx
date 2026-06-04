@@ -5,6 +5,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
 import { Dialog } from '@/components/Dialog'
+import { GeneResolveInput } from '@/components/GeneResolveInput'
 import { InProgressBadge } from '@/components/InProgressBadge'
 import { MolstarViewer } from '@/components/MolstarViewer'
 import type { AlphaFoldRun } from '@/types/api'
@@ -134,11 +135,12 @@ export function AlphaFoldPanel() {
           Runs the MSA + template search, then folds. Takes minutes to hours depending on sequence
           and infrastructure. Results show up in Search Past Runs below.
         </p>
+        <GeneResolveInput onResolved={setSequence} />
         <textarea
           rows={3}
           value={sequence}
           onChange={(e) => setSequence(e.target.value)}
-          placeholder="Protein sequence"
+          placeholder="Protein sequence — or resolve from a gene symbol above"
           className="w-full rounded-md border border-border bg-background p-3 font-mono text-xs"
         />
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">

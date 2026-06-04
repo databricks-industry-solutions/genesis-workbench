@@ -45,6 +45,7 @@ import type {
   AlphaFoldStartResponse,
   AnnotateResponse,
   InverseFoldingResponse,
+  ResolveGeneResponse,
   OrganismResponse,
   PerturbationResponse,
   ProfileResponse,
@@ -178,6 +179,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ description }),
     }),
+
+  resolveGene: (gene: string) =>
+    request<ResolveGeneResponse>(
+      `/api/large_molecule/resolve_gene?gene=${encodeURIComponent(gene)}`,
+    ),
 
   inverseFolding: (pdb: string) =>
     request<InverseFoldingResponse>('/api/large_molecule/inverse_folding', {

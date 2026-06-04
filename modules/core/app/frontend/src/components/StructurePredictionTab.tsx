@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query'
 
 import { api } from '@/api/client'
 import { AlphaFoldPanel } from '@/components/AlphaFoldPanel'
+import { GeneResolveInput } from '@/components/GeneResolveInput'
 import { MolstarViewer } from '@/components/MolstarViewer'
 import { WorkflowProgress } from '@/components/WorkflowProgress'
 import { cn } from '@/lib/utils'
@@ -64,6 +65,7 @@ export function StructurePredictionTab() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,420px)_1fr]">
           {/* Left: form */}
           <div className="space-y-3">
+            <GeneResolveInput onResolved={setSequence} />
             <label className="block text-xs">
               <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
                 Protein sequence
@@ -72,7 +74,7 @@ export function StructurePredictionTab() {
                 rows={10}
                 value={sequence}
                 onChange={(e) => setSequence(e.target.value)}
-                placeholder="Paste a protein sequence (single-letter amino acid code)"
+                placeholder="Paste a protein sequence (single-letter amino acid code) — or resolve from a gene symbol above"
                 className="w-full rounded-md border border-border bg-background p-3 font-mono text-xs"
               />
             </label>
