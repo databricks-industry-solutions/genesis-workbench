@@ -1172,14 +1172,16 @@ class NarrativeResponse(BaseModel):
     model: str
 
 
-@router.post("/perturbation/narrative", response_model=NarrativeResponse)
-def perturbation_narrative(
-    payload: PerturbationNarrativeRequest, _: CurrentUserDep
-) -> NarrativeResponse:
-    """Generate a plain-language interpretation of a perturbation result with a
-    premium foundation model (default Claude Opus 4.8). Reads only the data the
-    user is looking at; the prompt forbids inventing genes/numbers or claiming
-    viability/efficacy."""
+# Every narrative leads with a scannable Highlights block, then the detail.
+_NARRATIVE_FORMAT = """Format the response in markdown as:
+1. A **Highlights** heading, then 2-3 bullet points — each bullet STARTS with a short **bolded key phrase**, then a few words — capturing the most important takeaways at a glance.
+2. Then the detailed explanation, using the bold-headed sections specified below.
+Keep the whole thing ~200-280 words. Be specific to the genes/numbers provided. Do NOT invent genes or numbers."""
+
+
+def _run_narrative(system_prompt: str, context: str) -> NarrativeResponse:
+    """Shared LLM call for the AI narratives (perturbation, DE). Uses the
+    premium narrative endpoint (default Claude Opus 4.8) via the app SP."""
     from databricks.sdk.service.serving import ChatMessage, ChatMessageRole
 
     endpoint = get_settings().narrative_llm_endpoint_name
@@ -1188,7 +1190,32 @@ def perturbation_narrative(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "Narrative LLM endpoint not configured (NARRATIVE_LLM_ENDPOINT_NAME)",
         )
+    w = WorkspaceClient()
+    try:
+        response = w.serving_endpoints.query(
+            name=endpoint,
+            messages=[
+                ChatMessage(role=ChatMessageRole.SYSTEM, content=system_prompt),
+                ChatMessage(role=ChatMessageRole.USER, content=context),
+            ],
+            max_tokens=800,
+        )
+        return NarrativeResponse(
+            narrative=response.choices[0].message.content, model=endpoint
+        )
+    except Exception as e:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, f"Narrative generation failed: {e}"
+        )
 
+
+@router.post("/perturbation/narrative", response_model=NarrativeResponse)
+def perturbation_narrative(
+    payload: PerturbationNarrativeRequest, _: CurrentUserDep
+) -> NarrativeResponse:
+    """Plain-language interpretation of a perturbation result (default Opus 4.8).
+    Reads only the data shown; the prompt forbids inventing data or claiming
+    viability/efficacy."""
     ptype = "knockout" if payload.perturbation_type == "knockout" else "overexpression"
     up = [g for g in payload.top_genes if g.delta > 0][:15]
     dn = [g for g in payload.top_genes if g.delta < 0][:15]
@@ -1205,33 +1232,79 @@ def perturbation_narrative(
 - Top genes DOWN after perturbation: {_fmt(dn)}
 (delta = predicted change in scGPT expression units; small absolute values are expected — scGPT is conservative.)"""
 
-    system_prompt = """You are a computational biologist helping a bench scientist interpret an in-silico single-cell perturbation prediction from scGPT.
+    system_prompt = f"""You are a computational biologist helping a bench scientist interpret an in-silico single-cell perturbation prediction from scGPT.
 
-Write a concise, rigorous interpretation in markdown (~180-260 words) with short bold sections:
+{_NARRATIVE_FORMAT}
+
+Detailed-explanation sections (bold headings):
 - **What was tested** — one line restating the perturbation.
 - **What the model predicts** — name the notable up/down genes and the biological program/pathway they belong to; state what the direction implies.
 - **So what** — the biological takeaway, grounded ONLY in the data shown.
 - **Caveats** — scGPT predicts a transcriptional response, NOT cell viability or death; magnitudes are model estimates; a gene absent from the panel cannot be perturbed (a flat/near-zero result means no coverage, not no effect).
 
-Be specific to the genes provided. Do NOT invent genes or numbers. Do NOT overstate — never claim cell death, efficacy, or clinical effect."""
+Do NOT overstate — never claim cell death, efficacy, or clinical effect."""
 
-    w = WorkspaceClient()
-    try:
-        response = w.serving_endpoints.query(
-            name=endpoint,
-            messages=[
-                ChatMessage(role=ChatMessageRole.SYSTEM, content=system_prompt),
-                ChatMessage(role=ChatMessageRole.USER, content=context),
-            ],
-            max_tokens=700,
+    return _run_narrative(system_prompt, context)
+
+
+class DENarrativeGene(BaseModel):
+    gene: str
+    log2fc: float
+    p_adj: float
+
+
+class DENarrativeRequest(BaseModel):
+    cluster_a: str
+    cluster_b: str
+    cell_type_a: str | None = None
+    cell_type_b: str | None = None
+    n_significant: int | None = None
+    up_genes: list[DENarrativeGene] = Field(default_factory=list)
+    down_genes: list[DENarrativeGene] = Field(default_factory=list)
+    highlight_label: str | None = None
+    highlight_hits: list[str] = Field(default_factory=list)
+
+
+@router.post("/de/narrative", response_model=NarrativeResponse)
+def de_narrative(payload: DENarrativeRequest, _: CurrentUserDep) -> NarrativeResponse:
+    """Plain-language interpretation of a differential-expression result."""
+    a_lab = f"cluster {payload.cluster_a}" + (
+        f" ({payload.cell_type_a})" if payload.cell_type_a else ""
+    )
+    b_lab = f"cluster {payload.cluster_b}" + (
+        f" ({payload.cell_type_b})" if payload.cell_type_b else ""
+    )
+
+    def _fmt(rows: list[DENarrativeGene]) -> str:
+        return (
+            ", ".join(f"{g.gene} (log2FC {g.log2fc:+.2f}, p_adj {g.p_adj:.1e})" for g in rows)
+            or "none"
         )
-        return NarrativeResponse(
-            narrative=response.choices[0].message.content, model=endpoint
-        )
-    except Exception as e:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE, f"Narrative generation failed: {e}"
-        )
+
+    hl = ""
+    if payload.highlight_label:
+        hits = ", ".join(payload.highlight_hits) or "none of its genes are significant here"
+        hl = f"\n- Highlighted gene set '{payload.highlight_label}' — significant hits: {hits}"
+    context = f"""Differential expression between two single-cell clusters (Mann-Whitney U on the highly-variable genes; log2FC of mean expression; Benjamini-Hochberg p_adj).
+- Group A = {a_lab}; Group B = {b_lab}
+- Significant genes (|log2FC|>1, p_adj<0.05): {payload.n_significant}
+- Top genes UP in A: {_fmt(payload.up_genes)}
+- Top genes UP in B (down in A): {_fmt(payload.down_genes)}{hl}"""
+
+    system_prompt = f"""You are a computational biologist helping a bench scientist interpret a differential-expression result between two single-cell clusters.
+
+{_NARRATIVE_FORMAT}
+
+Detailed-explanation sections (bold headings):
+- **Contrast** — one line: what A vs B is.
+- **Up in A** — the notable A-enriched genes and the biological program / cell identity they suggest.
+- **Up in B** — the same for B.
+- **Takeaway** — what distinguishes these populations, grounded ONLY in the genes shown.
+- **Caveats** — DE here is limited to highly-variable genes (key genes may be absent); this is association, not causation.
+
+Do NOT claim clinical or therapeutic effect."""
+
+    return _run_narrative(system_prompt, context)
 
 
 # ─── UMAP color-points ──────────────────────────────────────────────────────

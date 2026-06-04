@@ -51,6 +51,7 @@ import type {
   ProfileResponse,
   ProteinDesignResponse,
   ColorPointsResponse,
+  DENarrativeRequest,
   DEResponse,
   GenesetDbsResponse,
   GenesetTermsResponse,
@@ -232,6 +233,11 @@ export const api = {
     ),
   singleCellPerturbationNarrative: (body: PerturbationNarrativeRequest) =>
     request<NarrativeResponse>('/api/single_cell/perturbation/narrative', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  singleCellDENarrative: (body: DENarrativeRequest) =>
+    request<NarrativeResponse>('/api/single_cell/de/narrative', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

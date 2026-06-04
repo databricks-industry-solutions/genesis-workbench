@@ -17,6 +17,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
 import { GeneHighlightPicker, type Highlight } from '@/components/GeneHighlightPicker'
+import { NarrativePanel } from '@/components/NarrativePanel'
 import { useGeneClipboard } from '@/stores/geneClipboard'
 import { PlotlyChart as Plot } from '@/components/PlotlyChart'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
@@ -902,6 +903,45 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
     [scoredGenes],
   )
 
+  // Auto AI interpretation of the DE result (Claude Opus 4.8) — runs on its own
+  // once a result with significant genes lands.
+  const cellTypeOf = (cl: string) => {
+    const s = annotations.data?.scimilarity?.annotations.find((x) => x.cluster === cl)
+    const t = annotations.data?.teddy?.annotations.find((x) => x.cluster === cl)
+    return s?.predicted_cell_type || t?.predicted_cell_type || null
+  }
+  const deNarrative = useMutation({
+    mutationFn: () => {
+      const sig = (de.data?.genes ?? []).filter((g) => g.significant)
+      const score = (g: DEGene) => g.log2fc * g.neg_log10_p_adj
+      const up = [...sig]
+        .filter((g) => g.log2fc > 0)
+        .sort((x, y) => score(y) - score(x))
+        .slice(0, 15)
+        .map((g) => ({ gene: g.gene, log2fc: g.log2fc, p_adj: g.p_adj }))
+      const down = [...sig]
+        .filter((g) => g.log2fc < 0)
+        .sort((x, y) => score(x) - score(y))
+        .slice(0, 15)
+        .map((g) => ({ gene: g.gene, log2fc: g.log2fc, p_adj: g.p_adj }))
+      return api.singleCellDENarrative({
+        cluster_a: a,
+        cluster_b: b,
+        cell_type_a: cellTypeOf(a),
+        cell_type_b: cellTypeOf(b),
+        n_significant: de.data?.n_significant,
+        up_genes: up,
+        down_genes: down,
+        highlight_label: highlight?.label ?? null,
+        highlight_hits: highlight ? scoredGenes.filter((g) => g.isHighlighted).map((g) => g.gene) : [],
+      })
+    },
+  })
+  useEffect(() => {
+    if (de.data && (de.data.n_significant ?? 0) > 0) deNarrative.mutate()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [de.data])
+
   const dirClass = (up: boolean) =>
     up ? 'text-rose-600 dark:text-rose-400' : 'text-sky-600 dark:text-sky-400'
 
@@ -1134,6 +1174,15 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
       )}
 
       <GeneHighlightPicker highlight={highlight} onChange={setHighlight} />
+
+      {de.data && (de.data.n_significant ?? 0) > 0 && (
+        <NarrativePanel
+          isPending={deNarrative.isPending}
+          data={deNarrative.data}
+          error={deNarrative.error}
+          onRegenerate={() => deNarrative.mutate()}
+        />
+      )}
 
       {de.data && (
         <VolcanoPlot

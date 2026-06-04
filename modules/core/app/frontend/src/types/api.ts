@@ -407,6 +407,18 @@ export type PerturbationNarrativeRequest = {
   top_genes: PerturbationNarrativeGene[]
 }
 export type NarrativeResponse = { narrative: string; model: string }
+export type DENarrativeGene = { gene: string; log2fc: number; p_adj: number }
+export type DENarrativeRequest = {
+  cluster_a: string
+  cluster_b: string
+  cell_type_a?: string | null
+  cell_type_b?: string | null
+  n_significant?: number
+  up_genes: DENarrativeGene[]
+  down_genes: DENarrativeGene[]
+  highlight_label?: string | null
+  highlight_hits?: string[]
+}
 export type PerturbationGene = {
   gene_name: string
   original_expression: number | null
