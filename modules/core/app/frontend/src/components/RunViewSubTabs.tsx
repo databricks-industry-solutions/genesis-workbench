@@ -869,9 +869,9 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
               {g.isCancer && (
                 <span
                   title="Known cancer-associated gene (curated COSMIC + HGSOC marker set)"
-                  className="rounded bg-rose-500/15 px-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400"
+                  className="rounded bg-yellow-400/20 px-1 text-[10px] font-semibold text-yellow-700 dark:text-yellow-400"
                 >
-                  ★ cancer
+                  ◆ cancer
                 </span>
               )}
             </span>
@@ -1064,7 +1064,7 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
               {de.data.n_significant} significant genes (|log2 FC| &gt; 1, p_adj &lt; 0.05) · sorted
               by <strong>score</strong> = log2FC × −log10(p_adj), so genes most enriched in{' '}
               <span className={dirClass(true)}>↑ {a}</span> lead. {nCancer} are{' '}
-              <span className="text-rose-600 dark:text-rose-400">★ cancer-associated</span>.
+              <span className="text-yellow-700 dark:text-yellow-400">◆ cancer-associated</span>.
             </div>
             <label className="flex cursor-pointer items-center gap-1.5 text-xs">
               <input
@@ -1121,13 +1121,13 @@ function VolcanoPlot({ genes, a, b }: { genes: DEGene[]; a: string; b: string })
     {
       type: 'scattergl' as const,
       mode: 'markers+text' as const,
-      name: '★ Cancer-associated',
+      name: '◆ Cancer-associated',
       x: cancer.map((g) => g.log2fc),
       y: cancer.map((g) => g.neg_log10_p_adj),
       marker: {
         size: 11,
         color: '#F1C40F',
-        symbol: 'star',
+        symbol: 'diamond',
         line: { width: 1, color: '#7A5C00' },
       },
       text: cancer.map((g) => g.gene),
