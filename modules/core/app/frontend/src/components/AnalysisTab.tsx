@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { api } from '@/api/client'
+import { useScRunContext } from '@/stores/scRunContext'
 import { CellSimilarityTab } from '@/components/CellSimilarityTab'
 import { PerturbationTab } from '@/components/PerturbationTab'
 import { SingleCellRunPicker } from '@/components/SingleCellRunPicker'
@@ -28,6 +29,14 @@ import type { SingleCellRun } from '@/types/api'
  * Raw Processing tab (where you pick a specific run to inspect). */
 export function AnalysisTab() {
   const [run, setRun] = useState<SingleCellRun | null>(null)
+
+  // Expose the open run to the global Clipboard drawer so it can offer
+  // "save marked genes onto this run" (the Large Molecule hand-off).
+  const setScRun = useScRunContext((s) => s.set)
+  useEffect(() => {
+    setScRun(run?.run_id ?? null, run?.run_name ?? run?.experiment_name ?? null)
+    return () => setScRun(null)
+  }, [run, setScRun])
 
   return (
     <div className="space-y-4">

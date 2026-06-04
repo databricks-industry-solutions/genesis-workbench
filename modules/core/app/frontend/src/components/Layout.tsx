@@ -1,6 +1,8 @@
 import { Fragment } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
+import { ClipboardDrawer } from '@/components/ClipboardDrawer'
+
 import { useUserStore, selectIsSetupDone, selectDisplayName } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'
 import { cn } from '@/lib/utils'
@@ -155,6 +157,9 @@ export function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {/* App-wide clipboard companion (slides out from the right edge). */}
+      <ClipboardDrawer />
     </div>
   )
 }

@@ -987,16 +987,11 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
   const dirClass = (up: boolean) =>
     up ? 'text-rose-600 dark:text-rose-400' : 'text-sky-600 dark:text-sky-400'
 
-  // Session-scoped "study list" — mark genes here, use them in Perturbation.
+  // Mark genes for the study list (shown in the global Clipboard drawer, which
+  // also handles save-to-run / clear). The DE "+" column toggles membership.
   const clipGenes = useGeneClipboard((s) => s.genes)
   const clipToggle = useGeneClipboard((s) => s.toggle)
-  const clipClear = useGeneClipboard((s) => s.clear)
   const clipSet = useMemo(() => new Set(clipGenes), [clipGenes])
-  // Persist the study list onto this run (MLflow tag `marked_interested`) so
-  // Large Molecule can pick the target straight from the run.
-  const markGenes = useMutation({
-    mutationFn: () => api.singleCellMarkGenes({ run_id: runId, genes: clipGenes }),
-  })
 
   const tableColumns = useMemo<ColumnDef<ScoredGene, unknown>[]>(
     () => [
@@ -1281,45 +1276,9 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
           <p className="mb-2 text-[11px] text-muted-foreground">
             Tip: set <strong>Cluster A</strong> to the cell population you’re studying — its
             enriched genes then carry the highest positive scores and appear at the top. Use the{' '}
-            <strong>+</strong> column to mark genes for your <strong>study list</strong> — they’re
-            available in the Perturbation tab.
+            <strong>+</strong> column to add genes to your <strong>Clipboard</strong> (the drawer on
+            the right) — from there they flow into Perturbation and the Large Molecule hand-off.
           </p>
-          {clipGenes.length > 0 && (
-            <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 p-2 text-xs">
-              <span className="font-medium text-primary">Study list ({clipGenes.length}):</span>
-              {clipGenes.map((g) => (
-                <button
-                  key={g}
-                  type="button"
-                  onClick={() => clipToggle(g)}
-                  title="Remove from study list"
-                  className="rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-primary hover:bg-primary/20"
-                >
-                  {g} ✕
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => markGenes.mutate()}
-                disabled={markGenes.isPending}
-                title="Save these genes onto this run so they show up as targets in Large Molecule"
-                className="ml-auto rounded border border-primary/50 bg-primary/10 px-2 py-0.5 font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
-              >
-                {markGenes.isPending
-                  ? 'Saving…'
-                  : markGenes.isSuccess
-                    ? '✓ Saved → Large Molecule'
-                    : 'Save to run → Large Molecule'}
-              </button>
-              <button
-                type="button"
-                onClick={clipClear}
-                className="text-muted-foreground hover:text-destructive"
-              >
-                Clear all
-              </button>
-            </div>
-          )}
           <DataTable
             columns={tableColumns}
             data={scoredGenes.slice(0, 100)}
