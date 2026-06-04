@@ -26,7 +26,6 @@ function GeneformerTab() {
 export function BionemoPage() {
   return (
     <div className="space-y-6 px-8 py-8">
-      <h1 className="text-lg font-semibold">NVIDIA BioNeMo©</h1>
       <Tabs
         tabs={[
           { id: 'esm2', label: 'ESM2', content: <Esm2Tab /> },
