@@ -1200,8 +1200,6 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
         </details>
       )}
 
-      <GeneHighlightPicker highlight={highlight} onChange={setHighlight} />
-
       {de.data && (de.data.n_significant ?? 0) > 0 && (
         <div className="space-y-1.5">
           <NarrativePanel
@@ -1222,6 +1220,8 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
           )}
         </div>
       )}
+
+      <GeneHighlightPicker highlight={highlight} onChange={setHighlight} />
 
       {de.data && (
         <VolcanoPlot
