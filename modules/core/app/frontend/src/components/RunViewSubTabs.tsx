@@ -1511,19 +1511,19 @@ export function EnrichmentSubTab({
             <div className="flex gap-1">
               <button
                 type="button"
-                title="Add this term's genes to the study list"
+                title="Add this term's leading-edge genes to your study list (→ Perturbation / Large Molecule)"
                 onClick={() => clipAdd(genes)}
-                className="rounded border border-border px-1.5 text-xs hover:border-primary hover:text-primary"
+                className="whitespace-nowrap rounded border border-border px-1.5 text-xs hover:border-primary hover:text-primary"
               >
-                + study
+                + Study list
               </button>
               <button
                 type="button"
-                title="Highlight these genes in Differential Expression"
+                title="Highlight these genes in the Differential Expression tab"
                 onClick={() => setDeHighlight({ genes: new Set(genes), label: ctx.row.original.term })}
-                className="rounded border border-yellow-400/50 bg-yellow-400/10 px-1.5 text-xs text-yellow-700 hover:bg-yellow-400/20 dark:text-yellow-400"
+                className="whitespace-nowrap rounded border border-yellow-400/50 bg-yellow-400/10 px-1.5 text-xs text-yellow-700 hover:bg-yellow-400/20 dark:text-yellow-400"
               >
-                ◆ DE
+                ◆ Highlight in DE
               </button>
             </div>
           )
@@ -1625,7 +1625,14 @@ export function EnrichmentSubTab({
       )}
       {enrich.data && topTerms.length > 0 && <EnrichmentBar terms={topTerms} cluster={cluster} />}
       {enrich.data && enrich.data.terms.length > 0 && (
-        <DataTable columns={tableColumns} data={enrich.data.terms.slice(0, 30)} />
+        <>
+          <p className="text-[11px] text-muted-foreground">
+            Per term: <strong>+ Study list</strong> adds its leading-edge genes to your study list
+            (→ Perturbation / Large Molecule); <strong>◆ Highlight in DE</strong> highlights those
+            genes over in the Differential Expression tab.
+          </p>
+          <DataTable columns={tableColumns} data={enrich.data.terms.slice(0, 30)} />
+        </>
       )}
     </div>
   )
