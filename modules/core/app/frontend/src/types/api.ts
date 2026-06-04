@@ -400,6 +400,7 @@ export type SimilarityResponse = {
 
 export type PerturbationNarrativeGene = { gene: string; delta: number }
 export type PerturbationNarrativeRequest = {
+  run_id?: string
   cluster: string
   perturbation_type: string
   genes_to_perturb: string[]
@@ -418,11 +419,13 @@ export type EnrichmentNarrativeTerm = {
   genes: string
 }
 export type EnrichmentNarrativeRequest = {
+  run_id?: string
   cluster: string
   cell_type?: string | null
   terms: EnrichmentNarrativeTerm[]
 }
 export type TrajectoryNarrativeRequest = {
+  run_id?: string
   gene: string
   n_cells?: number
   pseudotime_min?: number
@@ -432,6 +435,7 @@ export type TrajectoryNarrativeRequest = {
 }
 export type DENarrativeGene = { gene: string; log2fc: number; p_adj: number }
 export type DENarrativeRequest = {
+  run_id?: string
   cluster_a: string
   cluster_b: string
   cell_type_a?: string | null

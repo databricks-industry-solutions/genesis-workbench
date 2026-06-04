@@ -106,6 +106,7 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
         .slice(0, 30)
         .map((r) => ({ gene: r.gene_name, delta: r.delta as number }))
       return api.singleCellPerturbationNarrative({
+        run_id: runId ?? undefined,
         cluster,
         perturbation_type: perturbType,
         genes_to_perturb: allGenesToPerturb,

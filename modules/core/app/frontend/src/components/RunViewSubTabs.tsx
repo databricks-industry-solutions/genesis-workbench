@@ -940,6 +940,7 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
         .slice(0, 15)
         .map((g) => ({ gene: g.gene, log2fc: g.log2fc, p_adj: g.p_adj }))
       return api.singleCellDENarrative({
+        run_id: runId,
         cluster_a: a,
         cluster_b: b,
         cell_type_a: cellTypeOf(a),
@@ -1431,6 +1432,7 @@ export function EnrichmentSubTab({
   const narrative = useMutation({
     mutationFn: () =>
       api.singleCellEnrichmentNarrative({
+        run_id: runId,
         cluster,
         cell_type: cellType,
         terms: (enrich.data?.terms ?? []).slice(0, 15).map((t) => ({
@@ -1665,6 +1667,7 @@ export function TrajectorySubTab({
       const early = mean(sorted.slice(0, half).map((p) => p.expression))
       const late = mean(sorted.slice(-half).map((p) => p.expression))
       return api.singleCellTrajectoryNarrative({
+        run_id: runId,
         gene: gene!,
         n_cells: pts.length,
         pseudotime_min: ts.length ? ts.reduce((a, b) => Math.min(a, b), Infinity) : undefined,

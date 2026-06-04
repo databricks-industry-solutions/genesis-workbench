@@ -17,6 +17,30 @@ from app.services.sse import stream_with_progress
 router = APIRouter(prefix="/api/single_cell", tags=["single_cell"])
 
 
+def _persist_result(run_id: str, subdir: str, name: str, payload: dict) -> None:
+    """Fire-and-forget: log an analysis result artifact to the run's MLflow run
+    in a daemon thread, so persisting never adds latency to (or fails) the
+    user-visible response."""
+    import threading
+
+    threading.Thread(
+        target=runs_service.save_analysis,
+        args=(run_id, subdir, name, payload),
+        daemon=True,
+    ).start()
+
+
+def _persist_text(run_id: str, subdir: str, name: str, text: str) -> None:
+    """Fire-and-forget variant for text artifacts (e.g. AI narratives)."""
+    import threading
+
+    threading.Thread(
+        target=runs_service.save_analysis_text,
+        args=(run_id, subdir, name, text),
+        daemon=True,
+    ).start()
+
+
 class SingleCellRun(BaseModel):
     run_id: str
     run_name: str
@@ -1150,12 +1174,24 @@ def perturbation_stream(payload: PerturbationRequest, _: CurrentUserDep):
                 "abs_delta": _safe_float(r.get("abs_delta")),
             })
         progress_cb(100, f"Returning top {len(rows)} genes")
-        return {
+        result = {
             "results": rows,
             "summary_total_genes": int(len(result_df)),
             "summary_max_abs_delta": max_abs,
             "summary_significant_count": significant,
         }
+        _persist_result(
+            payload.run_id,
+            "perturbation",
+            f"cluster_{payload.cluster}__{payload.perturbation_type}__{'_'.join(payload.genes_to_perturb)}",
+            {
+                "cluster": payload.cluster,
+                "perturbation_type": payload.perturbation_type,
+                "genes_to_perturb": payload.genes_to_perturb,
+                **result,
+            },
+        )
+        return result
 
     return StreamingResponse(
         stream_with_progress(work),
@@ -1181,6 +1217,7 @@ class PerturbationNarrativeGene(BaseModel):
 
 
 class PerturbationNarrativeRequest(BaseModel):
+    run_id: str | None = None
     cluster: str
     perturbation_type: str
     genes_to_perturb: list[str]
@@ -1274,7 +1311,15 @@ Detailed-explanation sections (bold headings):
 
 Do NOT overstate — never claim cell death, efficacy, or clinical effect."""
 
-    return _run_narrative(system_prompt, context)
+    resp = _run_narrative(system_prompt, context)
+    if payload.run_id:
+        _persist_text(
+            payload.run_id,
+            "perturbation",
+            f"cluster_{payload.cluster}__{payload.perturbation_type}__{'_'.join(payload.genes_to_perturb)}",
+            resp.narrative,
+        )
+    return resp
 
 
 class DENarrativeGene(BaseModel):
@@ -1284,6 +1329,7 @@ class DENarrativeGene(BaseModel):
 
 
 class DENarrativeRequest(BaseModel):
+    run_id: str | None = None
     cluster_a: str
     cluster_b: str
     cell_type_a: str | None = None
@@ -1334,7 +1380,15 @@ Detailed-explanation sections (bold headings):
 
 Do NOT claim clinical or therapeutic effect."""
 
-    return _run_narrative(system_prompt, context)
+    resp = _run_narrative(system_prompt, context)
+    if payload.run_id:
+        _persist_text(
+            payload.run_id,
+            "differential_expression",
+            f"cluster_{payload.cluster_a}_vs_{payload.cluster_b}",
+            resp.narrative,
+        )
+    return resp
 
 
 class EnrichmentNarrativeTerm(BaseModel):
@@ -1346,6 +1400,7 @@ class EnrichmentNarrativeTerm(BaseModel):
 
 
 class EnrichmentNarrativeRequest(BaseModel):
+    run_id: str | None = None
     cluster: str
     cell_type: str | None = None
     terms: list[EnrichmentNarrativeTerm] = Field(default_factory=list)
@@ -1378,10 +1433,16 @@ Detailed-explanation sections (bold headings):
 
 Do NOT claim clinical or therapeutic effect."""
 
-    return _run_narrative(system_prompt, context)
+    resp = _run_narrative(system_prompt, context)
+    if payload.run_id:
+        _persist_text(
+            payload.run_id, "pathway_enrichment", f"cluster_{payload.cluster}", resp.narrative
+        )
+    return resp
 
 
 class TrajectoryNarrativeRequest(BaseModel):
+    run_id: str | None = None
     gene: str
     n_cells: int | None = None
     pseudotime_min: float | None = None
@@ -1417,7 +1478,10 @@ Detailed-explanation sections (bold headings):
 
 Do NOT claim clinical or therapeutic effect."""
 
-    return _run_narrative(system_prompt, context)
+    resp = _run_narrative(system_prompt, context)
+    if payload.run_id:
+        _persist_text(payload.run_id, "trajectory", str(payload.gene), resp.narrative)
+    return resp
 
 
 # ─── UMAP color-points ──────────────────────────────────────────────────────
@@ -1789,7 +1853,14 @@ def run_de(payload: DERequest, _: CurrentUserDep) -> DEResponse:
                 significant=significant,
             )
         )
-    return DEResponse(genes=out, n_significant=n_sig, warnings=warnings)
+    resp = DEResponse(genes=out, n_significant=n_sig, warnings=warnings)
+    _persist_result(
+        payload.run_id,
+        "differential_expression",
+        f"cluster_{payload.cluster_a}_vs_{payload.cluster_b}",
+        resp.model_dump(),
+    )
+    return resp
 
 
 # ─── Pathway Enrichment (GMT + Fisher's exact) ─────────────────────────────
@@ -2052,7 +2123,11 @@ def run_enrichment(payload: EnrichmentRequest, _: CurrentUserDep) -> EnrichmentR
             )
 
         all_terms.sort(key=lambda t: t.p_adj)
-        return EnrichmentResponse(terms=all_terms, available_dbs=available)
+        resp = EnrichmentResponse(terms=all_terms, available_dbs=available)
+        _persist_result(
+            payload.run_id, "pathway_enrichment", f"cluster_{payload.cluster}", resp.model_dump()
+        )
+        return resp
     except HTTPException:
         raise
     except Exception as e:
@@ -2146,12 +2221,26 @@ def run_trajectory(payload: TrajectoryRequest, _: CurrentUserDep) -> TrajectoryR
                 continue
             gene_points.append(TrajectoryGenePoint(pseudotime=t, expression=v))
 
-    return TrajectoryResponse(
+    resp = TrajectoryResponse(
         has_pseudotime=True,
         umap_points=umap_points,
         gene_points=gene_points,
         genes=sorted(genes),
     )
+    # Persist only the per-gene trace (skip the big per-cell pseudotime UMAP,
+    # which is identical across genes) when a gene is selected.
+    if payload.gene and gene_points:
+        _persist_result(
+            payload.run_id,
+            "trajectory",
+            str(payload.gene),
+            {
+                "gene": payload.gene,
+                "n_cells": len(gene_points),
+                "gene_points": [gp.model_dump() for gp in gene_points],
+            },
+        )
+    return resp
 
 
 # ─── Raw data table ────────────────────────────────────────────────────────

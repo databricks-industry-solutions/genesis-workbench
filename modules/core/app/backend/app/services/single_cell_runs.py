@@ -156,6 +156,54 @@ def mark_genes(run_id: str, genes: list[str]) -> list[str]:
     return cleaned
 
 
+def _safe_artifact_name(s: str, maxlen: int = 90) -> str:
+    import re
+
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", str(s)).strip("_")
+    return (cleaned or "result")[:maxlen]
+
+
+def save_analysis(run_id: str, subdir: str, name: str, payload: dict) -> None:
+    """Persist an interactive analysis result as `analyses/<subdir>/<name>.json`
+    on the source MLflow run. Idempotent per (subdir, name) — re-running the
+    same analysis overwrites rather than piling up. Best-effort: swallows and
+    logs failures so it can be called fire-and-forget without affecting the
+    user-visible response."""
+    import json
+
+    try:
+        mlflow.set_registry_uri("databricks-uc")
+        mlflow.set_tracking_uri("databricks")
+        client = MlflowClient()
+        fname = f"{_safe_artifact_name(name)}.json"
+        with tempfile.TemporaryDirectory() as tmp:
+            local = os.path.join(tmp, fname)
+            with open(local, "w") as f:
+                json.dump(payload, f, default=str)
+            client.log_artifact(run_id=run_id, local_path=local, artifact_path=f"analyses/{subdir}")
+        logger.info("Saved analysis %s/%s to MLflow run %s", subdir, fname, run_id)
+    except Exception as e:
+        logger.warning("save_analysis failed for %s/%s on run %s: %s", subdir, name, run_id, e)
+
+
+def save_analysis_text(run_id: str, subdir: str, name: str, text: str, ext: str = "md") -> None:
+    """Persist a text artifact (e.g. an AI narrative) under `analyses/<subdir>/`.
+    Same idempotent, best-effort semantics as `save_analysis`."""
+    try:
+        mlflow.set_registry_uri("databricks-uc")
+        mlflow.set_tracking_uri("databricks")
+        client = MlflowClient()
+        fname = f"{_safe_artifact_name(name)}.{ext}"
+        with tempfile.TemporaryDirectory() as tmp:
+            local = os.path.join(tmp, fname)
+            with open(local, "w") as f:
+                f.write(text or "")
+            client.log_artifact(run_id=run_id, local_path=local, artifact_path=f"analyses/{subdir}")
+        logger.info("Saved analysis text %s/%s to MLflow run %s", subdir, fname, run_id)
+    except Exception as e:
+        logger.warning("save_analysis_text failed for %s/%s on run %s: %s", subdir, name, run_id, e)
+
+
 # Each View Analysis sub-tab independently fetches markers — UMAP, markers,
 # DE, pathway enrichment, trajectory, cell similarity, perturbation. Without
 # caching that's ~5s × 7 = 35s of repeated parquet downloads per View click.
