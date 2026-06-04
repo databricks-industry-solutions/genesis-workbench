@@ -148,7 +148,10 @@ def _fetch_neighbor_metadata(cell_ids: list, catalog: str, schema: str) -> pd.Da
     return df
 
 
-def search_nearest_cells(embedding, k: int = 100) -> pd.DataFrame:
+def _query_neighbor_ids(embedding, k: int = 100) -> list[str]:
+    """Just the Vector Search leg: embedding -> neighbour cell_ids. Fast (no
+    SQL warehouse round-trip), so it's safe per-cell; metadata is joined
+    separately (batched) by the annotation pipeline."""
     s = get_settings()
     if hasattr(embedding, "tolist"):
         embedding = embedding.tolist()
@@ -167,7 +170,40 @@ def search_nearest_cells(embedding, k: int = 100) -> pd.DataFrame:
     if result.result and result.result.data_array:
         for row in result.result.data_array:
             cell_ids.append(row[0])
+    return cell_ids
+
+
+def search_nearest_cells(embedding, k: int = 100) -> pd.DataFrame:
+    s = get_settings()
+    cell_ids = _query_neighbor_ids(embedding, k=k)
     return _fetch_neighbor_metadata(cell_ids, s.catalog, s.schema)
+
+
+def _fetch_labels_by_id(
+    cell_ids: list[str], catalog: str, schema: str
+) -> dict[str, tuple[str | None, str | None]]:
+    """Batch the neighbour-metadata join into a few chunked queries instead of
+    one warehouse round-trip per cell. Returns {cell_id: (cell_type, disease)}.
+    This is what lets annotation scale to runs with many clusters — the
+    per-cell SQL open-session cost was the annotation timeout's root cause."""
+    out: dict[str, tuple[str | None, str | None]] = {}
+    uniq = list(dict.fromkeys(str(c) for c in cell_ids))
+    for j in range(0, len(uniq), 1000):
+        chunk = uniq[j : j + 1000]
+        ids_str = ", ".join(f"'{c}'" for c in chunk)
+        df = execute_select_query(
+            f"SELECT cell_id, cell_type, disease "
+            f"FROM {catalog}.{schema}.{TEDDY_CELLS_TABLE} WHERE cell_id IN ({ids_str})"
+        )
+        if not df.empty and "cell_id" in df.columns:
+            for _, r in df.iterrows():
+                ct = r["cell_type"] if "cell_type" in df.columns else None
+                ds = r["disease"] if "disease" in df.columns else None
+                out[str(r["cell_id"])] = (
+                    str(ct) if ct is not None else None,
+                    str(ds) if ds is not None else None,
+                )
+    return out
 
 
 def _load_label_freqs(catalog: str, schema: str) -> tuple[dict[str, int], dict[str, int]]:
@@ -312,35 +348,48 @@ def annotate_clusters(
         cluster_to_celltype = {cl: Counter() for cl in clusters}  # type: ignore[assignment]
         cluster_to_disease = {cl: Counter() for cl in clusters}  # type: ignore[assignment]
 
+    # Phase 1: per-cell Vector Search for neighbour ids (fast, no SQL).
     n_emb = len(emb_df)
+    per_cell_ids: list[list[str]] = []
     for i, (_idx, row) in enumerate(emb_df.iterrows()):
-        cl = sampled_clusters[i]
         try:
-            meta = search_nearest_cells(row["embedding"], k=k_neighbors)
+            ids = _query_neighbor_ids(row["embedding"], k=k_neighbors)
         except Exception as e:
             logger.warning("KNN failed for cell %d: %s", i, e)
-            continue
-        # 55% → 95% spread across per-cell KNN lookups.
-        _p(55 + int(((i + 1) / max(n_emb, 1)) * 40),
+            ids = []
+        per_cell_ids.append(ids)
+        # 55% → 85% spread across per-cell vector lookups.
+        _p(55 + int(((i + 1) / max(n_emb, 1)) * 30),
            f"Vector Search neighbours {i + 1}/{n_emb}")
-        if meta.empty:
-            continue
-        if "cell_type" in meta.columns:
-            for lbl in meta["cell_type"].dropna().tolist():
+
+    # Phase 2: ONE (chunked) metadata fetch for ALL neighbours, instead of a
+    # warehouse round-trip per cell — lets annotation scale to many clusters.
+    all_ids = [cid for ids in per_cell_ids for cid in ids]
+    _p(88, f"Fetching metadata for {len(set(all_ids))} neighbour cells")
+    labels_by_id = _fetch_labels_by_id(all_ids, s.catalog, s.schema)
+
+    # Phase 3: tally votes per cluster (identical weighting to before).
+    for i in range(len(per_cell_ids)):
+        cl = sampled_clusters[i]
+        for cid in per_cell_ids[i]:
+            lbls = labels_by_id.get(cid)
+            if not lbls:
+                continue
+            ct_lbl, ds_lbl = lbls
+            if ct_lbl is not None:
                 if bias_correct:
-                    w = _idf_weight(lbl, ct_freqs)
+                    w = _idf_weight(ct_lbl, ct_freqs)
                     d = cluster_to_celltype[cl]
-                    d[lbl] = d.get(lbl, 0.0) + w
+                    d[ct_lbl] = d.get(ct_lbl, 0.0) + w
                 else:
-                    cluster_to_celltype[cl][lbl] += 1
-        if "disease" in meta.columns:
-            for lbl in meta["disease"].dropna().tolist():
+                    cluster_to_celltype[cl][ct_lbl] += 1
+            if ds_lbl is not None:
                 if bias_correct:
-                    w = _idf_weight(lbl, ds_freqs)
+                    w = _idf_weight(ds_lbl, ds_freqs)
                     d = cluster_to_disease[cl]
-                    d[lbl] = d.get(lbl, 0.0) + w
+                    d[ds_lbl] = d.get(ds_lbl, 0.0) + w
                 else:
-                    cluster_to_disease[cl][lbl] += 1
+                    cluster_to_disease[cl][ds_lbl] += 1
 
     _p(96, "Aggregating votes per cluster")
     rows: list[TeddyClusterAnnotation] = []
