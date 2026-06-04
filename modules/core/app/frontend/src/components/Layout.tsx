@@ -22,7 +22,7 @@ const ALL_NAV: NavItem[] = [
   { to: '/large-molecule', label: 'Large Molecule', icon: 'biotech', module: 'large_molecule' },
   { to: '/small-molecule', label: 'Small Molecule', icon: 'science', module: 'small_molecule' },
   { to: '/genomics', label: 'Genomics', icon: 'coronavirus', module: 'genomics' },
-  { to: '/bionemo', label: 'BioNeMo', icon: 'genetics', module: 'bionemo' },
+  { to: '/bionemo', label: 'NVIDIA BioNeMo©', icon: 'genetics', module: 'bionemo' },
   { to: '/monitoring', label: 'Monitoring', icon: 'monitoring', dividerAbove: true },
   { to: '/settings', label: 'Settings', icon: 'settings' },
 ]
@@ -34,7 +34,7 @@ const ROUTE_TITLES: Record<string, string> = {
   '/large-molecule': 'Large Molecule',
   '/small-molecule': 'Small Molecule',
   '/genomics': 'Genomics',
-  '/bionemo': 'NVIDIA BioNeMo',
+  '/bionemo': 'NVIDIA BioNeMo©',
   '/monitoring': 'Monitoring',
   '/settings': 'Settings',
   '/profile': 'Profile',
