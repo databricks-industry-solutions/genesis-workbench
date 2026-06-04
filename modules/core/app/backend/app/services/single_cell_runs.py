@@ -44,6 +44,10 @@ class SingleCellRun:
     start_time_ms: int | None
     status: str
     cells: int | None
+    # Genes the scientist marked as "interesting" on this run (the study list),
+    # persisted as the MLflow tag `marked_interested` so downstream modules
+    # (e.g. Large Molecule) can pick the target straight from the run.
+    marked_genes: list[str]
 
 
 def search_runs(user_email: str, processing_mode: str | None = None) -> list[SingleCellRun]:
@@ -92,6 +96,12 @@ def search_runs(user_email: str, processing_mode: str | None = None) -> list[Sin
             cells = int(r.get("metrics.n_cells")) if pd.notna(r.get("metrics.n_cells")) else None
         except (TypeError, ValueError):
             cells = None
+        marked_raw = r.get("tags.marked_interested")
+        marked = (
+            [g.strip() for g in str(marked_raw).split(",") if g.strip()]
+            if (marked_raw is not None and pd.notna(marked_raw))
+            else []
+        )
         out.append(
             SingleCellRun(
                 run_id=str(r["run_id"]),
@@ -101,9 +111,49 @@ def search_runs(user_email: str, processing_mode: str | None = None) -> list[Sin
                 start_time_ms=start_ms,
                 status=str(r.get("tags.job_status", "unknown")),
                 cells=cells,
+                marked_genes=marked,
             )
         )
     return out
+
+
+def mark_genes(run_id: str, genes: list[str]) -> list[str]:
+    """Persist the scientist's marked genes-of-interest on the run: an MLflow
+    tag `marked_interested` (deduped, uppercased, comma-joined — capped for the
+    tag length limit) plus a full `analyses/marked_genes.json` artifact, so
+    Large Molecule can pick the target straight off the run. Returns the
+    normalized gene list."""
+    import json
+
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for g in genes:
+        u = str(g).strip().upper()
+        if u and u not in seen:
+            seen.add(u)
+            cleaned.append(u)
+
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+    client = MlflowClient()
+
+    # MLflow tag values cap at 500 chars — keep as many whole symbols as fit.
+    tag_acc: list[str] = []
+    total = 0
+    for g in cleaned:
+        if total + len(g) + 1 > 480:
+            break
+        tag_acc.append(g)
+        total += len(g) + 1
+    client.set_tag(run_id, "marked_interested", ",".join(tag_acc))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        local = os.path.join(tmp, "marked_genes.json")
+        with open(local, "w") as f:
+            json.dump({"genes": cleaned, "count": len(cleaned)}, f)
+        client.log_artifact(run_id=run_id, local_path=local, artifact_path="analyses")
+    logger.info("Marked %d genes on run %s", len(cleaned), run_id)
+    return cleaned
 
 
 # Each View Analysis sub-tab independently fetches markers — UMAP, markers,

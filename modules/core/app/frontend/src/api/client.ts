@@ -68,6 +68,8 @@ import type {
   SequenceSearchResponse,
   TrajectoryResponse,
   SimilarityResponse,
+  MarkGenesRequest,
+  MarkGenesResponse,
   SingleCellRunsResponse,
   StartProcessingRequest,
   StartProcessingResponse,
@@ -210,6 +212,11 @@ export const api = {
     }),
 
   singleCellRuns: () => request<SingleCellRunsResponse>('/api/single_cell/runs'),
+  singleCellMarkGenes: (body: MarkGenesRequest) =>
+    request<MarkGenesResponse>('/api/single_cell/runs/mark-genes', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   singleCellAnnotate: (body: {
     run_id: string
     cells_per_cluster: number

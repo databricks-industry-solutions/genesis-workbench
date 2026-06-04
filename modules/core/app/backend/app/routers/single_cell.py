@@ -26,10 +26,20 @@ class SingleCellRun(BaseModel):
     status: str
     progress: str
     cells: int | None
+    marked_genes: list[str] = []
 
 
 class RunsResponse(BaseModel):
     runs: list[SingleCellRun]
+
+
+class MarkGenesRequest(BaseModel):
+    run_id: str = Field(..., min_length=1)
+    genes: list[str] = Field(default_factory=list)
+
+
+class MarkGenesResponse(BaseModel):
+    marked_genes: list[str]
 
 
 @router.get("/runs", response_model=RunsResponse)
@@ -48,10 +58,24 @@ def list_runs(user: CurrentUserDep) -> RunsResponse:
                 status=r.status,
                 progress=runs_service.progress_chip(r.status),
                 cells=r.cells,
+                marked_genes=r.marked_genes,
             )
             for r in items
         ]
     )
+
+
+@router.post("/runs/mark-genes", response_model=MarkGenesResponse)
+def mark_genes(payload: MarkGenesRequest, _: CurrentUserDep) -> MarkGenesResponse:
+    """Persist the marked genes-of-interest on a run (MLflow tag
+    `marked_interested` + artifact) so Large Molecule can pick the target."""
+    try:
+        marked = runs_service.mark_genes(payload.run_id, payload.genes)
+    except Exception as e:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, f"Failed to save marked genes: {e}"
+        )
+    return MarkGenesResponse(marked_genes=marked)
 
 
 class StartProcessingRequest(BaseModel):

@@ -118,6 +118,10 @@ function AnalysisBody({ run }: { run: SingleCellRun }) {
 
       <Tabs
         tabs={[
+        // Ordered to follow the discovery flow:
+        // UMAP (how many populations?) → Markers/Similarity (what are they?) →
+        // DE (which genes differ?) → Enrichment (what programs?) →
+        // Trajectory (how did it get there?) → Perturbation (what if I hit a target?).
         {
           id: 'umap',
           label: 'UMAP',
@@ -127,6 +131,11 @@ function AnalysisBody({ run }: { run: SingleCellRun }) {
           id: 'markers',
           label: 'Marker Genes',
           content: <MarkerDotplotSubTab runId={run.run_id} summary={s} />,
+        },
+        {
+          id: 'similarity',
+          label: 'Cell Similarity',
+          content: <CellSimilarityTab runId={run.run_id} />,
         },
         {
           id: 'de',
@@ -142,11 +151,6 @@ function AnalysisBody({ run }: { run: SingleCellRun }) {
           id: 'traj',
           label: 'Trajectory',
           content: <TrajectorySubTab runId={run.run_id} summary={s} />,
-        },
-        {
-          id: 'similarity',
-          label: 'Cell Similarity',
-          content: <CellSimilarityTab runId={run.run_id} />,
         },
         {
           id: 'perturbation',

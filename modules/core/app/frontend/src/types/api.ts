@@ -209,8 +209,11 @@ export type SingleCellRun = {
   status: string
   progress: string
   cells: number | null
+  marked_genes: string[]
 }
 export type SingleCellRunsResponse = { runs: SingleCellRun[] }
+export type MarkGenesRequest = { run_id: string; genes: string[] }
+export type MarkGenesResponse = { marked_genes: string[] }
 
 export type StartProcessingRequest = {
   mode: 'scanpy' | 'rapids-singlecell'

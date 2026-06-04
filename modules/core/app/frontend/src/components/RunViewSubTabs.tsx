@@ -978,6 +978,11 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
   const clipToggle = useGeneClipboard((s) => s.toggle)
   const clipClear = useGeneClipboard((s) => s.clear)
   const clipSet = useMemo(() => new Set(clipGenes), [clipGenes])
+  // Persist the study list onto this run (MLflow tag `marked_interested`) so
+  // Large Molecule can pick the target straight from the run.
+  const markGenes = useMutation({
+    mutationFn: () => api.singleCellMarkGenes({ run_id: runId, genes: clipGenes }),
+  })
 
   const tableColumns = useMemo<ColumnDef<ScoredGene, unknown>[]>(
     () => [
@@ -1281,8 +1286,21 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
               ))}
               <button
                 type="button"
+                onClick={() => markGenes.mutate()}
+                disabled={markGenes.isPending}
+                title="Save these genes onto this run so they show up as targets in Large Molecule"
+                className="ml-auto rounded border border-primary/50 bg-primary/10 px-2 py-0.5 font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
+              >
+                {markGenes.isPending
+                  ? 'Saving…'
+                  : markGenes.isSuccess
+                    ? '✓ Saved → Large Molecule'
+                    : 'Save to run → Large Molecule'}
+              </button>
+              <button
+                type="button"
                 onClick={clipClear}
-                className="ml-auto text-muted-foreground hover:text-destructive"
+                className="text-muted-foreground hover:text-destructive"
               >
                 Clear all
               </button>

@@ -46,6 +46,12 @@ export function TargetFromRunPicker({ onPickGene }: { onPickGene: (gene: string)
         }
         return [...seen.entries()].map(([gene, note]) => ({ gene, note }))
       }
+      // Prefer the genes the scientist explicitly marked on this run (the
+      // study list, persisted from Single Cell). Fall back to top markers.
+      const scRun = (scRuns.data?.runs ?? []).find((r) => r.run_id === runId)
+      if (scRun && scRun.marked_genes && scRun.marked_genes.length > 0) {
+        return scRun.marked_genes.map((gene) => ({ gene, note: 'marked of interest' }))
+      }
       const info = await api.singleCellRunInfo(runId)
       const set = new Set<string>()
       for (const entries of Object.values(info.top_genes_by_cluster)) {
@@ -68,7 +74,15 @@ export function TargetFromRunPicker({ onPickGene }: { onPickGene: (gene: string)
   const runRows =
     source === 'genomics'
       ? (genomicsRuns.data?.runs ?? []).map((r) => ({ id: r.run_id, label: r.run_name, sub: r.experiment_name, ok: r.status === 'annotation_complete' || r.status === 'complete' }))
-      : (scRuns.data?.runs ?? []).map((r) => ({ id: r.run_id, label: r.run_name, sub: r.experiment_name, ok: r.status === 'complete' || r.status === 'finished' }))
+      : (scRuns.data?.runs ?? []).map((r) => ({
+          id: r.run_id,
+          label: r.run_name,
+          sub:
+            r.marked_genes && r.marked_genes.length > 0
+              ? `${r.experiment_name} · ◆ ${r.marked_genes.length} marked`
+              : r.experiment_name,
+          ok: r.status === 'complete' || r.status === 'finished',
+        }))
 
   const loading = source === 'genomics' ? genomicsRuns.isLoading : scRuns.isLoading
 

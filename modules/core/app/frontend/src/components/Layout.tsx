@@ -18,10 +18,12 @@ type NavItem = {
 // Material Symbols ligature names — keep these stable; they map to the icons loaded in frontend/index.html.
 const ALL_NAV: NavItem[] = [
   { to: '/', label: 'Home', icon: 'home' },
+  // Ordered to follow the discovery flow: Genomics (find the variant) →
+  // Single Cell (validate the target) → Large/Small Molecule (design) → BioNeMo.
+  { to: '/genomics', label: 'Genomics', icon: 'coronavirus', module: 'genomics' },
   { to: '/single-cell', label: 'Single Cell', icon: 'microbiology', module: 'single_cell' },
   { to: '/large-molecule', label: 'Large Molecule', icon: 'biotech', module: 'large_molecule' },
   { to: '/small-molecule', label: 'Small Molecule', icon: 'science', module: 'small_molecule' },
-  { to: '/genomics', label: 'Genomics', icon: 'coronavirus', module: 'genomics' },
   { to: '/bionemo', label: 'NVIDIA BioNeMo©', icon: 'genetics', module: 'bionemo' },
   { to: '/monitoring', label: 'Monitoring', icon: 'monitoring', dividerAbove: true },
   { to: '/settings', label: 'Settings', icon: 'settings' },
