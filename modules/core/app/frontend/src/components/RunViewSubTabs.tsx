@@ -686,6 +686,29 @@ export function MarkerDotplotSubTab({
     staleTime: 60_000,
   })
 
+  // Saved cluster annotations → shown in the dot hover so you can read each
+  // cluster's predicted cell type without leaving the Marker Genes view.
+  const annoQ = useQuery({
+    queryKey: ['sc', 'dotplot-anno', runId],
+    queryFn: () => api.singleCellSavedAnnotations(runId),
+  })
+  const annoByCluster = useMemo(() => {
+    const m = new Map<string, { scim?: string; teddy?: string }>()
+    for (const r of annoQ.data?.scimilarity?.annotations ?? []) {
+      const e = m.get(r.cluster) ?? {}
+      e.scim = `${r.predicted_cell_type} (${r.confidence_pct.toFixed(0)}%)`
+      m.set(r.cluster, e)
+    }
+    for (const r of annoQ.data?.teddy?.annotations ?? []) {
+      const e = m.get(r.cluster) ?? {}
+      e.teddy = `${r.predicted_cell_type} (${r.cell_type_confidence_pct.toFixed(0)}%)${
+        r.predicted_disease ? ` · ${r.predicted_disease}` : ''
+      }`
+      m.set(r.cluster, e)
+    }
+    return m
+  }, [annoQ.data])
+
   return (
     <div className="space-y-4">
       <header>
@@ -732,7 +755,7 @@ export function MarkerDotplotSubTab({
         </div>
       )}
 
-      {q.data && <Dotplot data={q.data} />}
+      {q.data && <Dotplot data={q.data} annoByCluster={annoByCluster} />}
 
       {/* summary.cluster_col is referenced indirectly via the response; this no-op keeps the
           `summary` arg meaningfully used by the lint pass and lets us add custom controls later. */}
@@ -741,7 +764,13 @@ export function MarkerDotplotSubTab({
   )
 }
 
-function Dotplot({ data }: { data: DotplotResponse }) {
+function Dotplot({
+  data,
+  annoByCluster,
+}: {
+  data: DotplotResponse
+  annoByCluster: Map<string, { scim?: string; teddy?: string }>
+}) {
   if (data.cells.length === 0) {
     return (
       <div className="rounded-md border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
@@ -750,11 +779,19 @@ function Dotplot({ data }: { data: DotplotResponse }) {
     )
   }
   const maxSize = Math.max(...data.cells.map((c) => c.size), 1)
+  const hasAnno = annoByCluster.size > 0
+  // Per-dot annotation strings for the cluster the dot belongs to, so hovering
+  // anywhere in a cluster's row surfaces its SCimilarity / TEDDY calls.
+  const customdata = data.cells.map((c) => {
+    const a = annoByCluster.get(String(c.cluster))
+    return [a?.scim ?? '—', a?.teddy ?? '—']
+  })
   const trace = {
     type: 'scatter' as const,
     mode: 'markers' as const,
     x: data.cells.map((c) => c.gene),
     y: data.cells.map((c) => `Cluster ${c.cluster}`),
+    customdata,
     marker: {
       color: data.cells.map((c) => c.expression),
       colorscale: data.color_scale,
@@ -765,7 +802,13 @@ function Dotplot({ data }: { data: DotplotResponse }) {
       colorbar: { title: { text: data.color_label } },
     },
     hovertemplate:
-      '<b>%{y}</b><br>%{x}<br>' + data.color_label + ': %{marker.color:.3f}<extra></extra>',
+      '<b>%{y}</b><br>%{x}<br>' +
+      data.color_label +
+      ': %{marker.color:.3f}' +
+      (hasAnno
+        ? '<br>SCimilarity: %{customdata[0]}<br>TEDDY: %{customdata[1]}'
+        : '') +
+      '<extra></extra>',
   }
   return (
     <div className="rounded-md border border-border bg-card p-2">
