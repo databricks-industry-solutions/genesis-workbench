@@ -156,6 +156,7 @@ export function BionemoFinetuneTab() {
           searchKey={['bionemo', 'finetune', 'search'] as const}
           searchFn={api.bionemoFinetuneSearch}
           detailLabel="Variant"
+          initialText="esm2"
           viewableStatuses={['complete']}
           renderDialog={(run) => <FinetuneResultBody run={run} />}
         />

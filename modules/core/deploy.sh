@@ -199,9 +199,12 @@ databricks bundle run --target $TARGET grant_app_permissions_job --var="$EXTRA_P
 echo ""
 echo "▶️ Cleaning up local build artifacts"
 echo ""
-# poetry's dist/ regenerates on every deploy; the staged wheel under
-# app/backend/lib/ stays because it's referenced by requirements.txt and
-# served at runtime.
+# Both wheels were already uploaded by `bundle deploy` (sync.include force-
+# uploads app/backend/lib/*.whl). Remove the local build outputs so they never
+# linger in the working tree or get committed. The staged wheel is intentionally
+# NOT gitignored — gitignored files are excluded from the DAB sync — so it must
+# be present at deploy time and deleted here afterwards.
 rm -rf library/genesis_workbench/dist
+rm -f app/backend/lib/genesis_workbench-*.whl
 
 date +"%Y-%m-%d %H:%M:%S" > .deployed

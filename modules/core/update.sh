@@ -190,6 +190,12 @@ if [ "$UI_ONLY" = "false" ]; then
     echo "▶️ Cleaning up local build artifacts"
     echo ""
     rm -rf library/genesis_workbench/dist
+    # The staged wheel under app/backend/lib/ has already been uploaded by
+    # `bundle deploy` (sync.include force-uploads it). Delete it afterwards so it
+    # never lingers in the working tree / gets committed. It is intentionally NOT
+    # gitignored — gitignored files are excluded from the DAB sync, so the wheel
+    # must be present (un-ignored) at deploy time and removed here instead.
+    rm -f app/backend/lib/genesis_workbench-*.whl
 else
     echo ""
     echo "▶️ --ui-only: skipping catalog grants, app-permissions job, and UC Volume library copy"
