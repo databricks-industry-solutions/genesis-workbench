@@ -24,6 +24,7 @@ from genesis_workbench.models import (
     ModelCategory,
     get_batch_models,
     get_deployed_models,
+    get_endpoint_name_for_uc_model,
     set_mlflow_experiment,
 )
 from genesis_workbench.workbench import (
@@ -42,7 +43,7 @@ from app.services.ai_canvas_registry import (
     PortType,
 )
 from app.services.databricks_links import job_run_url
-from app.services.endpoints import get_endpoint_name
+from app.services.endpoints import DISPLAY_TO_UC, get_endpoint_name
 from app.services.workbench import get_job_id
 
 logger = logging.getLogger(__name__)
@@ -86,9 +87,19 @@ def _serialize_node(node: NodeType, available: bool) -> dict:
     return d
 
 
-def _deployed_display_names() -> set[str]:
-    """Display names of all currently-deployed real-time endpoints."""
-    names: set[str] = set()
+def _uc_short(uc_name: str) -> str:
+    """Extract the model short name from a deployed model's uc_name
+    (`catalog.schema.<short>/<version>` → `<short>`). The short name — not the
+    display name — is the stable join key between curated nodes (via
+    DISPLAY_TO_UC) and live deployments (registration sets display names freely,
+    e.g. "Boltz-1", "NetSolP-1.0 …")."""
+    return uc_name.split("/")[0].split(".")[-1].strip().lower()
+
+
+def _deployed_endpoints() -> tuple[set[str], dict[str, str]]:
+    """Return (set of deployed UC short names, short -> friendly display name)."""
+    shorts: set[str] = set()
+    display: dict[str, str] = {}
     for module in _MODULES:
         if module == "genomics":
             continue  # genomics has no real-time endpoints
@@ -98,8 +109,10 @@ def _deployed_display_names() -> set[str]:
             logger.warning("catalog: deployed lookup failed for %s: %s", module, e)
             continue
         for _, r in df.iterrows():
-            names.add(str(r["model_display_name"]))
-    return names
+            short = _uc_short(str(r["uc_name"]))
+            shorts.add(short)
+            display[short] = str(r["model_display_name"])
+    return shorts, display
 
 
 def _batch_job_names() -> set[str]:
@@ -115,14 +128,14 @@ def _batch_job_names() -> set[str]:
     return names
 
 
-def _generic_endpoint_node(display_name: str, module: str) -> dict:
+def _generic_endpoint_node(short: str, display_name: str) -> dict:
     """A deployed endpoint with no curated schema — exposed as a permissive
-    single-in / single-out JSON node so it's still composable."""
+    single-in / single-out JSON node so it's still composable. Keyed on the UC
+    short name so the orchestrator can resolve it via the deployments table."""
     node = NodeType(
-        type=f"endpoint::{display_name}",
+        type=f"endpoint::{short}",
         label=display_name,
         category=NodeCategory.ENDPOINT,
-        module=module,
         endpoint_display_name=display_name,
         description=f"Deployed endpoint '{display_name}' (no curated schema).",
         inputs=[Port("input", PortType.ANY)],
@@ -134,34 +147,39 @@ def _generic_endpoint_node(display_name: str, module: str) -> dict:
 def build_catalog() -> list[dict]:
     """Curated node types merged with live deployment/job availability.
 
-    - Curated endpoint/batch nodes get an `available` flag from the live
-      `model_deployments` / `batch_models` tables.
-    - IO nodes are always available.
-    - Deployed endpoints with no curated entry are appended as generic nodes.
+    Availability is keyed on the **UC short name** (esmfold, netsolp_v1, …),
+    not the display name — registration sets display names freely, so a
+    display-name match would wrongly mark deployed endpoints unavailable.
+
+    - Curated endpoint nodes: available iff their DISPLAY_TO_UC short is deployed.
+    - Curated batch nodes: available iff their job is in batch_models.
+    - IO nodes: always available.
+    - Deployed endpoints with no curated entry: appended as generic nodes.
     """
-    deployed = _deployed_display_names()
+    deployed_shorts, short_to_display = _deployed_endpoints()
     batch_jobs = _batch_job_names()
 
     catalog: list[dict] = []
+    curated_shorts: set[str] = set()
     for node in CURATED_NODES:
         if node.category == NodeCategory.ENDPOINT:
-            available = node.endpoint_display_name in deployed
+            short = DISPLAY_TO_UC.get(node.endpoint_display_name or "")
+            if short:
+                curated_shorts.add(short)
+            available = bool(short) and short in deployed_shorts
         elif node.category == NodeCategory.BATCH:
             available = node.job_name in batch_jobs
         else:  # IO
             available = True
         catalog.append(_serialize_node(node, available))
 
-    # Append deployed endpoints we don't have a curated schema for. Map the
-    # display name back to a module via the per-category deployed lookups would
-    # be ideal; for the generic node `module` is best-effort/None.
-    curated_endpoint_names = set(CURATED_BY_ENDPOINT.keys())
-    for display_name in sorted(deployed - curated_endpoint_names):
-        catalog.append(_generic_endpoint_node(display_name, module=None))
+    # Deployed endpoints we have no curated schema for → generic nodes.
+    for short in sorted(deployed_shorts - curated_shorts):
+        catalog.append(_generic_endpoint_node(short, short_to_display.get(short, short)))
 
     logger.info(
         "ai_canvas catalog: %d nodes (%d deployed endpoints, %d batch jobs)",
-        len(catalog), len(deployed), len(batch_jobs),
+        len(catalog), len(deployed_shorts), len(batch_jobs),
     )
     return catalog
 
@@ -487,15 +505,15 @@ def _exec_descriptor(type_key: str, w: WorkspaceClient) -> dict:
     ids are resolved live here (the app owns the registry, not the notebook)."""
     nt: NodeType | None = CURATED_BY_TYPE.get(type_key)
 
-    # Generic deployed endpoint with no curated schema (type "endpoint::<name>").
+    # Generic deployed endpoint with no curated schema (type "endpoint::<short>").
     if nt is None and type_key.startswith("endpoint::"):
-        display = type_key.split("::", 1)[1]
+        short = type_key.split("::", 1)[1]
         ex = {"kind": "endpoint", "invoke_style": "records",
               "inputs": ["input"], "outputs": ["output"], "endpoint_name": None}
         try:
-            ex["endpoint_name"] = get_endpoint_name(display)
+            ex["endpoint_name"] = get_endpoint_name_for_uc_model(short)
         except Exception as e:  # noqa: BLE001
-            logger.info("exec: generic endpoint %s not resolvable: %s", display, e)
+            logger.info("exec: generic endpoint %s not resolvable: %s", short, e)
         return ex
 
     if nt is None:
