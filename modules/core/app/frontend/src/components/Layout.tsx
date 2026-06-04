@@ -149,7 +149,7 @@ export function Layout() {
         <div className="flex shrink-0 items-center justify-start px-7 pt-5 pb-0">
           <h1 className="text-xl font-bold text-black dark:text-white">{pageTitle}</h1>
         </div>
-        <main className="flex-1 overflow-auto">
+        <main className="min-h-0 flex-1 overflow-auto">
           <Outlet />
         </main>
       </div>

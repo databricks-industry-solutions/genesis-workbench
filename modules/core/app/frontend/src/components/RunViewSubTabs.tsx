@@ -942,6 +942,33 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [de.data])
 
+  // Genes the AI interpretation named that are real genes in this result —
+  // offered as a one-click highlight set. Case-sensitive match against the
+  // (uppercase) gene symbols avoids matching ordinary lowercase prose words.
+  const aiGenes = useMemo(() => {
+    const text = deNarrative.data?.narrative
+    if (!text || !de.data) return [] as string[]
+    const valid = new Set(de.data.genes.map((g) => g.gene))
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const m of text.matchAll(/[A-Z][A-Z0-9-]{1,14}/g)) {
+      const tok = m[0]
+      if (valid.has(tok) && !seen.has(tok)) {
+        seen.add(tok)
+        out.push(tok)
+      }
+    }
+    return out
+  }, [deNarrative.data, de.data])
+  // Auto-apply the AI's genes to the highlight box once — but never clobber a
+  // highlight the user already chose.
+  useEffect(() => {
+    if (aiGenes.length > 0 && !highlight) {
+      setHighlight({ genes: new Set(aiGenes), label: 'AI interpretation' })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deNarrative.data])
+
   const dirClass = (up: boolean) =>
     up ? 'text-rose-600 dark:text-rose-400' : 'text-sky-600 dark:text-sky-400'
 
@@ -1176,12 +1203,24 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
       <GeneHighlightPicker highlight={highlight} onChange={setHighlight} />
 
       {de.data && (de.data.n_significant ?? 0) > 0 && (
-        <NarrativePanel
-          isPending={deNarrative.isPending}
-          data={deNarrative.data}
-          error={deNarrative.error}
-          onRegenerate={() => deNarrative.mutate()}
-        />
+        <div className="space-y-1.5">
+          <NarrativePanel
+            isPending={deNarrative.isPending}
+            data={deNarrative.data}
+            error={deNarrative.error}
+            onRegenerate={() => deNarrative.mutate()}
+          />
+          {aiGenes.length > 0 && highlight?.label !== 'AI interpretation' && (
+            <button
+              type="button"
+              onClick={() => setHighlight({ genes: new Set(aiGenes), label: 'AI interpretation' })}
+              className="rounded-md border border-yellow-400/50 bg-yellow-400/10 px-2.5 py-1 text-xs text-yellow-700 hover:bg-yellow-400/20 dark:text-yellow-400"
+            >
+              ◆ Highlight the {aiGenes.length} gene{aiGenes.length === 1 ? '' : 's'} from this
+              interpretation
+            </button>
+          )}
+        </div>
       )}
 
       {de.data && (
