@@ -254,6 +254,18 @@ export function UmapSubTab({ runId, summary }: { runId: string; summary: RunSumm
       })
       return sortedKeys.map((v) => {
         const bucket = byVal.get(v)!
+        // When colouring by cluster, each trace is a single cluster — so append
+        // that cluster's saved annotation to the hover when available.
+        let hover = `<b>${v}</b>`
+        if (colorType === 'cluster') {
+          const parts: string[] = []
+          const sc = scimCellTypeMap.get(v)
+          const tc = teddyCellTypeMap.get(v)
+          const td = teddyDiseaseMap.get(v)
+          if (sc) parts.push(`SCimilarity: ${sc}`)
+          if (tc) parts.push(`TEDDY: ${tc}${td ? ` (${td})` : ''}`)
+          if (parts.length) hover += '<br>' + parts.join('<br>')
+        }
         return {
           type: 'scattergl' as const,
           mode: 'markers' as const,
@@ -261,7 +273,7 @@ export function UmapSubTab({ runId, summary }: { runId: string; summary: RunSumm
           x: bucket.x,
           y: bucket.y,
           marker: { size: 3, opacity: 0.75 },
-          hovertemplate: `<b>${v}</b><extra></extra>`,
+          hovertemplate: `${hover}<extra></extra>`,
         }
       })
     }
@@ -287,6 +299,8 @@ export function UmapSubTab({ runId, summary }: { runId: string; summary: RunSumm
     colorPoints.data,
     summary.umap_points,
     activeCellTypeMap,
+    scimCellTypeMap,
+    teddyCellTypeMap,
     teddyDiseaseMap,
     colorColumn,
   ])
