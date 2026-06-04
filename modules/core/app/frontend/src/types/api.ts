@@ -741,7 +741,8 @@ export type GenomicsDefaultsResponse = {
 export type BionemoVariantsResponse = { esm2: string[] }
 
 export type BionemoWeight = {
-  ft_id: number
+  // string (BIGINT ft_id exceeds JS safe-integer range — never parse as number)
+  ft_id: string
   ft_label: string
   variant: string
   model_type: string
@@ -775,7 +776,7 @@ export type BionemoFinetuneRequest = {
 export type BionemoInferenceRequest = {
   esm_variant: string
   is_base_model: boolean
-  finetune_run_id: number
+  finetune_run_id: string
   task_type: string
   data_location: string
   sequence_column_name: string

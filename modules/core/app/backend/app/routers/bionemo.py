@@ -81,7 +81,10 @@ def defaults(_: CurrentUserDep) -> DefaultsResponse:
 
 
 class FinetunedWeight(BaseModel):
-    ft_id: int
+    # ft_id is a time_ns() BIGINT (~19 digits) that exceeds JS's safe-integer
+    # range — send it as a string so the browser never rounds it (which would
+    # break the inference lookup `WHERE ft_id = <rounded>`).
+    ft_id: str
     ft_label: str
     variant: str
     model_type: str
@@ -103,7 +106,7 @@ def weights(_: CurrentUserDep) -> WeightsResponse:
     for _, r in df.iterrows():
         out.append(
             FinetunedWeight(
-                ft_id=int(r["ft_id"]),
+                ft_id=str(int(r["ft_id"])),
                 ft_label=str(r["ft_label"]),
                 variant=str(r["variant"]),
                 model_type=str(r["model_type"]),
@@ -236,7 +239,7 @@ def finetune_run_details(run_id: str, _: CurrentUserDep) -> FinetuneRunDetails:
 class InferenceRequest(BaseModel):
     esm_variant: str
     is_base_model: bool = True
-    finetune_run_id: int = 0  # ft_id of a fine-tuned weight; ignored for base model
+    finetune_run_id: str = ""  # ft_id (string — BIGINT) of a fine-tuned weight; ignored for base model
     task_type: str = "regression"
     data_location: str = Field(..., min_length=1)
     sequence_column_name: str = Field(..., min_length=1)
@@ -255,7 +258,7 @@ def inference(payload: InferenceRequest, user: CurrentUserDep) -> DispatchRespon
             status.HTTP_400_BAD_REQUEST,
             "Result location must be a UC Volume folder (/Volumes/...).",
         )
-    if not payload.is_base_model and not payload.finetune_run_id:
+    if not payload.is_base_model and payload.finetune_run_id.strip() in ("", "0"):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             "Select a fine-tuned weight, or use the base model.",
@@ -265,7 +268,7 @@ def inference(payload: InferenceRequest, user: CurrentUserDep) -> DispatchRespon
             user_info=_build_user_info(user),
             esm_variant=payload.esm_variant,
             is_base_model=payload.is_base_model,
-            finetune_run_id=int(payload.finetune_run_id),
+            finetune_run_id=payload.finetune_run_id.strip() or "0",
             task_type=payload.task_type,
             data_location=payload.data_location.strip(),
             sequence_column_name=payload.sequence_column_name.strip(),

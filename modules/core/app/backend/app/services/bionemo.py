@@ -137,7 +137,7 @@ def start_inference(
     user_info: UserInfo,
     esm_variant: str,
     is_base_model: bool,
-    finetune_run_id: int,
+    finetune_run_id: str,  # ft_id as string (BIGINT — avoid JS precision loss)
     task_type: str,
     data_location: str,
     sequence_column_name: str,
@@ -166,7 +166,7 @@ def start_inference(
                 user_info=user_info,
                 esm_variant=esm_variant,
                 is_base_model=is_base_model,
-                finetune_run_id=int(finetune_run_id),
+                finetune_run_id=finetune_run_id,  # string; notebook does int() with full precision
                 task_type=task_type,
                 data_volume_location=data_location,
                 sequence_column_name=sequence_column_name,

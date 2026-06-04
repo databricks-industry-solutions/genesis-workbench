@@ -25,7 +25,7 @@ export function BionemoInferenceTab() {
   const [esmVariantSel, setEsmVariant] = useState('')
   const esmVariant = esmVariantSel || esm2[0] || ''
   const [useBaseModel, setUseBaseModel] = useState(true)
-  const [selectedFtId, setSelectedFtId] = useState<number | null>(null)
+  const [selectedFtId, setSelectedFtId] = useState<string | null>(null)
   const [taskType, setTaskType] = useState('regression')
   // Effective values fall back to the sample-data defaults (derived, not stored).
   const [dataLocationSel, setDataLocation] = useState('')
@@ -42,7 +42,7 @@ export function BionemoInferenceTab() {
       api.bionemoInference({
         esm_variant: esmVariant,
         is_base_model: useBaseModel,
-        finetune_run_id: useBaseModel ? 0 : selectedFtId ?? 0,
+        finetune_run_id: useBaseModel ? '0' : selectedFtId ?? '0',
         task_type: taskType,
         data_location: dataLocation,
         sequence_column_name: seqColumn,
