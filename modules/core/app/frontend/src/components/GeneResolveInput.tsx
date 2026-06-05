@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 
 import { api } from '@/api/client'
+import { ClipboardPaste } from '@/components/ClipboardPaste'
 import { TargetFromRunPicker } from '@/components/TargetFromRunPicker'
 
 export function GeneResolveInput({ onResolved }: { onResolved: (sequence: string) => void }) {
@@ -43,6 +44,7 @@ export function GeneResolveInput({ onResolved }: { onResolved: (sequence: string
         >
           {resolve.isPending ? 'Resolving…' : 'Resolve'}
         </button>
+        <ClipboardPaste kind="gene" label="Paste gene" onPick={(it) => pickGene(it.value)} />
         <TargetFromRunPicker onPickGene={pickGene} />
       </div>
       {data?.found && (

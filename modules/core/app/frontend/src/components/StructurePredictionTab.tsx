@@ -67,7 +67,7 @@ export function StructurePredictionTab() {
           {/* Left: form */}
           <div className="space-y-3">
             <GeneResolveInput onResolved={setSequence} />
-            <label className="block text-xs">
+            <div className="text-xs">
               <div className="mb-1 flex items-center justify-between gap-2">
                 <span className="uppercase tracking-wide text-muted-foreground">
                   Protein sequence
@@ -85,7 +85,7 @@ export function StructurePredictionTab() {
                 placeholder="Paste a protein sequence (single-letter amino acid code) — or resolve from a gene symbol above"
                 className="w-full rounded-md border border-border bg-background p-3 font-mono text-xs"
               />
-            </label>
+            </div>
 
             <div className="flex gap-2">
               <button
