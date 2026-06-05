@@ -23,8 +23,9 @@ resources:
             notebook_path: ../notebooks/initialize.py
           max_retries: 0
           # Bumped from 600s — fresh installs do pip install on serverless
-          # (slow cold-pull) plus a ~3 GB FTP download of the sample FASTQs
-          # from 1000 Genomes, which routinely runs past the 10 min budget.
+          # (slow cold-pull) plus a ~3.6 GB HTTPS download of the sample FASTQs
+          # from 1000 Genomes. 30 min leaves ample margin over HTTPS (the prior
+          # ftp:// pull stalled on serverless egress and timed out).
           # Re-runs short-circuit on the `os.path.exists` guards.
           timeout_seconds: 1800
 

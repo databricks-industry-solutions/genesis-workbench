@@ -20,12 +20,13 @@ resources:
 
       max_concurrent_runs: 1
 
-      # The app triggers this job as its service principal (Settings → Endpoint
-      # Management → Start All Endpoints), so the SP needs run rights. Declared
-      # here so it persists across app deploys (which otherwise override the
-      # job ACL and drop the SP → run_now 403 → HTTP 500).
+      # The Genesis Workbench app triggers this job via jobs.run_now (Start
+      # Endpoints button). Grant the app service principal run permission
+      # declaratively so it survives every deploy — otherwise the app's
+      # CAN_MANAGE_RUN depends solely on grant_app_permissions_job re-running
+      # after each app deploy, which the app-resource binding can reset.
       permissions:
-        - level: CAN_MANAGE_RUN
+        - level: CAN_MANAGE
           service_principal_name: ${resources.apps.genesis_workbench_app.service_principal_client_id}
 
       parameters:
