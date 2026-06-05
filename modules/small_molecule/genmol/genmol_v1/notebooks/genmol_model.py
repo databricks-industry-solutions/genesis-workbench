@@ -19,15 +19,19 @@ class GenMolGenerator(mlflow.pyfunc.PythonModel):
     """
 
     def load_context(self, context):
-        import os, shutil
+        import os, shutil, tempfile
         import genmol.sampler as gs
 
-        # GenMol reads data/len.pk relative to ROOT_DIR = dirname×3(sampler.py);
-        # it ships in the repo but not the pip wheel, so restore the shipped copy.
-        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(gs.__file__))))
-        data_dir = os.path.join(root_dir, "data")
-        os.makedirs(data_dir, exist_ok=True)
-        shutil.copy(context.artifacts["len_pk"], os.path.join(data_dir, "len.pk"))
+        # GenMol reads data/len.pk from genmol.sampler.ROOT_DIR, which it computes
+        # as dirname×3(sampler.py) = the package dir under site-packages. That dir
+        # is READ-ONLY in Model Serving (writable on interactive clusters, which is
+        # why probes passed). So stage len.pk in a writable temp dir and repoint the
+        # module-level ROOT_DIR there — de_novo_generation reads ROOT_DIR/data/len.pk
+        # via the module global, so reassigning it redirects the read.
+        data_root = tempfile.mkdtemp(prefix="genmol_root_")
+        os.makedirs(os.path.join(data_root, "data"), exist_ok=True)
+        shutil.copy(context.artifacts["len_pk"], os.path.join(data_root, "data", "len.pk"))
+        gs.ROOT_DIR = data_root
 
         # Sampler(path) loads the Lightning checkpoint; uses cuda if available.
         self.sampler = gs.Sampler(context.artifacts["checkpoint"])
