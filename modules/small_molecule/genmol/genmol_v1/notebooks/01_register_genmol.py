@@ -253,6 +253,15 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
         pip_requirements=[
             GENMOL_GIT,
             "rdkit==2025.3.6",
+            # safe-mol imports wandb==0.13.5 (a GenMol pin) at import time. That ancient
+            # wandb is incompatible with the modern isolated serving env in two ways
+            # (DBR clusters ship old versions, so this only bites in serving):
+            #   - sentry_sdk.Hub was removed in sentry-sdk 3.x  -> AttributeError
+            #   - pkg_resources was removed in setuptools 81+   -> ModuleNotFoundError
+            # Pin both back to versions wandb 0.13.5 expects. Validated: with these,
+            # wandb/safe/genmol.sampler import cleanly in an isolated py3.11 venv.
+            "sentry-sdk<2.0.0",
+            "setuptools<80",
         ],
         input_example=input_example,
         signature=signature,
