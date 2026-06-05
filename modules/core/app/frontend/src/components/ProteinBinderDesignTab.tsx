@@ -461,8 +461,26 @@ export function ProteinBinderDesignTab() {
 
               {selectedDesign && (
                 <div>
-                  <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-                    Designed sequence
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      Designed sequence
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        clipAdd({
+                          kind: 'sequence',
+                          value: selectedDesign.sequence,
+                          label: selectedDesign.sample_id,
+                          source: 'Binder Design',
+                        })
+                      }
+                      title="Copy this binder sequence to the Clipboard"
+                      className="inline-flex items-center gap-1 rounded-md border border-primary/50 bg-primary/10 px-2 py-0.5 text-xs text-primary hover:bg-primary/20"
+                    >
+                      <MaterialIcon name="assignment" className="text-[14px] text-cyan-400" />
+                      {clipSeqSet.has(selectedDesign.sequence) ? '✓ On clipboard' : 'Copy to Clipboard'}
+                    </button>
                   </div>
                   <pre className="overflow-x-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-[11px]">
                     {selectedDesign.sequence}
