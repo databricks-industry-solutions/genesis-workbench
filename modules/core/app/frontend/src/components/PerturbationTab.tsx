@@ -8,7 +8,7 @@ import { DataTable } from '@/components/DataTable'
 import { NarrativePanel } from '@/components/NarrativePanel'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
 import { useSseMutation } from '@/hooks/useSseMutation'
-import { useGeneClipboard } from '@/stores/geneClipboard'
+import { ClipboardPaste } from '@/components/ClipboardPaste'
 import type { PerturbationGene, PerturbationResponse } from '@/types/api'
 
 type PerturbType = 'knockout' | 'overexpress'
@@ -69,8 +69,7 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
 
   const resultRows = predict.data?.results ?? []
 
-  // Genes marked for study in the DE tab — offer them as one-click targets.
-  const clipGenes = useGeneClipboard((s) => s.genes)
+  // Paste genes collected on the Clipboard straight into the perturbation targets.
   const mergeIntoExtra = (incoming: string[]) =>
     setExtraGenes((cur) => {
       const set = new Set(
@@ -208,29 +207,14 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
         </label>
       </div>
 
-      {clipGenes.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 p-2 text-xs">
-          <span className="font-medium text-primary">From your study list:</span>
-          {clipGenes.map((g) => (
-            <button
-              key={g}
-              type="button"
-              onClick={() => mergeIntoExtra([g])}
-              title="Add to perturbation targets"
-              className="rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-primary hover:bg-primary/20"
-            >
-              + {g}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => mergeIntoExtra(clipGenes)}
-            className="ml-auto rounded border border-primary/40 px-1.5 py-0.5 text-primary hover:bg-primary/10"
-          >
-            Add all
-          </button>
-        </div>
-      )}
+      <div className="flex items-center gap-2 text-xs">
+        <span className="text-muted-foreground">Add targets from your Clipboard:</span>
+        <ClipboardPaste
+          kind="gene"
+          label="Paste gene"
+          onPick={(it) => mergeIntoExtra([it.value])}
+        />
+      </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <label className="block text-xs">

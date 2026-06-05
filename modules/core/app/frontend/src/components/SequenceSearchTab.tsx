@@ -9,6 +9,7 @@ import { MolstarViewer } from '@/components/MolstarViewer'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
 import { WorkflowProgress } from '@/components/WorkflowProgress'
 import { useSseMutation } from '@/hooks/useSseMutation'
+import { useClipboard } from '@/stores/clipboard'
 import type { SequenceHit, SequenceSearchResponse } from '@/types/api'
 import { cn } from '@/lib/utils'
 
@@ -310,6 +311,8 @@ export function SequenceSearchTab() {
 
 function HitDetail({ hit }: { hit: SequenceHit }) {
   const targetSeq = useMemo(() => hit.aligned_target.replace(/-/g, ''), [hit])
+  const clipAdd = useClipboard((s) => s.add)
+  const clipHas = useClipboard((s) => s.items.some((i) => i.kind === 'sequence' && i.value === targetSeq))
 
   const organism = useQuery({
     queryKey: ['seq-search', 'organism', hit.seq_id],
@@ -326,7 +329,24 @@ function HitDetail({ hit }: { hit: SequenceHit }) {
 
   return (
     <div className="space-y-4">
-      <div className="text-xs text-muted-foreground">{hit.description}</div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="text-xs text-muted-foreground">{hit.description}</div>
+        <button
+          type="button"
+          onClick={() =>
+            clipAdd({
+              kind: 'sequence',
+              value: targetSeq,
+              label: hit.seq_id,
+              source: 'Protein Search',
+            })
+          }
+          title="Copy this sequence to your Clipboard to use in another module (e.g. Structure Prediction)"
+          className="shrink-0 rounded-md border border-primary/50 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/20"
+        >
+          {clipHas ? '🗂️ ✓ On clipboard' : '🗂️ Copy to Clipboard'}
+        </button>
+      </div>
       <div className="text-sm">
         <span className="text-muted-foreground">Suggested organism: </span>
         <span className="font-medium">

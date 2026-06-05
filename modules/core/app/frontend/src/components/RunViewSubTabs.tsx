@@ -19,7 +19,7 @@ import { DataTable } from '@/components/DataTable'
 import { GeneHighlightPicker } from '@/components/GeneHighlightPicker'
 import { NarrativePanel } from '@/components/NarrativePanel'
 import { useDeHighlight } from '@/stores/deHighlight'
-import { useGeneClipboard } from '@/stores/geneClipboard'
+import { useClipboard } from '@/stores/clipboard'
 import { PlotlyChart as Plot } from '@/components/PlotlyChart'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
 import { Tabs } from '@/components/Tabs'
@@ -988,10 +988,14 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
   const dirClass = (up: boolean) =>
     up ? 'text-rose-600 dark:text-rose-400' : 'text-sky-600 dark:text-sky-400'
 
-  // Mark genes for the study list (shown in the global Clipboard drawer, which
-  // also handles save-to-run / clear). The DE "+" column toggles membership.
-  const clipGenes = useGeneClipboard((s) => s.genes)
-  const clipToggle = useGeneClipboard((s) => s.toggle)
+  // Copy genes to the global Clipboard (drawer on the right). The DE "+" column
+  // toggles membership of the gene section.
+  const clipItems = useClipboard((s) => s.items)
+  const clipToggle = useClipboard((s) => s.toggle)
+  const clipGenes = useMemo(
+    () => clipItems.filter((i) => i.kind === 'gene').map((i) => i.value),
+    [clipItems],
+  )
   const clipSet = useMemo(() => new Set(clipGenes), [clipGenes])
 
   const tableColumns = useMemo<ColumnDef<ScoredGene, unknown>[]>(
@@ -1005,7 +1009,7 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
           return (
             <button
               type="button"
-              onClick={() => clipToggle(g)}
+              onClick={() => clipToggle({ kind: 'gene', value: g, source: 'Single Cell DE' })}
               title={inClip ? 'In study list — click to remove' : 'Add to study list'}
               className={
                 'rounded border px-1.5 text-xs leading-5 ' +
@@ -1414,7 +1418,7 @@ export function EnrichmentSubTab({
     mutationFn: () => api.singleCellEnrichment({ run_id: runId, cluster, dbs }),
   })
 
-  const clipAdd = useGeneClipboard((s) => s.add)
+  const clipAddMany = useClipboard((s) => s.addMany)
   const setDeHighlight = useDeHighlight((s) => s.setHighlight)
 
   // Predicted cell type for the cluster (if annotated) — context for the narrative.
@@ -1473,7 +1477,15 @@ export function EnrichmentSubTab({
               <button
                 type="button"
                 title="Add this term's leading-edge genes to your study list (→ Perturbation / Large Molecule)"
-                onClick={() => clipAdd(genes)}
+                onClick={() =>
+                  clipAddMany(
+                    genes.map((g) => ({
+                      kind: 'gene' as const,
+                      value: g,
+                      source: 'Single Cell Enrichment',
+                    })),
+                  )
+                }
                 className="whitespace-nowrap rounded border border-border px-1.5 text-xs hover:border-primary hover:text-primary"
               >
                 + Study list
@@ -1491,7 +1503,7 @@ export function EnrichmentSubTab({
         },
       },
     ],
-    [clipAdd, setDeHighlight],
+    [clipAddMany, setDeHighlight],
   )
 
   const topTerms = (enrich.data?.terms ?? []).slice(0, 15)
@@ -1653,7 +1665,7 @@ export function TrajectorySubTab({
     staleTime: 60_000,
   })
 
-  const clipAdd = useGeneClipboard((s) => s.add)
+  const clipAdd = useClipboard((s) => s.add)
 
   // Auto AI interpretation of the selected gene's dynamics along pseudotime.
   const trajNarrative = useMutation({
@@ -1761,7 +1773,7 @@ export function TrajectorySubTab({
         {gene && (
           <button
             type="button"
-            onClick={() => clipAdd(gene)}
+            onClick={() => clipAdd({ kind: 'gene', value: gene!, source: 'Single Cell Trajectory' })}
             title="Add this gene to the study list"
             className="rounded-md border border-border px-2.5 py-2 text-xs hover:border-primary hover:text-primary"
           >
