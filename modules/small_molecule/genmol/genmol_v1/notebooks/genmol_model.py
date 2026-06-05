@@ -20,14 +20,34 @@ class GenMolGenerator(mlflow.pyfunc.PythonModel):
 
     def load_context(self, context):
         import os, shutil, tempfile
-        import genmol.sampler as gs
 
-        # GenMol reads data/len.pk from genmol.sampler.ROOT_DIR, which it computes
-        # as dirname×3(sampler.py) = the package dir under site-packages. That dir
-        # is READ-ONLY in Model Serving (writable on interactive clusters, which is
-        # why probes passed). So stage len.pk in a writable temp dir and repoint the
-        # module-level ROOT_DIR there — de_novo_generation reads ROOT_DIR/data/len.pk
-        # via the module global, so reassigning it redirects the read.
+        # Model Serving containers have NO internet egress. GenMol's get_tokenizer()
+        # pulls 'datamol-io/safe-gpt' from the HF hub at model init, so loading fails
+        # in serving (it works on clusters, which have egress — that's why probes
+        # passed). Force HF offline and monkeypatch get_tokenizer to load the bundled
+        # tokenizer from the model artifact instead of the hub.
+        os.environ["HF_HUB_OFFLINE"] = "1"
+        os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
+        from safe.tokenizer import SAFETokenizer
+        tok_dir = context.artifacts["safe_tokenizer"]
+
+        def _local_get_tokenizer():
+            tk = SAFETokenizer.from_pretrained(tok_dir).get_pretrained()
+            tk.add_tokens(['<', '>'])  # mirror genmol.utils.utils_data.get_tokenizer
+            return tk
+
+        import genmol.utils.utils_data as _ud
+        import genmol.model as _gm
+        import genmol.sampler as gs
+        for _m in (_ud, _gm, gs):
+            if hasattr(_m, "get_tokenizer"):
+                _m.get_tokenizer = _local_get_tokenizer
+
+        # GenMol reads data/len.pk from genmol.sampler.ROOT_DIR (= dirname×3(sampler.py)
+        # = site-packages, READ-ONLY in serving). Stage len.pk in a writable temp dir
+        # and repoint the module-level ROOT_DIR — de_novo_generation reads
+        # ROOT_DIR/data/len.pk via the module global, so reassigning redirects it.
         data_root = tempfile.mkdtemp(prefix="genmol_root_")
         os.makedirs(os.path.join(data_root, "data"), exist_ok=True)
         shutil.copy(context.artifacts["len_pk"], os.path.join(data_root, "data", "len.pk"))

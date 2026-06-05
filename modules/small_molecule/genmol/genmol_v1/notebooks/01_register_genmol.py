@@ -133,6 +133,14 @@ len_pk_path = os.path.join(cache_full_path, "len.pk")
 urllib.request.urlretrieve(LEN_PK_URL, len_pk_path)
 print("checkpoint:", checkpoint_path, "| len.pk:", len_pk_path, os.path.getsize(len_pk_path), "bytes")
 
+# GenMol's get_tokenizer() downloads 'datamol-io/safe-gpt' from the HF hub at load.
+# Serving has no egress, so bundle the tokenizer as an artifact and load it offline
+# (see genmol_model.py load_context). Download it here while the cluster has egress.
+safe_tok_dir = os.path.join(cache_full_path, "safe_tokenizer")
+os.makedirs(safe_tok_dir, exist_ok=True)
+snapshot_download(repo_id="datamol-io/safe-gpt", local_dir=safe_tok_dir)
+print("safe-gpt tokenizer:", os.listdir(safe_tok_dir))
+
 # COMMAND ----------
 
 # MAGIC %md
@@ -167,7 +175,7 @@ _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 
 class _Ctx:
-    artifacts = {"checkpoint": checkpoint_path, "len_pk": len_pk_path}
+    artifacts = {"checkpoint": checkpoint_path, "len_pk": len_pk_path, "safe_tokenizer": safe_tok_dir}
 
 _gen = _mod.GenMolGenerator()
 _gen.load_context(_Ctx())
@@ -235,6 +243,7 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
         artifacts={
             "checkpoint": checkpoint_path,
             "len_pk": len_pk_path,
+            "safe_tokenizer": safe_tok_dir,
         },
         # The serving endpoint inherits this env. GenMol's git install pulls its
         # pinned torch/transformers/pandas/safe-mol; rdkit is for our scoring.
