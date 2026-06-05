@@ -7,6 +7,7 @@ import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
 import { NarrativePanel } from '@/components/NarrativePanel'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
+import { WorkflowProgress } from '@/components/WorkflowProgress'
 import { useSseMutation } from '@/hooks/useSseMutation'
 import { ClipboardPaste } from '@/components/ClipboardPaste'
 import type { PerturbationGene, PerturbationResponse } from '@/types/api'
@@ -123,6 +124,14 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
     if (predict.data && predict.data.summary_total_genes > 0) narrative.mutate()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [predict.data])
+
+  // Pattern: the AI interpretation is the final stage — keep a progress
+  // indicator up through "Interpreting result" and reveal the result only once
+  // the narrative has settled (so the page appears complete, not mid-spinner).
+  const willNarrate = (predict.data?.summary_total_genes ?? 0) > 0
+  const narrativeSettled = narrative.isSuccess || narrative.isError
+  const interpreting = Boolean(predict.data) && willNarrate && !narrativeSettled
+  const showResult = Boolean(predict.data) && (!willNarrate || narrativeSettled)
 
   const tableColumns = useMemo<ColumnDef<PerturbationGene, unknown>[]>(
     () => [
@@ -286,13 +295,21 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
         />
       )}
 
+      {interpreting && (
+        <WorkflowProgress
+          active
+          title="scGPT perturbation prediction"
+          stages={[{ label: 'Interpreting result with Claude (Opus 4.8)', estSeconds: 8 }]}
+        />
+      )}
+
       {predict.error && (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
           {String(predict.error)}
         </div>
       )}
 
-      {predict.data && (
+      {showResult && predict.data && (
         <section className="space-y-4 border-t border-border pt-4">
           {predict.data.summary_total_genes === 0 ? (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200">

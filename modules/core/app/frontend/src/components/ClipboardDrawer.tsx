@@ -21,18 +21,18 @@ export function ClipboardDrawer() {
 
   return (
     <>
-      {/* Right-edge handle — always visible, colourful, shows the count. */}
+      {/* Top rhombus handle — always visible, colourful, shows the count. */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         title="Clipboard — your collected items of interest"
-        className="fixed right-0 top-1/3 z-40 flex items-center gap-1.5 rounded-l-lg border border-r-0 border-border bg-gradient-to-b from-teal-500/15 to-indigo-500/15 px-1.5 py-3 text-sm font-bold shadow-md hover:from-teal-500/25 hover:to-indigo-500/25"
-        style={{ writingMode: 'vertical-rl' }}
+        className="group fixed right-10 top-1 z-40 grid h-12 w-12 place-items-center"
       >
-        <span className="text-base">🗂️</span>
-        <span>Clipboard</span>
+        {/* rotated square = rhombus tab */}
+        <span className="absolute inset-0 m-auto h-9 w-9 rotate-45 rounded-md border border-border bg-gradient-to-br from-teal-500/25 to-indigo-500/25 shadow-md transition group-hover:from-teal-500/40 group-hover:to-indigo-500/40" />
+        <span className="relative text-lg">🗂️</span>
         {count > 0 && (
-          <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">
+          <span className="absolute right-0 top-0 z-10 rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
             {count}
           </span>
         )}

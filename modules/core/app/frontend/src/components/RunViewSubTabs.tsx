@@ -958,6 +958,15 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [de.data])
 
+  // Pattern: the AI interpretation is the FINAL stage of the run — keep the
+  // progress bar up (through "Interpreting result") and reveal the results only
+  // once the narrative has settled, so the page appears complete rather than
+  // flashing results then a separate spinner.
+  const willNarrate = (de.data?.n_significant ?? 0) > 0
+  const narrativeSettled = deNarrative.isSuccess || deNarrative.isError
+  const interpreting = de.isSuccess && willNarrate && !narrativeSettled
+  const showResults = de.isSuccess && (!willNarrate || narrativeSettled)
+
   // Genes the AI interpretation named that are real genes in this result —
   // offered as a one-click highlight set. Case-sensitive match against the
   // (uppercase) gene symbols avoids matching ordinary lowercase prose words.
@@ -1190,12 +1199,13 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
       </div>
 
       <WorkflowProgress
-        active={de.isPending}
+        active={de.isPending || interpreting}
         title={`DE: Cluster ${a} vs ${b}`}
         stages={[
           { label: 'Downloading markers_flat from MLflow', estSeconds: 5 },
           { label: 'Mann-Whitney U per gene', estSeconds: 6 },
           { label: 'Adjusting p-values', estSeconds: 1 },
+          { label: 'Interpreting result with Claude (Opus 4.8)', estSeconds: 8 },
         ]}
       />
 
@@ -1205,7 +1215,7 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
         </div>
       )}
 
-      {de.data && de.data.warnings && de.data.warnings.length > 0 && (
+      {showResults && de.data && de.data.warnings && de.data.warnings.length > 0 && (
         <details className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs">
           <summary className="cursor-pointer font-medium text-amber-700 dark:text-amber-400">
             ⚠ Differential expression result has {de.data.warnings.length} data-quality
@@ -1219,7 +1229,7 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
         </details>
       )}
 
-      {de.data && (de.data.n_significant ?? 0) > 0 && (
+      {showResults && willNarrate && (
         <div className="space-y-1.5">
           <NarrativePanel
             isPending={deNarrative.isPending}
@@ -1240,9 +1250,9 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
         </div>
       )}
 
-      <GeneHighlightPicker highlight={highlight} onChange={setHighlight} />
+      {showResults && <GeneHighlightPicker highlight={highlight} onChange={setHighlight} />}
 
-      {de.data && (
+      {showResults && de.data && (
         <VolcanoPlot
           genes={de.data.genes}
           a={a}
@@ -1252,7 +1262,7 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
         />
       )}
 
-      {de.data && (
+      {showResults && de.data && (
         <div>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div className="text-xs text-muted-foreground">
