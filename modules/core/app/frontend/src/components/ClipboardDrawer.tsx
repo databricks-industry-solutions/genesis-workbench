@@ -44,7 +44,7 @@ export function ClipboardDrawer() {
         type="button"
         onClick={() => setOpen((o) => !o)}
         title="Clipboard — your collected items of interest"
-        className="fixed left-1/2 top-0 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-b-2xl border border-t-0 border-border/40 bg-card/40 px-4 py-1 text-xs font-semibold backdrop-blur-sm transition-colors hover:bg-card/70"
+        className="fixed left-1/2 top-0 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-b-2xl border border-t-0 border-border bg-card/85 px-4 py-1 text-xs font-semibold shadow-lg ring-1 ring-black/5 backdrop-blur-md transition-colors hover:bg-card"
       >
         <MaterialIcon name="assignment" className="text-base text-cyan-400" />
         <span>Clipboard</span>
