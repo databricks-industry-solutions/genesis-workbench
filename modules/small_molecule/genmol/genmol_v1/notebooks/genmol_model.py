@@ -19,7 +19,33 @@ class GenMolGenerator(mlflow.pyfunc.PythonModel):
     """
 
     def load_context(self, context):
-        import os, shutil, tempfile
+        import os, sys, shutil, tempfile, types
+
+        # safe-mol's __init__ unconditionally `import wandb` (via .io). GenMol pins the
+        # ancient wandb==0.13.5, which is incompatible with the serving env's modern stack
+        # in MULTIPLE ways — sentry_sdk.Hub (removed in sentry 3.x), pkg_resources (removed
+        # in setuptools 81+), and protobuf (wandb.proto.wandb_internal_pb2 has no attribute
+        # 'Result' against mlflow's protobuf). Pinning around all of these is whack-a-mole
+        # (and pinning protobuf down would break mlflow itself). wandb is only used for
+        # training logging, never for inference — so install a minimal stub BEFORE importing
+        # safe, so `import wandb` returns the stub and never executes wandb's real code.
+        # Real dunders (__file__, etc.) are preserved so torch/inspect don't choke on it.
+        if "wandb" not in sys.modules:
+            import importlib.machinery
+            _wandb = types.ModuleType("wandb")
+            _wandb.__file__ = "wandb_stub.py"
+            _wandb.__version__ = "0.13.5"
+            # A real ModuleSpec so importlib.util.find_spec("wandb") works — accelerate
+            # (imported by transformers.generation) calls it via is_wandb_available(),
+            # and a None __spec__ raises ValueError. The real wandb dist-info is still on
+            # disk (pip-installed), so importlib.metadata version checks also succeed.
+            _wandb.__spec__ = importlib.machinery.ModuleSpec("wandb", loader=None)
+            def _wandb_getattr(name):
+                if name.startswith("__") and name.endswith("__"):
+                    raise AttributeError(name)
+                return lambda *a, **k: None
+            _wandb.__getattr__ = _wandb_getattr
+            sys.modules["wandb"] = _wandb
 
         # Model Serving containers have NO internet egress. GenMol's get_tokenizer()
         # pulls 'datamol-io/safe-gpt' from the HF hub at model init, so loading fails
