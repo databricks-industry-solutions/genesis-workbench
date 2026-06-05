@@ -106,7 +106,7 @@ function RunNewAnalysisForm() {
       n_top_genes: 2000,
       n_pcs: 50,
       cluster_resolution: 0.15,
-      compute_pseudotime: false,
+      compute_pseudotime: true,
     },
   })
 

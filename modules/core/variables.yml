@@ -65,6 +65,10 @@ variables:
     description: Name of the LLM serving endpoint (Claude Sonnet) used by the home page assistant
     default: databricks-claude-sonnet-4-6
 
+  narrative_llm_endpoint_name:
+    description: Premium foundation-model endpoint (Claude Opus) for rich scientific narratives (e.g. perturbation interpretation)
+    default: databricks-claude-opus-4-8
+
   module_registration_experiment_name:
     description: >
       Experiment tag passed to registration notebooks. At runtime, notebooks call

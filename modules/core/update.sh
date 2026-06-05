@@ -185,16 +185,24 @@ if [ "$UI_ONLY" = "false" ]; then
     # NOTE: the genesis_workbench wheel is copied to the UC Volume earlier (right
     # after `bundle deploy`) because this serverless job %pip-installs it from there.
     databricks bundle run --target $TARGET grant_app_permissions_job --var="$EXTRA_PARAMS"
-
-    echo ""
-    echo "▶️ Cleaning up local build artifacts"
-    echo ""
-    rm -rf library/genesis_workbench/dist
 else
     echo ""
     echo "▶️ --ui-only: skipping catalog grants, app-permissions job, and UC Volume library copy"
     echo ""
 fi
+
+# Clean up local build artifacts — ALWAYS, in both the full and --ui-only paths.
+# The wheel is staged on every run (the staging block above is unconditional
+# because the DAB sync force-uploads it from app/backend/lib/), so it must be
+# removed afterwards in BOTH paths or it lingers in the working tree / risks
+# being committed. It is intentionally NOT gitignored: gitignored files are
+# excluded from the DAB sync, so the wheel must be present at deploy time and
+# deleted here instead.
+echo ""
+echo "▶️ Cleaning up local build artifacts"
+echo ""
+rm -rf library/genesis_workbench/dist
+rm -f app/backend/lib/genesis_workbench-*.whl
 
 # Note: NOT writing .deployed here — update.sh is for redeploys, the
 # .deployed marker is owned by deploy.sh.

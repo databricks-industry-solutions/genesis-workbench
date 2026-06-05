@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { PlotlyChart as Plot } from '@/components/PlotlyChart'
 
 import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
+import { NarrativePanel } from '@/components/NarrativePanel'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
+import { WorkflowProgress } from '@/components/WorkflowProgress'
+import { clusterOptionLabel } from '@/lib/clusterLabel'
 import { useSseMutation } from '@/hooks/useSseMutation'
+import { ClipboardPaste } from '@/components/ClipboardPaste'
 import type { PerturbationGene, PerturbationResponse } from '@/types/api'
 
 type PerturbType = 'knockout' | 'overexpress'
@@ -67,6 +71,69 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
 
   const resultRows = predict.data?.results ?? []
 
+  // Paste genes collected on the Clipboard straight into the perturbation targets.
+  const mergeIntoExtra = (incoming: string[]) =>
+    setExtraGenes((cur) => {
+      const set = new Set(
+        cur
+          .split(',')
+          .map((s) => s.trim().toUpperCase())
+          .filter(Boolean),
+      )
+      incoming.forEach((g) => set.add(g.toUpperCase()))
+      return Array.from(set).join(', ')
+    })
+
+  // Predicted cell type for the perturbed cluster (if annotation was run) —
+  // gives the narrative biological context.
+  const annoQ = useQuery({
+    queryKey: ['sc', 'pert-anno', runId],
+    queryFn: () => api.singleCellSavedAnnotations(runId!),
+    enabled: Boolean(runId),
+  })
+  const cellTypeForCluster = useMemo(() => {
+    const scim = annoQ.data?.scimilarity?.annotations.find((a) => a.cluster === cluster)
+    const teddy = annoQ.data?.teddy?.annotations.find((a) => a.cluster === cluster)
+    return scim?.predicted_cell_type || teddy?.predicted_cell_type || null
+  }, [annoQ.data, cluster])
+
+  // AI narrative (Claude Opus 4.8) interpreting the current result.
+  const narrative = useMutation({
+    mutationFn: () => {
+      const d = predict.data!
+      const top = [...d.results]
+        .filter((r) => r.delta != null)
+        .sort((x, y) => (y.abs_delta ?? 0) - (x.abs_delta ?? 0))
+        .slice(0, 30)
+        .map((r) => ({ gene: r.gene_name, delta: r.delta as number }))
+      return api.singleCellPerturbationNarrative({
+        run_id: runId ?? undefined,
+        cluster,
+        perturbation_type: perturbType,
+        genes_to_perturb: allGenesToPerturb,
+        cell_type: cellTypeForCluster,
+        summary_total_genes: d.summary_total_genes,
+        summary_significant_count: d.summary_significant_count,
+        summary_max_abs_delta: d.summary_max_abs_delta,
+        top_genes: top,
+      })
+    },
+  })
+
+  // Auto-interpret once a (non-empty) result lands — no button click needed.
+  useEffect(() => {
+    if (predict.data && predict.data.summary_total_genes > 0) narrative.mutate()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [predict.data])
+
+  // Pattern: the AI interpretation is the final stage — keep a progress
+  // indicator up through "Interpreting result" and reveal the result only once
+  // the narrative has settled (so the page appears complete, not mid-spinner).
+  const willNarrate = (predict.data?.summary_total_genes ?? 0) > 0
+  const narrativeSettled = narrative.isSuccess || narrative.isError
+  const interpreting = Boolean(predict.data) && willNarrate && !narrativeSettled
+  const showResult = Boolean(predict.data) && (!willNarrate || narrativeSettled)
+
   const tableColumns = useMemo<ColumnDef<PerturbationGene, unknown>[]>(
     () => [
       { id: 'gene_name', header: 'Gene', accessorKey: 'gene_name' },
@@ -111,7 +178,6 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
           mean expression profile using scGPT.
         </p>
       </div>
-
       <div className="flex flex-col gap-3 md:flex-row md:items-end">
         <label className="block text-xs">
           <span className="mb-1 block uppercase tracking-wide text-muted-foreground">Cluster</span>
@@ -119,11 +185,11 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
             value={cluster}
             onChange={(e) => setCluster(e.target.value)}
             disabled={!runInfo.data}
-            className="w-40 rounded-md border border-border bg-background px-3 py-2 text-sm disabled:opacity-50"
+            className="w-[28rem] max-w-full rounded-md border border-border bg-background px-3 py-2 text-sm disabled:opacity-50"
           >
             {runInfo.data?.clusters.map((c) => (
               <option key={c} value={c}>
-                Cluster {c}
+                {clusterOptionLabel(c, annoQ.data)}
               </option>
             )) ?? <option>—</option>}
           </select>
@@ -179,9 +245,16 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
         </label>
 
         <label className="block text-xs">
-          <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
-            Or add custom genes (comma-separated)
-          </span>
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <span className="uppercase tracking-wide text-muted-foreground">
+              Or add custom genes (comma-separated)
+            </span>
+            <ClipboardPaste
+              kind="gene"
+              label="Paste from Clipboard"
+              onPick={(it) => mergeIntoExtra([it.value])}
+            />
+          </div>
           <input
             type="text"
             value={extraGenes}
@@ -221,13 +294,21 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
         />
       )}
 
+      {interpreting && (
+        <WorkflowProgress
+          active
+          title="scGPT perturbation prediction"
+          stages={[{ label: 'Interpreting Results', estSeconds: 8 }]}
+        />
+      )}
+
       {predict.error && (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
           {String(predict.error)}
         </div>
       )}
 
-      {predict.data && (
+      {showResult && predict.data && (
         <section className="space-y-4 border-t border-border pt-4">
           {predict.data.summary_total_genes === 0 ? (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200">
@@ -235,6 +316,13 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
             </div>
           ) : (
             <>
+              <NarrativePanel
+                isPending={narrative.isPending}
+                data={narrative.data}
+                error={narrative.error}
+                onRegenerate={() => narrative.mutate()}
+              />
+
               <div className="grid grid-cols-3 gap-3">
                 <Metric label="Total genes analysed" value={predict.data.summary_total_genes.toLocaleString()} />
                 <Metric

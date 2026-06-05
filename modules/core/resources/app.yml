@@ -47,4 +47,9 @@ resources:
             name: ${var.llm_endpoint_name}
             permission: "CAN_QUERY"
 
+        - name: "narrative_llm_endpoint"
+          serving_endpoint:
+            name: ${var.narrative_llm_endpoint_name}
+            permission: "CAN_QUERY"
+
 

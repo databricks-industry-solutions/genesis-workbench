@@ -301,7 +301,11 @@ class ChempropADMETModel(mlflow.pyfunc.PythonModel):
         valid_indices = [i for i, (_, mol) in enumerate(mols) if mol is not None]
         datapoints = [MoleculeDatapoint(mols[i][1]) for i in valid_indices]
         dset = MoleculeDataset(datapoints)
-        loader = build_dataloader(dset, shuffle=False)
+        # drop_last=False: at inference the model is in eval() mode (BatchNorm
+        # uses running stats), so a size-1 batch is safe. Without this, chemprop
+        # auto-drops a trailing size-1 batch (when n % batch_size == 1, e.g. a
+        # single SMILES), yielding zero predictions and an all-NaN result.
+        loader = build_dataloader(dset, shuffle=False, drop_last=False)
 
         device = next(self.model.parameters()).device
         preds = []
@@ -379,7 +383,11 @@ class ChempropADMETModel(mlflow.pyfunc.PythonModel):
         valid_indices = [i for i, (_, mol) in enumerate(mols) if mol is not None]
         datapoints = [MoleculeDatapoint(mols[i][1]) for i in valid_indices]
         dset = MoleculeDataset(datapoints)
-        loader = build_dataloader(dset, shuffle=False)
+        # drop_last=False: at inference the model is in eval() mode (BatchNorm
+        # uses running stats), so a size-1 batch is safe. Without this, chemprop
+        # auto-drops a trailing size-1 batch (when n % batch_size == 1, e.g. a
+        # single SMILES), yielding zero predictions and an all-NaN result.
+        loader = build_dataloader(dset, shuffle=False, drop_last=False)
 
         device = next(self.model.parameters()).device
         preds = []

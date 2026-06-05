@@ -11,6 +11,7 @@ import { SingleCellPage } from '@/pages/SingleCell'
 import { LargeMoleculePage } from '@/pages/LargeMolecule'
 import { SmallMoleculePage } from '@/pages/SmallMolecule'
 import { GenomicsPage } from '@/pages/Genomics'
+import { BionemoPage } from '@/pages/Bionemo'
 import { BootstrapGate } from '@/components/BootstrapGate'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useThemeStore } from '@/stores/theme'
@@ -55,6 +56,7 @@ export default function App() {
                 <Route path="large-molecule" element={<LargeMoleculePage />} />
                 <Route path="small-molecule" element={<SmallMoleculePage />} />
                 <Route path="genomics" element={<GenomicsPage />} />
+                <Route path="bionemo" element={<BionemoPage />} />
                 <Route path="profile" element={<ProfilePage />} />
                 <Route path="monitoring" element={<MonitoringPage />} />
                 <Route path="settings" element={<SettingsPage />} />

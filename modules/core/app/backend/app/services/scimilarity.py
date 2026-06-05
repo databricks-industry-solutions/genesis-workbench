@@ -77,7 +77,10 @@ def get_cell_embeddings(normed_df: pd.DataFrame) -> pd.DataFrame:
     raise RuntimeError(f"GetEmbedding unexpected response type: {type(result)}")
 
 
-def search_nearest_cells(embedding, k: int = 100) -> pd.DataFrame:
+def _query_neighbor_ids(embedding, k: int = 100) -> list[str]:
+    """Just the Vector Search leg: embedding -> neighbour cell_ids. Fast
+    (no SQL warehouse round-trip), so it's safe to call once per cell. The
+    metadata join is done separately (batched) by the annotation pipeline."""
     s = get_settings()
     if hasattr(embedding, "tolist"):
         embedding = embedding.tolist()
@@ -98,7 +101,36 @@ def search_nearest_cells(embedding, k: int = 100) -> pd.DataFrame:
     if results.result and results.result.data_array:
         for row in results.result.data_array:
             cell_ids.append(row[0])
+    return cell_ids
+
+
+def search_nearest_cells(embedding, k: int = 100) -> pd.DataFrame:
+    s = get_settings()
+    cell_ids = _query_neighbor_ids(embedding, k=k)
     return _fetch_cell_metadata(cell_ids, s.catalog, s.schema)
+
+
+def _fetch_predictions_by_id(cell_ids: list[str], catalog: str, schema: str) -> dict[str, str]:
+    """Batch the neighbour-metadata join into a few chunked queries instead of
+    one warehouse round-trip per cell. Returns {cell_id: prediction}. This is
+    what lets annotation scale to runs with many clusters — the per-cell SQL
+    open-session cost (seconds each) was the annotation timeout's root cause."""
+    out: dict[str, str] = {}
+    uniq = list(dict.fromkeys(str(c) for c in cell_ids))
+    for j in range(0, len(uniq), 1000):
+        chunk = uniq[j : j + 1000]
+        ids_str = ", ".join(f"'{c}'" for c in chunk)
+        query = (
+            f"SELECT cell_id, prediction "
+            f"FROM {catalog}.{schema}.{SCIMILARITY_CELLS_TABLE} "
+            f"WHERE cell_id IN ({ids_str})"
+        )
+        df = execute_select_query(query)
+        if not df.empty and "cell_id" in df.columns and "prediction" in df.columns:
+            for cid, pred in zip(df["cell_id"], df["prediction"]):
+                if pred is not None:
+                    out[str(cid)] = str(pred)
+    return out
 
 
 def _fetch_cell_metadata(cell_ids: list[str], catalog: str, schema: str) -> pd.DataFrame:
@@ -135,6 +167,7 @@ def annotate_clusters(
         if progress_callback:
             progress_callback(pct, msg)
 
+    s = get_settings()
     _p(2, "Fetching SCimilarity gene order")
     gene_order = get_gene_order()
 
@@ -200,27 +233,40 @@ def annotate_clusters(
 
     embeddings_result = pd.concat(embedding_frames, ignore_index=True)
 
-    annotations: list[dict] = []
+    # Phase 1: per-cell Vector Search for neighbour ids (fast, no SQL). We keep
+    # the neighbour-id list per cell so duplicate votes within a cell are
+    # preserved exactly as before.
     n_emb = len(embeddings_result)
+    per_cell_ids: list[list[str]] = []
     for i, row in embeddings_result.iterrows():
         embedding = row["embedding"]
         if isinstance(embedding, str):
             embedding = json.loads(embedding)
         try:
-            nn_meta = search_nearest_cells(embedding, k=k_neighbors)
+            ids = _query_neighbor_ids(embedding, k=k_neighbors)
         except Exception as e:
-            logger.warning("search_nearest_cells failed for cell %d: %s", i, e)
-            nn_meta = pd.DataFrame()
-        annotations.append(
-            {
-                "cell_index": successful_indices[i] if i < len(successful_indices) else i,
-                "cluster": successful_clusters[i] if i < len(successful_clusters) else "?",
-                "nn_metadata": nn_meta,
-            }
-        )
-        # 55% → 95% spread across per-cell KNN lookups.
-        pct = 55 + int(((i + 1) / max(n_emb, 1)) * 40)
+            logger.warning("vector search failed for cell %d: %s", i, e)
+            ids = []
+        per_cell_ids.append(ids)
+        # 55% → 85% spread across per-cell vector lookups.
+        pct = 55 + int(((i + 1) / max(n_emb, 1)) * 30)
         _p(pct, f"Vector Search neighbours {i + 1}/{n_emb}")
+
+    # Phase 2: ONE (chunked) metadata fetch for ALL neighbours, instead of a
+    # warehouse round-trip per cell — this is the fix that lets annotation
+    # scale to runs with many clusters without hitting the request timeout.
+    all_ids = [cid for ids in per_cell_ids for cid in ids]
+    _p(88, f"Fetching metadata for {len(set(all_ids))} neighbour cells")
+    pred_by_id = _fetch_predictions_by_id(all_ids, s.catalog, s.schema)
+
+    annotations: list[dict] = [
+        {
+            "cell_index": successful_indices[i] if i < len(successful_indices) else i,
+            "cluster": successful_clusters[i] if i < len(successful_clusters) else "?",
+            "predictions": [pred_by_id[cid] for cid in per_cell_ids[i] if cid in pred_by_id],
+        }
+        for i in range(len(per_cell_ids))
+    ]
 
     _p(96, "Aggregating votes per cluster")
     cluster_results: list[dict] = []
@@ -229,9 +275,7 @@ def annotate_clusters(
         cl_cells = [a for a in annotations if str(a["cluster"]) == str(cl)]
         all_predictions: list[str] = []
         for cell in cl_cells:
-            meta = cell["nn_metadata"]
-            if not meta.empty and "prediction" in meta.columns:
-                all_predictions.extend(meta["prediction"].dropna().tolist())
+            all_predictions.extend(cell["predictions"])
 
         if all_predictions:
             type_counts = pd.Series(all_predictions).value_counts()

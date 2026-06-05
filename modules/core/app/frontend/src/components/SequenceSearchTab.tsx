@@ -8,7 +8,10 @@ import { Dialog } from '@/components/Dialog'
 import { MolstarViewer } from '@/components/MolstarViewer'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
 import { WorkflowProgress } from '@/components/WorkflowProgress'
+import { MaterialIcon } from '@/components/MaterialIcon'
+import { SequenceSourceControls } from '@/components/SequenceSourceControls'
 import { useSseMutation } from '@/hooks/useSseMutation'
+import { useClipboard } from '@/stores/clipboard'
 import type { SequenceHit, SequenceSearchResponse } from '@/types/api'
 import { cn } from '@/lib/utils'
 
@@ -158,13 +161,16 @@ export function SequenceSearchTab() {
           </div>
 
           {inputMode === 'paste' ? (
-            <textarea
-              rows={5}
-              value={sequence}
-              onChange={(e) => setSequence(e.target.value)}
-              placeholder="Amino acid sequence (single-letter code)"
-              className="w-full rounded-md border border-border bg-background p-3 font-mono text-xs"
-            />
+            <div className="space-y-1.5">
+              <SequenceSourceControls onSequence={setSequence} />
+              <textarea
+                rows={5}
+                value={sequence}
+                onChange={(e) => setSequence(e.target.value)}
+                placeholder="Amino acid sequence (single-letter code)"
+                className="w-full rounded-md border border-border bg-background p-3 font-mono text-xs"
+              />
+            </div>
           ) : (
             <div className="rounded-md border border-border bg-muted/30 p-3 text-xs">
               <input
@@ -310,6 +316,8 @@ export function SequenceSearchTab() {
 
 function HitDetail({ hit }: { hit: SequenceHit }) {
   const targetSeq = useMemo(() => hit.aligned_target.replace(/-/g, ''), [hit])
+  const clipAdd = useClipboard((s) => s.add)
+  const clipHas = useClipboard((s) => s.items.some((i) => i.kind === 'sequence' && i.value === targetSeq))
 
   const organism = useQuery({
     queryKey: ['seq-search', 'organism', hit.seq_id],
@@ -326,7 +334,25 @@ function HitDetail({ hit }: { hit: SequenceHit }) {
 
   return (
     <div className="space-y-4">
-      <div className="text-xs text-muted-foreground">{hit.description}</div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="text-xs text-muted-foreground">{hit.description}</div>
+        <button
+          type="button"
+          onClick={() =>
+            clipAdd({
+              kind: 'sequence',
+              value: targetSeq,
+              label: hit.seq_id,
+              source: 'Protein Search',
+            })
+          }
+          title="Copy this sequence to your Clipboard to use in another module (e.g. Structure Prediction)"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-primary/50 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/20"
+        >
+          <MaterialIcon name="assignment" className="text-[15px] text-cyan-400" />
+          {clipHas ? '✓ On clipboard' : 'Copy to Clipboard'}
+        </button>
+      </div>
       <div className="text-sm">
         <span className="text-muted-foreground">Suggested organism: </span>
         <span className="font-medium">
