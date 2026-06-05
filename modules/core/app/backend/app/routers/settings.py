@@ -220,13 +220,25 @@ def start_endpoints_trigger(
             "Start All Endpoints job is not configured. Redeploy the core module.",
         )
     s = get_settings()
-    run_id = workbench.execute_workflow(
-        int(job_id),
-        {
-            "catalog": s.catalog,
-            "schema": s.schema,
-            "sql_warehouse_id": s.warehouse_id,
-            "num_hours": str(payload.num_hours),
-        },
-    )
+    try:
+        run_id = workbench.execute_workflow(
+            int(job_id),
+            {
+                "catalog": s.catalog,
+                "schema": s.schema,
+                "sql_warehouse_id": s.warehouse_id,
+                "num_hours": str(payload.num_hours),
+            },
+        )
+    except Exception as e:
+        msg = str(e)
+        if "PERMISSION_DENIED" in msg or "does not have" in msg or "permission" in msg.lower():
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                "The app's service principal lacks run permission on the Start All Endpoints "
+                "job. Grant it CAN_MANAGE_RUN (a full core redeploy regrants it).",
+            )
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, f"Failed to start the endpoints job: {e}"
+        )
     return StartEndpointsTriggerResponse(run_id=str(run_id))
