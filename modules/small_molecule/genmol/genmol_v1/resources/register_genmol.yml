@@ -23,6 +23,11 @@ resources:
             spark_version: "15.4.x-scala2.12"
             node_type_id: ${var.cpu_node_type}
             num_workers: 0
+            # SINGLE_USER access mode is required for this classic cluster to read
+            # Unity Catalog Volumes (/Volumes/.../libraries holds the gwb wheel and
+            # the genmol cache). Without it: InvalidMountException on dbutils.fs.ls.
+            data_security_mode: SINGLE_USER
+            single_user_name: ${var.current_user}
             spark_conf:
               spark.databricks.cluster.profile: singleNode
               spark.master: "local[*]"
