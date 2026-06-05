@@ -257,10 +257,12 @@ def run_summary(payload: RunSummaryRequest, _: CurrentUserDep) -> RunSummaryResp
     client = MlflowClient()
     metrics: dict[str, float] = {}
     params: dict[str, str] = {}
+    experiment_id: str | None = None
     try:
         run_info = client.get_run(payload.run_id)
         metrics = dict(run_info.data.metrics or {})
         params = dict(run_info.data.params or {})
+        experiment_id = run_info.info.experiment_id
     except Exception:
         metrics = {}
 
@@ -332,7 +334,11 @@ def run_summary(payload: RunSummaryRequest, _: CurrentUserDep) -> RunSummaryResp
     host = _os.environ.get("DATABRICKS_HOSTNAME", "")
     if host and not host.startswith("https://"):
         host = f"https://{host}"
-    mlflow_run_url = f"{host}/ml/experiments/runs/{payload.run_id}" if host else None
+    mlflow_run_url = (
+        f"{host}/ml/experiments/{experiment_id}/runs/{payload.run_id}"
+        if host and experiment_id
+        else None
+    )
 
     return RunSummaryResponse(
         cells_total=cells_total,
