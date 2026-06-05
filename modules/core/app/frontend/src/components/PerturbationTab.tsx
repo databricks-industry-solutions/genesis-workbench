@@ -217,15 +217,6 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
         </label>
       </div>
 
-      <div className="flex items-center gap-2 text-xs">
-        <span className="text-muted-foreground">Add targets from your Clipboard:</span>
-        <ClipboardPaste
-          kind="gene"
-          label="Paste gene"
-          onPick={(it) => mergeIntoExtra([it.value])}
-        />
-      </div>
-
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <label className="block text-xs">
           <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
@@ -254,9 +245,16 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
         </label>
 
         <label className="block text-xs">
-          <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
-            Or add custom genes (comma-separated)
-          </span>
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <span className="uppercase tracking-wide text-muted-foreground">
+              Or add custom genes (comma-separated)
+            </span>
+            <ClipboardPaste
+              kind="gene"
+              label="Paste from Clipboard"
+              onPick={(it) => mergeIntoExtra([it.value])}
+            />
+          </div>
           <input
             type="text"
             value={extraGenes}

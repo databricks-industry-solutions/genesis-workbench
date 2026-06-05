@@ -4,6 +4,7 @@
 // into another module. No server round-trip — it's a pure client-side carrier.
 import { useState } from 'react'
 
+import { MaterialIcon } from '@/components/MaterialIcon'
 import { useClipboard, clipKindLabel, type ClipKind } from '@/stores/clipboard'
 import { cn } from '@/lib/utils'
 
@@ -30,7 +31,7 @@ export function ClipboardDrawer() {
         className="fixed left-1/2 top-0 z-40 flex -translate-x-1/2 items-center gap-1.5 bg-gradient-to-b from-teal-500/30 to-indigo-500/30 px-9 pb-2.5 pt-1.5 text-sm font-bold transition-colors hover:from-teal-500/45 hover:to-indigo-500/45"
         style={{ clipPath: 'polygon(0 0, 100% 0, 86% 100%, 14% 100%)' }}
       >
-        <span className="text-base">🗂️</span>
+        <MaterialIcon name="assignment" className="text-lg text-cyan-400" />
         <span>Clipboard</span>
         {count > 0 && (
           <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">
@@ -52,7 +53,7 @@ export function ClipboardDrawer() {
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div>
             <h2 className="flex items-center gap-1.5 text-sm font-bold">
-              <span className="text-base">🗂️</span> Clipboard
+              <MaterialIcon name="assignment" className="text-base text-cyan-400" /> Clipboard
             </h2>
             <p className="text-[10px] text-muted-foreground">
               Items of interest · kept for this session · paste across modules

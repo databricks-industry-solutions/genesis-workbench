@@ -8,6 +8,7 @@ import { Dialog } from '@/components/Dialog'
 import { MolstarViewer } from '@/components/MolstarViewer'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
 import { WorkflowProgress } from '@/components/WorkflowProgress'
+import { MaterialIcon } from '@/components/MaterialIcon'
 import { useSseMutation } from '@/hooks/useSseMutation'
 import { useClipboard } from '@/stores/clipboard'
 import type { SequenceHit, SequenceSearchResponse } from '@/types/api'
@@ -342,9 +343,10 @@ function HitDetail({ hit }: { hit: SequenceHit }) {
             })
           }
           title="Copy this sequence to your Clipboard to use in another module (e.g. Structure Prediction)"
-          className="shrink-0 rounded-md border border-primary/50 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/20"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-primary/50 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/20"
         >
-          {clipHas ? '🗂️ ✓ On clipboard' : '🗂️ Copy to Clipboard'}
+          <MaterialIcon name="assignment" className="text-[15px] text-cyan-400" />
+          {clipHas ? '✓ On clipboard' : 'Copy to Clipboard'}
         </button>
       </div>
       <div className="text-sm">

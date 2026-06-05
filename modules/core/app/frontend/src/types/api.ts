@@ -261,6 +261,7 @@ export type RunSummaryResponse = {
   obs_numerical: string[]
   all_columns: string[]
   mlflow_run_url: string | null
+  input_data_path?: string | null
 }
 
 export type ColorPointsResponse = {

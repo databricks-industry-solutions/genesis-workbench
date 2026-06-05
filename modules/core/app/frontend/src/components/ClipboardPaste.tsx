@@ -3,6 +3,7 @@
 // hands it to the parent (fill a field, add a perturbation target, …).
 import { useState } from 'react'
 
+import { MaterialIcon } from '@/components/MaterialIcon'
 import { useClipboard, type ClipItem, type ClipKind } from '@/stores/clipboard'
 
 export function ClipboardPaste({
@@ -28,9 +29,10 @@ export function ClipboardPaste({
             ? 'Clipboard has no items of this type yet'
             : 'Paste an item collected on your Clipboard'
         }
-        className="rounded-md border border-primary/50 bg-primary/10 px-2.5 py-1 font-medium text-primary hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-40"
+        className="inline-flex items-center gap-1 rounded-md border border-primary/50 bg-primary/10 px-2.5 py-1 font-medium text-primary hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-40"
       >
-        🗂️ {label}
+        <MaterialIcon name="assignment" className="text-[15px] text-cyan-400" />
+        {label}
         {items.length > 0 && ` (${items.length})`}
       </button>
 

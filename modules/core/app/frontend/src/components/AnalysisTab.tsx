@@ -33,13 +33,6 @@ export function AnalysisTab() {
     <div className="space-y-4">
       <SingleCellRunPicker value={run?.run_id ?? null} onChange={setRun} />
 
-      {run && (
-        <div className="space-y-0.5 text-sm font-semibold">
-          <div>Experiment: <code className="font-mono">{run.experiment_name}</code></div>
-          <div>Mode: <code className="font-mono">{run.processing_mode}</code></div>
-        </div>
-      )}
-
       {!run ? (
         <div className="rounded-md border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
           Pick a completed run above to run UMAP, markers, DE, pathway enrichment,
@@ -83,6 +76,33 @@ function AnalysisBody({ run }: { run: SingleCellRun }) {
   const s = summary.data
   return (
     <>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="space-y-0.5 text-sm">
+          <div>
+            <span className="font-semibold">Input file:</span>{' '}
+            <code className="break-all font-mono text-xs">{s.input_data_path ?? '—'}</code>
+          </div>
+          <div>
+            <span className="font-semibold">Experiment:</span>{' '}
+            <code className="font-mono text-xs">{run.experiment_name}</code>
+          </div>
+          <div>
+            <span className="font-semibold">Mode:</span>{' '}
+            <code className="font-mono text-xs">{run.processing_mode}</code>
+          </div>
+        </div>
+        {s.mlflow_run_url && (
+          <a
+            href={s.mlflow_run_url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-accent"
+          >
+            Open in MLflow ↗
+          </a>
+        )}
+      </div>
+
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Metric
           label="Total cells"

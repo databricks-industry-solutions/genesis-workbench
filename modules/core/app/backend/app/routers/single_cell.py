@@ -219,6 +219,7 @@ class RunSummaryResponse(BaseModel):
     obs_numerical: list[str]
     all_columns: list[str]
     mlflow_run_url: str | None
+    input_data_path: str | None = None
 
 
 # Curated set shown first in run-header tables
@@ -255,9 +256,11 @@ def run_summary(payload: RunSummaryRequest, _: CurrentUserDep) -> RunSummaryResp
     mlflow.set_tracking_uri("databricks")
     client = MlflowClient()
     metrics: dict[str, float] = {}
+    params: dict[str, str] = {}
     try:
         run_info = client.get_run(payload.run_id)
         metrics = dict(run_info.data.metrics or {})
+        params = dict(run_info.data.params or {})
     except Exception:
         metrics = {}
 
@@ -347,6 +350,7 @@ def run_summary(payload: RunSummaryRequest, _: CurrentUserDep) -> RunSummaryResp
         obs_numerical=obs_numerical,
         all_columns=[c for c in markers_df.columns],
         mlflow_run_url=mlflow_run_url,
+        input_data_path=params.get("data_path") or None,
     )
 
 
