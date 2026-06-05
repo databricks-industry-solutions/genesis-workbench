@@ -1205,7 +1205,7 @@ export function DESubTab({ runId, summary }: { runId: string; summary: RunSummar
           { label: 'Downloading markers_flat from MLflow', estSeconds: 5 },
           { label: 'Mann-Whitney U per gene', estSeconds: 6 },
           { label: 'Adjusting p-values', estSeconds: 1 },
-          { label: 'Interpreting result with Claude (Opus 4.8)', estSeconds: 8 },
+          { label: 'Interpreting Results', estSeconds: 8 },
         ]}
       />
 

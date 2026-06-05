@@ -299,7 +299,7 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
         <WorkflowProgress
           active
           title="scGPT perturbation prediction"
-          stages={[{ label: 'Interpreting result with Claude (Opus 4.8)', estSeconds: 8 }]}
+          stages={[{ label: 'Interpreting Results', estSeconds: 8 }]}
         />
       )}
 
