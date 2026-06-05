@@ -4,8 +4,10 @@ import type { ColumnDef } from '@tanstack/react-table'
 
 import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
+import { MaterialIcon } from '@/components/MaterialIcon'
 import { MolstarViewer } from '@/components/MolstarViewer'
 import { SequenceSourceControls } from '@/components/SequenceSourceControls'
+import { useClipboard } from '@/stores/clipboard'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
 import { useSseMutation } from '@/hooks/useSseMutation'
 import type { BinderDesign, BinderDesignResponse } from '@/types/api'
@@ -107,6 +109,14 @@ export function ProteinBinderDesignTab() {
     return selectedDesign.viewer_html_binder_only ?? null
   }, [selectedDesign, viewMode, design.data])
 
+  // Copy a generated binder sequence to the Clipboard (→ Structure Prediction, etc.).
+  const clipAdd = useClipboard((s) => s.add)
+  const clipItems = useClipboard((s) => s.items)
+  const clipSeqSet = useMemo(
+    () => new Set(clipItems.filter((i) => i.kind === 'sequence').map((i) => i.value)),
+    [clipItems],
+  )
+
   const tableColumns = useMemo<ColumnDef<BinderDesign, unknown>[]>(
     () => [
       { id: 'sample_id', header: 'Sample', accessorKey: 'sample_id' },
@@ -134,8 +144,34 @@ export function ProteinBinderDesignTab() {
             <span className="text-muted-foreground">—</span>
           ),
       },
+      {
+        id: 'copy',
+        header: '',
+        cell: (ctx) => {
+          const d = ctx.row.original
+          const onClip = clipSeqSet.has(d.sequence)
+          return (
+            <button
+              type="button"
+              onClick={() =>
+                clipAdd({
+                  kind: 'sequence',
+                  value: d.sequence,
+                  label: d.sample_id,
+                  source: 'Binder Design',
+                })
+              }
+              title="Copy this binder sequence to the Clipboard (use it in Structure Prediction, etc.)"
+              className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-primary/50 bg-primary/10 px-2 py-0.5 text-xs text-primary hover:bg-primary/20"
+            >
+              <MaterialIcon name="assignment" className="text-[14px] text-cyan-400" />
+              {onClip ? '✓' : 'Copy'}
+            </button>
+          )
+        },
+      },
     ],
-    [],
+    [clipAdd, clipSeqSet],
   )
 
   const mlflowUrl = design.data
