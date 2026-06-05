@@ -1464,6 +1464,16 @@ export function EnrichmentSubTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enrich.data])
 
+  // Pattern: AI interpretation is the final stage — keep progress up through it
+  // and reveal results only once the narrative settles.
+  const willNarrate = (enrich.data?.terms.length ?? 0) > 0
+  const narrativeSettled = narrative.isSuccess || narrative.isError
+  const interpreting = enrich.isSuccess && willNarrate && !narrativeSettled
+  const showResults = enrich.isSuccess && (!willNarrate || narrativeSettled)
+
+  // "Highlight in DE" confirmation (the highlight lands in the DE tab's store).
+  const [highlightedTerm, setHighlightedTerm] = useState<string | null>(null)
+
   const tableColumns = useMemo<ColumnDef<EnrichmentTerm, unknown>[]>(
     () => [
       { id: 'term', header: 'Term', accessorKey: 'term' },
@@ -1504,7 +1514,10 @@ export function EnrichmentSubTab({
               <button
                 type="button"
                 title="Highlight these genes in the Differential Expression tab"
-                onClick={() => setDeHighlight({ genes: new Set(genes), label: ctx.row.original.term })}
+                onClick={() => {
+                  setDeHighlight({ genes: new Set(genes), label: ctx.row.original.term })
+                  setHighlightedTerm(ctx.row.original.term)
+                }}
                 className="whitespace-nowrap rounded border border-yellow-400/50 bg-yellow-400/10 px-1.5 text-xs text-yellow-700 hover:bg-yellow-400/20 dark:text-yellow-400"
               >
                 ◆ Highlight in DE
@@ -1514,7 +1527,7 @@ export function EnrichmentSubTab({
         },
       },
     ],
-    [clipAddMany, setDeHighlight],
+    [clipAddMany, setDeHighlight, setHighlightedTerm],
   )
 
   const topTerms = (enrich.data?.terms ?? []).slice(0, 15)
@@ -1578,13 +1591,14 @@ export function EnrichmentSubTab({
       </div>
 
       <WorkflowProgress
-        active={enrich.isPending}
+        active={enrich.isPending || interpreting}
         title="Pathway enrichment"
         stages={[
           { label: 'Downloading markers_flat from MLflow', estSeconds: 5 },
           { label: 'Selecting top genes', estSeconds: 1 },
           { label: 'Loading GMT files from UC volume', estSeconds: 4 },
           { label: "Running Fisher's exact per term", estSeconds: 8 },
+          { label: 'Interpreting Results', estSeconds: 8 },
         ]}
       />
 
@@ -1599,7 +1613,7 @@ export function EnrichmentSubTab({
           No enriched terms.
         </div>
       )}
-      {enrich.data && enrich.data.terms.length > 0 && (
+      {showResults && willNarrate && (
         <NarrativePanel
           isPending={narrative.isPending}
           data={narrative.data}
@@ -1607,14 +1621,20 @@ export function EnrichmentSubTab({
           onRegenerate={() => narrative.mutate()}
         />
       )}
-      {enrich.data && topTerms.length > 0 && <EnrichmentBar terms={topTerms} cluster={cluster} />}
-      {enrich.data && enrich.data.terms.length > 0 && (
+      {showResults && topTerms.length > 0 && <EnrichmentBar terms={topTerms} cluster={cluster} />}
+      {showResults && enrich.data && enrich.data.terms.length > 0 && (
         <>
           <p className="text-[11px] text-muted-foreground">
             Per term: <strong>+ Study list</strong> adds its leading-edge genes to your study list
             (→ Perturbation / Large Molecule); <strong>◆ Highlight in DE</strong> highlights those
             genes over in the Differential Expression tab.
           </p>
+          {highlightedTerm && (
+            <div className="rounded-md border border-yellow-400/40 bg-yellow-400/10 p-2 text-xs text-yellow-700 dark:text-yellow-400">
+              ◆ Set <strong>{highlightedTerm}</strong> as the highlight — open the{' '}
+              <strong>Differential Expression</strong> tab to see those genes flagged.
+            </div>
+          )}
           <DataTable columns={tableColumns} data={enrich.data.terms.slice(0, 30)} />
         </>
       )}
