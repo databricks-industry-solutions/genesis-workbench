@@ -91,10 +91,10 @@ export function StructurePredictionTab() {
         {/* Left: shared input panel for all three models. */}
         <div className="space-y-3">
           <div className="text-xs">
-            <div className="mb-1 flex items-center justify-between gap-2">
-              <span className="uppercase tracking-wide text-muted-foreground">Protein sequence</span>
-              <SequenceSourceControls onSequence={setSequence} />
-            </div>
+            <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
+              Protein sequence
+            </span>
+            <SequenceSourceControls onSequence={setSequence} className="mb-1.5" />
             <textarea
               rows={8}
               value={sequence}

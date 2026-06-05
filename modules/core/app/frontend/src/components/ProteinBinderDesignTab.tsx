@@ -177,12 +177,10 @@ export function ProteinBinderDesignTab() {
 
           {inputMode === 'sequence' ? (
             <label className="block text-xs">
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <span className="uppercase tracking-wide text-muted-foreground">
-                  Target sequence
-                </span>
-                <SequenceSourceControls onSequence={setSequence} />
-              </div>
+              <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
+                Target sequence
+              </span>
+              <SequenceSourceControls onSequence={setSequence} className="mb-1.5" />
               <textarea
                 rows={4}
                 value={sequence}

@@ -162,9 +162,7 @@ export function SequenceSearchTab() {
 
           {inputMode === 'paste' ? (
             <div className="space-y-1.5">
-              <div className="flex justify-end">
-                <SequenceSourceControls onSequence={setSequence} />
-              </div>
+              <SequenceSourceControls onSequence={setSequence} />
               <textarea
                 rows={5}
                 value={sequence}

@@ -67,12 +67,10 @@ export function ProteinDesignTab() {
         {/* Left: form */}
         <div className="space-y-3">
           <label className="block text-xs">
-            <div className="mb-1 flex items-center justify-between gap-2">
-              <span className="uppercase tracking-wide text-muted-foreground">
-                Input sequence — masked region in [brackets]
-              </span>
-              <SequenceSourceControls onSequence={setSequence} />
-            </div>
+            <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
+              Input sequence — masked region in [brackets]
+            </span>
+            <SequenceSourceControls onSequence={setSequence} className="mb-1.5" />
             <textarea
               rows={8}
               value={sequence}
