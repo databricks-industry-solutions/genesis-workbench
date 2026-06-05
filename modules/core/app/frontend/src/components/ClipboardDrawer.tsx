@@ -22,19 +22,17 @@ export function ClipboardDrawer() {
 
   return (
     <>
-      {/* Center-top trapezoid tab — hangs from the top edge (wide top, narrowing
-          down), \____/ shape. */}
+      {/* Center-top tab — short, translucent, rounded bottom corners. */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         title="Clipboard — your collected items of interest"
-        className="fixed left-1/2 top-0 z-40 flex -translate-x-1/2 items-center gap-1.5 bg-gradient-to-b from-teal-500/30 to-indigo-500/30 px-9 pb-2.5 pt-1.5 text-sm font-bold transition-colors hover:from-teal-500/45 hover:to-indigo-500/45"
-        style={{ clipPath: 'polygon(0 0, 100% 0, 86% 100%, 14% 100%)' }}
+        className="fixed left-1/2 top-0 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-b-2xl border border-t-0 border-border/40 bg-card/40 px-4 py-1 text-xs font-semibold backdrop-blur-sm transition-colors hover:bg-card/70"
       >
-        <MaterialIcon name="assignment" className="text-lg text-cyan-400" />
+        <MaterialIcon name="assignment" className="text-base text-cyan-400" />
         <span>Clipboard</span>
         {count > 0 && (
-          <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">
+          <span className="rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground">
             {count}
           </span>
         )}
