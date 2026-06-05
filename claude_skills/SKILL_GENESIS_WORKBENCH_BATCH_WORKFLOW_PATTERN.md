@@ -17,6 +17,26 @@ Follow this pattern end-to-end. Don't invent a parallel approach — every batch
 - Anything the user wants to launch and walk away from.
 - Anything that needs to surface result history *after* the user closes the tab.
 
+## Non-negotiable: every batch workflow ships status + search
+
+**A batch workflow is NOT done until it has BOTH of these — build them in from the start, never as a follow-up:**
+
+1. **MLflow status logging.** Pre-create the run in the dispatcher and tag it
+   `origin=genesis_workbench`, `feature=<feature>`, `created_by=<email>`, and a
+   **progressive `job_status`** that the orchestrator advances
+   (`submitted` → `started` → stage-specific → `complete` / `failed`). Log the
+   final result location as a tag (e.g. `result_location`) plus the run's metrics.
+2. **A "Search Past Runs" feature.** A `GET /<feature>/search?by=run_name|experiment_name`
+   endpoint that queries MLflow by those tags, the reusable React `RunSearchSection`,
+   and a result dialog (a `run-details` endpoint) showing metrics + result location.
+   View is gated until `job_status == complete`.
+
+Reason this is a hard rule: the BioNeMo ESM2 fine-tune feature was first shipped
+launch-only (no status/search) and had to be retrofitted — a full extra cycle
+(dispatcher pre-create, notebook `job_status` tags, search + run-details
+endpoints, frontend). Genomics / AlphaFold / Enzyme / **BioNeMo ESM2 fine-tune**
+all now follow this; copy from one of them rather than shipping launch-only.
+
 ## What NOT to do (anti-patterns from real bugs in this repo)
 
 These each cost a deploy cycle when they slipped in. Read them before writing code.

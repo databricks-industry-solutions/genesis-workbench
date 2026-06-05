@@ -8,6 +8,7 @@ import { MolstarViewer } from '@/components/MolstarViewer'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
 import { useSseMutation } from '@/hooks/useSseMutation'
 import type { DockingPose, MolecularDockingResponse } from '@/types/api'
+import { StructurePicker } from '@/components/StructurePicker'
 
 function ts(): string {
   const d = new Date()
@@ -139,14 +140,17 @@ export function MolecularDockingTab() {
           </label>
 
           <label className="block text-xs">
-            <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
-              Target protein (PDB)
-            </span>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="block uppercase tracking-wide text-muted-foreground">
+                Target protein (PDB)
+              </span>
+              <StructurePicker onPick={setProteinPdb} />
+            </div>
             <textarea
               rows={10}
               value={proteinPdb}
               onChange={(e) => setProteinPdb(e.target.value)}
-              placeholder="ATOM…"
+              placeholder="ATOM…  — or use “Pick a structure from a prior run”"
               className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-[10px] leading-tight"
             />
           </label>

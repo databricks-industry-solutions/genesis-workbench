@@ -152,6 +152,8 @@ export type StructurePredictionResponse = {
   pdb: string
   viewer_html: string
   model: string
+  run_id?: string | null
+  run_url?: string | null
 }
 
 export type AlphaFoldStartResponse = { job_run_id: string }
@@ -209,8 +211,11 @@ export type SingleCellRun = {
   status: string
   progress: string
   cells: number | null
+  marked_genes: string[]
 }
 export type SingleCellRunsResponse = { runs: SingleCellRun[] }
+export type MarkGenesRequest = { run_id: string; genes: string[] }
+export type MarkGenesResponse = { marked_genes: string[] }
 
 export type StartProcessingRequest = {
   mode: 'scanpy' | 'rapids-singlecell'
@@ -256,6 +261,7 @@ export type RunSummaryResponse = {
   obs_numerical: string[]
   all_columns: string[]
   mlflow_run_url: string | null
+  input_data_path?: string | null
 }
 
 export type ColorPointsResponse = {
@@ -290,6 +296,9 @@ export type DEGene = {
   mean_b: number
   significant: boolean
 }
+export type GenesetDbsResponse = { dbs: string[] }
+export type GenesetTerm = { term: string; size: number; genes: string[] }
+export type GenesetTermsResponse = { terms: GenesetTerm[] }
 export type DEResponse = {
   genes: DEGene[]
   n_significant: number
@@ -392,6 +401,54 @@ export type SimilarityResponse = {
   sources: CategoryCount[]
 }
 
+export type PerturbationNarrativeGene = { gene: string; delta: number }
+export type PerturbationNarrativeRequest = {
+  run_id?: string
+  cluster: string
+  perturbation_type: string
+  genes_to_perturb: string[]
+  cell_type?: string | null
+  summary_total_genes?: number
+  summary_significant_count?: number
+  summary_max_abs_delta?: number
+  top_genes: PerturbationNarrativeGene[]
+}
+export type NarrativeResponse = { narrative: string; model: string }
+export type EnrichmentNarrativeTerm = {
+  term: string
+  gene_set: string
+  p_adj: number
+  overlap: string
+  genes: string
+}
+export type EnrichmentNarrativeRequest = {
+  run_id?: string
+  cluster: string
+  cell_type?: string | null
+  terms: EnrichmentNarrativeTerm[]
+}
+export type TrajectoryNarrativeRequest = {
+  run_id?: string
+  gene: string
+  n_cells?: number
+  pseudotime_min?: number
+  pseudotime_max?: number
+  early_mean?: number
+  late_mean?: number
+}
+export type DENarrativeGene = { gene: string; log2fc: number; p_adj: number }
+export type DENarrativeRequest = {
+  run_id?: string
+  cluster_a: string
+  cluster_b: string
+  cell_type_a?: string | null
+  cell_type_b?: string | null
+  n_significant?: number
+  up_genes: DENarrativeGene[]
+  down_genes: DENarrativeGene[]
+  highlight_label?: string | null
+  highlight_hits?: string[]
+}
 export type PerturbationGene = {
   gene_name: string
   original_expression: number | null
@@ -734,4 +791,81 @@ export type GenomicsDefaultsResponse = {
   vcf_ingestion: {
     vcf_path: string
   }
+}
+
+// ─── NVIDIA BioNeMo ──────────────────────────────────────────────────────────
+
+export type BionemoVariantsResponse = { esm2: string[] }
+
+export type BionemoWeight = {
+  // string (BIGINT ft_id exceeds JS safe-integer range — never parse as number)
+  ft_id: string
+  ft_label: string
+  variant: string
+  model_type: string
+  experiment_name: string | null
+  run_id: string | null
+  created_by: string | null
+  created_datetime: string | null
+}
+export type BionemoWeightsResponse = { weights: BionemoWeight[] }
+
+export type BionemoDispatchResponse = { job_run_id: number; run_url: string }
+
+export type BionemoFinetuneRequest = {
+  esm_variant: string
+  train_data: string
+  evaluation_data: string
+  finetune_label: string
+  experiment_name: string
+  should_use_lora: boolean
+  task_type: string
+  num_steps: number
+  micro_batch_size: number
+  precision: string
+  mlp_ft_dropout: number
+  mlp_hidden_size: number
+  mlp_target_size: number
+  mlp_lr: number
+  mlp_lr_multiplier: number
+}
+
+export type BionemoInferenceRequest = {
+  esm_variant: string
+  is_base_model: boolean
+  finetune_run_id: string
+  task_type: string
+  data_location: string
+  sequence_column_name: string
+  result_location: string
+  experiment_name: string
+  run_name: string
+}
+
+export type BionemoDefaultsResponse = {
+  train_data: string
+  evaluation_data: string
+  inference_data: string
+  sequence_column: string
+  result_location: string
+}
+
+export type BionemoFinetuneRunDetails = {
+  run_name: string
+  status: string
+  job_status: string
+  result_location: string
+  job_run_id: string
+  params: Record<string, string>
+  metrics: Record<string, number>
+}
+
+export type ResolveGeneResponse = {
+  found: boolean
+  gene?: string
+  accession?: string
+  protein_name?: string
+  organism?: string
+  sequence?: string
+  length?: number
 }

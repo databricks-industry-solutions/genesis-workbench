@@ -48,8 +48,9 @@ def start_esm2_finetuning(user_info: UserInfo,
             mlp_hidden_size:int,
             mlp_target_size:int,
             mlp_lr:float,
-            mlp_lr_multiplier:float):
-    
+            mlp_lr_multiplier:float,
+            mlflow_run_id:str = ""):
+
     print(f"Starting a finetune run with label: {finetune_label}")
     bionemo_finetune_job_id = os.environ["BIONEMO_ESM_FINETUNE_JOB_ID"]
     params = {
@@ -68,7 +69,11 @@ def start_esm2_finetuning(user_info: UserInfo,
         "lr" : mlp_lr,
         "lr_multiplier" : mlp_lr_multiplier,
         "micro_batch_size" : micro_batch_size,
-        "precision" : precision
+        "precision" : precision,
+        # When set, the notebook logs into this pre-created MLflow run (so the
+        # UI can show "submitted" status immediately). Empty → notebook creates
+        # its own run (back-compat).
+        "mlflow_run_id" : mlflow_run_id or "",
     }
     print(params)
     run_id = execute_workflow(bionemo_finetune_job_id,params)
@@ -81,22 +86,30 @@ def start_esm2_inference(user_info: UserInfo,
                         task_type:str,
                         data_volume_location:str,
                         sequence_column_name:str,
-                        result_location:str):
-    
+                        result_location:str,
+                        experiment_name:str = "gwb_bionemo_esm2_inference",
+                        run_name:str = "",
+                        mlflow_run_id:str = ""):
+
     print(f"Starting an Inference run")
-    bionemo_finetune_job_id = os.environ["BIONEMO_ESM_INFERENCE_JOB_ID"]
+    bionemo_inference_job_id = os.environ["BIONEMO_ESM_INFERENCE_JOB_ID"]
     params = {
         "user_email": "a@b.com" if not (user_info and user_info.user_email) else user_info.user_email,
         "esm_variant" :esm_variant,
         "is_base_model" : "true" if is_base_model else "false",
         "task_type": task_type,
-        "data_location" : data_volume_location,                
+        "data_location" : data_volume_location,
         "finetune_run_id" : finetune_run_id,
         "sequence_column_name" : sequence_column_name,
-        "result_location": result_location
+        "result_location": result_location,
+        "experiment_name" : experiment_name,
+        "run_name" : run_name,
+        # When set, the notebook logs into this pre-created MLflow run so the UI
+        # shows "submitted" status immediately. Empty → notebook creates its own.
+        "mlflow_run_id" : mlflow_run_id or "",
     }
     print(params)
-    run_id = execute_workflow(bionemo_finetune_job_id,params)
+    run_id = execute_workflow(bionemo_inference_job_id,params)
     return run_id
 
 

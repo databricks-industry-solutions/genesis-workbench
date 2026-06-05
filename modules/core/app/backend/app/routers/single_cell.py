@@ -17,6 +17,30 @@ from app.services.sse import stream_with_progress
 router = APIRouter(prefix="/api/single_cell", tags=["single_cell"])
 
 
+def _persist_result(run_id: str, subdir: str, name: str, payload: dict) -> None:
+    """Fire-and-forget: log an analysis result artifact to the run's MLflow run
+    in a daemon thread, so persisting never adds latency to (or fails) the
+    user-visible response."""
+    import threading
+
+    threading.Thread(
+        target=runs_service.save_analysis,
+        args=(run_id, subdir, name, payload),
+        daemon=True,
+    ).start()
+
+
+def _persist_text(run_id: str, subdir: str, name: str, text: str) -> None:
+    """Fire-and-forget variant for text artifacts (e.g. AI narratives)."""
+    import threading
+
+    threading.Thread(
+        target=runs_service.save_analysis_text,
+        args=(run_id, subdir, name, text),
+        daemon=True,
+    ).start()
+
+
 class SingleCellRun(BaseModel):
     run_id: str
     run_name: str
@@ -26,10 +50,20 @@ class SingleCellRun(BaseModel):
     status: str
     progress: str
     cells: int | None
+    marked_genes: list[str] = []
 
 
 class RunsResponse(BaseModel):
     runs: list[SingleCellRun]
+
+
+class MarkGenesRequest(BaseModel):
+    run_id: str = Field(..., min_length=1)
+    genes: list[str] = Field(default_factory=list)
+
+
+class MarkGenesResponse(BaseModel):
+    marked_genes: list[str]
 
 
 @router.get("/runs", response_model=RunsResponse)
@@ -48,10 +82,24 @@ def list_runs(user: CurrentUserDep) -> RunsResponse:
                 status=r.status,
                 progress=runs_service.progress_chip(r.status),
                 cells=r.cells,
+                marked_genes=r.marked_genes,
             )
             for r in items
         ]
     )
+
+
+@router.post("/runs/mark-genes", response_model=MarkGenesResponse)
+def mark_genes(payload: MarkGenesRequest, _: CurrentUserDep) -> MarkGenesResponse:
+    """Persist the marked genes-of-interest on a run (MLflow tag
+    `marked_interested` + artifact) so Large Molecule can pick the target."""
+    try:
+        marked = runs_service.mark_genes(payload.run_id, payload.genes)
+    except Exception as e:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, f"Failed to save marked genes: {e}"
+        )
+    return MarkGenesResponse(marked_genes=marked)
 
 
 class StartProcessingRequest(BaseModel):
@@ -171,6 +219,7 @@ class RunSummaryResponse(BaseModel):
     obs_numerical: list[str]
     all_columns: list[str]
     mlflow_run_url: str | None
+    input_data_path: str | None = None
 
 
 # Curated set shown first in run-header tables
@@ -207,9 +256,13 @@ def run_summary(payload: RunSummaryRequest, _: CurrentUserDep) -> RunSummaryResp
     mlflow.set_tracking_uri("databricks")
     client = MlflowClient()
     metrics: dict[str, float] = {}
+    params: dict[str, str] = {}
+    experiment_id: str | None = None
     try:
         run_info = client.get_run(payload.run_id)
         metrics = dict(run_info.data.metrics or {})
+        params = dict(run_info.data.params or {})
+        experiment_id = run_info.info.experiment_id
     except Exception:
         metrics = {}
 
@@ -281,7 +334,11 @@ def run_summary(payload: RunSummaryRequest, _: CurrentUserDep) -> RunSummaryResp
     host = _os.environ.get("DATABRICKS_HOSTNAME", "")
     if host and not host.startswith("https://"):
         host = f"https://{host}"
-    mlflow_run_url = f"{host}/ml/experiments/runs/{payload.run_id}" if host else None
+    mlflow_run_url = (
+        f"{host}/ml/experiments/{experiment_id}/runs/{payload.run_id}"
+        if host and experiment_id
+        else None
+    )
 
     return RunSummaryResponse(
         cells_total=cells_total,
@@ -299,6 +356,7 @@ def run_summary(payload: RunSummaryRequest, _: CurrentUserDep) -> RunSummaryResp
         obs_numerical=obs_numerical,
         all_columns=[c for c in markers_df.columns],
         mlflow_run_url=mlflow_run_url,
+        input_data_path=params.get("data_path") or None,
     )
 
 
@@ -1126,12 +1184,24 @@ def perturbation_stream(payload: PerturbationRequest, _: CurrentUserDep):
                 "abs_delta": _safe_float(r.get("abs_delta")),
             })
         progress_cb(100, f"Returning top {len(rows)} genes")
-        return {
+        result = {
             "results": rows,
             "summary_total_genes": int(len(result_df)),
             "summary_max_abs_delta": max_abs,
             "summary_significant_count": significant,
         }
+        _persist_result(
+            payload.run_id,
+            "perturbation",
+            f"cluster_{payload.cluster}__{payload.perturbation_type}__{'_'.join(payload.genes_to_perturb)}",
+            {
+                "cluster": payload.cluster,
+                "perturbation_type": payload.perturbation_type,
+                "genes_to_perturb": payload.genes_to_perturb,
+                **result,
+            },
+        )
+        return result
 
     return StreamingResponse(
         stream_with_progress(work),
@@ -1146,6 +1216,282 @@ def _safe_float(value) -> float | None:
         return f if f == f else None  # filter NaN
     except (TypeError, ValueError):
         return None
+
+
+# ─── Perturbation AI narrative (Claude Opus 4.8) ───────────────────────────
+
+
+class PerturbationNarrativeGene(BaseModel):
+    gene: str
+    delta: float
+
+
+class PerturbationNarrativeRequest(BaseModel):
+    run_id: str | None = None
+    cluster: str
+    perturbation_type: str
+    genes_to_perturb: list[str]
+    cell_type: str | None = None
+    summary_total_genes: int | None = None
+    summary_significant_count: int | None = None
+    summary_max_abs_delta: float | None = None
+    top_genes: list[PerturbationNarrativeGene] = Field(default_factory=list)
+
+
+class NarrativeResponse(BaseModel):
+    narrative: str
+    model: str
+
+
+# Every narrative leads with a scannable Highlights block, then the detail.
+_NARRATIVE_FORMAT = """Format the response in markdown as:
+1. A **Highlights** heading, then 2-3 bullet points — each bullet STARTS with a short **bolded key phrase**, then a few words — capturing the most important takeaways at a glance.
+2. Then the detailed explanation, using the bold-headed sections specified below.
+Keep the whole thing ~200-280 words. Be specific to the genes/numbers provided. Do NOT invent genes or numbers."""
+
+
+def _run_narrative(system_prompt: str, context: str) -> NarrativeResponse:
+    """Shared LLM call for the AI narratives (perturbation, DE). Uses the
+    premium narrative endpoint (default Claude Opus 4.8) via the app SP."""
+    from databricks.sdk.service.serving import ChatMessage, ChatMessageRole
+
+    endpoint = get_settings().narrative_llm_endpoint_name
+    if not endpoint:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Narrative LLM endpoint not configured (NARRATIVE_LLM_ENDPOINT_NAME)",
+        )
+    w = WorkspaceClient()
+    try:
+        response = w.serving_endpoints.query(
+            name=endpoint,
+            messages=[
+                ChatMessage(role=ChatMessageRole.SYSTEM, content=system_prompt),
+                ChatMessage(role=ChatMessageRole.USER, content=context),
+            ],
+            max_tokens=800,
+        )
+        content = response.choices[0].message.content if response.choices else None
+        if not content or not content.strip():
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                "The model returned an empty response — try Regenerate.",
+            )
+        return NarrativeResponse(narrative=content, model=endpoint)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, f"Narrative generation failed: {e}"
+        )
+
+
+@router.post("/perturbation/narrative", response_model=NarrativeResponse)
+def perturbation_narrative(
+    payload: PerturbationNarrativeRequest, _: CurrentUserDep
+) -> NarrativeResponse:
+    """Plain-language interpretation of a perturbation result (default Opus 4.8).
+    Reads only the data shown; the prompt forbids inventing data or claiming
+    viability/efficacy."""
+    ptype = "knockout" if payload.perturbation_type == "knockout" else "overexpression"
+    up = [g for g in payload.top_genes if g.delta > 0][:15]
+    dn = [g for g in payload.top_genes if g.delta < 0][:15]
+
+    def _fmt(rows: list[PerturbationNarrativeGene]) -> str:
+        return ", ".join(f"{g.gene} ({g.delta:+.4f})" for g in rows) or "none"
+
+    ct = f" (annotated cell type: {payload.cell_type})" if payload.cell_type else ""
+    context = f"""In-silico scGPT perturbation prediction.
+- Perturbation: {ptype} of {', '.join(payload.genes_to_perturb)}
+- Cluster: {payload.cluster}{ct}
+- Genes evaluated: {payload.summary_total_genes}; significantly changed: {payload.summary_significant_count}; max |delta|: {payload.summary_max_abs_delta}
+- Top genes UP after perturbation: {_fmt(up)}
+- Top genes DOWN after perturbation: {_fmt(dn)}
+(delta = predicted change in scGPT expression units; small absolute values are expected — scGPT is conservative.)"""
+
+    system_prompt = f"""You are a computational biologist helping a bench scientist interpret an in-silico single-cell perturbation prediction from scGPT.
+
+{_NARRATIVE_FORMAT}
+
+Detailed-explanation sections (bold headings):
+- **What was tested** — one line restating the perturbation.
+- **What the model predicts** — name the notable up/down genes and the biological program/pathway they belong to; state what the direction implies.
+- **So what** — the biological takeaway, grounded ONLY in the data shown.
+- **Caveats** — scGPT predicts a transcriptional response, NOT cell viability or death; magnitudes are model estimates; a gene absent from the panel cannot be perturbed (a flat/near-zero result means no coverage, not no effect).
+
+Do NOT overstate — never claim cell death, efficacy, or clinical effect."""
+
+    resp = _run_narrative(system_prompt, context)
+    if payload.run_id:
+        _persist_text(
+            payload.run_id,
+            "perturbation",
+            f"cluster_{payload.cluster}__{payload.perturbation_type}__{'_'.join(payload.genes_to_perturb)}",
+            resp.narrative,
+        )
+    return resp
+
+
+class DENarrativeGene(BaseModel):
+    gene: str
+    log2fc: float
+    p_adj: float
+
+
+class DENarrativeRequest(BaseModel):
+    run_id: str | None = None
+    cluster_a: str
+    cluster_b: str
+    cell_type_a: str | None = None
+    cell_type_b: str | None = None
+    n_significant: int | None = None
+    up_genes: list[DENarrativeGene] = Field(default_factory=list)
+    down_genes: list[DENarrativeGene] = Field(default_factory=list)
+    highlight_label: str | None = None
+    highlight_hits: list[str] = Field(default_factory=list)
+
+
+@router.post("/de/narrative", response_model=NarrativeResponse)
+def de_narrative(payload: DENarrativeRequest, _: CurrentUserDep) -> NarrativeResponse:
+    """Plain-language interpretation of a differential-expression result."""
+    a_lab = f"cluster {payload.cluster_a}" + (
+        f" ({payload.cell_type_a})" if payload.cell_type_a else ""
+    )
+    b_lab = f"cluster {payload.cluster_b}" + (
+        f" ({payload.cell_type_b})" if payload.cell_type_b else ""
+    )
+
+    def _fmt(rows: list[DENarrativeGene]) -> str:
+        return (
+            ", ".join(f"{g.gene} (log2FC {g.log2fc:+.2f}, p_adj {g.p_adj:.1e})" for g in rows)
+            or "none"
+        )
+
+    hl = ""
+    if payload.highlight_label:
+        hits = ", ".join(payload.highlight_hits) or "none of its genes are significant here"
+        hl = f"\n- Highlighted gene set '{payload.highlight_label}' — significant hits: {hits}"
+    context = f"""Differential expression between two single-cell clusters (Mann-Whitney U on the highly-variable genes; log2FC of mean expression; Benjamini-Hochberg p_adj).
+- Group A = {a_lab}; Group B = {b_lab}
+- Significant genes (|log2FC|>1, p_adj<0.05): {payload.n_significant}
+- Top genes UP in A: {_fmt(payload.up_genes)}
+- Top genes UP in B (down in A): {_fmt(payload.down_genes)}{hl}"""
+
+    system_prompt = f"""You are a computational biologist helping a bench scientist interpret a differential-expression result between two single-cell clusters.
+
+{_NARRATIVE_FORMAT}
+
+Detailed-explanation sections (bold headings):
+- **Contrast** — one line: what A vs B is.
+- **Up in A** — the notable A-enriched genes and the biological program / cell identity they suggest.
+- **Up in B** — the same for B.
+- **Takeaway** — what distinguishes these populations, grounded ONLY in the genes shown.
+- **Caveats** — DE here is limited to highly-variable genes (key genes may be absent); this is association, not causation.
+
+Do NOT claim clinical or therapeutic effect."""
+
+    resp = _run_narrative(system_prompt, context)
+    if payload.run_id:
+        _persist_text(
+            payload.run_id,
+            "differential_expression",
+            f"cluster_{payload.cluster_a}_vs_{payload.cluster_b}",
+            resp.narrative,
+        )
+    return resp
+
+
+class EnrichmentNarrativeTerm(BaseModel):
+    term: str
+    gene_set: str
+    p_adj: float
+    overlap: str
+    genes: str
+
+
+class EnrichmentNarrativeRequest(BaseModel):
+    run_id: str | None = None
+    cluster: str
+    cell_type: str | None = None
+    terms: list[EnrichmentNarrativeTerm] = Field(default_factory=list)
+
+
+@router.post("/enrichment/narrative", response_model=NarrativeResponse)
+def enrichment_narrative(
+    payload: EnrichmentNarrativeRequest, _: CurrentUserDep
+) -> NarrativeResponse:
+    """Plain-language interpretation of a pathway-enrichment result."""
+    ct = f" (annotated cell type: {payload.cell_type})" if payload.cell_type else ""
+    lines = [
+        f"- {t.term} [{t.gene_set}] — p_adj {t.p_adj:.1e}, overlap {t.overlap}; "
+        f"leading-edge genes: {t.genes}"
+        for t in payload.terms[:15]
+    ]
+    context = f"""Pathway / gene-set enrichment (Fisher's exact on the cluster's top marker genes vs GO/KEGG/Reactome).
+- Cluster: {payload.cluster}{ct}
+- Top enriched terms (most significant first):
+{chr(10).join(lines) if lines else '(none)'}"""
+
+    system_prompt = f"""You are a computational biologist helping a bench scientist interpret a pathway-enrichment result for a single-cell cluster.
+
+{_NARRATIVE_FORMAT}
+
+Detailed-explanation sections (bold headings):
+- **Dominant programs** — group the enriched terms into 2-3 biological themes; name the leading-edge genes that drive them.
+- **What it says about this cluster** — the cell state / identity / behaviour these programs imply.
+- **Caveats** — enrichment is computed over the highly-variable marker genes (not the whole transcriptome); overlap-based significance is association, not causation; redundant/overlapping terms are expected.
+
+Do NOT claim clinical or therapeutic effect."""
+
+    resp = _run_narrative(system_prompt, context)
+    if payload.run_id:
+        _persist_text(
+            payload.run_id, "pathway_enrichment", f"cluster_{payload.cluster}", resp.narrative
+        )
+    return resp
+
+
+class TrajectoryNarrativeRequest(BaseModel):
+    run_id: str | None = None
+    gene: str
+    n_cells: int | None = None
+    pseudotime_min: float | None = None
+    pseudotime_max: float | None = None
+    early_mean: float | None = None
+    late_mean: float | None = None
+
+
+@router.post("/trajectory/narrative", response_model=NarrativeResponse)
+def trajectory_narrative(
+    payload: TrajectoryNarrativeRequest, _: CurrentUserDep
+) -> NarrativeResponse:
+    """Plain-language interpretation of a gene's dynamics along pseudotime."""
+    direction = "flat"
+    if payload.early_mean is not None and payload.late_mean is not None:
+        diff = payload.late_mean - payload.early_mean
+        direction = "rising" if diff > 0.05 else "falling" if diff < -0.05 else "roughly flat"
+    context = f"""Diffusion-pseudotime trajectory analysis. Expression of one gene plotted along the inferred ordering.
+- Gene: {payload.gene}
+- Cells: {payload.n_cells}
+- Pseudotime range: {payload.pseudotime_min} – {payload.pseudotime_max}
+- Mean expression early (low pseudotime): {payload.early_mean}; late (high pseudotime): {payload.late_mean}
+- Overall trend along pseudotime: {direction}"""
+
+    system_prompt = f"""You are a computational biologist helping a bench scientist interpret a single gene's expression dynamics along an inferred diffusion-pseudotime trajectory.
+
+{_NARRATIVE_FORMAT}
+
+Detailed-explanation sections (bold headings):
+- **The dynamic** — restate whether {payload.gene} rises or falls along pseudotime and roughly where.
+- **What it could mean** — what a gene with this role behaving this way suggests for a differentiation / state-transition continuum (e.g. loss of a normal program, gain of an activated/malignant program). Ground it in the gene's known biology only if well established.
+- **Caveats** — pseudotime is an INFERRED ordering, not real time; the root/direction can be arbitrary; this is a single gene and one trajectory model.
+
+Do NOT claim clinical or therapeutic effect."""
+
+    resp = _run_narrative(system_prompt, context)
+    if payload.run_id:
+        _persist_text(payload.run_id, "trajectory", str(payload.gene), resp.narrative)
+    return resp
 
 
 # ─── UMAP color-points ──────────────────────────────────────────────────────
@@ -1517,7 +1863,14 @@ def run_de(payload: DERequest, _: CurrentUserDep) -> DEResponse:
                 significant=significant,
             )
         )
-    return DEResponse(genes=out, n_significant=n_sig, warnings=warnings)
+    resp = DEResponse(genes=out, n_significant=n_sig, warnings=warnings)
+    _persist_result(
+        payload.run_id,
+        "differential_expression",
+        f"cluster_{payload.cluster_a}_vs_{payload.cluster_b}",
+        resp.model_dump(),
+    )
+    return resp
 
 
 # ─── Pathway Enrichment (GMT + Fisher's exact) ─────────────────────────────
@@ -1570,6 +1923,83 @@ def _load_gmt(path: str) -> dict[str, set[str]]:
         if genes:
             out[term] = genes
     return out
+
+
+# ─── Gene-set libraries (DE highlight picker) ──────────────────────────────
+
+
+class GenesetDbsResponse(BaseModel):
+    dbs: list[str]
+
+
+class GenesetTerm(BaseModel):
+    term: str
+    size: int
+    genes: list[str]
+
+
+class GenesetTermsResponse(BaseModel):
+    terms: list[GenesetTerm]
+
+
+from functools import lru_cache as _lru_cache
+
+
+@_lru_cache(maxsize=8)
+def _geneset_gmt(db_name: str) -> dict:
+    """Load + cache a GMT library ({term: set(genes)}) from the genesets volume."""
+    s = get_settings()
+    return _load_gmt(
+        f"/Volumes/{s.catalog}/{s.schema}/scanpy_reference/genesets/{db_name}.gmt"
+    )
+
+
+@router.get("/geneset-dbs", response_model=GenesetDbsResponse)
+def geneset_dbs(_: CurrentUserDep) -> GenesetDbsResponse:
+    """List gene-set libraries (*.gmt) available to the DE highlight picker."""
+    import os
+
+    s = get_settings()
+    gmt_dir = f"/Volumes/{s.catalog}/{s.schema}/scanpy_reference/genesets"
+    w = WorkspaceClient()
+    dbs: list[str] = []
+    try:
+        for entry in w.files.list_directory_contents(gmt_dir):
+            name = entry.name or os.path.basename(entry.path or "")
+            if name.endswith(".gmt"):
+                dbs.append(name[:-4])
+    except Exception as e:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, f"Could not list gene-set libraries: {e}"
+        )
+    return GenesetDbsResponse(dbs=sorted(dbs))
+
+
+@router.get("/geneset-terms", response_model=GenesetTermsResponse)
+def geneset_terms(
+    _: CurrentUserDep, db: str, q: str = "", limit: int = 30
+) -> GenesetTermsResponse:
+    """Search terms within a gene-set library, returning each term's genes
+    inline so the DE highlight picker applies a selection in one round-trip."""
+    import re
+
+    if not re.fullmatch(r"[A-Za-z0-9_.\-]+", db):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid db name")
+    try:
+        gmt = _geneset_gmt(db)
+    except Exception as e:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, f"Could not load gene-set library '{db}': {e}"
+        )
+    ql = q.strip().lower()
+    matched = [(term, genes) for term, genes in gmt.items() if not ql or ql in term.lower()]
+    # Shorter term names first — concise terms ("DNA repair") tend to be the
+    # canonical ones the user is reaching for.
+    matched.sort(key=lambda t: (len(t[0]), t[0]))
+    limit = max(1, min(limit, 100))
+    return GenesetTermsResponse(
+        terms=[GenesetTerm(term=t, size=len(g), genes=sorted(g)) for t, g in matched[:limit]]
+    )
 
 
 @router.post("/run-enrichment", response_model=EnrichmentResponse)
@@ -1703,7 +2133,11 @@ def run_enrichment(payload: EnrichmentRequest, _: CurrentUserDep) -> EnrichmentR
             )
 
         all_terms.sort(key=lambda t: t.p_adj)
-        return EnrichmentResponse(terms=all_terms, available_dbs=available)
+        resp = EnrichmentResponse(terms=all_terms, available_dbs=available)
+        _persist_result(
+            payload.run_id, "pathway_enrichment", f"cluster_{payload.cluster}", resp.model_dump()
+        )
+        return resp
     except HTTPException:
         raise
     except Exception as e:
@@ -1797,12 +2231,26 @@ def run_trajectory(payload: TrajectoryRequest, _: CurrentUserDep) -> TrajectoryR
                 continue
             gene_points.append(TrajectoryGenePoint(pseudotime=t, expression=v))
 
-    return TrajectoryResponse(
+    resp = TrajectoryResponse(
         has_pseudotime=True,
         umap_points=umap_points,
         gene_points=gene_points,
         genes=sorted(genes),
     )
+    # Persist only the per-gene trace (skip the big per-cell pseudotime UMAP,
+    # which is identical across genes) when a gene is selected.
+    if payload.gene and gene_points:
+        _persist_result(
+            payload.run_id,
+            "trajectory",
+            str(payload.gene),
+            {
+                "gene": payload.gene,
+                "n_cells": len(gene_points),
+                "gene_points": [gp.model_dump() for gp in gene_points],
+            },
+        )
+    return resp
 
 
 # ─── Raw data table ────────────────────────────────────────────────────────

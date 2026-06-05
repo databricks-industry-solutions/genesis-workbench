@@ -3,6 +3,13 @@ import type {
   AssistantQueryResponse,
   AvailableModelsResponse,
   BatchModelsResponse,
+  BionemoDefaultsResponse,
+  BionemoDispatchResponse,
+  BionemoFinetuneRequest,
+  BionemoFinetuneRunDetails,
+  BionemoInferenceRequest,
+  BionemoVariantsResponse,
+  BionemoWeightsResponse,
   BootstrapResponse,
   DBSearchResponse,
   DeployedModelsResponse,
@@ -38,12 +45,20 @@ import type {
   AlphaFoldStartResponse,
   AnnotateResponse,
   InverseFoldingResponse,
+  ResolveGeneResponse,
   OrganismResponse,
   PerturbationResponse,
   ProfileResponse,
   ProteinDesignResponse,
   ColorPointsResponse,
+  DENarrativeRequest,
   DEResponse,
+  EnrichmentNarrativeRequest,
+  GenesetDbsResponse,
+  GenesetTermsResponse,
+  NarrativeResponse,
+  PerturbationNarrativeRequest,
+  TrajectoryNarrativeRequest,
   DotplotResponse,
   EnrichmentResponse,
   RawDataResponse,
@@ -53,6 +68,8 @@ import type {
   SequenceSearchResponse,
   TrajectoryResponse,
   SimilarityResponse,
+  MarkGenesRequest,
+  MarkGenesResponse,
   SingleCellRunsResponse,
   StartProcessingRequest,
   StartProcessingResponse,
@@ -136,15 +153,15 @@ export const api = {
   batchModelsByModule: (module: ModuleName) =>
     request<ModuleBatchModelsResponse>(`/api/models/batch?module=${module}`),
 
-  esmfold: (sequence: string) =>
+  esmfold: (sequence: string, experiment_name = '', run_name = '') =>
     request<StructurePredictionResponse>('/api/large_molecule/esmfold', {
       method: 'POST',
-      body: JSON.stringify({ sequence }),
+      body: JSON.stringify({ sequence, experiment_name, run_name }),
     }),
-  boltz: (sequence: string) =>
+  boltz: (sequence: string, experiment_name = '', run_name = '') =>
     request<StructurePredictionResponse>('/api/large_molecule/boltz', {
       method: 'POST',
-      body: JSON.stringify({ sequence }),
+      body: JSON.stringify({ sequence, experiment_name, run_name }),
     }),
 
   alphafoldStart: (body: { sequence: string; experiment_name: string; run_name: string }) =>
@@ -172,6 +189,11 @@ export const api = {
       body: JSON.stringify({ description }),
     }),
 
+  resolveGene: (gene: string) =>
+    request<ResolveGeneResponse>(
+      `/api/large_molecule/resolve_gene?gene=${encodeURIComponent(gene)}`,
+    ),
+
   inverseFolding: (pdb: string) =>
     request<InverseFoldingResponse>('/api/large_molecule/inverse_folding', {
       method: 'POST',
@@ -190,6 +212,11 @@ export const api = {
     }),
 
   singleCellRuns: () => request<SingleCellRunsResponse>('/api/single_cell/runs'),
+  singleCellMarkGenes: (body: MarkGenesRequest) =>
+    request<MarkGenesResponse>('/api/single_cell/runs/mark-genes', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   singleCellAnnotate: (body: {
     run_id: string
     cells_per_cluster: number
@@ -212,6 +239,31 @@ export const api = {
   singleCellSavedAnnotations: (run_id: string) =>
     request<SavedAnnotationsResponse>(
       `/api/single_cell/annotations?run_id=${encodeURIComponent(run_id)}`,
+    ),
+  singleCellPerturbationNarrative: (body: PerturbationNarrativeRequest) =>
+    request<NarrativeResponse>('/api/single_cell/perturbation/narrative', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  singleCellDENarrative: (body: DENarrativeRequest) =>
+    request<NarrativeResponse>('/api/single_cell/de/narrative', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  singleCellEnrichmentNarrative: (body: EnrichmentNarrativeRequest) =>
+    request<NarrativeResponse>('/api/single_cell/enrichment/narrative', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  singleCellTrajectoryNarrative: (body: TrajectoryNarrativeRequest) =>
+    request<NarrativeResponse>('/api/single_cell/trajectory/narrative', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  singleCellGenesetDbs: () => request<GenesetDbsResponse>('/api/single_cell/geneset-dbs'),
+  singleCellGenesetTerms: (db: string, q: string) =>
+    request<GenesetTermsResponse>(
+      `/api/single_cell/geneset-terms?db=${encodeURIComponent(db)}&q=${encodeURIComponent(q)}`,
     ),
   singleCellRunInfo: (run_id: string, top_genes_per_cluster = 50) =>
     request<RunInfoResponse>('/api/single_cell/run-info', {
@@ -376,4 +428,35 @@ export const api = {
     ),
   diseaseBiologyDefaults: () =>
     request<GenomicsDefaultsResponse>('/api/genomics/defaults'),
+
+  // NVIDIA BioNeMo
+  bionemoVariants: () => request<BionemoVariantsResponse>('/api/bionemo/variants'),
+  bionemoDefaults: () => request<BionemoDefaultsResponse>('/api/bionemo/defaults'),
+  bionemoWeights: () => request<BionemoWeightsResponse>('/api/bionemo/weights'),
+  bionemoFinetune: (body: BionemoFinetuneRequest) =>
+    request<BionemoDispatchResponse>('/api/bionemo/finetune', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  bionemoInference: (body: BionemoInferenceRequest) =>
+    request<BionemoDispatchResponse>('/api/bionemo/inference', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  bionemoFinetuneSearch: (by: 'run_name' | 'experiment_name', text: string) =>
+    request<DBSearchResponse>(
+      `/api/bionemo/finetune/search?by=${by}&text=${encodeURIComponent(text)}`,
+    ),
+  bionemoFinetuneRunDetails: (run_id: string) =>
+    request<BionemoFinetuneRunDetails>(
+      `/api/bionemo/finetune/run-details?run_id=${encodeURIComponent(run_id)}`,
+    ),
+  bionemoInferenceSearch: (by: 'run_name' | 'experiment_name', text: string) =>
+    request<DBSearchResponse>(
+      `/api/bionemo/inference/search?by=${by}&text=${encodeURIComponent(text)}`,
+    ),
+  bionemoInferenceRunDetails: (run_id: string) =>
+    request<BionemoFinetuneRunDetails>(
+      `/api/bionemo/inference/run-details?run_id=${encodeURIComponent(run_id)}`,
+    ),
 }

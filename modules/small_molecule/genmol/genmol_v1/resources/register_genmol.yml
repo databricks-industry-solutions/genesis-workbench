@@ -1,0 +1,51 @@
+resources:
+  jobs:
+    register_genmol:
+      name: register_genmol
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: register_genmol_generator
+          environment_key: genmol_env
+          compute:
+            hardware_accelerator: "GPU_1xA10"
+          notebook_task:
+            notebook_path: ../notebooks/01_register_genmol.py
+            base_parameters:
+              model_name: genmol
+              cache_dir: genmol_cache
+
+      environments:
+        - environment_key: genmol_env
+          spec:
+            environment_version: "4"
+            dependencies:
+              # GenMol weights come from HF (nvidia/NV-GenMol-89M-v2); the
+              # generation/decoding code is the Apache-2.0 GenMol package +
+              # the SAFE fragment representation library.
+              - torch>=2.5.1
+              - huggingface_hub>=0.24
+              - safe-mol
+              - rdkit
+              - mlflow>=2.15
+              - databricks-sdk>=0.50.0
+              - databricks-sql-connector>=4.0.2
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: experiment_name
+          default: ${var.module_registration_experiment_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: user_email
+          default: ${var.current_user}
+        - name: workload_type
+          default: ${var.gpu_small_setting}
+
+      tags: ${var.common_resource_tags}

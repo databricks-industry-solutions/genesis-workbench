@@ -37,6 +37,12 @@ resources:
           default: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/bionemo/esm2/ft_data
         - name: user_email
           default: a@b.com
+        - name: experiment_name
+          default: gwb_bionemo_esm2_inference
+        - name: run_name
+          default: esm2_inference
+        - name: mlflow_run_id
+          default: ''
 
       job_clusters:
         - job_cluster_key: job_cluster

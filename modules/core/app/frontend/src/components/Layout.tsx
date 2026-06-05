@@ -1,6 +1,8 @@
 import { Fragment } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
+import { ClipboardDrawer } from '@/components/ClipboardDrawer'
+
 import { useUserStore, selectIsSetupDone, selectDisplayName } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'
 import { cn } from '@/lib/utils'
@@ -18,10 +20,13 @@ type NavItem = {
 // Material Symbols ligature names — keep these stable; they map to the icons loaded in frontend/index.html.
 const ALL_NAV: NavItem[] = [
   { to: '/', label: 'Home', icon: 'home' },
+  // Ordered to follow the discovery flow: Genomics (find the variant) →
+  // Single Cell (validate the target) → Large/Small Molecule (design) → BioNeMo.
+  { to: '/genomics', label: 'Genomics', icon: 'coronavirus', module: 'genomics' },
   { to: '/single-cell', label: 'Single Cell', icon: 'microbiology', module: 'single_cell' },
   { to: '/large-molecule', label: 'Large Molecule', icon: 'biotech', module: 'large_molecule' },
   { to: '/small-molecule', label: 'Small Molecule', icon: 'science', module: 'small_molecule' },
-  { to: '/genomics', label: 'Genomics', icon: 'coronavirus', module: 'genomics' },
+  { to: '/bionemo', label: 'NVIDIA BioNeMo©', icon: 'genetics', module: 'bionemo' },
   { to: '/monitoring', label: 'Monitoring', icon: 'monitoring', dividerAbove: true },
   { to: '/settings', label: 'Settings', icon: 'settings' },
 ]
@@ -33,6 +38,7 @@ const ROUTE_TITLES: Record<string, string> = {
   '/large-molecule': 'Large Molecule',
   '/small-molecule': 'Small Molecule',
   '/genomics': 'Genomics',
+  '/bionemo': 'NVIDIA BioNeMo©',
   '/monitoring': 'Monitoring',
   '/settings': 'Settings',
   '/profile': 'Profile',
@@ -149,10 +155,13 @@ export function Layout() {
         <div className="flex shrink-0 items-center justify-start px-7 pt-5 pb-0">
           <h1 className="text-xl font-bold text-black dark:text-white">{pageTitle}</h1>
         </div>
-        <main className="flex-1 overflow-auto">
+        <main className="min-h-0 flex-1 overflow-auto">
           <Outlet />
         </main>
       </div>
+
+      {/* App-wide clipboard companion (slides out from the right edge). */}
+      <ClipboardDrawer />
     </div>
   )
 }
