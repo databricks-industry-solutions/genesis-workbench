@@ -9,30 +9,30 @@ resources:
 
       tasks:
         - task_key: register_genmol_generator
-          environment_key: genmol_env
-          compute:
-            hardware_accelerator: "GPU_1xA10"
+          # Classic single-node cluster pinned to DBR 15.4 LTS = Python 3.11.
+          #
+          # GenMol hard-pins pandas==2.1.0 and transformers==4.52.4. On serverless
+          # (Python 3.12) pandas 2.1.0 has NO prebuilt wheel and its C source build
+          # fails against the newer NumPy headers. On py3.11 those pins have wheels
+          # and install cleanly. Logging the model from a py3.11 env also makes the
+          # Model Serving endpoint inherit py3.11, so the exact same pins resolve at
+          # endpoint-build time. Registration is CPU-only (the 89M model loads + does
+          # a smoke generation on CPU fine); the *serving* endpoint is GPU via
+          # deploy_model(workload_type=GPU_SMALL).
+          new_cluster:
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: ${var.cpu_node_type}
+            num_workers: 0
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: "local[*]"
+            custom_tags:
+              ResourceClass: SingleNode
           notebook_task:
             notebook_path: ../notebooks/01_register_genmol.py
             base_parameters:
               model_name: genmol
               cache_dir: genmol_cache
-
-      environments:
-        - environment_key: genmol_env
-          spec:
-            environment_version: "4"
-            dependencies:
-              # GenMol weights come from HF (nvidia/NV-GenMol-89M-v2); the
-              # generation/decoding code is the Apache-2.0 GenMol package +
-              # the SAFE fragment representation library.
-              - torch>=2.5.1
-              - huggingface_hub>=0.24
-              - safe-mol
-              - rdkit
-              - mlflow>=2.15
-              - databricks-sdk>=0.50.0
-              - databricks-sql-connector>=4.0.2
 
       parameters:
         - name: catalog
