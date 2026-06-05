@@ -9,6 +9,7 @@ import { MolstarViewer } from '@/components/MolstarViewer'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
 import { WorkflowProgress } from '@/components/WorkflowProgress'
 import { MaterialIcon } from '@/components/MaterialIcon'
+import { SequenceSourceControls } from '@/components/SequenceSourceControls'
 import { useSseMutation } from '@/hooks/useSseMutation'
 import { useClipboard } from '@/stores/clipboard'
 import type { SequenceHit, SequenceSearchResponse } from '@/types/api'
@@ -160,13 +161,18 @@ export function SequenceSearchTab() {
           </div>
 
           {inputMode === 'paste' ? (
-            <textarea
-              rows={5}
-              value={sequence}
-              onChange={(e) => setSequence(e.target.value)}
-              placeholder="Amino acid sequence (single-letter code)"
-              className="w-full rounded-md border border-border bg-background p-3 font-mono text-xs"
-            />
+            <div className="space-y-1.5">
+              <div className="flex justify-end">
+                <SequenceSourceControls onSequence={setSequence} />
+              </div>
+              <textarea
+                rows={5}
+                value={sequence}
+                onChange={(e) => setSequence(e.target.value)}
+                placeholder="Amino acid sequence (single-letter code)"
+                className="w-full rounded-md border border-border bg-background p-3 font-mono text-xs"
+              />
+            </div>
           ) : (
             <div className="rounded-md border border-border bg-muted/30 p-3 text-xs">
               <input

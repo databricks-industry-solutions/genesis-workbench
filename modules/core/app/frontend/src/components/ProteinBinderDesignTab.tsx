@@ -5,6 +5,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
 import { MolstarViewer } from '@/components/MolstarViewer'
+import { SequenceSourceControls } from '@/components/SequenceSourceControls'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
 import { useSseMutation } from '@/hooks/useSseMutation'
 import type { BinderDesign, BinderDesignResponse } from '@/types/api'
@@ -176,9 +177,12 @@ export function ProteinBinderDesignTab() {
 
           {inputMode === 'sequence' ? (
             <label className="block text-xs">
-              <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
-                Target sequence
-              </span>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="uppercase tracking-wide text-muted-foreground">
+                  Target sequence
+                </span>
+                <SequenceSourceControls onSequence={setSequence} />
+              </div>
               <textarea
                 rows={4}
                 value={sequence}

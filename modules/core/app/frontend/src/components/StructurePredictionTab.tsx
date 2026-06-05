@@ -3,9 +3,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/api/client'
 import { AlphaFoldSearchResults } from '@/components/AlphaFoldPanel'
-import { ClipboardPaste } from '@/components/ClipboardPaste'
-import { GeneResolveInput } from '@/components/GeneResolveInput'
 import { MolstarViewer } from '@/components/MolstarViewer'
+import { SequenceSourceControls } from '@/components/SequenceSourceControls'
 import { WorkflowProgress } from '@/components/WorkflowProgress'
 import { cn } from '@/lib/utils'
 
@@ -94,14 +93,7 @@ export function StructurePredictionTab() {
           <div className="text-xs">
             <div className="mb-1 flex items-center justify-between gap-2">
               <span className="uppercase tracking-wide text-muted-foreground">Protein sequence</span>
-              <div className="flex items-center gap-1.5">
-                <GeneResolveInput onResolved={setSequence} />
-                <ClipboardPaste
-                  kind="sequence"
-                  label="Sequence"
-                  onPick={(it) => setSequence(it.value)}
-                />
-              </div>
+              <SequenceSourceControls onSequence={setSequence} />
             </div>
             <textarea
               rows={8}
