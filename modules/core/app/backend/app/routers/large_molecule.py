@@ -28,12 +28,18 @@ router = APIRouter(prefix="/api/large_molecule", tags=["large_molecule"])
 
 class StructurePredictionRequest(BaseModel):
     sequence: str = Field(..., min_length=1)
+    # Optional: when both are provided, the synchronous fold (ESMFold/Boltz) is
+    # also logged to an MLflow run so it's recorded like an AlphaFold result.
+    experiment_name: str = ""
+    run_name: str = ""
 
 
 class StructurePredictionResponse(BaseModel):
     pdb: str
     viewer_html: str
     model: str
+    run_id: str | None = None
+    run_url: str | None = None
 
 
 class ResolveGeneResponse(BaseModel):
@@ -61,28 +67,77 @@ def _viewer_html(pdb: str, name: str) -> str:
     return molstar_html_singlebody(pdb, name=name, with_iframe=False)
 
 
+def _log_structure_prediction(
+    user_email: str, model: str, sequence: str, pdb: str, experiment_name: str, run_name: str
+) -> tuple[str | None, str | None]:
+    """Best-effort: log a synchronous fold (ESMFold/Boltz) to an MLflow run —
+    the predicted PDB as an artifact + sequence/model params + standard tags —
+    so it's recorded like an AlphaFold result. Returns (run_id, run_url) or
+    (None, None) on any failure (never blocks the fold)."""
+    import logging
+    import tempfile
+
+    try:
+        experiment = set_mlflow_experiment(experiment_tag=experiment_name, user_email=user_email)
+        with mlflow.start_run(run_name=run_name, experiment_id=experiment.experiment_id) as run:
+            mlflow.log_param("model", model)
+            mlflow.log_param("sequence_length", len(sequence))
+            mlflow.set_tag("origin", "genesis_workbench")
+            mlflow.set_tag("feature", "structure_prediction")
+            mlflow.set_tag("model", model)
+            mlflow.set_tag("created_by", user_email)
+            mlflow.set_tag("job_status", "complete")
+            with tempfile.TemporaryDirectory() as tmp:
+                p = os.path.join(tmp, "structure.pdb")
+                with open(p, "w") as f:
+                    f.write(pdb)
+                mlflow.log_artifact(p)
+            run_id = run.info.run_id
+        host = os.environ.get("DATABRICKS_HOSTNAME", "")
+        if host and not host.startswith("https://"):
+            host = f"https://{host}"
+        run_url = f"{host}/ml/experiments/{experiment.experiment_id}/runs/{run_id}" if host else None
+        return run_id, run_url
+    except Exception as e:
+        logging.getLogger(__name__).warning("structure-prediction MLflow log failed: %s", e)
+        return None, None
+
+
+def _fold_and_log(
+    user, model: str, payload: StructurePredictionRequest, pdb: str
+) -> StructurePredictionResponse:
+    run_id = run_url = None
+    if payload.experiment_name.strip() and payload.run_name.strip() and getattr(user, "email", None):
+        run_id, run_url = _log_structure_prediction(
+            user.email, model, payload.sequence, pdb, payload.experiment_name, payload.run_name
+        )
+    return StructurePredictionResponse(
+        pdb=pdb,
+        viewer_html=_viewer_html(pdb, f"{model} prediction"),
+        model=model,
+        run_id=run_id,
+        run_url=run_url,
+    )
+
+
 @router.post("/esmfold", response_model=StructurePredictionResponse)
-def esmfold(payload: StructurePredictionRequest, _: CurrentUserDep) -> StructurePredictionResponse:
+def esmfold(payload: StructurePredictionRequest, user: CurrentUserDep) -> StructurePredictionResponse:
     w = WorkspaceClient()  # app SP — OBO tokens lack model-serving scope
     try:
         pdb = hit_esmfold(w, payload.sequence)
     except Exception as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"ESMFold call failed: {e}")
-    return StructurePredictionResponse(
-        pdb=pdb, viewer_html=_viewer_html(pdb, "ESMFold prediction"), model="ESMFold"
-    )
+    return _fold_and_log(user, "ESMFold", payload, pdb)
 
 
 @router.post("/boltz", response_model=StructurePredictionResponse)
-def boltz(payload: StructurePredictionRequest, _: CurrentUserDep) -> StructurePredictionResponse:
+def boltz(payload: StructurePredictionRequest, user: CurrentUserDep) -> StructurePredictionResponse:
     w = WorkspaceClient()
     try:
         pdb = hit_boltz(w, payload.sequence)
     except Exception as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Boltz call failed: {e}")
-    return StructurePredictionResponse(
-        pdb=pdb, viewer_html=_viewer_html(pdb, "Boltz prediction"), model="Boltz"
-    )
+    return _fold_and_log(user, "Boltz", payload, pdb)
 
 
 class AlphaFoldStartRequest(BaseModel):

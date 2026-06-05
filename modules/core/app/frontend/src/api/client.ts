@@ -153,15 +153,15 @@ export const api = {
   batchModelsByModule: (module: ModuleName) =>
     request<ModuleBatchModelsResponse>(`/api/models/batch?module=${module}`),
 
-  esmfold: (sequence: string) =>
+  esmfold: (sequence: string, experiment_name = '', run_name = '') =>
     request<StructurePredictionResponse>('/api/large_molecule/esmfold', {
       method: 'POST',
-      body: JSON.stringify({ sequence }),
+      body: JSON.stringify({ sequence, experiment_name, run_name }),
     }),
-  boltz: (sequence: string) =>
+  boltz: (sequence: string, experiment_name = '', run_name = '') =>
     request<StructurePredictionResponse>('/api/large_molecule/boltz', {
       method: 'POST',
-      body: JSON.stringify({ sequence }),
+      body: JSON.stringify({ sequence, experiment_name, run_name }),
     }),
 
   alphafoldStart: (body: { sequence: string; experiment_name: string; run_name: string }) =>

@@ -152,6 +152,8 @@ export type StructurePredictionResponse = {
   pdb: string
   viewer_html: string
   model: string
+  run_id?: string | null
+  run_url?: string | null
 }
 
 export type AlphaFoldStartResponse = { job_run_id: string }
