@@ -8,6 +8,7 @@ import { DataTable } from '@/components/DataTable'
 import { NarrativePanel } from '@/components/NarrativePanel'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
 import { WorkflowProgress } from '@/components/WorkflowProgress'
+import { clusterOptionLabel } from '@/lib/clusterLabel'
 import { useSseMutation } from '@/hooks/useSseMutation'
 import { ClipboardPaste } from '@/components/ClipboardPaste'
 import type { PerturbationGene, PerturbationResponse } from '@/types/api'
@@ -184,11 +185,11 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
             value={cluster}
             onChange={(e) => setCluster(e.target.value)}
             disabled={!runInfo.data}
-            className="w-40 rounded-md border border-border bg-background px-3 py-2 text-sm disabled:opacity-50"
+            className="w-[28rem] max-w-full rounded-md border border-border bg-background px-3 py-2 text-sm disabled:opacity-50"
           >
             {runInfo.data?.clusters.map((c) => (
               <option key={c} value={c}>
-                Cluster {c}
+                {clusterOptionLabel(c, annoQ.data)}
               </option>
             )) ?? <option>—</option>}
           </select>

@@ -18,6 +18,7 @@ import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
 import { GeneHighlightPicker } from '@/components/GeneHighlightPicker'
 import { NarrativePanel } from '@/components/NarrativePanel'
+import { clusterOptionLabel } from '@/lib/clusterLabel'
 import { useDeHighlight } from '@/stores/deHighlight'
 import { useClipboard } from '@/stores/clipboard'
 import { PlotlyChart as Plot } from '@/components/PlotlyChart'
@@ -1537,11 +1538,11 @@ export function EnrichmentSubTab({
             size={5}
             value={cluster}
             onChange={(e) => setCluster(e.target.value)}
-            className="w-32 rounded-md border border-border bg-background px-3 py-2 text-xs"
+            className="w-[28rem] max-w-full rounded-md border border-border bg-background px-3 py-2 text-xs"
           >
             {summary.clusters.map((c) => (
               <option key={c} value={c}>
-                Cluster {c}
+                {clusterOptionLabel(c, annoQ.data)}
               </option>
             ))}
           </select>
