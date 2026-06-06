@@ -22,6 +22,9 @@ export function GuidedMoleculeOptimizationTab() {
   const [dockTopK, setDockTopK] = useState(5)
   const [wQed, setWQed] = useState(1.0)
   const [wAdmet, setWAdmet] = useState(1.0)
+  const [wDock, setWDock] = useState(1.0)
+  const [targetPdb, setTargetPdb] = useState('')
+  const [dockPerIter, setDockPerIter] = useState(8)
   const [runName, setRunName] = useState(`mol_opt_${ts()}`)
   const [runId, setRunId] = useState<string | null>(null)
 
@@ -48,9 +51,11 @@ export function GuidedMoleculeOptimizationTab() {
         num_iterations: numIterations,
         select_top: selectTop,
         dock_top_k: dockTopK,
-        weights: { qed: wQed, admet: wAdmet },
+        weights: { qed: wQed, admet: wAdmet, dock: targetPdb.trim() ? wDock : 0 },
         temperature: 1.2,
         randomness: 2.0,
+        target_pdb: targetPdb.trim(),
+        dock_per_iter: dockPerIter,
         mlflow_run_name: runName,
       }),
     onSuccess: (d) => setRunId(d.mlflow_run_id),
@@ -237,6 +242,41 @@ export function GuidedMoleculeOptimizationTab() {
                 onChange={(e) => setWAdmet(parseFloat(e.target.value) || 0)}
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
             </label>
+          </div>
+
+          {/* Optional: dock candidates into the reward (binding drives the loop). */}
+          <div className="rounded-md border border-border bg-card p-3 text-xs">
+            <div className="mb-1.5 font-medium uppercase tracking-wide text-muted-foreground">
+              Dock into reward (optional)
+            </div>
+            <span className="mb-1 block text-[11px] text-muted-foreground">
+              Paste the target structure (PDB) to make DiffDock binding part of the reward — the
+              top candidates each iteration get docked and binding drives reseeding. Leave empty for
+              a QED+ADMET-only loop.
+            </span>
+            <textarea
+              rows={3}
+              value={targetPdb}
+              onChange={(e) => setTargetPdb(e.target.value)}
+              placeholder="Paste target PDB (e.g. the PARP1 structure from Structure Prediction)…"
+              className="w-full rounded-md border border-border bg-background p-2 font-mono text-[11px]"
+            />
+            <div className="mt-2 grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1 block uppercase tracking-wide text-muted-foreground">Dock weight</span>
+                <input type="number" step={0.1} value={wDock}
+                  onChange={(e) => setWDock(parseFloat(e.target.value) || 0)}
+                  disabled={!targetPdb.trim()}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm disabled:opacity-50" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block uppercase tracking-wide text-muted-foreground">Dock / iter</span>
+                <input type="number" min={1} max={20} value={dockPerIter}
+                  onChange={(e) => setDockPerIter(parseInt(e.target.value) || 1)}
+                  disabled={!targetPdb.trim()}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm disabled:opacity-50" />
+              </label>
+            </div>
           </div>
 
           <label className="block text-xs">

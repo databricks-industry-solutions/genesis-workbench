@@ -68,5 +68,9 @@ resources:
           default: "2.0"
         - name: target_pdb_path
           default: ""
+        - name: dock_per_iter
+          default: "8"
+        - name: dock_samples
+          default: "3"
 
       tags: ${var.common_resource_tags}

@@ -215,6 +215,9 @@ export const api = {
     weights: Record<string, number>
     temperature: number
     randomness: number
+    target_pdb?: string
+    dock_per_iter?: number
+    dock_samples?: number
     mlflow_run_name: string
   }) =>
     request<MoleculeOptimizeStartResponse>('/api/small_molecule/molecule_optimization/start', {

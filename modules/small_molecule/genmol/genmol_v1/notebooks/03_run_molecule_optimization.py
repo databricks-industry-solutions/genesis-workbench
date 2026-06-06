@@ -32,7 +32,9 @@ dbutils.widgets.text("dock_top_k", "5", "Top-K to dock at the end")
 dbutils.widgets.text("weights_json", '{"qed":1.0,"admet":1.0}', "Per-axis weights JSON")
 dbutils.widgets.text("temperature", "1.2", "GenMol softmax temperature")
 dbutils.widgets.text("randomness", "2.0", "GenMol randomness")
-dbutils.widgets.text("target_pdb_path", "", "UC volume path to target PDB for shortlist docking (optional)")
+dbutils.widgets.text("target_pdb_path", "", "UC volume path to target PDB (enables in-reward docking)")
+dbutils.widgets.text("dock_per_iter", "8", "Candidates docked per iteration (top by cheap score)")
+dbutils.widgets.text("dock_samples", "3", "DiffDock samples_per_complex per ligand")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
@@ -78,6 +80,8 @@ weights = {"qed": 1.0, "admet": 1.0, **json.loads(dbutils.widgets.get("weights_j
 temperature = float(dbutils.widgets.get("temperature"))
 randomness = float(dbutils.widgets.get("randomness"))
 target_pdb_path = dbutils.widgets.get("target_pdb_path").strip()
+DOCK_PER_ITER = int(dbutils.widgets.get("dock_per_iter"))
+DOCK_SAMPLES = int(dbutils.widgets.get("dock_samples"))
 
 from genesis_workbench.workbench import initialize
 from genesis_workbench.models import get_endpoint_name_for_uc_model, set_mlflow_experiment
@@ -118,7 +122,11 @@ def clintox(smiles_list):
         return [None] * len(smiles_list)
 
 
-def score_candidates(smiles_list):
+import math
+
+
+def cheap_score(smiles_list):
+    """Cheap axes only — QED (RDKit) + ADMET clinical-tox (Chemprop). No GPU dock."""
     tox = clintox(smiles_list)
     rows = []
     for smi, tx in zip(smiles_list, tox):
@@ -127,9 +135,60 @@ def score_candidates(smiles_list):
             continue
         q = float(QED.qed(mol))
         tox_term = (1.0 - tx) if tx is not None else 0.5
-        reward = weights["qed"] * q + weights["admet"] * tox_term
-        rows.append({"smiles": Chem.MolToSmiles(mol), "qed": q, "tox": tx, "reward": reward})
+        cheap = weights["qed"] * q + weights["admet"] * tox_term
+        rows.append({"smiles": Chem.MolToSmiles(mol), "qed": q, "tox": tx,
+                     "cheap_reward": cheap, "dock_confidence": None})
     return rows
+
+
+# ── In-reward docking: embed the target ONCE, then score each ligand. ──────────
+DOCK_ENABLED = bool(target_pdb_path) and float(weights.get("dock", 0.0)) > 0.0
+_target_pdb, _esm_emb = "", "{}"
+if DOCK_ENABLED:
+    from databricks.sdk.service.serving import DataframeSplitInput
+    try:
+        ESM_EP = get_endpoint_name_for_uc_model("diffdock_esm_embeddings")
+        DIFFDOCK_EP = get_endpoint_name_for_uc_model("diffdock")
+        _target_pdb = open(target_pdb_path).read()
+        r = w.serving_endpoints.query(
+            name=ESM_EP,
+            dataframe_split=DataframeSplitInput(columns=["protein_pdb"], data=[[_target_pdb]]),
+        )
+        preds = r.predictions
+        rec = preds[0] if isinstance(preds, list) and preds else preds
+        _esm_emb = rec.get("embeddings_b64", "{}") if isinstance(rec, dict) else "{}"
+        print("Target ESM embeddings computed — docking is in the reward.")
+    except Exception as e:
+        print("ESM embed failed; disabling in-reward docking:", e)
+        DOCK_ENABLED = False
+
+
+def dock_confidence(smi):
+    """Best DiffDock pose confidence for a ligand vs the (pre-embedded) target."""
+    try:
+        r = w.serving_endpoints.query(
+            name=DIFFDOCK_EP,
+            dataframe_split=DataframeSplitInput(
+                columns=["protein_pdb", "ligand_smiles", "samples_per_complex", "esm_embeddings_b64"],
+                data=[[_target_pdb, smi, DOCK_SAMPLES, _esm_emb]],
+            ),
+        )
+        preds = r.predictions
+        confs = [float(p["confidence"]) for p in (preds or [])
+                 if isinstance(p, dict) and p.get("confidence") is not None]
+        return max(confs) if confs else None
+    except Exception as e:
+        print("dock failed:", e)
+        return None
+
+
+def full_reward(row):
+    """Compose the reward; the dock term (sigmoid of DiffDock confidence ∈ 0..1)
+    only contributes when the candidate was docked."""
+    r = row["cheap_reward"]
+    if row.get("dock_confidence") is not None:
+        r += float(weights.get("dock", 0.0)) * (1.0 / (1.0 + math.exp(-row["dock_confidence"])))
+    return r
 
 
 def murcko(smi):
@@ -165,52 +224,46 @@ with _run_ctx:
     seeds = list(seed_smiles)
     best_by_smiles: dict[str, dict] = {}
 
+    mlflow.set_tag("docking_in_reward", str(DOCK_ENABLED).lower())
+
     for it in range(N):
         cands = genmol_generate(seeds, K)
-        scored = score_candidates(cands)
-        for r in scored:
-            prev = best_by_smiles.get(r["smiles"])
-            if prev is None or r["reward"] > prev["reward"]:
-                best_by_smiles[r["smiles"]] = r
+        scored = cheap_score(cands)
         if not scored:
             print(f"iter {it}: no valid candidates"); continue
+
+        # Dock the most promising (by cheap score) and fold binding into the reward,
+        # so DiffDock confidence — not just QED/ADMET — drives which scaffolds reseed.
+        if DOCK_ENABLED:
+            scored.sort(key=lambda x: x["cheap_reward"], reverse=True)
+            for row in scored[:DOCK_PER_ITER]:
+                row["dock_confidence"] = dock_confidence(row["smiles"])
+
+        for row in scored:
+            row["reward"] = full_reward(row)
+            prev = best_by_smiles.get(row["smiles"])
+            if prev is None or row["reward"] > prev["reward"]:
+                best_by_smiles[row["smiles"]] = row
+
         scored.sort(key=lambda x: x["reward"], reverse=True)
         parents = scored[:SELECT_TOP]
-        # Reseed next iteration with the parents' Murcko scaffolds (fall back to the
-        # parent molecule itself when it has no ring scaffold).
+        # Reseed with the elite's Murcko scaffolds (fall back to the molecule itself).
         seeds = [murcko(p["smiles"]) or p["smiles"] for p in parents]
 
-        mlflow.log_metrics({
+        docked = [s for s in scored if s.get("dock_confidence") is not None]
+        metrics = {
             "iter_best_reward": parents[0]["reward"],
             "iter_mean_reward": sum(s["reward"] for s in scored) / len(scored),
             "iter_best_qed": max(s["qed"] for s in scored),
             "iter_n_candidates": len(scored),
-        }, step=it)
-        print(f"iter {it}: best_reward={parents[0]['reward']:.3f} n={len(scored)}")
+        }
+        if docked:
+            metrics["iter_best_dock"] = max(s["dock_confidence"] for s in docked)
+        mlflow.log_metrics(metrics, step=it)
+        print(f"iter {it}: best_reward={parents[0]['reward']:.3f} n={len(scored)} docked={len(docked)}")
 
-    # Global top-K
+    # Global top-K (reward already includes the dock term for docked candidates).
     top = sorted(best_by_smiles.values(), key=lambda x: x["reward"], reverse=True)[:DOCK_TOP_K]
-
-    # Best-effort shortlist docking against the target structure (optional).
-    if target_pdb_path:
-        try:
-            from databricks.sdk.service.serving import DataframeSplitInput
-            diffdock_ep = get_endpoint_name_for_uc_model("diffdock")
-            pdb = "".join(open(target_pdb_path).read()) if target_pdb_path.startswith("/Volumes") else ""
-            for t in top:
-                try:
-                    resp = w.serving_endpoints.query(
-                        name=diffdock_ep,
-                        dataframe_split=DataframeSplitInput(
-                            columns=["protein_pdb", "ligand_smiles"], data=[[pdb, t["smiles"]]]),
-                    )
-                    preds = resp.predictions
-                    rec = preds[0] if isinstance(preds, list) and preds else preds
-                    t["dock_confidence"] = float(rec.get("confidence")) if isinstance(rec, dict) and rec.get("confidence") is not None else None
-                except Exception as e:
-                    print("dock failed for one:", e); t["dock_confidence"] = None
-        except Exception as e:
-            print("docking step skipped:", e)
 
     mlflow.log_dict({"top_k": top}, "top_k.json")
     mlflow.log_metric("iterations_completed", N)

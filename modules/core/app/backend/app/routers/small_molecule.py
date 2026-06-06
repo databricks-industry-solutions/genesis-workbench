@@ -660,10 +660,12 @@ class MoleculeOptimizeRequest(BaseModel):
     num_iterations: int = 5
     select_top: int = 3
     dock_top_k: int = 5
-    weights: dict[str, float] = Field(default_factory=lambda: {"qed": 1.0, "admet": 1.0})
+    weights: dict[str, float] = Field(default_factory=lambda: {"qed": 1.0, "admet": 1.0, "dock": 1.0})
     temperature: float = 1.2
     randomness: float = 2.0
-    target_pdb_path: str = ""
+    target_pdb: str = ""           # paste a target structure to dock in-reward
+    dock_per_iter: int = 8
+    dock_samples: int = 3
     mlflow_experiment: str = "gwb_molecule_optimization"
     mlflow_run_name: str = Field(..., min_length=1)
 
@@ -694,7 +696,9 @@ def molecule_optimization_start(payload: MoleculeOptimizeRequest, user: CurrentU
             weights=payload.weights,
             temperature=payload.temperature,
             randomness=payload.randomness,
-            target_pdb_path=payload.target_pdb_path,
+            target_pdb=payload.target_pdb,
+            dock_per_iter=payload.dock_per_iter,
+            dock_samples=payload.dock_samples,
         )
     except Exception as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Failed to start optimization: {e}")
