@@ -3,10 +3,11 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { api } from '@/api/client'
+import { ClipboardPaste } from '@/components/ClipboardPaste'
 import { DataTable } from '@/components/DataTable'
 import { MaterialIcon } from '@/components/MaterialIcon'
 import { useClipboard } from '@/stores/clipboard'
-import type { MolOptStatus, MolOptTopKItem } from '@/types/api'
+import type { MolOptStatus, MolOptTopKItem, SeedMotif } from '@/types/api'
 
 function ts(): string {
   const d = new Date()
@@ -25,6 +26,17 @@ export function GuidedMoleculeOptimizationTab() {
   const [runId, setRunId] = useState<string | null>(null)
 
   const clipAdd = useClipboard((s) => s.add)
+
+  // Find binding motif from target → seed scaffold(s).
+  const [gene, setGene] = useState('')
+  const motifs = useMutation({
+    mutationFn: (p: { gene?: string; sequence?: string }) => api.genmolSeedMotifs(p),
+  })
+  const addMotif = (m: SeedMotif) =>
+    setSeeds((prev) => {
+      const lines = prev.split('\n').map((s) => s.trim()).filter(Boolean)
+      return lines.includes(m.scaffold) ? prev : [...lines, m.scaffold].join('\n')
+    })
 
   const seedList = seeds.split('\n').map((s) => s.trim()).filter(Boolean)
 
@@ -115,6 +127,66 @@ export function GuidedMoleculeOptimizationTab() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,420px)_1fr]">
         {/* Left: form */}
         <div className="space-y-3">
+          {/* Find binding motif from an identified target → seed scaffold(s). */}
+          <div className="rounded-md border border-border bg-card p-3 text-xs">
+            <div className="mb-1.5 font-medium uppercase tracking-wide text-muted-foreground">
+              Find binding motif from target
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                value={gene}
+                onChange={(e) => setGene(e.target.value)}
+                placeholder="Target gene, e.g. PARP1"
+                className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => motifs.mutate({ gene })}
+                disabled={!gene.trim() || motifs.isPending}
+                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+              >
+                {motifs.isPending ? 'Finding…' : 'Find'}
+              </button>
+            </div>
+            <div className="mt-1.5">
+              <ClipboardPaste
+                kind="sequence"
+                label="From Clipboard sequence"
+                onPick={(it) => motifs.mutate({ sequence: it.value })}
+              />
+            </div>
+            {motifs.data && (
+              <div className="mt-2 space-y-1">
+                {motifs.data.motifs.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    No binding motifs found{motifs.data.gene ? ` for ${motifs.data.gene}` : ''}.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-[11px] text-muted-foreground">
+                      {motifs.data.gene} — click to add a seed scaffold:
+                    </p>
+                    {motifs.data.motifs.map((m) => (
+                      <button
+                        key={m.scaffold}
+                        type="button"
+                        onClick={() => addMotif(m)}
+                        title={`Add as seed (${m.count} known binders)`}
+                        className="block w-full truncate rounded border border-border bg-background px-2 py-1 text-left font-mono text-[11px] hover:bg-accent"
+                      >
+                        <span className="text-primary">◆</span> {m.scaffold}
+                        <span className="ml-1 font-sans text-[10px] text-muted-foreground">
+                          · {m.count} binders
+                          {m.best_pchembl != null ? ` · pChEMBL ${m.best_pchembl.toFixed(1)}` : ''}
+                        </span>
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
           <label className="block text-xs">
             <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
               Seed scaffold SMILES — one per line
