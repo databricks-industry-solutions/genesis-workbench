@@ -11,10 +11,7 @@ import { useSseMutation } from '@/hooks/useSseMutation'
 import { useClipboard } from '@/stores/clipboard'
 import type { GenMolGenerateResponse, GenMolMolecule, SeedMotif } from '@/types/api'
 
-type Mode = 'denovo' | 'fragment'
-
 export function GenMolGenerateTab() {
-  const [mode, setMode] = useState<Mode>('denovo')
   const [fragments, setFragments] = useState('c1ccc(cc1)C(=O)N')
   const [numMolecules, setNumMolecules] = useState(20)
   const [temperature, setTemperature] = useState(1.0)
@@ -37,7 +34,6 @@ export function GenMolGenerateTab() {
   })
 
   const useMotif = (m: SeedMotif) => {
-    setMode('fragment')
     setFragments((prev) => {
       const lines = prev.split('\n').map((s) => s.trim()).filter(Boolean)
       return lines.includes(m.scaffold) ? prev : [...lines, m.scaffold].join('\n')
@@ -63,7 +59,7 @@ export function GenMolGenerateTab() {
 
   const run = () =>
     gen.start({
-      seeds: mode === 'denovo' ? [''] : fragmentSeeds,
+      seeds: fragmentSeeds,
       num_molecules: numMolecules,
       temperature,
       randomness,
@@ -71,7 +67,7 @@ export function GenMolGenerateTab() {
       unique,
     })
 
-  const canRun = !gen.isPending && (mode === 'denovo' || fragmentSeeds.length > 0)
+  const canRun = !gen.isPending && fragmentSeeds.length > 0
   const molecules = gen.data?.molecules ?? []
 
   const columns: ColumnDef<GenMolMolecule, unknown>[] = [
@@ -122,9 +118,10 @@ export function GenMolGenerateTab() {
       <div>
         <h3 className="text-sm font-semibold">Generate Novel Small Molecules</h3>
         <p className="text-xs text-muted-foreground">
-          GenMol (NVIDIA) invents drug-like molecules — <strong>de novo</strong>, or by growing a{' '}
-          <strong>seed fragment</strong> into analogs that keep its motif. Generated candidates flow
-          to <strong>Molecular Docking</strong> (binding vs a target) and <strong>ADMET &amp; Safety</strong>{' '}
+          GenMol (NVIDIA) grows a <strong>seed fragment</strong> into novel drug-like analogs that
+          keep its motif. Seed it from a target’s known binders via{' '}
+          <strong>Find binding motif from target</strong>. Generated candidates flow to{' '}
+          <strong>Molecular Docking</strong> (binding vs a target) and <strong>ADMET &amp; Safety</strong>{' '}
           via the Clipboard. Research use — evaluate before any downstream use.
         </p>
       </div>
@@ -197,37 +194,22 @@ export function GenMolGenerateTab() {
             )}
           </div>
 
-          <div className="flex gap-2">
-            {(['denovo', 'fragment'] as Mode[]).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={
-                  'rounded-full border px-3 py-1 text-xs transition-colors ' +
-                  (m === mode
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border text-muted-foreground hover:bg-accent')
-                }
-              >
-                {m === 'denovo' ? 'De novo' : 'From fragment(s)'}
-              </button>
-            ))}
-          </div>
-
-          {mode === 'fragment' && (
-            <label className="block text-xs">
-              <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
-                Seed fragment SMILES — one per line
-              </span>
-              <textarea
-                rows={5}
-                value={fragments}
-                onChange={(e) => setFragments(e.target.value)}
-                placeholder="c1ccc(cc1)C(=O)N"
-                className="w-full rounded-md border border-border bg-background p-3 font-mono text-xs"
-              />
-            </label>
-          )}
+          <label className="block text-xs">
+            <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
+              Seed fragment SMILES — one per line
+            </span>
+            <textarea
+              rows={5}
+              value={fragments}
+              onChange={(e) => setFragments(e.target.value)}
+              placeholder="c1ccc(cc1)C(=O)N"
+              className="w-full rounded-md border border-border bg-background p-3 font-mono text-xs"
+            />
+            <span className="mt-1 block text-[11px] text-muted-foreground">
+              Generation grows each seed into novel analogs that keep its motif. Use “Find binding
+              motif from target” above to seed from a target’s known binders.
+            </span>
+          </label>
 
           <div className="grid grid-cols-2 gap-3">
             <label className="block text-xs">
