@@ -91,12 +91,15 @@ def chembl_target_id(gene):
     return targets[0]["target_chembl_id"] if targets else None
 
 
-def chembl_actives(target_chembl_id, cap):
-    """Page activities with a pChEMBL value; return (smiles, pchembl, molecule_id)."""
-    rows, url = [], f"{chembl_base}/activity.json"
+def chembl_actives(target_chembl_id, cap, max_pages=3, timeout=30):
+    """Page activities with a pChEMBL value; return (smiles, pchembl, molecule_id).
+    Hard-bounded: short per-request timeout + a max page count, so a slow/large
+    target (e.g. EGFR has tens of thousands of activities) can't run away — we
+    over-fetch a few pages, then dedup + top-N below."""
+    rows, url, pages = [], f"{chembl_base}/activity.json", 0
     params = {"target_chembl_id": target_chembl_id, "pchembl_value__isnull": "false", "limit": 1000}
-    while url and len(rows) < cap * 4:  # over-fetch; we dedup + top-N below
-        resp = requests.get(url, params=params, timeout=120)
+    while url and pages < max_pages and len(rows) < cap * 4:
+        resp = requests.get(url, params=params, timeout=timeout)
         resp.raise_for_status()
         data = resp.json()
         for a in data.get("activities", []):
@@ -106,6 +109,7 @@ def chembl_actives(target_chembl_id, cap):
         nxt = (data.get("page_meta") or {}).get("next")
         url = ("https://www.ebi.ac.uk" + nxt) if nxt else None
         params = None
+        pages += 1
     return rows
 
 

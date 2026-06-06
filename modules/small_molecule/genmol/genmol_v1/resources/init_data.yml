@@ -29,8 +29,10 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/02_init_repurposing_data.py
             base_parameters:
-              target_genes: "PARP1,BRCA1,BRCA2,EGFR,KRAS,TP53,PARP2,ATM"
-              max_actives_per_gene: "300"
+              # BRCA→PARP1 demo set. Avoids huge-activity targets (EGFR/TP53/KRAS)
+              # that made the ChEMBL pulls run away; add more later if needed.
+              target_genes: "PARP1,PARP2,BRCA1,BRCA2"
+              max_actives_per_gene: "150"
 
       parameters:
         - name: catalog
