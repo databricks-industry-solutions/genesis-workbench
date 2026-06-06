@@ -9,23 +9,12 @@ resources:
 
       tasks:
         - task_key: init_repurposing_data
-          # Classic single-node py3.11 cluster (same rationale as register_genmol):
-          # SINGLE_USER for UC Volume/table access, ON_DEMAND so the driver isn't a
-          # reclaimable spot VM. CPU is fine — this is a download + RDKit + Delta write.
-          new_cluster:
-            spark_version: "15.4.x-scala2.12"
-            node_type_id: ${var.cpu_node_type}
-            num_workers: 0
-            data_security_mode: SINGLE_USER
-            single_user_name: ${var.current_user}
-            aws_attributes:
-              availability: ON_DEMAND
-              first_on_demand: 1
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: "local[*]"
-            custom_tags:
-              ResourceClass: SingleNode
+          # Serverless — this is just a download + RDKit + Delta write (no GenMol
+          # deps / pandas-2.1 pin), so it doesn't need the classic py3.11 cluster.
+          # Serverless starts fast and is UC-native; the classic cluster was slow
+          # to spin up and the notebook hung. Deps are declared here (the notebook
+          # also %pip-installs them, idempotently).
+          environment_key: init_env
           notebook_task:
             notebook_path: ../notebooks/02_init_repurposing_data.py
             base_parameters:
@@ -33,6 +22,14 @@ resources:
               # that made the ChEMBL pulls run away; add more later if needed.
               target_genes: "PARP1,PARP2,BRCA1,BRCA2"
               max_actives_per_gene: "150"
+
+      environments:
+        - environment_key: init_env
+          spec:
+            environment_version: "4"
+            dependencies:
+              - rdkit==2025.3.6
+              - requests
 
       parameters:
         - name: catalog

@@ -153,7 +153,7 @@ except Exception as e:
 
 def fetch_broad_tsv(url):
     """Broad Hub TSVs have a '!'-prefixed comment block, then a header row."""
-    with urllib.request.urlopen(url, timeout=300) as resp:
+    with urllib.request.urlopen(url, timeout=45) as resp:
         text = resp.read().decode("utf-8", errors="replace")
     lines = [ln for ln in text.splitlines() if ln and not ln.startswith("!")]
     header = lines[0].split("\t")
