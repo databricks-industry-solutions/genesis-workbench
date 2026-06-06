@@ -80,7 +80,7 @@ randomness = float(dbutils.widgets.get("randomness"))
 target_pdb_path = dbutils.widgets.get("target_pdb_path").strip()
 
 from genesis_workbench.workbench import initialize
-from genesis_workbench.models import get_endpoint_name_for_uc_model
+from genesis_workbench.models import get_endpoint_name_for_uc_model, set_mlflow_experiment
 databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
 initialize(core_catalog_name=catalog, core_schema_name=schema,
            sql_warehouse_id=sql_warehouse_id, token=databricks_token)
@@ -141,8 +141,23 @@ def murcko(smi):
 
 # COMMAND ----------
 
-# Resume the pre-created run; run the loop, logging a trajectory + top-K.
-with mlflow.start_run(run_id=mlflow_run_id):
+# Resume the dispatcher's pre-created run, or create one (so the orchestrator can
+# also be run standalone, e.g. for testing). Either way tag it so Search finds it.
+if mlflow_run_id:
+    _run_ctx = mlflow.start_run(run_id=mlflow_run_id)
+else:
+    _exp = set_mlflow_experiment(
+        experiment_tag=(mlflow_experiment or "gwb_molecule_optimization"),
+        user_email=user_email, host=None, token=None,
+    )
+    _run_ctx = mlflow.start_run(
+        run_name=(mlflow_run_name or "mol_opt"), experiment_id=_exp.experiment_id
+    )
+
+with _run_ctx:
+    mlflow.set_tag("origin", "genesis_workbench")
+    mlflow.set_tag("feature", "molecule_optimization")
+    mlflow.set_tag("created_by", user_email)
     mlflow.set_tag("job_status", "running")
     mlflow.log_params({"num_samples": K, "num_iterations": N, "select_top": SELECT_TOP,
                        "seed_smiles": ",".join(seed_smiles)[:480]})
