@@ -16,6 +16,7 @@ from app.routers.large_molecule import _build_user_info
 from app.services import admet_safety as admet_pipeline
 from app.services import genmol as genmol_svc
 from app.services import ligand_binder_design as ligand_pipeline
+from app.services import molecule_optimization as mol_opt
 from app.services import molecular_docking as docking
 from app.services import motif_scaffolding as motif_pipeline
 from app.services.molstar import molstar_html_multibody
@@ -649,3 +650,77 @@ def genmol_seed_motifs(
     from app.services import target_motifs
 
     return target_motifs.seed_motifs(gene=gene or None, sequence=sequence or None)
+
+
+# ── Guided Molecule Optimization ───────────────────────────────────────────────
+
+class MoleculeOptimizeRequest(BaseModel):
+    seed_smiles: list[str] = Field(..., min_length=1)  # binding-motif scaffolds
+    num_samples: int = 24
+    num_iterations: int = 5
+    select_top: int = 3
+    dock_top_k: int = 5
+    weights: dict[str, float] = Field(default_factory=lambda: {"qed": 1.0, "admet": 1.0})
+    temperature: float = 1.2
+    randomness: float = 2.0
+    target_pdb_path: str = ""
+    mlflow_experiment: str = "gwb_molecule_optimization"
+    mlflow_run_name: str = Field(..., min_length=1)
+
+
+class MoleculeOptimizeStartResponse(BaseModel):
+    mlflow_run_id: str
+    job_run_id: int
+    experiment_id: str
+
+
+@router.post("/molecule_optimization/start", response_model=MoleculeOptimizeStartResponse)
+def molecule_optimization_start(payload: MoleculeOptimizeRequest, user: CurrentUserDep):
+    if not user.email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "User email missing from headers")
+    seeds = [s.strip() for s in payload.seed_smiles if s and s.strip()]
+    if not seeds:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "At least one seed SMILES is required")
+    try:
+        res = mol_opt.start_molecule_optimization_job(
+            user_email=user.email,
+            mlflow_experiment=payload.mlflow_experiment,
+            mlflow_run_name=payload.mlflow_run_name,
+            seed_smiles=seeds,
+            num_samples=payload.num_samples,
+            num_iterations=payload.num_iterations,
+            select_top=payload.select_top,
+            dock_top_k=payload.dock_top_k,
+            weights=payload.weights,
+            temperature=payload.temperature,
+            randomness=payload.randomness,
+            target_pdb_path=payload.target_pdb_path,
+        )
+    except Exception as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Failed to start optimization: {e}")
+    return MoleculeOptimizeStartResponse(
+        mlflow_run_id=res["mlflow_run_id"],
+        job_run_id=res["job_run_id"],
+        experiment_id=res["experiment_id"],
+    )
+
+
+@router.get("/molecule_optimization/status")
+def molecule_optimization_status(_: CurrentUserDep, run_id: str = Query(..., min_length=1)):
+    return mol_opt.get_run_status(run_id)
+
+
+@router.get("/molecule_optimization/top-k")
+def molecule_optimization_top_k(_: CurrentUserDep, run_id: str = Query(..., min_length=1)):
+    return {"top_k": mol_opt.load_top_k(run_id)}
+
+
+@router.get("/molecule_optimization/search")
+def molecule_optimization_search(
+    user: CurrentUserDep,
+    by: str = Query("run_name"),
+    text: str = Query(""),
+):
+    if not user.email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "User email missing from headers")
+    return {"runs": mol_opt.search_runs(user.email, by, text)}

@@ -2,6 +2,7 @@ import { Tabs } from '@/components/Tabs'
 import { AdmetSafetyTab } from '@/components/AdmetSafetyTab'
 import { DeployedModelsButton } from '@/components/DeployedModelsButton'
 import { GenMolGenerateTab } from '@/components/GenMolGenerateTab'
+import { GuidedMoleculeOptimizationTab } from '@/components/GuidedMoleculeOptimizationTab'
 import { LigandBinderDesignTab } from '@/components/LigandBinderDesignTab'
 import { MolecularDockingTab } from '@/components/MolecularDockingTab'
 import { MotifScaffoldingTab } from '@/components/MotifScaffoldingTab'
@@ -16,6 +17,11 @@ export function SmallMoleculePage() {
             id: 'design',
             label: 'Small Molecule Design',
             content: <GenMolGenerateTab />,
+          },
+          {
+            id: 'guided_opt',
+            label: 'Guided Molecule Optimization',
+            content: <GuidedMoleculeOptimizationTab />,
           },
           {
             id: 'docking',

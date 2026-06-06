@@ -887,3 +887,37 @@ export type SeedMotif = {
   example_smiles: string
 }
 export type SeedMotifsResponse = { gene: string | null; motifs: SeedMotif[] }
+
+// Guided Molecule Optimization
+export type MoleculeOptimizeStartResponse = {
+  mlflow_run_id: string
+  job_run_id: number
+  experiment_id: string
+}
+export type MolOptPoint = { step: number; value: number }
+export type MolOptStatus = {
+  status: string
+  job_status: string
+  best_reward_history: MolOptPoint[]
+  mean_reward_history: MolOptPoint[]
+  best_qed_history: MolOptPoint[]
+  current_metrics: Record<string, number>
+  experiment_id: string
+  run_name: string
+}
+export type MolOptTopKItem = {
+  smiles: string
+  qed: number | null
+  tox: number | null
+  reward: number
+  dock_confidence?: number | null
+}
+export type MolOptRun = {
+  run_id: string
+  run_name: string
+  experiment_name: string
+  job_status: string
+  num_iterations: number | null
+  iterations_completed: number | null
+  start_time_ms: number | null
+}

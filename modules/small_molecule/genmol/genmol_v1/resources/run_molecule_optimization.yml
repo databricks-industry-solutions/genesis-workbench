@@ -1,0 +1,72 @@
+resources:
+  jobs:
+    run_molecule_optimization:
+      name: run_molecule_optimization_gwb
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      job_clusters:
+        - job_cluster_key: molecule_optimization_cpu_cluster
+          new_cluster:
+            num_workers: 0
+            node_type_id: ${var.cpu_node_type}
+            driver_node_type_id: ${var.cpu_node_type}
+            spark_version: "15.4.x-scala2.12"
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            single_user_name: ${var.current_user}
+            aws_attributes:
+              availability: ON_DEMAND
+              first_on_demand: 1
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: "local[*]"
+            custom_tags:
+              ResourceClass: SingleNode
+
+      tasks:
+        - task_key: run_loop
+          job_cluster_key: molecule_optimization_cpu_cluster
+          notebook_task:
+            notebook_path: ../notebooks/03_run_molecule_optimization.py
+
+      timeout_seconds: 21600  # 6h hard cap; a typical loop is minutes.
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: user_email
+          default: ${var.current_user}
+        # Per-run parameters (populated by start_molecule_optimization_job).
+        - name: mlflow_experiment
+          default: ""
+        - name: mlflow_run_name
+          default: ""
+        - name: mlflow_run_id
+          default: ""
+        - name: seed_smiles_csv
+          default: ""
+        - name: num_samples
+          default: "24"
+        - name: num_iterations
+          default: "5"
+        - name: select_top
+          default: "3"
+        - name: dock_top_k
+          default: "5"
+        - name: weights_json
+          default: '{"qed":1.0,"admet":1.0}'
+        - name: temperature
+          default: "1.2"
+        - name: randomness
+          default: "2.0"
+        - name: target_pdb_path
+          default: ""
+
+      tags: ${var.common_resource_tags}

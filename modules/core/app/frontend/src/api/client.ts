@@ -66,6 +66,10 @@ import type {
   RunSummaryResponse,
   SavedAnnotationsResponse,
   SeedMotifsResponse,
+  MoleculeOptimizeStartResponse,
+  MolOptStatus,
+  MolOptTopKItem,
+  MolOptRun,
   SequenceSearchResponse,
   TrajectoryResponse,
   SimilarityResponse,
@@ -200,6 +204,34 @@ export const api = {
       `/api/small_molecule/genmol/seed_motifs?gene=${encodeURIComponent(
         p.gene || '',
       )}&sequence=${encodeURIComponent(p.sequence || '')}`,
+    ),
+
+  molOptStart: (body: {
+    seed_smiles: string[]
+    num_samples: number
+    num_iterations: number
+    select_top: number
+    dock_top_k: number
+    weights: Record<string, number>
+    temperature: number
+    randomness: number
+    mlflow_run_name: string
+  }) =>
+    request<MoleculeOptimizeStartResponse>('/api/small_molecule/molecule_optimization/start', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  molOptStatus: (run_id: string) =>
+    request<MolOptStatus>(
+      `/api/small_molecule/molecule_optimization/status?run_id=${encodeURIComponent(run_id)}`,
+    ),
+  molOptTopK: (run_id: string) =>
+    request<{ top_k: MolOptTopKItem[] }>(
+      `/api/small_molecule/molecule_optimization/top-k?run_id=${encodeURIComponent(run_id)}`,
+    ),
+  molOptSearch: (by: 'run_name' | 'experiment_name', text: string) =>
+    request<{ runs: MolOptRun[] }>(
+      `/api/small_molecule/molecule_optimization/search?by=${by}&text=${encodeURIComponent(text)}`,
     ),
 
   inverseFolding: (pdb: string) =>
