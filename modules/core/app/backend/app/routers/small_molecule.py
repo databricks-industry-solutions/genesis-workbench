@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from app.auth import CurrentUserDep
 from app.routers.large_molecule import _build_user_info
 from app.services import admet_safety as admet_pipeline
+from app.services import genmol as genmol_svc
 from app.services import ligand_binder_design as ligand_pipeline
 from app.services import molecular_docking as docking
 from app.services import motif_scaffolding as motif_pipeline
@@ -559,6 +560,62 @@ def admet_stream(payload: AdmetRequest, user: CurrentUserDep):
                 "run_id": mlflow_run_id,
                 "warnings": result["warnings"],
             }
+
+    return StreamingResponse(
+        stream_with_progress(work),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
+
+
+# ── GenMol — generative small-molecule design ──────────────────────────────────
+
+class GenMolGenerateRequest(BaseModel):
+    # Each seed: "" => de novo; a SMILES fragment => scaffold decoration.
+    seeds: list[str] = Field(default_factory=lambda: [""])
+    num_molecules: int = 20
+    temperature: float = 1.0
+    randomness: float = 1.0
+    scoring: str = "qed"  # qed | logp
+    unique: bool = True
+
+
+class GenMolMolecule(BaseModel):
+    seed: str
+    smiles: str
+    score: Optional[float] = None
+
+
+class GenMolGenerateResponse(BaseModel):
+    molecules: list[GenMolMolecule]
+
+
+@router.post("/genmol/generate/stream")
+def genmol_generate_stream(payload: GenMolGenerateRequest, user: CurrentUserDep):
+    """SSE generate. GenMol scales to zero, so the first call cold-starts
+    (~30-60s) — streaming keeps the connection alive past proxy timeouts."""
+    if not user.email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "User email missing from headers")
+    seeds = [s.strip() for s in payload.seeds] if payload.seeds else [""]
+    if not seeds:
+        seeds = [""]
+
+    def work(progress_cb):
+        progress_cb(5, "Submitting to GenMol")
+        progress_cb(
+            20,
+            "Generating molecules — the endpoint may cold-start (~30-60s on first call)",
+        )
+        mols = genmol_svc.generate(
+            seeds=seeds,
+            num_molecules=payload.num_molecules,
+            temperature=payload.temperature,
+            randomness=payload.randomness,
+            scoring=payload.scoring,
+            unique=payload.unique,
+        )
+        progress_cb(95, f"Generated {len(mols)} molecule(s)")
+        return {"molecules": mols}
 
     return StreamingResponse(
         stream_with_progress(work),

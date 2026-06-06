@@ -869,3 +869,13 @@ export type ResolveGeneResponse = {
   sequence?: string
   length?: number
 }
+
+// GenMol — generative small-molecule design
+export type GenMolMolecule = {
+  seed: string
+  smiles: string
+  score: number | null
+}
+export type GenMolGenerateResponse = {
+  molecules: GenMolMolecule[]
+}

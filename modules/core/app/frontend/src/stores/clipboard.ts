@@ -5,7 +5,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 
-export type ClipKind = 'gene' | 'sequence'
+export type ClipKind = 'gene' | 'sequence' | 'molecule'
 export type ClipItem = {
   kind: ClipKind
   value: string
@@ -15,7 +15,11 @@ export type ClipItem = {
   source?: string
 }
 
-const KIND_LABELS: Record<ClipKind, string> = { gene: 'Genes', sequence: 'Sequences' }
+const KIND_LABELS: Record<ClipKind, string> = {
+  gene: 'Genes',
+  sequence: 'Sequences',
+  molecule: 'Molecules',
+}
 export const clipKindLabel = (k: ClipKind) => KIND_LABELS[k] ?? k
 
 // Genes are normalized uppercase (so PARP1 == parp1); sequences kept verbatim.

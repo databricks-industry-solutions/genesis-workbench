@@ -27,6 +27,7 @@ DISPLAY_TO_UC: dict[str, str] = {
     "Chemprop BBBP": "chemprop_bbbp",
     "Chemprop ClinTox": "chemprop_clintox",
     "Chemprop ADMET": "chemprop_admet",
+    "GenMol Molecule Generator": "genmol",
     # Single Cell
     "SCimilarity Gene Order": "scimilarity_gene_order",
     "SCimilarity Get Embedding": "scimilarity_get_embedding",

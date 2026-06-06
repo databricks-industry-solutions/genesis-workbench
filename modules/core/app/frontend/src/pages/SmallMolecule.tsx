@@ -1,6 +1,7 @@
 import { Tabs } from '@/components/Tabs'
 import { AdmetSafetyTab } from '@/components/AdmetSafetyTab'
 import { DeployedModelsButton } from '@/components/DeployedModelsButton'
+import { GenMolGenerateTab } from '@/components/GenMolGenerateTab'
 import { LigandBinderDesignTab } from '@/components/LigandBinderDesignTab'
 import { MolecularDockingTab } from '@/components/MolecularDockingTab'
 import { MotifScaffoldingTab } from '@/components/MotifScaffoldingTab'
@@ -11,6 +12,11 @@ export function SmallMoleculePage() {
       <Tabs
         rightAccessory={<DeployedModelsButton module="small_molecule" />}
         tabs={[
+          {
+            id: 'generate',
+            label: 'Generate (GenMol)',
+            content: <GenMolGenerateTab />,
+          },
           {
             id: 'docking',
             label: 'Molecular Docking',
