@@ -115,7 +115,7 @@ export function GuidedMoleculeOptimizationTab() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold">Guided Molecule Optimization</h3>
+        <h3 className="text-sm font-semibold">Guided Molecule Design</h3>
         <p className="text-xs text-muted-foreground">
           A design-make-test loop: GenMol grows the seed motif into candidates → each scored on{' '}
           <strong>QED</strong> (drug-likeness) + <strong>ADMET</strong> clinical-tox → the best

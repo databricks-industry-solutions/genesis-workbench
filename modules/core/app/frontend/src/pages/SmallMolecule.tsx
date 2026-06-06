@@ -14,7 +14,7 @@ export function SmallMoleculePage() {
         tabs={[
           {
             id: 'guided_opt',
-            label: 'Guided Molecule Optimization',
+            label: 'Guided Molecule Design',
             content: <GuidedMoleculeOptimizationTab />,
           },
           {
