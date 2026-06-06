@@ -1,0 +1,41 @@
+resources:
+  jobs:
+    init_genmol_data:
+      name: init_genmol_data
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: init_repurposing_data
+          # Classic single-node py3.11 cluster (same rationale as register_genmol):
+          # SINGLE_USER for UC Volume/table access, ON_DEMAND so the driver isn't a
+          # reclaimable spot VM. CPU is fine — this is a download + RDKit + Delta write.
+          new_cluster:
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: ${var.cpu_node_type}
+            num_workers: 0
+            data_security_mode: SINGLE_USER
+            single_user_name: ${var.current_user}
+            aws_attributes:
+              availability: ON_DEMAND
+              first_on_demand: 1
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: "local[*]"
+            custom_tags:
+              ResourceClass: SingleNode
+          notebook_task:
+            notebook_path: ../notebooks/02_init_repurposing_data.py
+            base_parameters:
+              target_genes: "PARP1,BRCA1,BRCA2,EGFR,KRAS,TP53,PARP2,ATM"
+              max_actives_per_gene: "300"
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+
+      tags: ${var.common_resource_tags}
