@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 
+import { api } from '@/api/client'
+import { ClipboardPaste } from '@/components/ClipboardPaste'
 import { DataTable } from '@/components/DataTable'
 import { MaterialIcon } from '@/components/MaterialIcon'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
 import { useSseMutation } from '@/hooks/useSseMutation'
 import { useClipboard } from '@/stores/clipboard'
-import type { GenMolGenerateResponse, GenMolMolecule } from '@/types/api'
+import type { GenMolGenerateResponse, GenMolMolecule, SeedMotif } from '@/types/api'
 
 type Mode = 'denovo' | 'fragment'
 
@@ -25,6 +28,21 @@ export function GenMolGenerateTab() {
     () => new Set(clipItems.filter((i) => i.kind === 'molecule').map((i) => i.value)),
     [clipItems],
   )
+
+  // Seed from an identified target: gene (or a protein sequence to reverse-
+  // resolve) → known-binder Murcko scaffolds (motifs) → seed fragment mode.
+  const [gene, setGene] = useState('')
+  const motifs = useMutation({
+    mutationFn: (p: { gene?: string; sequence?: string }) => api.genmolSeedMotifs(p),
+  })
+
+  const useMotif = (m: SeedMotif) => {
+    setMode('fragment')
+    setFragments((prev) => {
+      const lines = prev.split('\n').map((s) => s.trim()).filter(Boolean)
+      return lines.includes(m.scaffold) ? prev : [...lines, m.scaffold].join('\n')
+    })
+  }
 
   const gen = useSseMutation<
     {
@@ -114,6 +132,71 @@ export function GenMolGenerateTab() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,420px)_1fr]">
         {/* Left: form */}
         <div className="space-y-3">
+          {/* Seed from an identified target protein → its binding motif. */}
+          <div className="rounded-md border border-border bg-card p-3 text-xs">
+            <div className="mb-1.5 font-medium uppercase tracking-wide text-muted-foreground">
+              Find binding motif from target
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                value={gene}
+                onChange={(e) => setGene(e.target.value)}
+                placeholder="Target gene, e.g. PARP1"
+                className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => motifs.mutate({ gene })}
+                disabled={!gene.trim() || motifs.isPending}
+                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+              >
+                {motifs.isPending ? 'Finding…' : 'Find'}
+              </button>
+            </div>
+            <div className="mt-1.5">
+              <ClipboardPaste
+                kind="sequence"
+                label="From Clipboard sequence"
+                onPick={(it) => motifs.mutate({ sequence: it.value })}
+              />
+            </div>
+
+            {motifs.data && (
+              <div className="mt-2 space-y-1">
+                {motifs.data.motifs.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    No binding motifs found{motifs.data.gene ? ` for ${motifs.data.gene}` : ''}. The
+                    target_binders table may still be building, or the target has no known binders.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-[11px] text-muted-foreground">
+                      {motifs.data.gene} — click a motif to seed fragment generation:
+                    </p>
+                    {motifs.data.motifs.map((m) => (
+                      <button
+                        key={m.scaffold}
+                        type="button"
+                        onClick={() => useMotif(m)}
+                        title={`Seed GenMol with this scaffold (${m.count} known binders)`}
+                        className="block w-full truncate rounded border border-border bg-background px-2 py-1 text-left font-mono text-[11px] hover:bg-accent"
+                      >
+                        <span className="text-primary">◆</span> {m.scaffold}
+                        <span className="ml-1 font-sans text-[10px] text-muted-foreground">
+                          · {m.count} binders
+                          {m.best_pchembl != null ? ` · pChEMBL ${m.best_pchembl.toFixed(1)}` : ''}
+                        </span>
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+            {motifs.error && (
+              <p className="mt-1 text-[11px] text-destructive">{String(motifs.error)}</p>
+            )}
+          </div>
+
           <div className="flex gap-2">
             {(['denovo', 'fragment'] as Mode[]).map((m) => (
               <button

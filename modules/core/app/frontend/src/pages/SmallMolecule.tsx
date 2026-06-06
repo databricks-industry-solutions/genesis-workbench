@@ -13,8 +13,8 @@ export function SmallMoleculePage() {
         rightAccessory={<DeployedModelsButton module="small_molecule" />}
         tabs={[
           {
-            id: 'generate',
-            label: 'Generate (GenMol)',
+            id: 'design',
+            label: 'Small Molecule Design',
             content: <GenMolGenerateTab />,
           },
           {

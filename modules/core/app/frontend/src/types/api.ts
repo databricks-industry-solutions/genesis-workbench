@@ -879,3 +879,11 @@ export type GenMolMolecule = {
 export type GenMolGenerateResponse = {
   molecules: GenMolMolecule[]
 }
+
+export type SeedMotif = {
+  scaffold: string
+  count: number
+  best_pchembl: number | null
+  example_smiles: string
+}
+export type SeedMotifsResponse = { gene: string | null; motifs: SeedMotif[] }

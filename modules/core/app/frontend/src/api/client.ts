@@ -65,6 +65,7 @@ import type {
   RunInfoResponse,
   RunSummaryResponse,
   SavedAnnotationsResponse,
+  SeedMotifsResponse,
   SequenceSearchResponse,
   TrajectoryResponse,
   SimilarityResponse,
@@ -192,6 +193,13 @@ export const api = {
   resolveGene: (gene: string) =>
     request<ResolveGeneResponse>(
       `/api/large_molecule/resolve_gene?gene=${encodeURIComponent(gene)}`,
+    ),
+
+  genmolSeedMotifs: (p: { gene?: string; sequence?: string }) =>
+    request<SeedMotifsResponse>(
+      `/api/small_molecule/genmol/seed_motifs?gene=${encodeURIComponent(
+        p.gene || '',
+      )}&sequence=${encodeURIComponent(p.sequence || '')}`,
     ),
 
   inverseFolding: (pdb: string) =>

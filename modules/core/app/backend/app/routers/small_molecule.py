@@ -6,7 +6,7 @@ from typing import Optional
 
 import mlflow
 from databricks.sdk import WorkspaceClient
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from genesis_workbench.models import set_mlflow_experiment
 from pydantic import BaseModel, Field
@@ -622,3 +622,30 @@ def genmol_generate_stream(payload: GenMolGenerateRequest, user: CurrentUserDep)
         media_type="text/event-stream",
         headers=_SSE_HEADERS,
     )
+
+
+class SeedMotif(BaseModel):
+    scaffold: str
+    count: int
+    best_pchembl: Optional[float] = None
+    example_smiles: str
+
+
+class SeedMotifsResponse(BaseModel):
+    gene: Optional[str] = None
+    motifs: list[SeedMotif]
+
+
+@router.get("/genmol/seed_motifs", response_model=SeedMotifsResponse)
+def genmol_seed_motifs(
+    _: CurrentUserDep,
+    gene: str = Query("", description="Target gene symbol, e.g. PARP1"),
+    sequence: str = Query("", description="Protein sequence to reverse-resolve to a gene"),
+):
+    """Binding motifs (Murcko scaffolds of known ChEMBL binders) for a target —
+    seed candidates for GenMol's fragment mode. Pass a gene, or a protein
+    sequence to reverse-resolve. Returns {gene, motifs:[]} (empty if the
+    target_binders table isn't built or the target has no known binders)."""
+    from app.services import target_motifs
+
+    return target_motifs.seed_motifs(gene=gene or None, sequence=sequence or None)
