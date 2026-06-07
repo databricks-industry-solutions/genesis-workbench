@@ -214,7 +214,7 @@ export const api = {
     weights: Record<string, number>
     temperature: number
     randomness: number
-    target_pdb?: string
+    target_sequence?: string
     dock_per_iter?: number
     dock_samples?: number
     mlflow_experiment?: string

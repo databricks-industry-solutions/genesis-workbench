@@ -663,7 +663,7 @@ class MoleculeOptimizeRequest(BaseModel):
     weights: dict[str, float] = Field(default_factory=lambda: {"qed": 1.0, "admet": 1.0, "dock": 1.0})
     temperature: float = 1.2
     randomness: float = 2.0
-    target_pdb: str = ""           # paste a target structure to dock in-reward
+    target_sequence: str = ""      # target protein sequence (folded → docked in-reward)
     dock_per_iter: int = 8
     dock_samples: int = 3
     mlflow_experiment: str = "gwb_molecule_optimization"
@@ -696,7 +696,7 @@ def molecule_optimization_start(payload: MoleculeOptimizeRequest, user: CurrentU
             weights=payload.weights,
             temperature=payload.temperature,
             randomness=payload.randomness,
-            target_pdb=payload.target_pdb,
+            target_sequence=payload.target_sequence,
             dock_per_iter=payload.dock_per_iter,
             dock_samples=payload.dock_samples,
         )

@@ -32,7 +32,7 @@ dbutils.widgets.text("dock_top_k", "5", "Top-K to dock at the end")
 dbutils.widgets.text("weights_json", '{"qed":1.0,"admet":1.0}', "Per-axis weights JSON")
 dbutils.widgets.text("temperature", "1.2", "GenMol softmax temperature")
 dbutils.widgets.text("randomness", "2.0", "GenMol randomness")
-dbutils.widgets.text("target_pdb_path", "", "UC volume path to target PDB (enables in-reward docking)")
+dbutils.widgets.text("target_sequence", "", "Target protein sequence (folded via ESMFold; enables in-reward docking)")
 dbutils.widgets.text("dock_per_iter", "8", "Candidates docked per iteration (top by cheap score)")
 dbutils.widgets.text("dock_samples", "3", "DiffDock samples_per_complex per ligand")
 
@@ -79,7 +79,7 @@ DOCK_TOP_K = int(dbutils.widgets.get("dock_top_k"))
 weights = {"qed": 1.0, "admet": 1.0, **json.loads(dbutils.widgets.get("weights_json") or "{}")}
 temperature = float(dbutils.widgets.get("temperature"))
 randomness = float(dbutils.widgets.get("randomness"))
-target_pdb_path = dbutils.widgets.get("target_pdb_path").strip()
+target_sequence = dbutils.widgets.get("target_sequence").strip()
 DOCK_PER_ITER = int(dbutils.widgets.get("dock_per_iter"))
 DOCK_SAMPLES = int(dbutils.widgets.get("dock_samples"))
 
@@ -141,15 +141,28 @@ def cheap_score(smiles_list):
     return rows
 
 
-# ── In-reward docking: embed the target ONCE, then score each ligand. ──────────
-DOCK_ENABLED = bool(target_pdb_path) and float(weights.get("dock", 0.0)) > 0.0
+# ── In-reward docking: fold the target (ESMFold) + ESM-embed it ONCE, then
+# score each ligand against it. The target comes in as a SEQUENCE (resolved from
+# a gene or pasted) — same "Target from gene / Paste sequence" pattern as the
+# Structure Prediction tab — and we fold it here to the structure DiffDock needs.
+DOCK_ENABLED = bool(target_sequence) and float(weights.get("dock", 0.0)) > 0.0
 _target_pdb, _esm_emb = "", "{}"
 if DOCK_ENABLED:
     from databricks.sdk.service.serving import DataframeSplitInput
     try:
+        ESMFOLD_EP = get_endpoint_name_for_uc_model("esmfold")
         ESM_EP = get_endpoint_name_for_uc_model("diffdock_esm_embeddings")
         DIFFDOCK_EP = get_endpoint_name_for_uc_model("diffdock")
-        _target_pdb = open(target_pdb_path).read()
+
+        # 1) Fold the target sequence → PDB (ESMFold).
+        fr = w.serving_endpoints.query(name=ESMFOLD_EP, inputs=[target_sequence])
+        fout = fr.predictions[0]
+        _target_pdb = fout.get("pdb", "") if isinstance(fout, dict) else str(fout)
+        if not _target_pdb:
+            raise RuntimeError("ESMFold returned no PDB")
+        print(f"Folded target ({len(target_sequence)} aa) → PDB ({len(_target_pdb)} chars)")
+
+        # 2) ESM-embed the folded structure once (reused for every ligand dock).
         r = w.serving_endpoints.query(
             name=ESM_EP,
             dataframe_split=DataframeSplitInput(columns=["protein_pdb"], data=[[_target_pdb]]),
@@ -157,9 +170,9 @@ if DOCK_ENABLED:
         preds = r.predictions
         rec = preds[0] if isinstance(preds, list) and preds else preds
         _esm_emb = rec.get("embeddings_b64", "{}") if isinstance(rec, dict) else "{}"
-        print("Target ESM embeddings computed — docking is in the reward.")
+        print("Target embedded — docking is in the reward.")
     except Exception as e:
-        print("ESM embed failed; disabling in-reward docking:", e)
+        print("Fold/embed failed; disabling in-reward docking:", e)
         DOCK_ENABLED = False
 
 
