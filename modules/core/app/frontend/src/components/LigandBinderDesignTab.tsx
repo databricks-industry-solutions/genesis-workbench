@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
+import { ClipboardPaste } from '@/components/ClipboardPaste'
 import { DataTable } from '@/components/DataTable'
 import { MolstarViewer } from '@/components/MolstarViewer'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
@@ -201,9 +202,12 @@ export function LigandBinderDesignTab() {
 
           {inputMode === 'smiles' ? (
             <label className="block text-xs">
-              <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
-                Ligand SMILES
-              </span>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="block uppercase tracking-wide text-muted-foreground">
+                  Ligand SMILES
+                </span>
+                <ClipboardPaste kind="molecule" label="Paste molecule" onPick={(it) => setSmiles(it.value)} />
+              </div>
               <input
                 value={smiles}
                 onChange={(e) => setSmiles(e.target.value)}

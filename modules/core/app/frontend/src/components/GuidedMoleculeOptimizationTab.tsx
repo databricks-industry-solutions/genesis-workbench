@@ -6,6 +6,7 @@ import { api } from '@/api/client'
 import { ClipboardPaste } from '@/components/ClipboardPaste'
 import { DataTable } from '@/components/DataTable'
 import { MaterialIcon } from '@/components/MaterialIcon'
+import { StructurePicker } from '@/components/StructurePicker'
 import { useClipboard } from '@/stores/clipboard'
 import type { MolOptStatus, MolOptTopKItem, SeedMotif } from '@/types/api'
 
@@ -193,9 +194,21 @@ export function GuidedMoleculeOptimizationTab() {
           </div>
 
           <label className="block text-xs">
-            <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
-              Seed scaffold SMILES — one per line
-            </span>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="block uppercase tracking-wide text-muted-foreground">
+                Seed scaffold SMILES — one per line
+              </span>
+              <ClipboardPaste
+                kind="molecule"
+                label="Paste molecule"
+                onPick={(it) =>
+                  setSeeds((prev) => {
+                    const lines = prev.split('\n').map((s) => s.trim()).filter(Boolean)
+                    return lines.includes(it.value) ? prev : [...lines, it.value].join('\n')
+                  })
+                }
+              />
+            </div>
             <textarea
               rows={4}
               value={seeds}
@@ -246,8 +259,11 @@ export function GuidedMoleculeOptimizationTab() {
 
           {/* Optional: dock candidates into the reward (binding drives the loop). */}
           <div className="rounded-md border border-border bg-card p-3 text-xs">
-            <div className="mb-1.5 font-medium uppercase tracking-wide text-muted-foreground">
-              Dock into reward (optional)
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <span className="font-medium uppercase tracking-wide text-muted-foreground">
+                Dock into reward (optional)
+              </span>
+              <StructurePicker onPick={setTargetPdb} />
             </div>
             <span className="mb-1 block text-[11px] text-muted-foreground">
               Paste the target structure (PDB) to make DiffDock binding part of the reward — the

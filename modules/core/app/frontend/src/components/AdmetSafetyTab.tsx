@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 
+import { ClipboardPaste } from '@/components/ClipboardPaste'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
 import { useSseMutation } from '@/hooks/useSseMutation'
 import type { AdmetResponse } from '@/types/api'
@@ -128,9 +129,21 @@ export function AdmetSafetyTab() {
         {/* Left form */}
         <div className="space-y-3">
           <label className="block text-xs">
-            <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
-              SMILES (one per line)
-            </span>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="block uppercase tracking-wide text-muted-foreground">
+                SMILES (one per line)
+              </span>
+              <ClipboardPaste
+                kind="molecule"
+                label="Paste molecule"
+                onPick={(it) =>
+                  setSmilesText((prev) => {
+                    const lines = prev.split('\n').map((s) => s.trim()).filter(Boolean)
+                    return lines.includes(it.value) ? prev : [...lines, it.value].join('\n')
+                  })
+                }
+              />
+            </div>
             <textarea
               rows={8}
               value={smilesText}
