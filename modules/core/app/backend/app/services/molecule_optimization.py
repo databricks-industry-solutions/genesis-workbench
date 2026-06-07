@@ -22,6 +22,8 @@ from databricks.sdk import WorkspaceClient
 from genesis_workbench.models import set_mlflow_experiment
 from mlflow.tracking import MlflowClient
 
+from app.services.databricks_links import job_run_url
+
 logger = logging.getLogger(__name__)
 
 ORCHESTRATOR_JOB_NAME = "run_molecule_optimization_gwb"
@@ -212,15 +214,30 @@ def search_runs(user_email: str, by: str, text: str) -> list[dict]:
     def _g(r, col):
         return r[col] if col in r and pd.notna(r[col]) else None
 
+    try:
+        job_id = _resolve_orchestrator_job_id()
+    except Exception:
+        job_id = None
+
     out = []
     for _, r in runs.iterrows():
+        status = str(_g(r, "tags.job_status") or "")
+        n_iter = _g(r, "params.num_iterations")
+        done = _g(r, "metrics.iterations_completed")
+        jrid = _g(r, "tags.job_run_id")
+        detail = (
+            f"{int(float(done)) if done is not None else '—'}"
+            f"/{int(float(n_iter)) if n_iter is not None else '—'} iters"
+        )
+        # Conform to DBRunRow (the shared RunSearchSection contract).
         out.append({
             "run_id": str(r["run_id"]),
             "run_name": str(_g(r, "tags.mlflow.runName") or ""),
             "experiment_name": exp_map.get(str(r["experiment_id"]), ""),
-            "job_status": str(_g(r, "tags.job_status") or ""),
-            "num_iterations": (int(r["params.num_iterations"]) if "params.num_iterations" in r and pd.notna(r["params.num_iterations"]) else None),
-            "iterations_completed": (int(r["metrics.iterations_completed"]) if "metrics.iterations_completed" in r and pd.notna(r["metrics.iterations_completed"]) else None),
+            "status": status,
+            "progress": status,
+            "detail": detail,
             "start_time_ms": (int(r["start_time"].timestamp() * 1000) if "start_time" in r and pd.notna(r["start_time"]) else None),
+            "run_url": (job_run_url(job_id, int(float(jrid))) if (job_id and jrid is not None) else ""),
         })
     return out

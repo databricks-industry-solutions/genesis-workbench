@@ -69,7 +69,6 @@ import type {
   MoleculeOptimizeStartResponse,
   MolOptStatus,
   MolOptTopKItem,
-  MolOptRun,
   SequenceSearchResponse,
   TrajectoryResponse,
   SimilarityResponse,
@@ -218,6 +217,7 @@ export const api = {
     target_pdb?: string
     dock_per_iter?: number
     dock_samples?: number
+    mlflow_experiment?: string
     mlflow_run_name: string
   }) =>
     request<MoleculeOptimizeStartResponse>('/api/small_molecule/molecule_optimization/start', {
@@ -233,7 +233,7 @@ export const api = {
       `/api/small_molecule/molecule_optimization/top-k?run_id=${encodeURIComponent(run_id)}`,
     ),
   molOptSearch: (by: 'run_name' | 'experiment_name', text: string) =>
-    request<{ runs: MolOptRun[] }>(
+    request<DBSearchResponse>(
       `/api/small_molecule/molecule_optimization/search?by=${by}&text=${encodeURIComponent(text)}`,
     ),
 
