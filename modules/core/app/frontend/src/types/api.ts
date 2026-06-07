@@ -893,6 +893,7 @@ export type MoleculeOptimizeStartResponse = {
   mlflow_run_id: string
   job_run_id: number
   experiment_id: string
+  run_url: string
 }
 export type MolOptPoint = { step: number; value: number }
 export type MolOptStatus = {

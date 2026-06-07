@@ -117,6 +117,7 @@ def start_molecule_optimization_job(
         "job_run_id": int(job_run.run_id),
         "mlflow_run_id": run_id,
         "experiment_id": str(experiment.experiment_id),
+        "run_url": job_run_url(job_id, job_run.run_id),
     }
 
 

@@ -5,6 +5,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { api } from '@/api/client'
 import { ClipboardPaste } from '@/components/ClipboardPaste'
 import { DataTable } from '@/components/DataTable'
+import { DispatchSuccess } from '@/components/DispatchSuccess'
 import { MaterialIcon } from '@/components/MaterialIcon'
 import { RunSearchSection } from '@/components/RunSearchSection'
 import { SequenceSourceControls } from '@/components/SequenceSourceControls'
@@ -274,10 +275,7 @@ export function GuidedMoleculeOptimizationTab() {
             {start.isPending ? 'Starting…' : 'Start optimization'}
           </button>
           {start.data && (
-            <div className="rounded-md border border-success/40 bg-success/10 p-2 text-xs">
-              Started <code>{runName}</code> (job run {start.data.job_run_id}). Track it in
-              <strong> Search past runs → </strong> and click <strong>View</strong> when complete.
-            </div>
+            <DispatchSuccess jobRunId={start.data.job_run_id} runUrl={start.data.run_url} />
           )}
           {start.error && (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">

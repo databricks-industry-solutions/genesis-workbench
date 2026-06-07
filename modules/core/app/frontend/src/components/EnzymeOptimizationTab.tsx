@@ -4,13 +4,13 @@ import type { ColumnDef } from '@tanstack/react-table'
 
 import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
+import { DispatchSuccess } from '@/components/DispatchSuccess'
 import { Dialog } from '@/components/Dialog'
 import { InProgressBadge } from '@/components/InProgressBadge'
 import { MolstarViewer } from '@/components/MolstarViewer'
 import { PlotlyChart as Plot } from '@/components/PlotlyChart'
 import type {
   EnzymeCandidate,
-  EnzymeOptimizationStartResponse,
   EnzymeRefRow,
   EnzymeRunRow,
   EnzymeStatusResponse,
@@ -320,7 +320,9 @@ export function EnzymeOptimizationTab() {
             </button>
           </div>
 
-          {start.data && <DispatchSuccess data={start.data} />}
+          {start.data && (
+            <DispatchSuccess jobRunId={start.data.job_run_id} runUrl={start.data.run_url} />
+          )}
           {start.error && (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
               {String(start.error)}
@@ -547,26 +549,6 @@ export function EnzymeOptimizationTab() {
 }
 
 // ─── Helper components ─────────────────────────────────────────────────────
-
-function DispatchSuccess({ data }: { data: EnzymeOptimizationStartResponse }) {
-  return (
-    <div className="rounded-md border border-success/40 bg-success/10 p-3 text-xs">
-      <span className="text-success">✓ Job dispatched.</span> Run ID{' '}
-      <code className="rounded bg-muted px-1">{data.job_run_id}</code>{' '}
-      {data.run_url && (
-        <a
-          className="text-primary hover:underline"
-          href={data.run_url}
-          target="_blank"
-          rel="noreferrer"
-        >
-          View in Databricks ↗
-        </a>
-      )}
-      . Track progress under <strong>Search Past Runs</strong> below.
-    </div>
-  )
-}
 
 function SmokeTestPanel({ data }: { data: { sequence: string; solubility: number | null; half_life: number | null; thermostab: number | null; immuno: number | null } }) {
   const rows: { label: string; val: number | null; fmt?: (v: number) => string }[] = [

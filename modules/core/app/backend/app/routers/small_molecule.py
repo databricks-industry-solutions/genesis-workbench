@@ -674,6 +674,7 @@ class MoleculeOptimizeStartResponse(BaseModel):
     mlflow_run_id: str
     job_run_id: int
     experiment_id: str
+    run_url: str = ""
 
 
 @router.post("/molecule_optimization/start", response_model=MoleculeOptimizeStartResponse)
@@ -706,6 +707,7 @@ def molecule_optimization_start(payload: MoleculeOptimizeRequest, user: CurrentU
         mlflow_run_id=res["mlflow_run_id"],
         job_run_id=res["job_run_id"],
         experiment_id=res["experiment_id"],
+        run_url=res.get("run_url", ""),
     )
 
 
