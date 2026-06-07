@@ -32,6 +32,14 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/03_run_molecule_optimization.py
 
+      # The Genesis Workbench app dispatches this job as its service principal, so
+      # the SP needs run rights (and visibility for jobs.list). Granted declaratively
+      # here so it survives deploys — grant_app_permissions_job only covers registered
+      # jobs and --ui-only skips it.
+      permissions:
+        - level: CAN_MANAGE_RUN
+          service_principal_name: ${var.app_service_principal_id}
+
       timeout_seconds: 21600  # 6h hard cap; a typical loop is minutes.
 
       parameters:
