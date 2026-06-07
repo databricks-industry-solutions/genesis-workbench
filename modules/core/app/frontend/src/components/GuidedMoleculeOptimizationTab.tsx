@@ -154,10 +154,18 @@ export function GuidedMoleculeOptimizationTab() {
                 {motifs.isPending ? 'Finding…' : 'Find'}
               </button>
             </div>
-            <div className="mt-1.5">
+            <div className="mt-1.5 flex flex-wrap gap-2">
+              <ClipboardPaste
+                kind="gene"
+                label="Clipboard gene"
+                onPick={(it) => {
+                  setGene(it.value)
+                  motifs.mutate({ gene: it.value })
+                }}
+              />
               <ClipboardPaste
                 kind="sequence"
-                label="From Clipboard sequence"
+                label="Clipboard sequence"
                 onPick={(it) => motifs.mutate({ sequence: it.value })}
               />
             </div>
