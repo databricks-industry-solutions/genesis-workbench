@@ -28,6 +28,19 @@ ORCHESTRATOR_JOB_NAME = "run_molecule_optimization_gwb"
 _job_id_cache: dict[str, int] = {}
 
 
+def _use_databricks_tracking() -> None:
+    """Pin MLflow to the Databricks tracking + UC registry stores.
+
+    Other request handlers in the app can leave the process-global MLflow
+    tracking URI pointing elsewhere; without re-pinning here, this module's
+    `search_experiments`/`MlflowClient` calls intermittently query the wrong
+    store — which made runs vanish from Search Past Runs and the View dialog
+    come up empty between page loads. Mirrors enzyme_optimization._experiment_map.
+    """
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+
+
 def _resolve_orchestrator_job_id(w: Optional[WorkspaceClient] = None) -> int:
     cached = _job_id_cache.get(ORCHESTRATOR_JOB_NAME)
     if cached is not None:
@@ -64,6 +77,7 @@ def start_molecule_optimization_job(
     dock_per_iter: int = 8,
     dock_samples: int = 3,
 ) -> dict:
+    _use_databricks_tracking()
     experiment = set_mlflow_experiment(
         experiment_tag=mlflow_experiment, user_email=user_email, host=None, token=None
     )
@@ -122,6 +136,7 @@ def start_molecule_optimization_job(
 
 
 def get_run_status(run_id: str) -> dict[str, Any]:
+    _use_databricks_tracking()
     client = MlflowClient()
     run = client.get_run(run_id)
 
@@ -148,6 +163,7 @@ def get_run_status(run_id: str) -> dict[str, Any]:
 
 def load_top_k(run_id: str) -> list[dict]:
     """The `top_k.json` artifact → list of {smiles, qed, tox, reward, dock_confidence?}."""
+    _use_databricks_tracking()
     client = MlflowClient()
     try:
         with tempfile.TemporaryDirectory() as tmp:
@@ -161,6 +177,7 @@ def load_top_k(run_id: str) -> list[dict]:
 
 
 def _experiment_map() -> dict[str, str]:
+    _use_databricks_tracking()
     experiments = mlflow.search_experiments(
         filter_string="tags.used_by_genesis_workbench = 'yes'"
     )

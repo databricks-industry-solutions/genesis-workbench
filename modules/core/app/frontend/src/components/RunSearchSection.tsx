@@ -25,6 +25,10 @@ type Props = {
   viewableStatuses: string[]
   renderDialog: (run: DBRunRow) => React.ReactNode
   runUrlFor?: (jobRunId: string) => string
+  /** Tailwind class for the detail column width; default fits genomics file
+   * paths. Tabs with short detail (e.g. "4/5 iters") pass a slimmer one so the
+   * table fits without horizontal scrolling. */
+  detailColClass?: string
 }
 
 export function RunSearchSection({
@@ -34,6 +38,7 @@ export function RunSearchSection({
   initialText = '',
   viewableStatuses,
   renderDialog,
+  detailColClass = 'min-w-[280px]',
 }: Props) {
   const qc = useQueryClient()
   const [mode, setMode] = useState<'run_name' | 'experiment_name'>('run_name')
@@ -81,12 +86,21 @@ export function RunSearchSection({
           )
         },
       },
-      { id: 'experiment_name', header: 'Experiment', accessorKey: 'experiment_name' },
+      {
+        id: 'experiment_name',
+        header: 'Experiment',
+        // Show just the experiment name (last path segment), full path on hover.
+        cell: (ctx) => {
+          const v = ctx.row.original.experiment_name || ''
+          const name = v.split('/').filter(Boolean).pop() || v
+          return <span title={v}>{name}</span>
+        },
+      },
       {
         id: 'detail',
         header: detailLabel,
         cell: (ctx) => <PathCell value={ctx.row.original.detail} />,
-        meta: { thClass: 'min-w-[280px]', tdClass: 'whitespace-normal' },
+        meta: { thClass: detailColClass, tdClass: 'whitespace-normal' },
       },
       {
         id: 'start_time',
@@ -127,7 +141,7 @@ export function RunSearchSection({
         },
       },
     ],
-    [detailLabel, viewableStatuses],
+    [detailLabel, viewableStatuses, detailColClass],
   )
 
   const inProgressCount = rows.filter((r) =>

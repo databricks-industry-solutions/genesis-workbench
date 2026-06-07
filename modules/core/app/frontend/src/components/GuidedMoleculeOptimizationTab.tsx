@@ -4,12 +4,11 @@ import type { ColumnDef } from '@tanstack/react-table'
 
 import { api } from '@/api/client'
 import { ClipboardPaste } from '@/components/ClipboardPaste'
+import { ClipToggle } from '@/components/ClipToggle'
 import { DataTable } from '@/components/DataTable'
 import { DispatchSuccess } from '@/components/DispatchSuccess'
-import { MaterialIcon } from '@/components/MaterialIcon'
 import { RunSearchSection } from '@/components/RunSearchSection'
 import { SequenceSourceControls } from '@/components/SequenceSourceControls'
-import { useClipboard } from '@/stores/clipboard'
 import type { DBRunRow, MolOptStatus, MolOptTopKItem, SeedMotif } from '@/types/api'
 
 function ts(): string {
@@ -22,7 +21,7 @@ const fmt = (v: number | null | undefined, d = 3) =>
 
 export function GuidedMoleculeOptimizationTab() {
   const [seeds, setSeeds] = useState('')
-  const [numIterations, setNumIterations] = useState(5)
+  const [numIterations, setNumIterations] = useState(25)
   const [numSamples, setNumSamples] = useState(24)
   const [selectTop, setSelectTop] = useState(3)
   const [dockTopK, setDockTopK] = useState(5)
@@ -176,7 +175,7 @@ export function GuidedMoleculeOptimizationTab() {
           <div className="grid grid-cols-2 gap-3 text-xs">
             <label className="block">
               <span className="mb-1 block uppercase tracking-wide text-muted-foreground">Iterations</span>
-              <input type="number" min={1} max={20} value={numIterations}
+              <input type="number" min={1} max={50} value={numIterations}
                 onChange={(e) => setNumIterations(parseInt(e.target.value) || 1)}
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
             </label>
@@ -293,6 +292,7 @@ export function GuidedMoleculeOptimizationTab() {
             detailLabel="Iterations"
             initialText="mol_opt"
             viewableStatuses={['complete']}
+            detailColClass="min-w-[80px]"
             renderDialog={(run) => <MolOptResultBody run={run} />}
           />
         </div>
@@ -303,7 +303,6 @@ export function GuidedMoleculeOptimizationTab() {
 
 // View dialog: the run's reward trajectory + optimized top-K (with Clip hand-off).
 function MolOptResultBody({ run }: { run: DBRunRow }) {
-  const clipAdd = useClipboard((s) => s.add)
   const status = useQuery<MolOptStatus>({
     queryKey: ['molopt', 'status', run.run_id],
     queryFn: () => api.molOptStatus(run.run_id),
@@ -329,11 +328,13 @@ function MolOptResultBody({ run }: { run: DBRunRow }) {
     {
       id: 'clip', header: '',
       cell: ({ row }) => (
-        <button type="button"
-          onClick={() => clipAdd({ kind: 'molecule', value: row.original.smiles, source: 'Mol Design' })}
-          className="inline-flex items-center gap-1 rounded-md border border-primary/50 bg-primary/10 px-2 py-0.5 text-xs text-primary hover:bg-primary/20">
-          <MaterialIcon name="assignment" className="text-[14px] text-cyan-400" /> Clip
-        </button>
+        <ClipToggle
+          kind="molecule"
+          value={row.original.smiles}
+          source="Guided Molecule Design"
+          addTitle="Add molecule to clipboard"
+          removeTitle="On clipboard — click to remove"
+        />
       ),
     },
   ]
