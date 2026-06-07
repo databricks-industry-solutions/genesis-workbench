@@ -48,6 +48,10 @@ variables:
     description: The experiment to which all registered modules are logged
     default: dbx_genesis_workbench_modules
 
+  app_name:
+    description: Name of the Databricks App service principal that should be granted CAN_MANAGE_RUN on the orchestrator job.
+    default: genesis-workbench
+
   app_service_principal_id:
     description: >-
       Client id of the Genesis Workbench app service principal. Granted

@@ -37,3 +37,10 @@ echo ""
 # Self-contained small-molecule lookup data (ChEMBL binders + Broad Repurposing Hub).
 # Independent of the model deploy; safe to re-run on its own to refresh the tables.
 databricks bundle run --target $TARGET init_genmol_data $EXTRA_PARAMS --no-wait
+
+echo ""
+echo "▶️ [GenMol] Registering the Guided Molecule Design orchestrator job"
+echo "    (persists its job id + grants the app SP CAN_MANAGE_RUN so the app can dispatch it)"
+echo ""
+
+databricks bundle run --target $TARGET register_molecule_optimization_job $EXTRA_PARAMS
