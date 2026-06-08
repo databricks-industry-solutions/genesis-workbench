@@ -7,7 +7,6 @@ import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
 import { NarrativePanel } from '@/components/NarrativePanel'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
-import { WorkflowProgress } from '@/components/WorkflowProgress'
 import { clusterOptionLabel } from '@/lib/clusterLabel'
 import { useSseMutation } from '@/hooks/useSseMutation'
 import { ClipboardPaste } from '@/components/ClipboardPaste'
@@ -281,24 +280,26 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
         </button>
       </div>
 
-      {predict.isPending && (
+      {/* One continuous progress flow: prediction (real SSE %) → AI interpretation
+          as the FINAL stage of the SAME bar. The result is revealed only once the
+          narrative settles (showResult), so interpretation never runs "outside"
+          the main progress. Prediction % is capped below the Interpreting stage so
+          that stage stays pending until the narrative call actually starts. */}
+      {(predict.isPending || interpreting) && (
         <RealtimeProgress
           title="scGPT perturbation prediction"
-          pct={predict.progress?.pct ?? 0}
-          msg={predict.progress?.msg ?? 'Starting…'}
+          pct={interpreting ? 96 : Math.min(predict.progress?.pct ?? 0, 92)}
+          msg={
+            interpreting
+              ? 'Interpreting result with Claude Opus 4.8…'
+              : (predict.progress?.msg ?? 'Starting…')
+          }
           stages={[
             { label: 'Computing cluster mean expression', pctEnd: 30 },
-            { label: 'Calling scGPT Perturbation endpoint', pctEnd: 85 },
-            { label: 'Sorting + summarising results', pctEnd: 100 },
+            { label: 'Calling scGPT Perturbation endpoint', pctEnd: 80 },
+            { label: 'Sorting + summarising results', pctEnd: 95 },
+            { label: 'Interpreting Results', pctEnd: 100 },
           ]}
-        />
-      )}
-
-      {interpreting && (
-        <WorkflowProgress
-          active
-          title="scGPT perturbation prediction"
-          stages={[{ label: 'Interpreting Results', estSeconds: 8 }]}
         />
       )}
 
