@@ -17,23 +17,34 @@ export function ClipboardPaste({
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
   const items = useClipboard((s) => s.items).filter((i) => i.kind === kind)
 
   // Close on outside click via a document listener — NOT a full-screen overlay.
   // A `fixed inset-0` backdrop would block all page interaction if it ever got
   // stuck open; this approach can't, since there's no blocking element.
+  // We track the button separately so it's excluded from the outside-close
+  // (the button's own onClick toggles).
   useEffect(() => {
     if (!open) return
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    const onDown = (e: Event) => {
+      const t = e.target as Node
+      // Clicks on the button → let its onClick toggle.
+      if (buttonRef.current && buttonRef.current.contains(t)) return
+      // Anything outside the whole component closes the dropdown.
+      if (ref.current && !ref.current.contains(t)) setOpen(false)
     }
     const onEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
     }
-    document.addEventListener('mousedown', onDown)
+    // CAPTURE phase + pointerdown: fires before any ancestor that might
+    // stopPropagation() a bubble-phase mousedown (which would otherwise prevent
+    // the outside-click from ever reaching us — the symptom where clicking the
+    // page didn't close the dropdown but Esc did).
+    document.addEventListener('pointerdown', onDown, true)
     document.addEventListener('keydown', onEsc)
     return () => {
-      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('pointerdown', onDown, true)
       document.removeEventListener('keydown', onEsc)
     }
   }, [open])
@@ -41,6 +52,7 @@ export function ClipboardPaste({
   return (
     <div ref={ref} className="relative inline-block text-xs">
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
         disabled={items.length === 0}
