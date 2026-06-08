@@ -71,12 +71,9 @@ from databricks.sdk.service.vectorsearch import (
 source_table = f"{catalog}.{schema}.gene_sequence_embeddings"
 index_name = f"{catalog}.{schema}.gene_sequence_embedding_index"
 
+# Idempotent create-or-sync (see 04): drive off create(), fall back to sync on
+# "already exists", so workflow re-runs stay green once the index exists.
 try:
-    existing_index = w.vector_search_indexes.get_index(index_name)
-    print(f"Index '{index_name}' already exists. Triggering sync...")
-    w.vector_search_indexes.sync_index(index_name=index_name)
-    print("Sync triggered.")
-except Exception:
     print(f"Creating Delta Sync index '{index_name}' over {source_table}...")
     w.vector_search_indexes.create_index(
         name=index_name,
@@ -93,6 +90,13 @@ except Exception:
         ),
     )
     print(f"Index '{index_name}' created. Initial sync will begin automatically.")
+except Exception as e:
+    if "already exists" in str(e).lower():
+        print(f"Index '{index_name}' already exists. Triggering sync...")
+        w.vector_search_indexes.sync_index(index_name=index_name)
+        print("Sync triggered.")
+    else:
+        raise
 
 # COMMAND ----------
 
