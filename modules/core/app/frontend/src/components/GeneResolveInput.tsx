@@ -13,7 +13,8 @@ import { useOutsideDismiss } from '@/hooks/useOutsideDismiss'
 export function GeneResolveInput({ onResolved }: { onResolved: (sequence: string) => void }) {
   const [open, setOpen] = useState(false)
   const [gene, setGene] = useState('')
-  const ref = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
 
   const resolve = useMutation({
     mutationFn: (g: string) => api.resolveGene(g),
@@ -32,12 +33,14 @@ export function GeneResolveInput({ onResolved }: { onResolved: (sequence: string
   }
 
   // Click-away/Esc to close (the run-picker dialog is nested inside this ref, so
-  // clicking it doesn't close the popover). Centralized in useOutsideDismiss.
-  useOutsideDismiss(ref, () => setOpen(false), open)
+  // clicking it doesn't close the popover). Anchor to button + panel (not the
+  // wrapper, which can stretch) so an outside click reliably closes it.
+  useOutsideDismiss([btnRef, panelRef], () => setOpen(false), open)
 
   return (
-    <div ref={ref} className="relative inline-block text-xs">
+    <div className="relative inline-block text-xs">
       <button
+        ref={btnRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
         title="Fill the sequence from a target gene — type it, or pull from Clipboard / a prior run"
@@ -47,7 +50,7 @@ export function GeneResolveInput({ onResolved }: { onResolved: (sequence: string
       </button>
 
       {open && (
-        <div className="absolute left-0 z-40 mt-1 w-80 space-y-2 rounded-md border border-border bg-card p-3 shadow-lg">
+        <div ref={panelRef} className="absolute left-0 z-40 mt-1 w-80 space-y-2 rounded-md border border-border bg-card p-3 shadow-lg">
           <div className="flex items-center justify-between">
             <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
               Resolve a gene → protein sequence

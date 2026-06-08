@@ -17,16 +17,20 @@ export function ClipboardPaste({
   label?: string
 }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
   const items = useClipboard((s) => s.items).filter((i) => i.kind === kind)
 
-  // Centralized click-away/Esc behavior — the trigger button is inside `ref`,
-  // so its own onClick toggle handles button clicks.
-  useOutsideDismiss(ref, () => setOpen(false), open)
+  // Click-away/Esc to close. Anchor "inside" to the button + panel (both
+  // content-sized) rather than the wrapper div, which can stretch to its flex
+  // row — a wide wrapper would make every click count as "inside" and the
+  // dropdown would never close.
+  useOutsideDismiss([btnRef, panelRef], () => setOpen(false), open)
 
   return (
-    <div ref={ref} className="relative inline-block text-xs">
+    <div className="relative inline-block text-xs">
       <button
+        ref={btnRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
         disabled={items.length === 0}
@@ -43,7 +47,7 @@ export function ClipboardPaste({
       </button>
 
       {open && items.length > 0 && (
-        <div className="absolute left-0 z-50 mt-1 max-h-64 w-64 overflow-auto rounded-md border border-border bg-card p-1 shadow-lg">
+        <div ref={panelRef} className="absolute left-0 z-50 mt-1 max-h-64 w-64 overflow-auto rounded-md border border-border bg-card p-1 shadow-lg">
           {items.map((it) => (
             <button
               key={`${it.kind}:${it.value}`}
