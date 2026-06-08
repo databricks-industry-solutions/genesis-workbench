@@ -11,7 +11,7 @@ dbutils.widgets.text("experiment_name", "dbx_genesis_workbench_modules", "Experi
 dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id")
 dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
 dbutils.widgets.text("cache_dir", "esm2_cache_dir", "Cache dir")
-dbutils.widgets.text("workload_type", "GPU_SMALL", "Workload Type for endpoints")
+dbutils.widgets.text("workload_type", "GPU_MEDIUM", "Workload Type for endpoints")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
