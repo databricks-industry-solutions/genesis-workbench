@@ -39,6 +39,26 @@ resources:
             notebook_path: ../notebooks/04_create_vector_index.py
             source: WORKSPACE
 
+        # Human SwissProt companion index. gene_sequences is built by core's
+        # ingest_uniprot_genes.py; we embed it (same ESM-2 model as UniRef) and
+        # index it so protein search also returns human targets (e.g. PARP1).
+        # Chained after batch_embed_sequences to serialise GPU-cluster use.
+        - task_key: embed_gene_sequences
+          depends_on:
+            - task_key: batch_embed_sequences
+          job_cluster_key: multi_gpu_cluster
+          notebook_task:
+            notebook_path: ../notebooks/05_batch_embed_gene_sequences.py
+            source: WORKSPACE
+
+        - task_key: create_gene_vector_index
+          depends_on:
+            - task_key: embed_gene_sequences
+          job_cluster_key: cpu_cluster
+          notebook_task:
+            notebook_path: ../notebooks/06_create_gene_vector_index.py
+            source: WORKSPACE
+
       parameters:
         - name: catalog
           default: ${var.core_catalog_name}

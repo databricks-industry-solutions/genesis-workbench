@@ -20,6 +20,13 @@ logger = logging.getLogger(__name__)
 
 VS_INDEX_SUFFIX = "sequence_embedding_index"
 SEQUENCE_TABLE_SUFFIX = "sequence_db"
+# Human SwissProt companion corpus (built by the sequence_search workflow's
+# embed_gene_sequences / create_gene_vector_index tasks over core's
+# gene_sequences table). Searched ALONGSIDE the UniRef index — both are the same
+# ESM-2 1280-dim space — so a query returns human targets (e.g. PARP1) that the
+# microbe-dominated UniRef90 slice lacks.
+HUMAN_VS_INDEX_SUFFIX = "gene_sequence_embedding_index"
+HUMAN_TABLE_SUFFIX = "gene_sequences"
 
 
 @dataclass(frozen=True)
@@ -68,6 +75,49 @@ def _ann(embedding: list[float], index_name: str, num_results: int) -> list[dict
     if result.result and result.result.data_array:
         for row in result.result.data_array:
             out.append({"seq_id": row[0], "distance": float(row[-1]) if len(row) > 1 else 0.0})
+    return out
+
+
+def _ann_safe(embedding: list[float], index_name: str, num_results: int) -> list[dict]:
+    """ANN query that tolerates a missing/not-yet-ready index (returns []), so
+    the search still works against the other corpus before the human index is
+    built/synced."""
+    try:
+        return _ann(embedding, index_name, num_results)
+    except Exception as e:
+        logger.info("ANN query skipped for %s: %s", index_name, e)
+        return []
+
+
+def _fetch_human(seq_ids: list[str], catalog: str, schema: str) -> dict[str, dict]:
+    """Fetch human-protein candidates from gene_sequences (keyed by UniProt
+    accession = the index seq_id). Builds a UniProt-style description from the
+    protein name / organism / gene so the UI shows a meaningful label."""
+    if not seq_ids:
+        return {}
+    ids_str = ", ".join(f"'{sid}'" for sid in seq_ids)
+    query = (
+        f"SELECT accession AS seq_id, sequence, seq_length, "
+        f"protein_name, organism, gene "
+        f"FROM {catalog}.{schema}.{HUMAN_TABLE_SUFFIX} "
+        f"WHERE accession IN ({ids_str})"
+    )
+    df = execute_select_query(query)
+    out: dict[str, dict] = {}
+    for _, row in df.iterrows():
+        gene = str(row.get("gene", "") or "")
+        org = str(row.get("organism", "") or "")
+        desc = f"{row.get('protein_name', '')}".strip()
+        if org:
+            desc += f" OS={org}"
+        if gene:
+            desc += f" GN={gene}"
+        out[row["seq_id"]] = {
+            "seq_id": row["seq_id"],
+            "sequence": row["sequence"],
+            "description": desc,
+            "seq_length": row["seq_length"],
+        }
     return out
 
 
@@ -153,6 +203,7 @@ def run_sequence_search(
     s = get_settings()
     embedding_endpoint = get_endpoint_name("ESM2 Embeddings")
     vs_index = f"{s.catalog}.{s.schema}.{VS_INDEX_SUFFIX}"
+    human_index = f"{s.catalog}.{s.schema}.{HUMAN_VS_INDEX_SUFFIX}"
     top_k_vector = min(top_k * 10, 1000)
 
     def _p(pct, msg):
@@ -160,37 +211,41 @@ def run_sequence_search(
             progress_callback(pct, msg)
 
     logger.info(
-        "sequence_search: query_len=%d top_k=%d vs_index=%s endpoint=%s",
+        "sequence_search: query_len=%d top_k=%d vs_index=%s human_index=%s endpoint=%s",
         len(query_sequence),
         top_k,
         vs_index,
+        human_index,
         embedding_endpoint,
     )
 
     _p(5, f"Embedding query sequence ({len(query_sequence)} aa)")
     embedding = _embed(query_sequence, embedding_endpoint)
-    _p(35, f"Vector Search ({top_k_vector} candidates)")
-    vs_hits = _ann(embedding, vs_index, num_results=top_k_vector)
-    if not vs_hits:
+
+    # One query embedding searches BOTH corpora (same ESM-2 1280-dim space):
+    # the broad UniRef90 slice and the human SwissProt companion. The human
+    # query is tolerant so search still works before that index is built.
+    _p(35, f"Vector Search — UniRef + human ({top_k_vector} each)")
+    uniref_hits = _ann_safe(embedding, vs_index, num_results=top_k_vector)
+    human_hits = _ann_safe(embedding, human_index, num_results=top_k_vector)
+    if not uniref_hits and not human_hits:
         _p(100, "No vector-search hits")
         return []
 
-    _p(50, f"Fetching {len(vs_hits)} candidate sequences")
-    seq_records = _fetch([h["seq_id"] for h in vs_hits], s.catalog, s.schema)
+    _p(50, f"Fetching {len(uniref_hits) + len(human_hits)} candidate sequences")
+    uniref_records = _fetch([h["seq_id"] for h in uniref_hits], s.catalog, s.schema)
+    human_records = _fetch_human([h["seq_id"] for h in human_hits], s.catalog, s.schema)
+
     candidates: list[dict] = []
-    for hit in vs_hits:
-        sid = hit["seq_id"]
-        if sid in seq_records:
-            rec = seq_records[sid]
-            candidates.append(
-                {
-                    "seq_id": sid,
-                    "sequence": rec["sequence"],
-                    "description": rec["description"],
-                    "seq_length": rec["seq_length"],
-                    "distance": hit["distance"],
-                }
-            )
+    for hit in uniref_hits:
+        rec = uniref_records.get(hit["seq_id"])
+        if rec:
+            candidates.append({**rec, "distance": hit["distance"]})
+    for hit in human_hits:
+        rec = human_records.get(hit["seq_id"])
+        if rec:
+            candidates.append({**rec, "distance": hit["distance"]})
+
     _p(60, f"Aligning {len(candidates)} sequences (Smith-Waterman)")
     aligned = _align(query_sequence, candidates, progress_callback=progress_callback)
     if min_coverage_pct > 0:
