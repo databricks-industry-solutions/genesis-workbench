@@ -154,9 +154,19 @@ export function GuidedMoleculeOptimizationTab() {
             {motifs.data && (
               <div className="mt-2 space-y-1">
                 {motifs.data.motifs.length === 0 ? (
-                  <p className="text-[11px] text-muted-foreground">
-                    No binding motifs found{motifs.data.gene ? ` for ${motifs.data.gene}` : ''}.
-                  </p>
+                  motifs.data.gene ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      No catalogued small-molecule binders found for{' '}
+                      <strong>{motifs.data.gene}</strong> — it may not be an established drug target.
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground">
+                      This sequence isn't a recognized drug target with catalogued binders. Enter a
+                      target <strong>gene</strong> (e.g. PARP1), or a <strong>known</strong> target's
+                      exact sequence — designed/de-novo proteins (e.g. from Protein Binder Design)
+                      won't match.
+                    </p>
+                  )
                 ) : (
                   <>
                     <p className="text-[11px] text-muted-foreground">
