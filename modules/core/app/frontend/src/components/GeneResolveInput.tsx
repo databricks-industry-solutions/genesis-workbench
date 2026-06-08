@@ -2,12 +2,13 @@
 // turn a gene symbol into its canonical protein sequence (self-contained
 // gene_sequences lookup), sourced by typing, from the Clipboard, or a prior run.
 // Hands the resolved sequence to the parent (fills a sequence field).
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 
 import { api } from '@/api/client'
 import { ClipboardPaste } from '@/components/ClipboardPaste'
 import { TargetFromRunPicker } from '@/components/TargetFromRunPicker'
+import { useOutsideDismiss } from '@/hooks/useOutsideDismiss'
 
 export function GeneResolveInput({ onResolved }: { onResolved: (sequence: string) => void }) {
   const [open, setOpen] = useState(false)
@@ -30,26 +31,9 @@ export function GeneResolveInput({ onResolved }: { onResolved: (sequence: string
     resolve.mutate(g)
   }
 
-  // Close on Escape or a click outside the control (the run-picker dialog is
-  // nested inside this ref, so clicking it doesn't close the popover).
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    const onDown = (e: Event) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('keydown', onKey)
-    // CAPTURE-phase pointerdown: fires before any ancestor that stopPropagation()s
-    // a bubble-phase mousedown — otherwise clicking the page never closes this
-    // popover (only Esc does). Matches ClipboardPaste.
-    document.addEventListener('pointerdown', onDown, true)
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.removeEventListener('pointerdown', onDown, true)
-    }
-  }, [open])
+  // Click-away/Esc to close (the run-picker dialog is nested inside this ref, so
+  // clicking it doesn't close the popover). Centralized in useOutsideDismiss.
+  useOutsideDismiss(ref, () => setOpen(false), open)
 
   return (
     <div ref={ref} className="relative inline-block text-xs">
