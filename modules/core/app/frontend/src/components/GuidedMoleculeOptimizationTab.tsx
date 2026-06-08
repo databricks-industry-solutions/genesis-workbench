@@ -26,9 +26,9 @@ export function GuidedMoleculeOptimizationTab() {
   const [numSamples, setNumSamples] = useState(24)
   const [selectTop, setSelectTop] = useState(3)
   const [dockTopK, setDockTopK] = useState(5)
-  const [wQed, setWQed] = useState(1.0)
-  const [wAdmet, setWAdmet] = useState(1.0)
-  const [wDock, setWDock] = useState(1.0)
+  // Hard-constraint targets: keep molecules with QED >= qedMin and ClinTox <= toxMax.
+  const [qedMin, setQedMin] = useState(0.5)
+  const [toxMax, setToxMax] = useState(0.3)
   const [targetSequence, setTargetSequence] = useState('')
   const [dockPerIter, setDockPerIter] = useState(8)
   const [experiment, setExperiment] = useState('gwb_molecule_optimization')
@@ -74,7 +74,8 @@ export function GuidedMoleculeOptimizationTab() {
         num_iterations: numIterations,
         select_top: selectTop,
         dock_top_k: dockTopK,
-        weights: { qed: wQed, admet: wAdmet, dock: targetSequence.trim() ? wDock : 0 },
+        qed_min: qedMin,
+        tox_max: toxMax,
         temperature: 1.2,
         randomness: 2.0,
         target_sequence: targetSequence.trim(),
@@ -224,18 +225,23 @@ export function GuidedMoleculeOptimizationTab() {
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
             </label>
             <label className="block">
-              <span className="mb-1 block uppercase tracking-wide text-muted-foreground">QED weight</span>
-              <input type="number" step={0.1} value={wQed}
-                onChange={(e) => setWQed(parseFloat(e.target.value) || 0)}
+              <span className="mb-1 block uppercase tracking-wide text-muted-foreground">Min QED</span>
+              <input type="number" step={0.05} min={0} max={1} value={qedMin}
+                onChange={(e) => setQedMin(parseFloat(e.target.value) || 0)}
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
             </label>
             <label className="block">
-              <span className="mb-1 block uppercase tracking-wide text-muted-foreground">ADMET weight</span>
-              <input type="number" step={0.1} value={wAdmet}
-                onChange={(e) => setWAdmet(parseFloat(e.target.value) || 0)}
+              <span className="mb-1 block uppercase tracking-wide text-muted-foreground">Max ClinTox</span>
+              <input type="number" step={0.05} min={0} max={1} value={toxMax}
+                onChange={(e) => setToxMax(parseFloat(e.target.value) || 0)}
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
             </label>
           </div>
+          <p className="text-[10px] text-muted-foreground">
+            Hard constraints: only molecules with <strong>QED ≥ {qedMin.toFixed(2)}</strong> and{' '}
+            <strong>ClinTox ≤ {toxMax.toFixed(2)}</strong> are kept; survivors are then optimized
+            (docking, when a target is set, ranks the survivors).
+          </p>
 
           {/* Optional: dock candidates into the reward (binding drives the loop).
               Target comes in as a sequence (gene-resolve / paste), folded by the loop. */}
@@ -272,13 +278,6 @@ export function GuidedMoleculeOptimizationTab() {
               )
             })()}
             <div className="mt-2 grid grid-cols-2 gap-3">
-              <label className="block">
-                <span className="mb-1 block uppercase tracking-wide text-muted-foreground">Dock weight</span>
-                <input type="number" step={0.1} value={wDock}
-                  onChange={(e) => setWDock(parseFloat(e.target.value) || 0)}
-                  disabled={!targetSequence.trim()}
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm disabled:opacity-50" />
-              </label>
               <label className="block">
                 <span className="mb-1 block uppercase tracking-wide text-muted-foreground">Dock / iter</span>
                 <input type="number" min={1} max={20} value={dockPerIter}
@@ -352,34 +351,43 @@ function MolOptResultBody({ run }: { run: DBRunRow }) {
 
   const traj = status.data?.best_reward_history ?? []
   const meanTraj = status.data?.mean_reward_history ?? []
-  const molecules = topk.data?.top_k ?? []
-  // Only show the Dock column when this run actually docked (target provided);
-  // otherwise it's an all-"—" column. New runs dock the full shortlist.
-  const hasDock = molecules.some((m) => m.dock_confidence != null)
+  const valid = topk.data?.top_k ?? []
+  const explored = topk.data?.explored ?? []
+  const qedMin = status.data?.qed_min
+  const toxMax = status.data?.tox_max
+  const targetTxt = qedMin != null && toxMax != null ? ` (QED ≥ ${qedMin}, ClinTox ≤ ${toxMax})` : ''
 
-  const columns: ColumnDef<MolOptTopKItem, unknown>[] = [
-    { id: 'idx', header: '#', cell: ({ row }) => row.index + 1 },
-    { id: 'smiles', header: 'SMILES', accessorKey: 'smiles',
-      cell: ({ row }) => <span className="font-mono text-xs">{row.original.smiles}</span> },
-    { id: 'reward', header: 'Reward', cell: ({ row }) => fmt(row.original.reward) },
-    { id: 'qed', header: 'QED', cell: ({ row }) => fmt(row.original.qed) },
-    { id: 'tox', header: 'ClinTox', cell: ({ row }) => fmt(row.original.tox) },
-    ...(hasDock
-      ? [{ id: 'dock', header: 'Dock', cell: ({ row }) => fmt(row.original.dock_confidence) } as ColumnDef<MolOptTopKItem, unknown>]
-      : []),
-    {
-      id: 'clip', header: '',
-      cell: ({ row }) => (
-        <ClipToggle
-          kind="molecule"
-          value={row.original.smiles}
-          source="Guided Molecule Design"
-          addTitle="Add molecule to clipboard"
-          removeTitle="On clipboard — click to remove"
-        />
-      ),
-    },
-  ]
+  // Shared columns; the explored table adds a "Meets targets" ✓/✗ so you can see
+  // why each attempt didn't make the valid list. Dock column only when docked.
+  const makeColumns = (
+    rows: MolOptTopKItem[],
+    withFeasible: boolean,
+  ): ColumnDef<MolOptTopKItem, unknown>[] => {
+    const hasDock = rows.some((m) => m.dock_confidence != null)
+    return [
+      { id: 'idx', header: '#', cell: ({ row }) => row.index + 1 },
+      { id: 'smiles', header: 'SMILES', accessorKey: 'smiles',
+        cell: ({ row }) => <span className="font-mono text-xs">{row.original.smiles}</span> },
+      { id: 'reward', header: 'Reward', cell: ({ row }) => fmt(row.original.reward) },
+      { id: 'qed', header: 'QED', cell: ({ row }) => fmt(row.original.qed) },
+      { id: 'tox', header: 'ClinTox', cell: ({ row }) => fmt(row.original.tox) },
+      ...(withFeasible
+        ? [{ id: 'meets', header: 'Meets targets',
+            cell: ({ row }: { row: { original: MolOptTopKItem } }) =>
+              row.original.feasible
+                ? <span className="text-primary">✓</span>
+                : <span className="text-muted-foreground">✗</span> } as ColumnDef<MolOptTopKItem, unknown>]
+        : []),
+      ...(hasDock
+        ? [{ id: 'dock', header: 'Dock', cell: ({ row }: { row: { original: MolOptTopKItem } }) => fmt(row.original.dock_confidence) } as ColumnDef<MolOptTopKItem, unknown>]
+        : []),
+      { id: 'clip', header: '',
+        cell: ({ row }) => (
+          <ClipToggle kind="molecule" value={row.original.smiles} source="Guided Molecule Design"
+            addTitle="Add molecule to clipboard" removeTitle="On clipboard — click to remove" />
+        ) },
+    ]
+  }
 
   return (
     <div className="space-y-4 text-sm">
@@ -426,18 +434,32 @@ function MolOptResultBody({ run }: { run: DBRunRow }) {
           )}
         </div>
       )}
-      <div>
-        <div className="mb-1 text-xs font-medium text-muted-foreground">
-          Optimized top-K {molecules.length ? `(${molecules.length})` : ''}
+      {topk.isLoading ? (
+        <p className="text-xs text-muted-foreground">Loading…</p>
+      ) : valid.length > 0 ? (
+        <div>
+          <div className="mb-1 text-xs font-medium text-muted-foreground">
+            Valid candidates ({valid.length}){targetTxt}
+          </div>
+          <DataTable columns={makeColumns(valid, false)} data={valid} emptyText="No molecules" />
         </div>
-        {topk.isLoading ? (
-          <p className="text-xs text-muted-foreground">Loading…</p>
-        ) : molecules.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No molecules in this run.</p>
-        ) : (
-          <DataTable columns={columns} data={molecules} emptyText="No molecules" />
-        )}
-      </div>
+      ) : (
+        <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-4 text-center">
+          <p className="text-lg font-bold text-amber-300">No candidates could be found</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            No molecule met the targets{targetTxt} in this run. Loosen the thresholds or run more
+            iterations — the closest attempts are shown below.
+          </p>
+        </div>
+      )}
+      {explored.length > 0 && (
+        <div>
+          <div className="mb-1 text-xs font-medium text-muted-foreground">
+            Other molecules explored ({explored.length})
+          </div>
+          <DataTable columns={makeColumns(explored, true)} data={explored} emptyText="No molecules" />
+        </div>
+      )}
     </div>
   )
 }

@@ -87,7 +87,8 @@ def start_molecule_optimization_job(
     num_iterations: int,
     select_top: int,
     dock_top_k: int,
-    weights: dict[str, float],
+    qed_min: float,
+    tox_max: float,
     temperature: float,
     randomness: float,
     target_sequence: str = "",
@@ -115,7 +116,6 @@ def start_molecule_optimization_job(
         # Log the full input configuration up front so the run records exactly
         # what was requested (the orchestrator skips re-logging these to avoid
         # param conflicts — see 03_run_molecule_optimization.py).
-        w_dock = float((weights or {}).get("dock", 0.0) or 0.0)
         mlflow.log_params({
             "num_iterations": num_iterations,
             "num_samples": num_samples,
@@ -123,15 +123,14 @@ def start_molecule_optimization_job(
             "dock_top_k": dock_top_k,
             "temperature": temperature,
             "randomness": randomness,
-            "w_qed": float((weights or {}).get("qed", 1.0)),
-            "w_admet": float((weights or {}).get("admet", 1.0)),
-            "w_dock": w_dock,
+            "qed_min": qed_min,        # hard constraint: keep QED >= this
+            "tox_max": tox_max,        # hard constraint: keep ClinTox <= this
             "seed_count": len(seed_smiles),
             "seed_smiles": ",".join(seed_smiles)[:480],
             "target_gene": target_label or "(none)",
             "target_provided": bool(target_sequence),
             "target_length": len(target_sequence or ""),
-            "docking_requested": bool(target_sequence) and w_dock > 0,
+            "docking_requested": bool(target_sequence),
             "dock_per_iter": dock_per_iter,
             "dock_samples": dock_samples,
         })
@@ -151,7 +150,8 @@ def start_molecule_optimization_job(
                     "num_iterations": str(num_iterations),
                     "select_top": str(select_top),
                     "dock_top_k": str(dock_top_k),
-                    "weights_json": json.dumps({"qed": 1.0, "admet": 1.0, **(weights or {})}),
+                    # weights_json param slot now carries the hard-constraint targets.
+                    "weights_json": json.dumps({"qed_min": qed_min, "tox_max": tox_max}),
                     "temperature": str(temperature),
                     "randomness": str(randomness),
                     "target_sequence": target_sequence or "",
@@ -188,6 +188,13 @@ def get_run_status(run_id: str) -> dict[str, Any]:
         except Exception:
             return []
 
+    def _pfloat(key: str):
+        v = run.data.params.get(key)
+        try:
+            return float(v) if v is not None else None
+        except (TypeError, ValueError):
+            return None
+
     return {
         "status": run.info.status,
         "job_status": run.data.tags.get("job_status", ""),
@@ -197,11 +204,17 @@ def get_run_status(run_id: str) -> dict[str, Any]:
         "current_metrics": {k: float(v) for k, v in run.data.metrics.items()},
         "experiment_id": run.info.experiment_id,
         "run_name": run.data.tags.get("mlflow.runName", ""),
+        # Hard-constraint thresholds — let the View show "no candidate met
+        # QED >= x / ClinTox <= y" with the actual numbers.
+        "qed_min": _pfloat("qed_min"),
+        "tox_max": _pfloat("tox_max"),
     }
 
 
-def load_top_k(run_id: str) -> list[dict]:
-    """The `top_k.json` artifact → list of {smiles, qed, tox, reward, dock_confidence?}."""
+def load_top_k(run_id: str) -> dict[str, list]:
+    """The `top_k.json` artifact → {top_k, explored}. `top_k` = valid (feasible)
+    candidates; `explored` = other molecules tried (closest-to-feasible when none
+    passed). Each row: {smiles, qed, tox, reward, feasible, dock_confidence?}."""
     _use_databricks_tracking()
     client = MlflowClient()
     try:
@@ -209,10 +222,12 @@ def load_top_k(run_id: str) -> list[dict]:
             local = client.download_artifacts(run_id, "top_k.json", dst_path=tmp)
             with open(local) as f:
                 data = json.load(f)
-        return list(data.get("top_k", data) if isinstance(data, dict) else data)
+        if isinstance(data, dict):
+            return {"top_k": list(data.get("top_k", [])), "explored": list(data.get("explored", []))}
+        return {"top_k": list(data), "explored": []}  # legacy: bare list artifact
     except Exception as e:
         logger.info("top_k not yet available for run %s: %s", run_id, e)
-        return []
+        return {"top_k": [], "explored": []}
 
 
 def _experiment_map() -> dict[str, str]:

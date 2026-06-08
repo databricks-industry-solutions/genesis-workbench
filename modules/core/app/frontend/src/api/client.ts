@@ -68,7 +68,7 @@ import type {
   SeedMotifsResponse,
   MoleculeOptimizeStartResponse,
   MolOptStatus,
-  MolOptTopKItem,
+  MolOptTopKResponse,
   SequenceSearchResponse,
   TrajectoryResponse,
   SimilarityResponse,
@@ -211,7 +211,8 @@ export const api = {
     num_iterations: number
     select_top: number
     dock_top_k: number
-    weights: Record<string, number>
+    qed_min: number
+    tox_max: number
     temperature: number
     randomness: number
     target_sequence?: string
@@ -230,7 +231,7 @@ export const api = {
       `/api/small_molecule/molecule_optimization/status?run_id=${encodeURIComponent(run_id)}`,
     ),
   molOptTopK: (run_id: string) =>
-    request<{ top_k: MolOptTopKItem[] }>(
+    request<MolOptTopKResponse>(
       `/api/small_molecule/molecule_optimization/top-k?run_id=${encodeURIComponent(run_id)}`,
     ),
   molOptSearch: (by: 'run_name' | 'experiment_name', text: string) =>

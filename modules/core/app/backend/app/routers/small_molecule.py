@@ -660,7 +660,8 @@ class MoleculeOptimizeRequest(BaseModel):
     num_iterations: int = 5
     select_top: int = 3
     dock_top_k: int = 5
-    weights: dict[str, float] = Field(default_factory=lambda: {"qed": 1.0, "admet": 1.0, "dock": 1.0})
+    qed_min: float = 0.5          # hard constraint: keep molecules with QED >= this
+    tox_max: float = 0.3          # hard constraint: keep molecules with ClinTox <= this
     temperature: float = 1.2
     randomness: float = 2.0
     target_sequence: str = ""      # target protein sequence (folded → docked in-reward)
@@ -695,7 +696,8 @@ def molecule_optimization_start(payload: MoleculeOptimizeRequest, user: CurrentU
             num_iterations=payload.num_iterations,
             select_top=payload.select_top,
             dock_top_k=payload.dock_top_k,
-            weights=payload.weights,
+            qed_min=payload.qed_min,
+            tox_max=payload.tox_max,
             temperature=payload.temperature,
             randomness=payload.randomness,
             target_sequence=payload.target_sequence,
@@ -720,7 +722,8 @@ def molecule_optimization_status(_: CurrentUserDep, run_id: str = Query(..., min
 
 @router.get("/molecule_optimization/top-k")
 def molecule_optimization_top_k(_: CurrentUserDep, run_id: str = Query(..., min_length=1)):
-    return {"top_k": mol_opt.load_top_k(run_id)}
+    # Returns {"top_k": [...valid...], "explored": [...other attempts...]}.
+    return mol_opt.load_top_k(run_id)
 
 
 @router.get("/molecule_optimization/search")

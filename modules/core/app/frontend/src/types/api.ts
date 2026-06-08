@@ -906,13 +906,20 @@ export type MolOptStatus = {
   current_metrics: Record<string, number>
   experiment_id: string
   run_name: string
+  qed_min?: number | null
+  tox_max?: number | null
 }
 export type MolOptTopKItem = {
   smiles: string
   qed: number | null
   tox: number | null
   reward: number
+  feasible?: boolean
   dock_confidence?: number | null
+}
+export type MolOptTopKResponse = {
+  top_k: MolOptTopKItem[]
+  explored: MolOptTopKItem[]
 }
 export type MolOptRun = {
   run_id: string

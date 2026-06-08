@@ -76,7 +76,13 @@ K = int(dbutils.widgets.get("num_samples"))
 N = int(dbutils.widgets.get("num_iterations"))
 SELECT_TOP = int(dbutils.widgets.get("select_top"))
 DOCK_TOP_K = int(dbutils.widgets.get("dock_top_k"))
-weights = {"qed": 1.0, "admet": 1.0, **json.loads(dbutils.widgets.get("weights_json") or "{}")}
+# Hard-constraint targets (transported via the weights_json param slot):
+# keep only molecules with QED >= QED_MIN and ClinTox <= TOX_MAX. Guarded away
+# from the divide-by-zero / degenerate ends.
+_targets = json.loads(dbutils.widgets.get("weights_json") or "{}")
+QED_MIN = min(max(float(_targets.get("qed_min", 0.5)), 0.0), 0.99)
+TOX_MAX = min(max(float(_targets.get("tox_max", 0.3)), 0.01), 1.0)
+print(f"Hard constraints: QED >= {QED_MIN}, ClinTox <= {TOX_MAX}")
 temperature = float(dbutils.widgets.get("temperature"))
 randomness = float(dbutils.widgets.get("randomness"))
 target_sequence = dbutils.widgets.get("target_sequence").strip()
@@ -160,7 +166,9 @@ import math
 
 
 def cheap_score(smiles_list):
-    """Cheap axes only — QED (RDKit) + ADMET clinical-tox (Chemprop). No GPU dock."""
+    """QED (RDKit) + ADMET clinical-tox (Chemprop). Flags hard-constraint
+    feasibility (QED >= QED_MIN and ClinTox <= TOX_MAX) and a composite used to
+    rank candidates (high QED + low tox). No GPU dock here."""
     tox = clintox(smiles_list)
     rows = []
     for smi, tx in zip(smiles_list, tox):
@@ -168,10 +176,12 @@ def cheap_score(smiles_list):
         if mol is None:
             continue
         q = float(QED.qed(mol))
-        tox_term = (1.0 - tx) if tx is not None else 0.5
-        cheap = weights["qed"] * q + weights["admet"] * tox_term
+        # Feasible only if BOTH targets are met AND tox is actually known.
+        feasible = (q >= QED_MIN) and (tx is not None and tx <= TOX_MAX)
+        # Composite (also the reseed/ranking signal): higher QED + lower tox.
+        comp = q + (1.0 - (tx if tx is not None else 1.0))
         rows.append({"smiles": Chem.MolToSmiles(mol), "qed": q, "tox": tx,
-                     "cheap_reward": cheap, "dock_confidence": None})
+                     "feasible": feasible, "cheap_reward": comp, "dock_confidence": None})
     return rows
 
 
@@ -179,7 +189,7 @@ def cheap_score(smiles_list):
 # score each ligand against it. The target comes in as a SEQUENCE (resolved from
 # a gene or pasted) — same "Target from gene / Paste sequence" pattern as the
 # Structure Prediction tab — and we fold it here to the structure DiffDock needs.
-DOCK_ENABLED = bool(target_sequence) and float(weights.get("dock", 0.0)) > 0.0
+DOCK_ENABLED = bool(target_sequence)
 _target_pdb, _esm_emb = "", "{}"
 if DOCK_ENABLED:
     from databricks.sdk.service.serving import DataframeSplitInput
@@ -230,11 +240,12 @@ def dock_confidence(smi):
 
 
 def full_reward(row):
-    """Compose the reward; the dock term (sigmoid of DiffDock confidence ∈ 0..1)
-    only contributes when the candidate was docked."""
+    """Composite (QED + low-tox) plus a docking bonus (sigmoid of DiffDock
+    confidence ∈ 0..1) when the candidate was docked. Used to RANK feasible
+    molecules — feasibility itself is the hard QED/tox gate, applied separately."""
     r = row["cheap_reward"]
     if row.get("dock_confidence") is not None:
-        r += float(weights.get("dock", 0.0)) * (1.0 / (1.0 + math.exp(-row["dock_confidence"])))
+        r += 1.0 / (1.0 + math.exp(-row["dock_confidence"]))
     return r
 
 
@@ -273,7 +284,8 @@ with _run_ctx:
                            "seed_smiles": ",".join(seed_smiles)[:480]})
 
     seeds = list(seed_smiles)
-    best_by_smiles: dict[str, dict] = {}
+    best_by_smiles: dict[str, dict] = {}   # feasible only → the valid candidates / top-K
+    all_by_smiles: dict[str, dict] = {}    # every molecule explored → the "other results" table
 
     mlflow.set_tag("docking_in_reward", str(DOCK_ENABLED).lower())
 
@@ -289,37 +301,53 @@ with _run_ctx:
             if not scored:
                 print(f"iter {it}: no valid candidates"); continue
 
-            # Dock the most promising (by cheap score) and fold binding into the reward,
-            # so DiffDock confidence — not just QED/ADMET — drives which scaffolds reseed.
+            # Dock the most promising — feasible candidates first (they pass the
+            # hard QED/tox gate) — and fold binding into the ranking reward.
             if DOCK_ENABLED:
-                scored.sort(key=lambda x: x["cheap_reward"], reverse=True)
+                scored.sort(key=lambda x: (x["feasible"], x["cheap_reward"]), reverse=True)
                 for row in scored[:DOCK_PER_ITER]:
                     row["dock_confidence"] = dock_confidence(row["smiles"])
 
             for row in scored:
                 row["reward"] = full_reward(row)
-                prev = best_by_smiles.get(row["smiles"])
-                if prev is None or row["reward"] > prev["reward"]:
-                    best_by_smiles[row["smiles"]] = row
+                # Track every molecule explored (for the "other results" table)...
+                prevall = all_by_smiles.get(row["smiles"])
+                if prevall is None or row["reward"] > prevall["reward"]:
+                    all_by_smiles[row["smiles"]] = row
+                # ...and keep ONLY feasible ones for the valid-candidate top-K.
+                if row["feasible"]:
+                    prev = best_by_smiles.get(row["smiles"])
+                    if prev is None or row["reward"] > prev["reward"]:
+                        best_by_smiles[row["smiles"]] = row
 
-            scored.sort(key=lambda x: x["reward"], reverse=True)
-            parents = scored[:SELECT_TOP]
-            # Reseed with the elite's Murcko scaffolds (fall back to the molecule itself).
+            survivors = [s for s in scored if s["feasible"]]
+            # Reseed from feasible survivors; if an iteration has none, reseed from
+            # the least-violating candidates so the search keeps moving toward the
+            # feasible region instead of dead-ending.
+            pool = sorted(survivors or scored, key=lambda x: x["reward"], reverse=True)
+            parents = pool[:SELECT_TOP]
             seeds = [murcko(p["smiles"]) or p["smiles"] for p in parents]
 
             docked = [s for s in scored if s.get("dock_confidence") is not None]
             metrics = {
+                "iter_n_candidates": len(scored),
+                "iter_n_survivors": len(survivors),
                 "iter_best_reward": parents[0]["reward"],
                 "iter_mean_reward": sum(s["reward"] for s in scored) / len(scored),
                 "iter_best_qed": max(s["qed"] for s in scored),
-                "iter_n_candidates": len(scored),
             }
             if docked:
                 metrics["iter_best_dock"] = max(s["dock_confidence"] for s in docked)
             mlflow.log_metrics(metrics, step=it)
-            print(f"iter {it}: best_reward={parents[0]['reward']:.3f} n={len(scored)} docked={len(docked)}")
+            print(f"iter {it}: survivors={len(survivors)}/{len(scored)} "
+                  f"best_reward={parents[0]['reward']:.3f} docked={len(docked)}")
 
-        # Global top-K (reward already includes the dock term for docked candidates).
+        # Global top-K — only feasible molecules ever entered best_by_smiles, so
+        # the shortlist is guaranteed to meet the hard QED/tox targets.
+        mlflow.log_metric("n_feasible_total", len(best_by_smiles))
+        if not best_by_smiles:
+            print(f"No molecules met the targets (QED>={QED_MIN}, ClinTox<={TOX_MAX}). "
+                  "Loosen the constraints or run more iterations.")
         top = sorted(best_by_smiles.values(), key=lambda x: x["reward"], reverse=True)[:DOCK_TOP_K]
 
         # Dock the final shortlist so every top-K row carries a binding confidence
@@ -333,10 +361,20 @@ with _run_ctx:
                     row["reward"] = full_reward(row)
             top = sorted(top, key=lambda x: x["reward"], reverse=True)
 
-        mlflow.log_dict({"top_k": top}, "top_k.json")
+        # "Other molecules explored" — best attempts NOT in the valid top-K
+        # (includes the closest-to-feasible when nothing met the targets). Always
+        # populated as long as the generator produced anything, so the View has a
+        # data table to show even when there are zero valid candidates.
+        valid_smiles = {r["smiles"] for r in top}
+        explored = [r for r in sorted(all_by_smiles.values(), key=lambda x: x["reward"], reverse=True)
+                    if r["smiles"] not in valid_smiles][:25]
+
+        mlflow.log_dict({"top_k": top, "explored": explored}, "top_k.json")
         mlflow.log_metric("iterations_completed", N)
+        # Always succeed — "no candidates found" is a valid, non-failing outcome.
         mlflow.set_tag("job_status", "complete")
-        print("DONE. top reward:", top[0]["reward"] if top else None)
+        print(f"DONE. valid candidates: {len(top)} | explored: {len(all_by_smiles)} | "
+              f"top reward: {top[0]['reward'] if top else None}")
     except Exception as e:
         # Mark the run failed so Search Past Runs shows 🟥 instead of a stuck
         # "running" when the orchestrator dies mid-loop.
