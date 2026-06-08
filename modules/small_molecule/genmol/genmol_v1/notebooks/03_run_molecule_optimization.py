@@ -95,9 +95,33 @@ w = WorkspaceClient()
 
 # COMMAND ----------
 
+import time
+
 from rdkit import Chem
 from rdkit.Chem import QED
 from rdkit.Chem.Scaffolds import MurckoScaffold
+
+
+def wait_for_endpoint_ready(ep_name, timeout_s=1800, poll_s=20):
+    """Block until a serving endpoint reports READY.
+
+    GenMol/Chemprop can scale to zero; the first request then waits on a GPU
+    container cold start that can exceed the SDK's 5-minute request timeout and
+    crash the whole run (TimeoutError). Polling the endpoint state up front means
+    the per-iteration queries hit a warm endpoint."""
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        try:
+            ep = w.serving_endpoints.get(ep_name)
+            ready = getattr(getattr(ep, "state", None), "ready", None)
+            if str(ready).endswith("READY"):
+                print(f"endpoint {ep_name} READY")
+                return
+            print(f"waiting for endpoint {ep_name} (ready={ready})…")
+        except Exception as e:
+            print(f"endpoint {ep_name} not queryable yet: {e}")
+        time.sleep(poll_s)
+    raise TimeoutError(f"endpoint {ep_name} not READY after {timeout_s}s")
 
 
 def genmol_generate(seeds, n):
@@ -106,9 +130,19 @@ def genmol_generate(seeds, n):
         "params": {"num_molecules": int(n), "temperature": temperature,
                    "randomness": randomness, "scoring": "qed", "unique": True},
     }
-    resp = w.api_client.do("POST", f"/serving-endpoints/{GENMOL_EP}/invocations", body=body)
-    preds = resp.get("predictions", resp) if isinstance(resp, dict) else resp
-    return [p.get("smiles") for p in (preds or []) if p.get("smiles")]
+    # Retry once through a re-warm: a mid-loop scale-down can cold-start the next
+    # call past the 5-minute SDK timeout.
+    for attempt in range(2):
+        try:
+            resp = w.api_client.do("POST", f"/serving-endpoints/{GENMOL_EP}/invocations", body=body)
+            preds = resp.get("predictions", resp) if isinstance(resp, dict) else resp
+            return [p.get("smiles") for p in (preds or []) if p.get("smiles")]
+        except Exception as e:
+            print(f"genmol_generate attempt {attempt} failed: {e}")
+            if attempt == 0:
+                wait_for_endpoint_ready(GENMOL_EP)
+            else:
+                raise
 
 
 def clintox(smiles_list):
@@ -239,57 +273,70 @@ with _run_ctx:
 
     mlflow.set_tag("docking_in_reward", str(DOCK_ENABLED).lower())
 
-    for it in range(N):
-        cands = genmol_generate(seeds, K)
-        scored = cheap_score(cands)
-        if not scored:
-            print(f"iter {it}: no valid candidates"); continue
+    try:
+        # Warm the endpoints used every iteration so a GPU cold start doesn't blow
+        # past the SDK's 5-minute request timeout and crash the run.
+        wait_for_endpoint_ready(GENMOL_EP)
+        wait_for_endpoint_ready(CLINTOX_EP)
 
-        # Dock the most promising (by cheap score) and fold binding into the reward,
-        # so DiffDock confidence — not just QED/ADMET — drives which scaffolds reseed.
-        if DOCK_ENABLED:
-            scored.sort(key=lambda x: x["cheap_reward"], reverse=True)
-            for row in scored[:DOCK_PER_ITER]:
-                row["dock_confidence"] = dock_confidence(row["smiles"])
+        for it in range(N):
+            cands = genmol_generate(seeds, K)
+            scored = cheap_score(cands)
+            if not scored:
+                print(f"iter {it}: no valid candidates"); continue
 
-        for row in scored:
-            row["reward"] = full_reward(row)
-            prev = best_by_smiles.get(row["smiles"])
-            if prev is None or row["reward"] > prev["reward"]:
-                best_by_smiles[row["smiles"]] = row
+            # Dock the most promising (by cheap score) and fold binding into the reward,
+            # so DiffDock confidence — not just QED/ADMET — drives which scaffolds reseed.
+            if DOCK_ENABLED:
+                scored.sort(key=lambda x: x["cheap_reward"], reverse=True)
+                for row in scored[:DOCK_PER_ITER]:
+                    row["dock_confidence"] = dock_confidence(row["smiles"])
 
-        scored.sort(key=lambda x: x["reward"], reverse=True)
-        parents = scored[:SELECT_TOP]
-        # Reseed with the elite's Murcko scaffolds (fall back to the molecule itself).
-        seeds = [murcko(p["smiles"]) or p["smiles"] for p in parents]
-
-        docked = [s for s in scored if s.get("dock_confidence") is not None]
-        metrics = {
-            "iter_best_reward": parents[0]["reward"],
-            "iter_mean_reward": sum(s["reward"] for s in scored) / len(scored),
-            "iter_best_qed": max(s["qed"] for s in scored),
-            "iter_n_candidates": len(scored),
-        }
-        if docked:
-            metrics["iter_best_dock"] = max(s["dock_confidence"] for s in docked)
-        mlflow.log_metrics(metrics, step=it)
-        print(f"iter {it}: best_reward={parents[0]['reward']:.3f} n={len(scored)} docked={len(docked)}")
-
-    # Global top-K (reward already includes the dock term for docked candidates).
-    top = sorted(best_by_smiles.values(), key=lambda x: x["reward"], reverse=True)[:DOCK_TOP_K]
-
-    # Dock the final shortlist so every top-K row carries a binding confidence
-    # (per-iter docking only covers a subset, leaving the View's Dock column
-    # blank for shortlisted molecules that were never docked). When a target was
-    # provided, this guarantees the column is populated.
-    if DOCK_ENABLED:
-        for row in top:
-            if row.get("dock_confidence") is None:
-                row["dock_confidence"] = dock_confidence(row["smiles"])
+            for row in scored:
                 row["reward"] = full_reward(row)
-        top = sorted(top, key=lambda x: x["reward"], reverse=True)
+                prev = best_by_smiles.get(row["smiles"])
+                if prev is None or row["reward"] > prev["reward"]:
+                    best_by_smiles[row["smiles"]] = row
 
-    mlflow.log_dict({"top_k": top}, "top_k.json")
-    mlflow.log_metric("iterations_completed", N)
-    mlflow.set_tag("job_status", "complete")
-    print("DONE. top reward:", top[0]["reward"] if top else None)
+            scored.sort(key=lambda x: x["reward"], reverse=True)
+            parents = scored[:SELECT_TOP]
+            # Reseed with the elite's Murcko scaffolds (fall back to the molecule itself).
+            seeds = [murcko(p["smiles"]) or p["smiles"] for p in parents]
+
+            docked = [s for s in scored if s.get("dock_confidence") is not None]
+            metrics = {
+                "iter_best_reward": parents[0]["reward"],
+                "iter_mean_reward": sum(s["reward"] for s in scored) / len(scored),
+                "iter_best_qed": max(s["qed"] for s in scored),
+                "iter_n_candidates": len(scored),
+            }
+            if docked:
+                metrics["iter_best_dock"] = max(s["dock_confidence"] for s in docked)
+            mlflow.log_metrics(metrics, step=it)
+            print(f"iter {it}: best_reward={parents[0]['reward']:.3f} n={len(scored)} docked={len(docked)}")
+
+        # Global top-K (reward already includes the dock term for docked candidates).
+        top = sorted(best_by_smiles.values(), key=lambda x: x["reward"], reverse=True)[:DOCK_TOP_K]
+
+        # Dock the final shortlist so every top-K row carries a binding confidence
+        # (per-iter docking only covers a subset, leaving the View's Dock column
+        # blank for shortlisted molecules that were never docked). When a target was
+        # provided, this guarantees the column is populated.
+        if DOCK_ENABLED:
+            for row in top:
+                if row.get("dock_confidence") is None:
+                    row["dock_confidence"] = dock_confidence(row["smiles"])
+                    row["reward"] = full_reward(row)
+            top = sorted(top, key=lambda x: x["reward"], reverse=True)
+
+        mlflow.log_dict({"top_k": top}, "top_k.json")
+        mlflow.log_metric("iterations_completed", N)
+        mlflow.set_tag("job_status", "complete")
+        print("DONE. top reward:", top[0]["reward"] if top else None)
+    except Exception as e:
+        # Mark the run failed so Search Past Runs shows 🟥 instead of a stuck
+        # "running" when the orchestrator dies mid-loop.
+        mlflow.set_tag("job_status", "failed")
+        mlflow.set_tag("error", str(e)[:500])
+        print("FAILED:", e)
+        raise

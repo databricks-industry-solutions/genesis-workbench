@@ -232,6 +232,11 @@ def search_runs(user_email: str, by: str, text: str) -> list[dict]:
     out = []
     for _, r in runs.iterrows():
         status = str(_g(r, "tags.job_status") or "")
+        # If the orchestrator died mid-loop the job_status tag stays "running"
+        # forever; fall back to the MLflow run lifecycle so the row shows failed.
+        lifecycle = str(_g(r, "status") or "")
+        if lifecycle in ("FAILED", "KILLED") and status not in ("complete", "failed"):
+            status = "failed"
         n_iter = _g(r, "params.num_iterations")
         done = _g(r, "metrics.iterations_completed")
         exp_id = str(r["experiment_id"])
