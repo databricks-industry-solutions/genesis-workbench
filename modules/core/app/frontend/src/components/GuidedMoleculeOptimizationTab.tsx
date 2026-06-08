@@ -232,11 +232,22 @@ export function GuidedMoleculeOptimizationTab() {
               placeholder="Target protein sequence (single-letter), or resolve from a gene above…"
               className="w-full rounded-md border border-border bg-background p-2 font-mono text-[11px]"
             />
-            {targetSequence.trim() && (
-              <div className="mt-1 text-[10px] text-muted-foreground">
-                Target: {targetSequence.replace(/\s+/g, '').length} aa
-              </div>
-            )}
+            {targetSequence.trim() && (() => {
+              const aa = targetSequence.replace(/\s+/g, '').length
+              return (
+                <div className="mt-1 space-y-1">
+                  <div className="text-[10px] text-muted-foreground">Target: {aa} aa</div>
+                  {aa > 1000 && (
+                    <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-300">
+                      ⚠ Long target ({aa} aa). Folding (ESMFold) may run out of GPU memory; if it
+                      does, docking is skipped and the run falls back to a QED+ADMET-only loop.
+                      Consider docking against just the binding domain (e.g. the catalytic domain)
+                      rather than the full-length protein.
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
             <div className="mt-2 grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="mb-1 block uppercase tracking-wide text-muted-foreground">Dock weight</span>
