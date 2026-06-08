@@ -238,13 +238,13 @@ def run_sequence_search(
 
     candidates: list[dict] = []
     for hit in uniref_hits:
-        rec = uniref_records.get(hit["seq_id"])
-        if rec:
-            candidates.append({**rec, "distance": hit["distance"]})
+        rec = uniref_records.get(hit["seq_id"])  # pandas Series (from _fetch) or None
+        if rec is not None:
+            candidates.append({**dict(rec), "distance": hit["distance"]})
     for hit in human_hits:
-        rec = human_records.get(hit["seq_id"])
-        if rec:
-            candidates.append({**rec, "distance": hit["distance"]})
+        rec = human_records.get(hit["seq_id"])   # dict (from _fetch_human) or None
+        if rec is not None:
+            candidates.append({**dict(rec), "distance": hit["distance"]})
 
     _p(60, f"Aligning {len(candidates)} sequences (Smith-Waterman)")
     aligned = _align(query_sequence, candidates, progress_callback=progress_callback)
