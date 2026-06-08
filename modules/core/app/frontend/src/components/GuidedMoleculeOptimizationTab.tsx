@@ -7,6 +7,7 @@ import { ClipboardPaste } from '@/components/ClipboardPaste'
 import { ClipToggle } from '@/components/ClipToggle'
 import { DataTable } from '@/components/DataTable'
 import { DispatchSuccess } from '@/components/DispatchSuccess'
+import { PlotlyChart as Plot } from '@/components/PlotlyChart'
 import { RunSearchSection } from '@/components/RunSearchSection'
 import { SequenceSourceControls } from '@/components/SequenceSourceControls'
 import type { DBRunRow, MolOptStatus, MolOptTopKItem, SeedMotif } from '@/types/api'
@@ -351,7 +352,6 @@ function MolOptResultBody({ run }: { run: DBRunRow }) {
 
   const traj = status.data?.best_reward_history ?? []
   const meanTraj = status.data?.mean_reward_history ?? []
-  const maxReward = Math.max(0.001, ...traj.map((p) => p.value))
   const molecules = topk.data?.top_k ?? []
   // Only show the Dock column when this run actually docked (target provided);
   // otherwise it's an all-"—" column. New runs dock the full shortlist.
@@ -389,19 +389,39 @@ function MolOptResultBody({ run }: { run: DBRunRow }) {
           {traj.length === 0 ? (
             <p className="text-xs text-muted-foreground">No iterations logged.</p>
           ) : (
-            <div className="space-y-1">
-              {traj.map((p, i) => (
-                <div key={p.step} className="flex items-center gap-2">
-                  <span className="w-12 text-[10px] text-muted-foreground">iter {p.step}</span>
-                  <div className="h-2 flex-1 rounded bg-muted">
-                    <div className="h-2 rounded bg-primary"
-                      style={{ width: `${Math.min(100, (p.value / maxReward) * 100)}%` }} />
-                  </div>
-                  <span className="w-24 text-right text-[10px]">
-                    best {fmt(p.value)} {meanTraj[i] ? `· mean ${fmt(meanTraj[i].value)}` : ''}
-                  </span>
-                </div>
-              ))}
+            <div className="rounded-md border border-border bg-card p-2">
+              <Plot
+                data={[
+                  {
+                    x: traj.map((p) => p.step),
+                    y: traj.map((p) => p.value),
+                    mode: 'lines+markers',
+                    name: 'best',
+                    line: { color: '#86efac' },
+                  } as never,
+                  {
+                    x: meanTraj.map((p) => p.step),
+                    y: meanTraj.map((p) => p.value),
+                    mode: 'lines+markers',
+                    name: 'mean',
+                    line: { color: '#60a5fa' },
+                  } as never,
+                ]}
+                layout={{
+                  title: { text: 'Reward by iteration' },
+                  height: 240,
+                  paper_bgcolor: 'rgba(0,0,0,0)',
+                  plot_bgcolor: 'rgba(0,0,0,0)',
+                  font: { size: 11 },
+                  xaxis: { title: { text: 'iteration' }, gridcolor: '#333' },
+                  yaxis: { title: { text: 'reward' }, gridcolor: '#333' },
+                  legend: { font: { size: 10 } },
+                  margin: { l: 50, r: 20, t: 40, b: 40 },
+                }}
+                config={{ displaylogo: false, responsive: true }}
+                style={{ width: '100%' }}
+                useResizeHandler
+              />
             </div>
           )}
         </div>
