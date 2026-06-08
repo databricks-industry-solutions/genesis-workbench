@@ -239,10 +239,10 @@ export const api = {
       `/api/small_molecule/molecule_optimization/search?by=${by}&text=${encodeURIComponent(text)}`,
     ),
 
-  inverseFolding: (pdb: string) =>
+  inverseFolding: (args: { pdb: string; experiment_name?: string; run_name?: string }) =>
     request<InverseFoldingResponse>('/api/large_molecule/inverse_folding', {
       method: 'POST',
-      body: JSON.stringify({ pdb }),
+      body: JSON.stringify(args),
     }),
 
   proteinDesign: (body: {

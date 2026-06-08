@@ -194,7 +194,11 @@ export type SequenceSearchResponse = { hits: SequenceHit[] }
 
 export type OrganismResponse = { organism: string }
 
-export type InverseFoldingResponse = { sequences: string[] }
+export type InverseFoldingResponse = {
+  sequences: string[]
+  run_id?: string | null
+  run_url?: string | null
+}
 
 export type ProteinDesignResponse = {
   viewer_html: string

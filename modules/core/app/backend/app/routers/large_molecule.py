@@ -382,15 +382,60 @@ def sequence_search_organism(
 
 class InverseFoldingRequest(BaseModel):
     pdb: str = Field(..., min_length=1)
+    experiment_name: str = "gwb_inverse_folding"
+    run_name: str = ""
 
 
 class InverseFoldingResponse(BaseModel):
     sequences: list[str]
+    run_id: str | None = None
+    run_url: str | None = None
+
+
+def _log_inverse_folding(
+    user_email: str, pdb: str, sequences: list[str], experiment_name: str, run_name: str
+) -> tuple[str | None, str | None]:
+    """Best-effort: log a synchronous ProteinMPNN inverse-folding run to MLflow —
+    the designed sequences (FASTA + JSON) and the input backbone as artifacts +
+    standard tags. Never blocks the result; returns (run_id, run_url) or (None, None)."""
+    import logging
+    import tempfile
+
+    try:
+        experiment = set_mlflow_experiment(experiment_tag=experiment_name, user_email=user_email)
+        with mlflow.start_run(run_name=run_name, experiment_id=experiment.experiment_id) as run:
+            mlflow.log_param("model", "ProteinMPNN")
+            mlflow.log_param("num_designs", len(sequences))
+            mlflow.set_tag("origin", "genesis_workbench")
+            mlflow.set_tag("feature", "inverse_folding")
+            mlflow.set_tag("model", "ProteinMPNN")
+            mlflow.set_tag("created_by", user_email)
+            mlflow.set_tag("job_status", "complete")
+            mlflow.log_dict({"sequences": sequences}, "designs.json")
+            with tempfile.TemporaryDirectory() as tmp:
+                fa = os.path.join(tmp, "designs.fasta")
+                with open(fa, "w") as f:
+                    for i, s in enumerate(sequences, 1):
+                        f.write(f">design_{i}\n{s}\n")
+                mlflow.log_artifact(fa)
+                bb = os.path.join(tmp, "backbone.pdb")
+                with open(bb, "w") as f:
+                    f.write(pdb)
+                mlflow.log_artifact(bb)
+            run_id = run.info.run_id
+        host = os.environ.get("DATABRICKS_HOSTNAME", "")
+        if host and not host.startswith("https://"):
+            host = f"https://{host}"
+        run_url = f"{host}/ml/experiments/{experiment.experiment_id}/runs/{run_id}" if host else None
+        return run_id, run_url
+    except Exception as e:
+        logging.getLogger(__name__).warning("inverse-folding MLflow log failed: %s", e)
+        return None, None
 
 
 @router.post("/inverse_folding", response_model=InverseFoldingResponse)
 def inverse_folding(
-    payload: InverseFoldingRequest, _: CurrentUserDep
+    payload: InverseFoldingRequest, user: CurrentUserDep
 ) -> InverseFoldingResponse:
     if "ATOM" not in payload.pdb:
         raise HTTPException(
@@ -402,7 +447,12 @@ def inverse_folding(
         sequences = hit_proteinmpnn(w, payload.pdb)
     except Exception as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"ProteinMPNN call failed: {e}")
-    return InverseFoldingResponse(sequences=sequences)
+    run_id = run_url = None
+    if payload.experiment_name.strip() and payload.run_name.strip() and getattr(user, "email", None):
+        run_id, run_url = _log_inverse_folding(
+            user.email, payload.pdb, sequences, payload.experiment_name, payload.run_name
+        )
+    return InverseFoldingResponse(sequences=sequences, run_id=run_id, run_url=run_url)
 
 
 class ProteinDesignRequest(BaseModel):
