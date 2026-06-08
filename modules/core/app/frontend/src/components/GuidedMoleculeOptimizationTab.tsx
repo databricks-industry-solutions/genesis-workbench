@@ -40,6 +40,23 @@ export function GuidedMoleculeOptimizationTab() {
   const motifs = useMutation({
     mutationFn: (p: { gene?: string; sequence?: string }) => api.genmolSeedMotifs(p),
   })
+  // Finding motifs by gene also resolves that gene to its protein sequence and
+  // pre-fills the docking target — most runs dock against the same protein the
+  // seeds come from. Non-clobbering: only fills when the dock box is empty, so a
+  // deliberate choice (a different target, or just the binding domain) is kept.
+  const resolveTarget = useMutation({
+    mutationFn: api.resolveGene,
+    onSuccess: (data) => {
+      if (data.found && data.sequence) {
+        setTargetSequence((prev) => (prev.trim() ? prev : data.sequence!))
+      }
+    },
+  })
+  const findMotifsByGene = (g: string) => {
+    if (!g.trim()) return
+    motifs.mutate({ gene: g })
+    resolveTarget.mutate(g)
+  }
   const addMotif = (m: SeedMotif) =>
     setSeeds((prev) => {
       const lines = prev.split('\n').map((s) => s.trim()).filter(Boolean)
@@ -96,7 +113,7 @@ export function GuidedMoleculeOptimizationTab() {
               />
               <button
                 type="button"
-                onClick={() => motifs.mutate({ gene })}
+                onClick={() => findMotifsByGene(gene)}
                 disabled={!gene.trim() || motifs.isPending}
                 className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
               >
@@ -109,13 +126,17 @@ export function GuidedMoleculeOptimizationTab() {
                 label="Clipboard gene"
                 onPick={(it) => {
                   setGene(it.value)
-                  motifs.mutate({ gene: it.value })
+                  findMotifsByGene(it.value)
                 }}
               />
               <ClipboardPaste
                 kind="sequence"
                 label="Clipboard sequence"
-                onPick={(it) => motifs.mutate({ sequence: it.value })}
+                onPick={(it) => {
+                  motifs.mutate({ sequence: it.value })
+                  // We already have the sequence — pre-fill the dock target too.
+                  setTargetSequence((prev) => (prev.trim() ? prev : it.value))
+                }}
               />
             </div>
             {motifs.data && (
