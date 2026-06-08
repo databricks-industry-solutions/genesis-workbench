@@ -57,6 +57,20 @@ These each cost a deploy cycle when they slipped in. Read them before writing co
 
 8. **Always exact-pin every pip dependency.** No ranges, no `latest`, no unpinned bares. See `SKILL_GENESIS_WORKBENCH_DEVELOPMENT.md` for the rationale (a real outage caused this rule).
 
+9. **Pin the MLflow tracking + registry URIs at every MLflow entry point in the dispatcher service.** Call `mlflow.set_registry_uri("databricks-uc")` + `mlflow.set_tracking_uri("databricks")` at the top of *every* function that does `search_experiments` / `search_runs` / `MlflowClient()` / `set_mlflow_experiment` (status, search, load-artifacts, start). Other request handlers in the shared app process leave the process-global tracking URI pointing elsewhere; without re-pinning, your `search_experiments`/`MlflowClient` calls intermittently hit the wrong store and **runs vanish from Search Past Runs / the View dialog comes up empty between page loads.** This was a real, baffling bug — molecule_optimization omitted it while enzyme_optimization had it. See `enzyme_optimization._experiment_map` / `molecule_optimization._use_databricks_tracking`.
+
+10. **Reuse the shared React `RunSearchSection` and don't add your own "Search Past Runs" header.** `RunSearchSection` already renders the standard header + `InProgressBadge` + divider. If the tab wraps it with its own `<h4>Search past runs</h4>`, the header shows **twice**. The search function must return the `DBRunRow` contract: `run_id, run_name, experiment_name, status, progress, detail, start_time_ms, run_url`.
+
+11. **`progress` must be the shared emoji block bar; the `run_url` for search rows must be the MLflow run page.** Build `progress` with a `_PROGRESS_MAP` + `_progress(status)` (e.g. `🟩⬜⬜⬜` → `🟩🟩🟩🟩` / `🟥`) — same style as `enzyme_optimization` and `genomics` so **every** Search Past Runs progress column looks identical. For the Run-name link, use `databricks_links.mlflow_run_url(experiment_id, run_id)` (the run's metrics/artifacts), **not** the job-run page — the job-run page is only for the *dispatch banner* (`DispatchSuccess`).
+
+12. **Hide result columns that are all-empty for a given run, and guarantee they're populated when they should be.** A column that's always `—` (e.g. the Dock column when a run had no target) reads as a bug. Conditionally include it (`molecules.some(m => m.dock_confidence != null)`), AND make the orchestrator actually fill it for the cases where it applies (e.g. dock the *final shortlist*, not just a per-iteration subset).
+
+13. **Deploy under the `ci-demo` profile.** `update.sh` / `bundle deploy` use ambient auth; bare invocation hits the wrong workspace (`default` profile) and fakes a terraform `lineage mismatch`. Always `DATABRICKS_CONFIG_PROFILE=ci-demo ./update.sh aws …` (and same for submodule `bundle deploy`). Never hand-edit terraform state.
+
+14. **A crashed orchestrator must not show a perpetual "running".** Wrap the orchestrator loop in `try/except`, set `job_status="failed"` + an `error` tag, then re-raise — otherwise the tag stays at its last value (`running`) forever while the MLflow run is actually `FAILED`. Belt-and-suspenders: the search helper should fall back to the MLflow run lifecycle (`if run.info.status in ('FAILED','KILLED') and job_status not terminal → 'failed'`) so already-stuck runs render 🟥 without a re-run. Also **warm serving endpoints up front** (`wait_for_endpoint_ready`) — a scale-to-zero GPU cold start can exceed the SDK's 5-minute request timeout and crash the run with a bare `TimeoutError` (this is exactly what failed a mol-opt run).
+
+15. **The run must show in Search Past Runs *immediately* after submit — auto-search, don't make the user click Search.** Wire a `searchToken` (a counter) bumped in the dispatch mutation's `onSuccess`, passed to `RunSearchSection` (or the bespoke section). The shared `RunSearchSection` runs the search when the token changes and **auto-refreshes every 10s while any run is in progress** (`isInProgress = !viewableStatuses.includes(status) && status not failed/error`). Two real causes of "it doesn't show up like other screens": (a) no auto-search after submit, and (b) **the search default doesn't match the run naming** — AlphaFold defaulted to `experiment_name='alphafold'` but its experiment is `structure_prediction` (the *run* is `alphafold_<ts>`), so it matched nothing. Default `mode='run_name'` with a needle that prefixes the run name (`mol_opt`, `enzyme_opt`, `alphafold`). New search-result features should reuse `RunSearchSection` (which bakes all of this in) rather than hand-rolling a search panel.
+
 ## The five layers
 
 Every batch workflow has these five pieces. Each links to the freshest reference (Guided Enzyme Optimization) — copy from there when adding a new feature.
@@ -485,14 +499,21 @@ When uncertain how to wire something, start by reading the equivalent block of t
 Two-step (matches the GWB always-rules):
 
 ```bash
-# 1. Submodule — orchestrator + registration
-./deploy.sh <module> <cloud> --only-submodule <feature>/<feature_v1>
+# 1. Submodule — orchestrator + registration (full: also runs register/init jobs)
+DATABRICKS_CONFIG_PROFILE=ci-demo ./deploy.sh <module> <cloud> --only-submodule <feature>/<feature_v1>
 
-# 2. Core app — dispatcher + view
-cd modules/core && ./update.sh <cloud>
+# 1b. To sync ONLY an edited orchestrator notebook (no endpoint re-register, no
+#     data re-pull): bundle deploy the submodule directly — deploy uploads files
+#     + updates job defs but does NOT run jobs. Run from the <feature_v1> dir:
+DATABRICKS_CONFIG_PROFILE=ci-demo databricks bundle deploy --target prod_aws \
+  --var="$(paste -sd, application.env),$(paste -sd, <cloud>.env)"
+
+# 2. Core app — dispatcher + view (backend service + React build)
+cd modules/core && DATABRICKS_CONFIG_PROFILE=ci-demo ./update.sh <cloud> --ui-only
 ```
 
 **Never** `./deploy.sh core` — wipes settings + user-profile tables.
+**Always** set `DATABRICKS_CONFIG_PROFILE=ci-demo` (see anti-pattern 13) — bare deploy hits the wrong workspace and looks like a terraform state lineage mismatch.
 
 ## Documentation (hard rule — same as the development skill)
 

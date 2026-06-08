@@ -42,7 +42,8 @@ resources:
         - name: user_email
           default: ${var.current_user}
         - name: workload_type
-          default: ${var.gpu_small_setting}
+          # A10 (24 GB) — RFdiffusion OOMs/struggles on a T4/GPU_SMALL for larger designs.
+          default: ${var.gpu_medium_setting}
           
       job_clusters:
         - job_cluster_key: job_cluster

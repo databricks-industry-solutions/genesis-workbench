@@ -404,7 +404,10 @@ function Metric({ label, value }: { label: string; value: string }) {
   )
 }
 
-function chunkAlignment(query: string, comp: string, target: string, chunk = 60): string {
+// Wide line width so the alignment fills the (max-w-5xl) View dialog instead of
+// wrapping early and leaving the right side empty; overflow-x-auto scrolls on
+// narrow screens.
+function chunkAlignment(query: string, comp: string, target: string, chunk = 110): string {
   const lines: string[] = []
   for (let i = 0; i < query.length; i += chunk) {
     lines.push(`Query:  ${query.slice(i, i + chunk)}`)

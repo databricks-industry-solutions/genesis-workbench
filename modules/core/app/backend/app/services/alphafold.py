@@ -19,6 +19,27 @@ from app.services.workbench import get_job_id
 
 logger = logging.getLogger(__name__)
 
+# Emoji block progress bar — same style as enzyme_optimization / molecule_optimization
+# / genomics search tables so every Search Past Runs progress column is consistent.
+# AlphaFold advances job_status: started -> featurize_complete -> fold_complete
+# (or failed). Map every stage so the in-progress bar never falls back to all-white.
+_PROGRESS_MAP = {
+    "started": "🟩⬜⬜⬜",
+    "featurize_complete": "🟩🟩🟩⬜",
+    "running": "🟩🟩🟩⬜",
+    "fold_complete": "🟩🟩🟩🟩",
+    "failed": "🟥",
+    "unknown": "⬜⬜⬜⬜",
+}
+
+
+def _progress(status: str) -> str:
+    if not status:
+        return _PROGRESS_MAP["unknown"]
+    if status.startswith("error"):
+        return _PROGRESS_MAP["failed"]
+    return _PROGRESS_MAP.get(status, _PROGRESS_MAP["unknown"])
+
 
 @dataclass(frozen=True)
 class AlphaFoldRun:
@@ -28,6 +49,8 @@ class AlphaFoldRun:
     protein_sequence: str
     start_time_ms: int | None
     status: str
+    # Emoji block progress bar (shared style across all Search Past Runs tables).
+    progress: str = ""
     # Workspace UI link to the dispatched AlphaFold job's run page.
     run_url: str = ""
 
@@ -109,6 +132,7 @@ def _df_to_runs(experiments: dict[str, str], df: pd.DataFrame) -> list[AlphaFold
                 if pd.notna(r.get("start_time"))
                 else None,
                 status=str(r.get("tags.job_status", "unknown")),
+                progress=_progress(str(r.get("tags.job_status", "unknown"))),
                 run_url=job_run_url(job_id, job_run_id),
             )
         )

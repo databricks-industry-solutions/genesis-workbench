@@ -7,7 +7,6 @@ import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
 import { NarrativePanel } from '@/components/NarrativePanel'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
-import { WorkflowProgress } from '@/components/WorkflowProgress'
 import { clusterOptionLabel } from '@/lib/clusterLabel'
 import { useSseMutation } from '@/hooks/useSseMutation'
 import { ClipboardPaste } from '@/components/ClipboardPaste'
@@ -244,7 +243,12 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
           </span>
         </label>
 
-        <label className="block text-xs">
+        {/* NOT a <label>: it contains the ClipboardPaste button, and a <label>
+            proxies clicks to its first labelable descendant (that button). With
+            this block stretched to the tall select's height by the grid, clicking
+            anywhere in it would open/toggle the popover. A <div> + aria-labelled
+            input avoids that. */}
+        <div className="block text-xs">
           <div className="mb-1 flex items-center justify-between gap-2">
             <span className="uppercase tracking-wide text-muted-foreground">
               Or add custom genes (comma-separated)
@@ -260,12 +264,13 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
             value={extraGenes}
             onChange={(e) => setExtraGenes(e.target.value)}
             placeholder="e.g. TP53, BRCA1"
+            aria-label="Custom genes (comma-separated)"
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
           />
           <span className="mt-1 block text-[10px] text-muted-foreground">
             Must be in scGPT's vocabulary; otherwise the model ignores them.
           </span>
-        </label>
+        </div>
       </div>
 
       <div className="flex items-center justify-between">
@@ -281,24 +286,26 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
         </button>
       </div>
 
-      {predict.isPending && (
+      {/* One continuous progress flow: prediction (real SSE %) → AI interpretation
+          as the FINAL stage of the SAME bar. The result is revealed only once the
+          narrative settles (showResult), so interpretation never runs "outside"
+          the main progress. Prediction % is capped below the Interpreting stage so
+          that stage stays pending until the narrative call actually starts. */}
+      {(predict.isPending || interpreting) && (
         <RealtimeProgress
           title="scGPT perturbation prediction"
-          pct={predict.progress?.pct ?? 0}
-          msg={predict.progress?.msg ?? 'Starting…'}
+          pct={interpreting ? 96 : Math.min(predict.progress?.pct ?? 0, 92)}
+          msg={
+            interpreting
+              ? 'Interpreting result with Claude Opus 4.8…'
+              : (predict.progress?.msg ?? 'Starting…')
+          }
           stages={[
             { label: 'Computing cluster mean expression', pctEnd: 30 },
-            { label: 'Calling scGPT Perturbation endpoint', pctEnd: 85 },
-            { label: 'Sorting + summarising results', pctEnd: 100 },
+            { label: 'Calling scGPT Perturbation endpoint', pctEnd: 80 },
+            { label: 'Sorting + summarising results', pctEnd: 95 },
+            { label: 'Interpreting Results', pctEnd: 100 },
           ]}
-        />
-      )}
-
-      {interpreting && (
-        <WorkflowProgress
-          active
-          title="scGPT perturbation prediction"
-          stages={[{ label: 'Interpreting Results', estSeconds: 8 }]}
         />
       )}
 

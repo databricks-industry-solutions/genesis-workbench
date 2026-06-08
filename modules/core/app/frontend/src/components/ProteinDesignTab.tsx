@@ -66,19 +66,22 @@ export function ProteinDesignTab() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,420px)_1fr]">
         {/* Left: form */}
         <div className="space-y-3">
-          <label className="block text-xs">
+          {/* Plain div (not <label>): a <label> proxies dead-area clicks to its first
+              labelable descendant — here the SequenceSourceControls picker button — popping it open. */}
+          <div className="block text-xs">
             <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
               Input sequence — masked region in [brackets]
             </span>
             <SequenceSourceControls onSequence={setSequence} className="mb-1.5" />
             <textarea
+              aria-label="Input sequence — masked region in [brackets]"
               rows={8}
               value={sequence}
               onChange={(e) => setSequence(e.target.value)}
               placeholder="MAQV...[TNYADS]...SSGQ"
               className="w-full rounded-md border border-border bg-background p-3 font-mono text-xs"
             />
-          </label>
+          </div>
           {!bracketsOk && sequence.trim() && (
             <div className="text-xs text-amber-500">
               Sequence must contain a [bracketed] region to redesign.

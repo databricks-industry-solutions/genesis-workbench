@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
+import { ClipboardPaste } from '@/components/ClipboardPaste'
 import { DataTable } from '@/components/DataTable'
+import { MaterialIcon } from '@/components/MaterialIcon'
 import { MolstarViewer } from '@/components/MolstarViewer'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
 import { useSseMutation } from '@/hooks/useSseMutation'
+import { useClipboard } from '@/stores/clipboard'
 import type { LigandBinderDesign, LigandBinderDesignResponse } from '@/types/api'
 import { cn } from '@/lib/utils'
 
@@ -134,6 +137,13 @@ export function LigandBinderDesignTab() {
     }
   }, [selectedDesign, viewChoice])
 
+  const clipAdd = useClipboard((s) => s.add)
+  const clipItems = useClipboard((s) => s.items)
+  const clipSeqSet = useMemo(
+    () => new Set(clipItems.filter((i) => i.kind === 'sequence').map((i) => i.value)),
+    [clipItems],
+  )
+
   const tableColumns = useMemo<ColumnDef<LigandBinderDesign, unknown>[]>(
     () => [
       { id: 'sample_id', header: 'Sample', accessorKey: 'sample_id' },
@@ -158,8 +168,28 @@ export function LigandBinderDesignTab() {
             ? ctx.row.original.dock_confidence.toFixed(4)
             : <span className="text-muted-foreground">—</span>,
       },
+      {
+        id: 'clip',
+        header: '',
+        cell: (ctx) => {
+          const seq = ctx.row.original.sequence
+          return (
+            <button
+              type="button"
+              onClick={() =>
+                clipAdd({ kind: 'sequence', value: seq, label: ctx.row.original.sample_id, source: 'Ligand Binder Design' })
+              }
+              title="Copy this designed binder sequence to the Clipboard"
+              className="inline-flex items-center gap-1 rounded-md border border-primary/50 bg-primary/10 px-2 py-0.5 text-xs text-primary hover:bg-primary/20"
+            >
+              <MaterialIcon name="assignment" className="text-[14px] text-cyan-400" />
+              {clipSeqSet.has(seq) ? '✓' : 'Clip'}
+            </button>
+          )
+        },
+      },
     ],
-    [],
+    [clipAdd, clipSeqSet],
   )
 
   const mlflowUrl = design.data
@@ -200,17 +230,23 @@ export function LigandBinderDesignTab() {
           </div>
 
           {inputMode === 'smiles' ? (
-            <label className="block text-xs">
-              <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
-                Ligand SMILES
-              </span>
+            // Plain div (not <label>): a <label> proxies dead-area clicks to its first
+            // labelable descendant — here the ClipboardPaste button — popping the clipboard.
+            <div className="block text-xs">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="block uppercase tracking-wide text-muted-foreground">
+                  Ligand SMILES
+                </span>
+                <ClipboardPaste kind="molecule" label="Paste molecule" onPick={(it) => setSmiles(it.value)} />
+              </div>
               <input
+                aria-label="Ligand SMILES"
                 value={smiles}
                 onChange={(e) => setSmiles(e.target.value)}
                 placeholder="COc(cc1)ccc1C#N"
                 className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
               />
-            </label>
+            </div>
           ) : (
             <>
               <label className="block text-xs">

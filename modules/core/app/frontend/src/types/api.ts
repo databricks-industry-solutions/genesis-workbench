@@ -165,6 +165,7 @@ export type AlphaFoldRun = {
   protein_sequence: string
   start_time_ms: number | null
   status: string
+  progress: string
   run_url: string
 }
 
@@ -193,7 +194,11 @@ export type SequenceSearchResponse = { hits: SequenceHit[] }
 
 export type OrganismResponse = { organism: string }
 
-export type InverseFoldingResponse = { sequences: string[] }
+export type InverseFoldingResponse = {
+  sequences: string[]
+  run_id?: string | null
+  run_url?: string | null
+}
 
 export type ProteinDesignResponse = {
   viewer_html: string
@@ -868,4 +873,64 @@ export type ResolveGeneResponse = {
   organism?: string
   sequence?: string
   length?: number
+}
+
+// GenMol — generative small-molecule design
+export type GenMolMolecule = {
+  seed: string
+  smiles: string
+  score: number | null
+}
+export type GenMolGenerateResponse = {
+  molecules: GenMolMolecule[]
+}
+
+export type SeedMotif = {
+  scaffold: string
+  count: number
+  best_pchembl: number | null
+  example_smiles: string
+}
+export type SeedMotifsResponse = { gene: string | null; motifs: SeedMotif[] }
+
+// Guided Molecule Optimization
+export type MoleculeOptimizeStartResponse = {
+  mlflow_run_id: string
+  job_run_id: number
+  experiment_id: string
+  run_url: string
+}
+export type MolOptPoint = { step: number; value: number }
+export type MolOptStatus = {
+  status: string
+  job_status: string
+  best_reward_history: MolOptPoint[]
+  mean_reward_history: MolOptPoint[]
+  best_qed_history: MolOptPoint[]
+  current_metrics: Record<string, number>
+  experiment_id: string
+  run_name: string
+  qed_min?: number | null
+  tox_max?: number | null
+}
+export type MolOptTopKItem = {
+  smiles: string
+  qed: number | null
+  tox: number | null
+  reward: number
+  feasible?: boolean
+  dock_confidence?: number | null
+}
+export type MolOptTopKResponse = {
+  top_k: MolOptTopKItem[]
+  explored: MolOptTopKItem[]
+}
+export type MolOptRun = {
+  run_id: string
+  run_name: string
+  experiment_name: string
+  job_status: string
+  num_iterations: number | null
+  iterations_completed: number | null
+  start_time_ms: number | null
 }

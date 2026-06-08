@@ -54,7 +54,11 @@ export function GwasTab() {
     if (row?.output_vcf) setVcfPath(row.output_vcf)
   }, [selectedVcRun, picker.data])
 
-  const start = useMutation({ mutationFn: api.gwasStart })
+  const [searchToken, setSearchToken] = useState(0)
+  const start = useMutation({
+    mutationFn: api.gwasStart,
+    onSuccess: () => setSearchToken((t) => t + 1),
+  })
   const canStart =
     !start.isPending &&
     vcfPath.trim() &&
@@ -231,6 +235,7 @@ export function GwasTab() {
         detailLabel="VCF path"
         initialText="gwas"
         viewableStatuses={['gwas_complete']}
+        searchToken={searchToken}
         renderDialog={(run) => <GwasResultsBody run={run} />}
       />
     </div>

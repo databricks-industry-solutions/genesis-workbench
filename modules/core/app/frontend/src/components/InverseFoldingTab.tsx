@@ -5,6 +5,11 @@ import { api } from '@/api/client'
 import { MolstarViewer } from '@/components/MolstarViewer'
 import { WorkflowProgress } from '@/components/WorkflowProgress'
 
+function ts(): string {
+  const d = new Date()
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}_${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`
+}
+
 const DEFAULT_PDB = `ATOM      1  N   MET A   1      27.340  24.430   2.614  1.00  9.67           N
 ATOM      2  CA  MET A   1      26.266  25.413   2.842  1.00 10.38           C
 ATOM      3  C   MET A   1      26.913  26.639   3.531  1.00  9.62           C
@@ -43,9 +48,12 @@ END
 export function InverseFoldingTab() {
   const [pdb, setPdb] = useState(DEFAULT_PDB)
   const [selectedIdx, setSelectedIdx] = useState(0)
+  const [experiment, setExperiment] = useState('gwb_inverse_folding')
+  const [runName, setRunName] = useState(`inverse_folding_${ts()}`)
 
   const design = useMutation({
-    mutationFn: () => api.inverseFolding(pdb),
+    mutationFn: () =>
+      api.inverseFolding({ pdb, experiment_name: experiment, run_name: runName }),
     onSuccess: () => setSelectedIdx(0),
   })
 
@@ -67,7 +75,8 @@ export function InverseFoldingTab() {
     }
   }, [sequences.length, selectedIdx])
 
-  const canDesign = pdb.trim().includes('ATOM') && !design.isPending
+  const canDesign =
+    pdb.trim().includes('ATOM') && experiment.trim() !== '' && runName.trim() !== '' && !design.isPending
 
   return (
     <div className="space-y-4">
@@ -94,6 +103,21 @@ export function InverseFoldingTab() {
               className="w-full rounded-md border border-border bg-background p-3 font-mono text-[11px] leading-tight"
             />
           </label>
+
+          {/* MLflow tracking — captures the designed sequences to a run, like other workflows. */}
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <label className="block">
+              <span className="mb-1 block uppercase tracking-wide text-muted-foreground">MLflow Experiment</span>
+              <input value={experiment} onChange={(e) => setExperiment(e.target.value)}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
+            </label>
+            <label className="block">
+              <span className="mb-1 block uppercase tracking-wide text-muted-foreground">Run name</span>
+              <input value={runName} onChange={(e) => setRunName(e.target.value)}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
+            </label>
+          </div>
+
           <div className="flex gap-2">
             <button
               onClick={() => design.mutate()}
@@ -113,6 +137,15 @@ export function InverseFoldingTab() {
               Clear
             </button>
           </div>
+
+          {design.data?.run_url && (
+            <p className="text-[11px] text-muted-foreground">
+              ✓ Designs logged to{' '}
+              <a href={design.data.run_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                MLflow run ↗
+              </a>
+            </p>
+          )}
 
           {sequences.length > 0 && (
             <div className="space-y-2 rounded-md border border-border bg-card p-3">
