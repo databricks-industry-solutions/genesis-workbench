@@ -21,8 +21,11 @@ logger = logging.getLogger(__name__)
 
 # Emoji block progress bar — same style as enzyme_optimization / molecule_optimization
 # / genomics search tables so every Search Past Runs progress column is consistent.
+# AlphaFold advances job_status: started -> featurize_complete -> fold_complete
+# (or failed). Map every stage so the in-progress bar never falls back to all-white.
 _PROGRESS_MAP = {
-    "started": "🟩🟩⬜⬜",
+    "started": "🟩⬜⬜⬜",
+    "featurize_complete": "🟩🟩🟩⬜",
     "running": "🟩🟩🟩⬜",
     "fold_complete": "🟩🟩🟩🟩",
     "failed": "🟥",
