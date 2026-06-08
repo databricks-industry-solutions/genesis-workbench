@@ -93,21 +93,33 @@ The diagrams below show the sub-modules, Databricks workflows, and model-serving
 
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment_single_cell.png" alt="Single Cell module deployment" width="900"/>
 
+**Sub-modules:** `scanpy`, `rapidssinglecell`, `scgpt`, `scimilarity`, `teddy`
+
 #### Large Molecule
 
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment_large_molecule.png" alt="Large Molecule module deployment" width="900"/>
+
+**Sub-modules:** `alphafold`, `esmfold`, `boltz`, `esm2_embeddings`, `protein_mpnn`, `rfdiffusion`, `sequence_search`, `enzyme_optimization`
 
 #### Small Molecule
 
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment_small_molecule.png" alt="Small Molecule module deployment" width="900"/>
 
+**Sub-modules:** `genmol`, `diffdock`, `chemprop`, `proteina_complexa`, `netsolp`, `pltnum`, `deepstabp`, `mhcflurry`
+
 #### Genomics
 
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment_genomics.png" alt="Genomics module deployment" width="900"/>
 
+**Sub-modules:** `parabricks`, `vcf_ingestion`, `variant_annotation`, `gwas`
+
 #### BioNeMo
 
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment_bionemo.png" alt="BioNeMo module deployment" width="900"/>
+
+**Sub-modules:** ESM-2 fine-tuning + inference (container-based)
+
+A single sub-module can be (re)deployed on its own with `--only-submodule`, e.g. `./deploy.sh small_molecule <cloud> --only-submodule genmol/genmol_v1`.
 
 ### **IMPORTANT NOTE:**
 ** ⚠️ Do not manually delete the resources that are created by the script, using the workspace UI.**
