@@ -286,6 +286,7 @@ with _run_ctx:
     seeds = list(seed_smiles)
     best_by_smiles: dict[str, dict] = {}   # feasible only → the valid candidates / top-K
     all_by_smiles: dict[str, dict] = {}    # every molecule explored → the "other results" table
+    trajectory_rows: list[dict] = []       # every candidate, every iteration → full MLflow capture
 
     mlflow.set_tag("docking_in_reward", str(DOCK_ENABLED).lower())
 
@@ -310,6 +311,18 @@ with _run_ctx:
 
             for row in scored:
                 row["reward"] = full_reward(row)
+                # Full trajectory — EVERY candidate in EVERY iteration (captured to
+                # trajectory.json so MLflow records the complete search, not just
+                # the deduped survivors/explored).
+                trajectory_rows.append({
+                    "iteration": it,
+                    "smiles": row["smiles"],
+                    "qed": row["qed"],
+                    "tox": row["tox"],
+                    "feasible": row["feasible"],
+                    "reward": row["reward"],
+                    "dock_confidence": row.get("dock_confidence"),
+                })
                 # Track every molecule explored (for the "other results" table)...
                 prevall = all_by_smiles.get(row["smiles"])
                 if prevall is None or row["reward"] > prevall["reward"]:
@@ -370,6 +383,8 @@ with _run_ctx:
                     if r["smiles"] not in valid_smiles][:25]
 
         mlflow.log_dict({"top_k": top, "explored": explored}, "top_k.json")
+        # Full per-candidate trajectory across all iterations (complete capture).
+        mlflow.log_dict({"trajectory": trajectory_rows}, "trajectory.json")
         mlflow.log_metric("iterations_completed", N)
         # Always succeed — "no candidates found" is a valid, non-failing outcome.
         mlflow.set_tag("job_status", "complete")

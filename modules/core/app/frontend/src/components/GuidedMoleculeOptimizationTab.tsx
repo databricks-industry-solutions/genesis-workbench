@@ -20,6 +20,15 @@ function ts(): string {
 const fmt = (v: number | null | undefined, d = 3) =>
   v == null || Number.isNaN(v) ? '—' : v.toFixed(d)
 
+// ClinTox probabilities are often tiny (e.g. 6e-5); toFixed(3) would show 0.000.
+// Use scientific notation below 0.001 so a near-zero value reads as such, not 0.
+const fmtTox = (v: number | null | undefined) => {
+  if (v == null || Number.isNaN(v)) return '—'
+  if (v === 0) return '0'
+  if (v < 0.001) return v.toExponential(1)
+  return v.toFixed(3)
+}
+
 export function GuidedMoleculeOptimizationTab() {
   const [seeds, setSeeds] = useState('')
   const [numIterations, setNumIterations] = useState(25)
@@ -370,7 +379,7 @@ function MolOptResultBody({ run }: { run: DBRunRow }) {
         cell: ({ row }) => <span className="font-mono text-xs">{row.original.smiles}</span> },
       { id: 'reward', header: 'Reward', cell: ({ row }) => fmt(row.original.reward) },
       { id: 'qed', header: 'QED', cell: ({ row }) => fmt(row.original.qed) },
-      { id: 'tox', header: 'ClinTox', cell: ({ row }) => fmt(row.original.tox) },
+      { id: 'tox', header: 'ClinTox', cell: ({ row }) => fmtTox(row.original.tox) },
       ...(withFeasible
         ? [{ id: 'meets', header: 'Meets targets',
             cell: ({ row }: { row: { original: MolOptTopKItem } }) =>
