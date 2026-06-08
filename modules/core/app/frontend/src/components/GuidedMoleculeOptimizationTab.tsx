@@ -77,6 +77,7 @@ export function GuidedMoleculeOptimizationTab() {
         temperature: 1.2,
         randomness: 2.0,
         target_sequence: targetSequence.trim(),
+        target_label: gene.trim(),
         dock_per_iter: dockPerIter,
         mlflow_experiment: experiment,
         mlflow_run_name: runName,

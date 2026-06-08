@@ -215,6 +215,7 @@ export const api = {
     temperature: number
     randomness: number
     target_sequence?: string
+    target_label?: string
     dock_per_iter?: number
     dock_samples?: number
     mlflow_experiment?: string

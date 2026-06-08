@@ -265,8 +265,12 @@ with _run_ctx:
     mlflow.set_tag("feature", "molecule_optimization")
     mlflow.set_tag("created_by", user_email)
     mlflow.set_tag("job_status", "running")
-    mlflow.log_params({"num_samples": K, "num_iterations": N, "select_top": SELECT_TOP,
-                       "seed_smiles": ",".join(seed_smiles)[:480]})
+    # Only self-log inputs when run standalone — the app dispatcher already logs
+    # the full input config on the pre-created run, and re-logging a param with a
+    # different value/format would raise.
+    if not mlflow_run_id:
+        mlflow.log_params({"num_samples": K, "num_iterations": N, "select_top": SELECT_TOP,
+                           "seed_smiles": ",".join(seed_smiles)[:480]})
 
     seeds = list(seed_smiles)
     best_by_smiles: dict[str, dict] = {}

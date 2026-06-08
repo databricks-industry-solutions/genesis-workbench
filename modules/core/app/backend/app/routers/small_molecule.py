@@ -664,6 +664,7 @@ class MoleculeOptimizeRequest(BaseModel):
     temperature: float = 1.2
     randomness: float = 2.0
     target_sequence: str = ""      # target protein sequence (folded → docked in-reward)
+    target_label: str = ""         # gene symbol of the docking target, for MLflow logging
     dock_per_iter: int = 8
     dock_samples: int = 3
     mlflow_experiment: str = "gwb_molecule_optimization"
@@ -698,6 +699,7 @@ def molecule_optimization_start(payload: MoleculeOptimizeRequest, user: CurrentU
             temperature=payload.temperature,
             randomness=payload.randomness,
             target_sequence=payload.target_sequence,
+            target_label=payload.target_label,
             dock_per_iter=payload.dock_per_iter,
             dock_samples=payload.dock_samples,
         )

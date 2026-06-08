@@ -91,6 +91,7 @@ def start_molecule_optimization_job(
     temperature: float,
     randomness: float,
     target_sequence: str = "",
+    target_label: str = "",
     dock_per_iter: int = 8,
     dock_samples: int = 3,
 ) -> dict:
@@ -111,8 +112,29 @@ def start_molecule_optimization_job(
         mlflow.set_tag("feature", "molecule_optimization")
         mlflow.set_tag("created_by", user_email)
         mlflow.set_tag("job_status", "submitted")
-        mlflow.log_param("num_samples", num_samples)
-        mlflow.log_param("num_iterations", num_iterations)
+        # Log the full input configuration up front so the run records exactly
+        # what was requested (the orchestrator skips re-logging these to avoid
+        # param conflicts — see 03_run_molecule_optimization.py).
+        w_dock = float((weights or {}).get("dock", 0.0) or 0.0)
+        mlflow.log_params({
+            "num_iterations": num_iterations,
+            "num_samples": num_samples,
+            "select_top": select_top,
+            "dock_top_k": dock_top_k,
+            "temperature": temperature,
+            "randomness": randomness,
+            "w_qed": float((weights or {}).get("qed", 1.0)),
+            "w_admet": float((weights or {}).get("admet", 1.0)),
+            "w_dock": w_dock,
+            "seed_count": len(seed_smiles),
+            "seed_smiles": ",".join(seed_smiles)[:480],
+            "target_gene": target_label or "(none)",
+            "target_provided": bool(target_sequence),
+            "target_length": len(target_sequence or ""),
+            "docking_requested": bool(target_sequence) and w_dock > 0,
+            "dock_per_iter": dock_per_iter,
+            "dock_samples": dock_samples,
+        })
         try:
             job_run = w.jobs.run_now(
                 job_id=job_id,
