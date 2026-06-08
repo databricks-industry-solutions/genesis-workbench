@@ -1,0 +1,296 @@
+"""Guided Molecule Optimization — dispatch + read helpers.
+
+Small-molecule twin of enzyme_optimization.py. Dispatches the
+`run_molecule_optimization_gwb` orchestrator job (GenMol→score→reseed loop),
+pre-creating the MLflow run so Search Past Runs shows it in-flight; the
+orchestrator logs the trajectory + top_k artifact + job_status to that run.
+Status/search read MLflow by the `feature='molecule_optimization'` tag.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import tempfile
+from typing import Any, Optional
+
+import mlflow
+import pandas as pd
+from databricks.sdk import WorkspaceClient
+from genesis_workbench.models import set_mlflow_experiment
+from mlflow.tracking import MlflowClient
+
+from app.services.databricks_links import job_run_url, mlflow_run_url
+
+logger = logging.getLogger(__name__)
+
+# Emoji block progress bar — same style as enzyme_optimization / genomics search
+# tables so every Search Past Runs progress column looks consistent.
+_PROGRESS_MAP = {
+    "submitted": "🟩⬜⬜⬜",
+    "running": "🟩🟩🟩⬜",
+    "complete": "🟩🟩🟩🟩",
+    "failed": "🟥",
+    "unknown": "⬜⬜⬜⬜",
+}
+
+
+def _progress(status: str) -> str:
+    if not status:
+        return _PROGRESS_MAP["unknown"]
+    return _PROGRESS_MAP.get(status, _PROGRESS_MAP["unknown"])
+
+
+ORCHESTRATOR_JOB_NAME = "run_molecule_optimization_gwb"
+_job_id_cache: dict[str, int] = {}
+
+
+def _use_databricks_tracking() -> None:
+    """Pin MLflow to the Databricks tracking + UC registry stores.
+
+    Other request handlers in the app can leave the process-global MLflow
+    tracking URI pointing elsewhere; without re-pinning here, this module's
+    `search_experiments`/`MlflowClient` calls intermittently query the wrong
+    store — which made runs vanish from Search Past Runs and the View dialog
+    come up empty between page loads. Mirrors enzyme_optimization._experiment_map.
+    """
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+
+
+def _resolve_orchestrator_job_id(w: Optional[WorkspaceClient] = None) -> int:
+    cached = _job_id_cache.get(ORCHESTRATOR_JOB_NAME)
+    if cached is not None:
+        return cached
+    env_id = os.environ.get("RUN_MOLECULE_OPTIMIZATION_JOB_ID")
+    if env_id:
+        _job_id_cache[ORCHESTRATOR_JOB_NAME] = int(env_id)
+        return int(env_id)
+    workspace = w or WorkspaceClient()
+    matches = list(workspace.jobs.list(name=ORCHESTRATOR_JOB_NAME))
+    if not matches:
+        raise RuntimeError(
+            f"Orchestrator job '{ORCHESTRATOR_JOB_NAME}' not found. Deploy the genmol "
+            "submodule: `./deploy.sh small_molecule aws --only-submodule genmol/genmol_v1`"
+        )
+    _job_id_cache[ORCHESTRATOR_JOB_NAME] = int(matches[0].job_id)
+    return _job_id_cache[ORCHESTRATOR_JOB_NAME]
+
+
+def start_molecule_optimization_job(
+    *,
+    user_email: str,
+    mlflow_experiment: str,
+    mlflow_run_name: str,
+    seed_smiles: list[str],
+    num_samples: int,
+    num_iterations: int,
+    select_top: int,
+    dock_top_k: int,
+    qed_min: float,
+    tox_max: float,
+    temperature: float,
+    randomness: float,
+    target_sequence: str = "",
+    target_label: str = "",
+    dock_per_iter: int = 8,
+    dock_samples: int = 3,
+) -> dict:
+    _use_databricks_tracking()
+    experiment = set_mlflow_experiment(
+        experiment_tag=mlflow_experiment, user_email=user_email, host=None, token=None
+    )
+    w = WorkspaceClient()
+    job_id = _resolve_orchestrator_job_id(w)
+    # A target sequence (resolved from a gene or pasted) is folded by the loop
+    # (ESMFold) and DiffDock binding joins the reward. Empty ⇒ QED+ADMET-only loop.
+
+    with mlflow.start_run(
+        run_name=mlflow_run_name, experiment_id=experiment.experiment_id
+    ) as pre:
+        run_id = pre.info.run_id
+        mlflow.set_tag("origin", "genesis_workbench")
+        mlflow.set_tag("feature", "molecule_optimization")
+        mlflow.set_tag("created_by", user_email)
+        mlflow.set_tag("job_status", "submitted")
+        # Log the full input configuration up front so the run records exactly
+        # what was requested (the orchestrator skips re-logging these to avoid
+        # param conflicts — see 03_run_molecule_optimization.py).
+        mlflow.log_params({
+            "num_iterations": num_iterations,
+            "num_samples": num_samples,
+            "select_top": select_top,
+            "dock_top_k": dock_top_k,
+            "temperature": temperature,
+            "randomness": randomness,
+            "qed_min": qed_min,        # hard constraint: keep QED >= this
+            "tox_max": tox_max,        # hard constraint: keep ClinTox <= this
+            "seed_count": len(seed_smiles),
+            "seed_smiles": ",".join(seed_smiles)[:480],
+            "target_gene": target_label or "(none)",
+            "target_provided": bool(target_sequence),
+            "target_length": len(target_sequence or ""),
+            "docking_requested": bool(target_sequence),
+            "dock_per_iter": dock_per_iter,
+            "dock_samples": dock_samples,
+        })
+        try:
+            job_run = w.jobs.run_now(
+                job_id=job_id,
+                job_parameters={
+                    "catalog": os.environ["CORE_CATALOG_NAME"],
+                    "schema": os.environ["CORE_SCHEMA_NAME"],
+                    "sql_warehouse_id": os.environ.get("SQL_WAREHOUSE", ""),
+                    "user_email": user_email,
+                    "mlflow_experiment": mlflow_experiment,
+                    "mlflow_run_name": mlflow_run_name,
+                    "mlflow_run_id": run_id,
+                    "seed_smiles_csv": ",".join(seed_smiles),
+                    "num_samples": str(num_samples),
+                    "num_iterations": str(num_iterations),
+                    "select_top": str(select_top),
+                    "dock_top_k": str(dock_top_k),
+                    # weights_json param slot now carries the hard-constraint targets.
+                    "weights_json": json.dumps({"qed_min": qed_min, "tox_max": tox_max}),
+                    "temperature": str(temperature),
+                    "randomness": str(randomness),
+                    "target_sequence": target_sequence or "",
+                    "dock_per_iter": str(dock_per_iter),
+                    "dock_samples": str(dock_samples),
+                },
+            )
+        except Exception as e:
+            mlflow.set_tag("job_status", "failed")
+            mlflow.set_tag("error", str(e)[:500])
+            raise
+        mlflow.set_tag("job_run_id", str(job_run.run_id))
+
+    return {
+        "job_id": job_id,
+        "job_run_id": int(job_run.run_id),
+        "mlflow_run_id": run_id,
+        "experiment_id": str(experiment.experiment_id),
+        "run_url": job_run_url(job_id, job_run.run_id),
+    }
+
+
+def get_run_status(run_id: str) -> dict[str, Any]:
+    _use_databricks_tracking()
+    client = MlflowClient()
+    run = client.get_run(run_id)
+
+    def hist(metric: str):
+        try:
+            return [
+                {"step": m.step, "value": float(m.value)}
+                for m in client.get_metric_history(run_id, metric)
+            ]
+        except Exception:
+            return []
+
+    def _pfloat(key: str):
+        v = run.data.params.get(key)
+        try:
+            return float(v) if v is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    return {
+        "status": run.info.status,
+        "job_status": run.data.tags.get("job_status", ""),
+        "best_reward_history": hist("iter_best_reward"),
+        "mean_reward_history": hist("iter_mean_reward"),
+        "best_qed_history": hist("iter_best_qed"),
+        "current_metrics": {k: float(v) for k, v in run.data.metrics.items()},
+        "experiment_id": run.info.experiment_id,
+        "run_name": run.data.tags.get("mlflow.runName", ""),
+        # Hard-constraint thresholds — let the View show "no candidate met
+        # QED >= x / ClinTox <= y" with the actual numbers.
+        "qed_min": _pfloat("qed_min"),
+        "tox_max": _pfloat("tox_max"),
+    }
+
+
+def load_top_k(run_id: str) -> dict[str, list]:
+    """The `top_k.json` artifact → {top_k, explored}. `top_k` = valid (feasible)
+    candidates; `explored` = other molecules tried (closest-to-feasible when none
+    passed). Each row: {smiles, qed, tox, reward, feasible, dock_confidence?}."""
+    _use_databricks_tracking()
+    client = MlflowClient()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            local = client.download_artifacts(run_id, "top_k.json", dst_path=tmp)
+            with open(local) as f:
+                data = json.load(f)
+        if isinstance(data, dict):
+            return {"top_k": list(data.get("top_k", [])), "explored": list(data.get("explored", []))}
+        return {"top_k": list(data), "explored": []}  # legacy: bare list artifact
+    except Exception as e:
+        logger.info("top_k not yet available for run %s: %s", run_id, e)
+        return {"top_k": [], "explored": []}
+
+
+def _experiment_map() -> dict[str, str]:
+    _use_databricks_tracking()
+    experiments = mlflow.search_experiments(
+        filter_string="tags.used_by_genesis_workbench = 'yes'"
+    )
+    return {e.experiment_id: e.name for e in experiments}
+
+
+def search_runs(user_email: str, by: str, text: str) -> list[dict]:
+    exp_map = _experiment_map()
+    if not exp_map:
+        return []
+    if by == "experiment_name":
+        needle = text.upper()
+        exp_map = {eid: n for eid, n in exp_map.items() if needle in n.upper()}
+        if not exp_map:
+            return []
+    runs = mlflow.search_runs(
+        filter_string=(
+            "tags.feature='molecule_optimization' AND "
+            f"tags.created_by='{user_email}' AND tags.origin='genesis_workbench'"
+        ),
+        experiment_ids=list(exp_map.keys()),
+    )
+    if runs.empty:
+        return []
+    if by == "run_name":
+        runs = runs[
+            runs["tags.mlflow.runName"].astype(str).str.contains(text, case=False, na=False)
+        ]
+        if runs.empty:
+            return []
+
+    def _g(r, col):
+        return r[col] if col in r and pd.notna(r[col]) else None
+
+    out = []
+    for _, r in runs.iterrows():
+        status = str(_g(r, "tags.job_status") or "")
+        # If the orchestrator died mid-loop the job_status tag stays "running"
+        # forever; fall back to the MLflow run lifecycle so the row shows failed.
+        lifecycle = str(_g(r, "status") or "")
+        if lifecycle in ("FAILED", "KILLED") and status not in ("complete", "failed"):
+            status = "failed"
+        n_iter = _g(r, "params.num_iterations")
+        done = _g(r, "metrics.iterations_completed")
+        exp_id = str(r["experiment_id"])
+        detail = (
+            f"{int(float(done)) if done is not None else '—'}"
+            f"/{int(float(n_iter)) if n_iter is not None else '—'} iters"
+        )
+        # Conform to DBRunRow (the shared RunSearchSection contract). The Run
+        # column links to the MLflow run page; progress is the shared emoji bar.
+        out.append({
+            "run_id": str(r["run_id"]),
+            "run_name": str(_g(r, "tags.mlflow.runName") or ""),
+            "experiment_name": exp_map.get(exp_id, ""),
+            "status": status,
+            "progress": _progress(status),
+            "detail": detail,
+            "start_time_ms": (int(r["start_time"].timestamp() * 1000) if "start_time" in r and pd.notna(r["start_time"]) else None),
+            "run_url": mlflow_run_url(exp_id, str(r["run_id"])),
+        })
+    return out

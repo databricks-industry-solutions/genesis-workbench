@@ -41,6 +41,20 @@ def job_run_url(job_id: str | int | None, job_run_id: str | int | None) -> str:
     return f"{host}/jobs/{job_id}/runs/{job_run_id}"
 
 
+def mlflow_run_url(experiment_id: str | int | None, run_id: str | None) -> str:
+    """MLflow run-page URL (the run's metrics/params/artifacts in the
+    experiment UI). Returns empty string when any required piece is missing —
+    callers should guard the render."""
+    if not experiment_id or not run_id:
+        return ""
+    host = workspace_host()
+    if not host:
+        return ""
+    url = f"{host}/ml/experiments/{experiment_id}/runs/{run_id}"
+    wid = workspace_id()
+    return f"{url}?o={wid}" if wid else url
+
+
 def dashboard_embed_url(dashboard_id: str | None, params: dict[str, str] | None = None) -> str:
     """Lakeview (dashboardsv3) embed URL. Optional `params` are passed as
     raw `?<keyword>=<value>` query string entries — Lakeview matches each

@@ -9,10 +9,11 @@ import { MaterialIcon } from '@/components/MaterialIcon'
 import { useClipboard, clipKindLabel, type ClipKind } from '@/stores/clipboard'
 import { cn } from '@/lib/utils'
 
-const SECTION_ORDER: ClipKind[] = ['gene', 'sequence']
+const SECTION_ORDER: ClipKind[] = ['gene', 'sequence', 'molecule']
 
 /** Which clipboard kind is most relevant on each module route. */
 function contextKind(pathname: string): ClipKind | null {
+  if (pathname.startsWith('/small-molecule')) return 'molecule'
   if (pathname.startsWith('/large-molecule')) return 'sequence'
   if (pathname.startsWith('/single-cell') || pathname.startsWith('/genomics')) return 'gene'
   return null

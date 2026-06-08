@@ -2,17 +2,19 @@
 // turn a gene symbol into its canonical protein sequence (self-contained
 // gene_sequences lookup), sourced by typing, from the Clipboard, or a prior run.
 // Hands the resolved sequence to the parent (fills a sequence field).
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 
 import { api } from '@/api/client'
 import { ClipboardPaste } from '@/components/ClipboardPaste'
 import { TargetFromRunPicker } from '@/components/TargetFromRunPicker'
+import { useOutsideDismiss } from '@/hooks/useOutsideDismiss'
 
 export function GeneResolveInput({ onResolved }: { onResolved: (sequence: string) => void }) {
   const [open, setOpen] = useState(false)
   const [gene, setGene] = useState('')
-  const ref = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
 
   const resolve = useMutation({
     mutationFn: (g: string) => api.resolveGene(g),
@@ -30,27 +32,15 @@ export function GeneResolveInput({ onResolved }: { onResolved: (sequence: string
     resolve.mutate(g)
   }
 
-  // Close on Escape or a click outside the control (the run-picker dialog is
-  // nested inside this ref, so clicking it doesn't close the popover).
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('keydown', onKey)
-    document.addEventListener('mousedown', onDown)
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.removeEventListener('mousedown', onDown)
-    }
-  }, [open])
+  // Click-away/Esc to close (the run-picker dialog is nested inside this ref, so
+  // clicking it doesn't close the popover). Anchor to button + panel (not the
+  // wrapper, which can stretch) so an outside click reliably closes it.
+  useOutsideDismiss([btnRef, panelRef], () => setOpen(false), open)
 
   return (
-    <div ref={ref} className="relative inline-block text-xs">
+    <div className="relative inline-block text-xs">
       <button
+        ref={btnRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
         title="Fill the sequence from a target gene — type it, or pull from Clipboard / a prior run"
@@ -60,7 +50,7 @@ export function GeneResolveInput({ onResolved }: { onResolved: (sequence: string
       </button>
 
       {open && (
-        <div className="absolute left-0 z-40 mt-1 w-80 space-y-2 rounded-md border border-border bg-card p-3 shadow-lg">
+        <div ref={panelRef} className="absolute left-0 z-40 mt-1 w-80 space-y-2 rounded-md border border-border bg-card p-3 shadow-lg">
           <div className="flex items-center justify-between">
             <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
               Resolve a gene → protein sequence

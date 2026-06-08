@@ -11,10 +11,12 @@
 
 - [Protein Structure Prediction](protein_structure_prediction.md) — Predict 3D protein structures with ESMFold (fast) or AlphaFold2 (high-accuracy)
 - [Protein Design](protein_design.md) — Design novel proteins by redesigning specified regions using RFDiffusion + ProteinMPNN
+- [Inverse Folding](inverse_folding.md) — Design new sequences for a fixed backbone with ProteinMPNN, each validated by re-folding with ESMFold
 - [Sequence Similarity Search](sequence_search.md) — Fast BLAST-like search across 150M+ sequences using ESM-2 embeddings
 
 ## Small Molecule
 
+- [Guided Molecule Design](guided_molecule_design.md) — Closed-loop small-molecule generator: GenMol grows a seed scaffold/binding motif into novel candidates, scored under hard constraints (Min QED, Max ClinTox) with optional ESMFold+DiffDock binding in the reward, reseeding from the best each iteration
 - [Molecular Docking](molecular_docking.md) — Predict protein-ligand binding poses using DiffDock
 - [Protein Binder Design](protein_binder_design.md) — Design proteins that bind a target protein using Proteina-Complexa
 - [Ligand Binder Design](ligand_binder_design.md) — Design proteins that bind a small molecule using Proteina-Complexa-Ligand

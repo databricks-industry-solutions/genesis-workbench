@@ -1,0 +1,40 @@
+resources:
+  jobs:
+    init_genmol_data:
+      name: init_genmol_data
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: init_repurposing_data
+          # Serverless — this is just a download + RDKit + Delta write (no GenMol
+          # deps / pandas-2.1 pin), so it doesn't need the classic py3.11 cluster.
+          # Serverless starts fast and is UC-native; the classic cluster was slow
+          # to spin up and the notebook hung. Deps are declared here (the notebook
+          # also %pip-installs them, idempotently).
+          environment_key: init_env
+          notebook_task:
+            notebook_path: ../notebooks/02_init_repurposing_data.py
+            base_parameters:
+              # BRCA→PARP1 demo set. Avoids huge-activity targets (EGFR/TP53/KRAS)
+              # that made the ChEMBL pulls run away; add more later if needed.
+              target_genes: "PARP1,PARP2,BRCA1,BRCA2"
+              max_actives_per_gene: "150"
+
+      environments:
+        - environment_key: init_env
+          spec:
+            environment_version: "4"
+            dependencies:
+              - rdkit==2025.3.6
+              - requests
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+
+      tags: ${var.common_resource_tags}

@@ -46,18 +46,18 @@ Single-cell RNA-seq at scale. Run end-to-end pipelines on millions of cells with
 📖 [Single Cell Analysis](modules/core/app/backend/documentation/single_cell_analysis.md) · [Cell Type Annotation](modules/core/app/backend/documentation/cell_type_annotation.md) · [Cell Similarity Search](modules/core/app/backend/documentation/cell_similarity.md) · [Gene Perturbation Prediction](modules/core/app/backend/documentation/perturbation_prediction.md)
 
 ### Large Molecule
-Protein structure prediction, design, and engineering. Fold proteins in seconds with ESMFold or at high accuracy with AlphaFold2; design novel sequences for a target backbone with RFDiffusion + ProteinMPNN; run BLAST-like searches across 150M+ sequences using ESM-2 embeddings. The **Guided Enzyme Optimization** workflow chains Proteina-Complexa, ProteinMPNN, ESMFold, Boltz, NetSolP, PLTNUM, DeepSTABp, and MHCflurry into a reward-weighted scaffold-and-score loop that surfaces variants ranked on motif fidelity, fold confidence, optional substrate complex, and four developability axes (solubility, anchor-relative half-life, melting temperature, immunogenic burden).
+Protein structure prediction, design, and engineering. Fold proteins in seconds with ESMFold or at high accuracy with AlphaFold2; design novel backbones with RFDiffusion + ProteinMPNN; redesign sequences for a fixed backbone (inverse folding) with ProteinMPNN and validate each design by re-folding with ESMFold; run BLAST-like searches across 150M+ sequences using ESM-2 embeddings. The **Guided Enzyme Optimization** workflow chains Proteina-Complexa, ProteinMPNN, ESMFold, Boltz, NetSolP, PLTNUM, DeepSTABp, and MHCflurry into a reward-weighted scaffold-and-score loop that surfaces variants ranked on motif fidelity, fold confidence, optional substrate complex, and four developability axes (solubility, anchor-relative half-life, melting temperature, immunogenic burden).
 
 **Models bundled:** ESMFold, ESM-2 Embeddings, AlphaFold2, ProteinMPNN, RFDiffusion, Boltz
 
-📖 [Protein Structure Prediction](modules/core/app/backend/documentation/protein_structure_prediction.md) · [Protein Design](modules/core/app/backend/documentation/protein_design.md) · [Sequence Similarity Search](modules/core/app/backend/documentation/sequence_search.md) · [Guided Enzyme Optimization](modules/core/app/backend/documentation/enzyme_optimization.md)
+📖 [Protein Structure Prediction](modules/core/app/backend/documentation/protein_structure_prediction.md) · [Protein Design](modules/core/app/backend/documentation/protein_design.md) · [Inverse Folding](modules/core/app/backend/documentation/inverse_folding.md) · [Sequence Similarity Search](modules/core/app/backend/documentation/sequence_search.md) · [Guided Enzyme Optimization](modules/core/app/backend/documentation/enzyme_optimization.md)
 
 ### Small Molecule
-Drug-discovery essentials. Profile candidates for drug-like properties and toxicity with ChemProp, predict protein-ligand binding poses with DiffDock, design protein binders to a target protein or small molecule with Proteina-Complexa, and transplant functional motifs into new scaffolds. Each generated candidate can be scored on developability through NetSolP (solubility), PLTNUM-ESM2 (relative half-life), DeepSTABp (melting temperature), and MHCflurry (immunogenic burden).
+Drug-discovery essentials. Generate novel candidate molecules from a seed scaffold or binding motif with **GenMol** in a hard-constraint generate→score→reseed loop (**Guided Molecule Design**), profile candidates for drug-like properties and toxicity with ChemProp, predict protein-ligand binding poses with DiffDock, design protein binders to a target protein or small molecule with Proteina-Complexa, and transplant functional motifs into new scaffolds. Each generated candidate can be scored on developability through NetSolP (solubility), PLTNUM-ESM2 (relative half-life), DeepSTABp (melting temperature), and MHCflurry (immunogenic burden).
 
-**Models bundled:** ChemProp, DiffDock, Proteina-Complexa, NetSolP-1.0, PLTNUM-ESM2, DeepSTABp, MHCflurry 2.x
+**Models bundled:** GenMol, ChemProp, DiffDock, Proteina-Complexa, NetSolP-1.0, PLTNUM-ESM2, DeepSTABp, MHCflurry 2.x
 
-📖 [Molecular Docking](modules/core/app/backend/documentation/molecular_docking.md) · [Protein Binder Design](modules/core/app/backend/documentation/protein_binder_design.md) · [Ligand Binder Design](modules/core/app/backend/documentation/ligand_binder_design.md) · [Motif Scaffolding](modules/core/app/backend/documentation/motif_scaffolding.md) · [ADMET & Safety](modules/core/app/backend/documentation/admet_safety.md)
+📖 [Guided Molecule Design](modules/core/app/backend/documentation/guided_molecule_design.md) · [Molecular Docking](modules/core/app/backend/documentation/molecular_docking.md) · [Protein Binder Design](modules/core/app/backend/documentation/protein_binder_design.md) · [Ligand Binder Design](modules/core/app/backend/documentation/ligand_binder_design.md) · [Motif Scaffolding](modules/core/app/backend/documentation/motif_scaffolding.md) · [ADMET & Safety](modules/core/app/backend/documentation/admet_safety.md)
 
 ### Genomics
 Variant analysis at population scale. Call germline variants from FASTQ files with GPU-accelerated NVIDIA Parabricks, ingest VCFs into Delta tables for fast SQL/Spark queries, run genome-wide association studies (GWAS) using Glow, and annotate variants with ClinVar clinical-significance data. Inline interactive charts in the UI break down findings by gene, ACMG category, clinical significance, and zygosity.
@@ -107,6 +107,57 @@ For UI-only redeploys after the initial install (preserves all settings tables �
 cd modules/core
 ./update.sh <cloud> --ui-only   # rebuilds frontend, redeploys app, skips secret refresh / grants / UC volume copy
 ```
+
+## $${\color{orange}What's}$$ $${\color{orange}Included}$$
+
+Genesis Workbench ships open models and open datasets across all modules. Models are registered as Databricks Model Serving endpoints (or run as batch jobs); datasets are downloaded/ingested once into Unity Catalog so the app has **no runtime external-API dependency**.
+
+### Models
+
+| Model | Module / submodule | Source | Task |
+|---|---|---|---|
+| AlphaFold2 | large_molecule / alphafold | DeepMind AlphaFold2 v2.3.2 | Protein 3D structure prediction (MSA + templates) |
+| ESMFold | large_molecule / esmfold | `facebook/esmfold_v1` | Fast single-sequence structure prediction (no MSA) |
+| Boltz-1 | large_molecule / boltz | `boltz-community/boltz-1` | Lightweight structure / co-folding prediction |
+| ESM-2 Embeddings | large_molecule / esm2_embeddings | `facebook/esm2_t33_650M_UR50D` | 650M mean-pooled protein embeddings (1280-dim) for similarity search |
+| RFdiffusion | large_molecule / rfdiffusion | RosettaCommons/RFdiffusion | De novo protein backbone design |
+| ProteinMPNN | large_molecule / protein_mpnn | dauparas/ProteinMPNN | Sequence design for a given backbone |
+| DiffDock | small_molecule / diffdock | gcorso/DiffDock v1.1.3 | Protein–ligand blind docking (diffusion) |
+| GenMol | small_molecule / genmol | `nvidia/NV-GenMol-89M-v2` | Generative small-molecule design (SAFE masked diffusion) |
+| Chemprop (BBBP / ClinTox / ADMET) | small_molecule / chemprop | `chemprop==2.2.3` | Blood-brain barrier, clinical toxicity, 10-property ADMET |
+| NetSolP-1.0 | small_molecule / netsolp | tvinet/NetSolP-1.0 | Protein solubility prediction |
+| PLTNUM-ESM2 | small_molecule / pltnum | `sagawa/PLTNUM-ESM2-NIH3T3` | Protein half-life / stability |
+| DeepSTABp | small_molecule / deepstabp | CSBiology/deepStabP (ProtT5-XL) | Protein melting temperature (Tm) |
+| MHCflurry 2.x | small_molecule / mhcflurry | openvax/mhcflurry | MHC-I peptide presentation / immunogenicity |
+| Proteina-Complexa (Binder / Ligand / AME) | small_molecule / proteina_complexa | NVIDIA-Digital-Bio/Proteina-Complexa | Flow-matching binder design + motif scaffolding |
+| scGPT (+ Perturbation) | single_cell / scgpt | bowang-lab/scGPT | Single-cell foundation model; gene-perturbation prediction |
+| TEDDY | single_cell / teddy | `Merck/TEDDY` | Single-cell embedding foundation model |
+| SCimilarity | single_cell / scimilarity | `scimilarity==0.4.0` | Single-cell embeddings + nearest-cell search |
+| Rapids-SingleCell / Scanpy | single_cell / rapidssinglecell, scanpy | RAPIDS, Scanpy | GPU/CPU single-cell QC, clustering, UMAP, DE, enrichment |
+| BioNeMo ESM-2 (fine-tune / inference) | bionemo | NVIDIA BioNeMo | ESM-2 fine-tuning + inference on custom assays |
+
+### Datasets
+
+All datasets below are open/public (UniProt CC-BY 4.0, PDB/ClinVar/1000G public domain, CC-BY 4.0 cell atlases, etc.).
+
+| Dataset | Use | is Vector Index |
+|---|---|---|
+| SwissProt reviewed human proteins (UniProt) → `gene_sequences` | core — gene symbol → canonical sequence (Target Resolver) **and** human protein similarity search | **Yes** — `gene_sequence_embedding_index` (1280-dim, ESM-2) |
+| UniRef90 FASTA (UniProt) → `sequence_db` | large_molecule / sequence_search — protein similarity-search corpus | **Yes** — `sequence_embedding_index` (1280-dim, ESM-2) |
+| CellxGene Census scRNA-seq reference | single_cell / scimilarity — cell-type semantic search corpus (~23M cells) | **Yes** — `scimilarity_cell_index` (128-dim) |
+| ChEMBL target binders | small_molecule / genmol — per-target active compounds (SMILES + pChEMBL) for target-aware generation → `target_binders` | No |
+| Broad Drug Repurposing Hub | small_molecule / genmol — approved/clinical drugs (MoA, target, phase) → `repurposing_hub` | No |
+| ClinVar GRCh38 VCF (NCBI) | genomics — clinical variant annotation → `clinvar_variants` | No |
+| ACMG SF v3.2 gene panel | genomics — 81 medically-actionable genes for pathogenic-variant flagging | No |
+| GRCh38 reference genome (1000 Genomes/EBI) | genomics — alignment + variant normalization | No |
+| 1000 Genomes sample VCF (chr6) | genomics — GWAS demo input | No |
+| MSK SPECTRUM HGSOC scRNA-seq (CellxGene) | single_cell — ovarian-cancer demo dataset | No |
+| Adams et al. 2020 lung scRNA-seq (Zenodo) | single_cell / scimilarity — IPF/healthy lung query sample | No |
+| Ensembl gene reference (BioMart) | single_cell — Ensembl ID ↔ gene-symbol mapping | No |
+| Enrichr gene-set libraries (GMT) | single_cell / scanpy — pathway enrichment | No |
+| AlphaFold genetic DBs — UniRef90, UniRef30, MGnify, small BFD, PDB70, PDB mmCIF, pdb_seqres, UniProt | large_molecule / alphafold — MSA + template search for folding | No |
+
+> The three vector indexes are served from Databricks Vector Search: `gene_sequence_embedding_index` and `sequence_embedding_index` (protein similarity) plus `scimilarity_cell_index` (cell similarity). Protein search queries the human and UniRef indexes together so a single query returns both human and broad-organism hits.
 
 ## $${\color{orange}Changelog}$$
 See [CHANGELOG.md](CHANGELOG.md) for deployment fixes, known issues, and configuration notes.

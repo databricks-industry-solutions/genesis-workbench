@@ -1,9 +1,11 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC ## Create Vector Search Index
+# MAGIC ## Create Human Protein Vector Search Index
 # MAGIC
-# MAGIC Creates a Databricks Vector Search endpoint and a Delta Sync index
-# MAGIC over the `sequence_embeddings` table for fast ANN similarity search.
+# MAGIC Delta Sync index over `gene_sequence_embeddings` (human SwissProt) on the
+# MAGIC same Vector Search endpoint as the UniRef index, with the same 1280-dim
+# MAGIC ESM-2 embedding space. The app queries this index alongside
+# MAGIC `sequence_embedding_index` so protein search returns human hits too.
 
 # COMMAND ----------
 
@@ -24,7 +26,7 @@ schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
-# DBTITLE 1,Create Vector Search endpoint
+# DBTITLE 1,Reuse the Vector Search endpoint (created by 04)
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.vectorsearch import EndpointType
 import time
@@ -33,17 +35,13 @@ w = WorkspaceClient()
 
 VS_ENDPOINT_NAME = "gwb_sequence_search_vs_endpoint"
 
-# Create endpoint if it doesn't exist
 try:
     endpoint = w.vector_search_endpoints.get_endpoint(VS_ENDPOINT_NAME)
     print(f"Vector Search endpoint '{VS_ENDPOINT_NAME}' already exists (status: {endpoint.endpoint_status})")
 except Exception:
     print(f"Creating Vector Search endpoint '{VS_ENDPOINT_NAME}'...")
-    
     w.vector_search_endpoints.create_endpoint(name=VS_ENDPOINT_NAME, endpoint_type=EndpointType.STANDARD)
-    print("Endpoint creation initiated. Waiting for it to become ready...")
 
-# Wait for endpoint to be ready
 for _ in range(60):
     endpoint = w.vector_search_endpoints.get_endpoint(VS_ENDPOINT_NAME)
     if endpoint.endpoint_status and endpoint.endpoint_status.state and endpoint.endpoint_status.state.value == "ONLINE":
@@ -56,11 +54,12 @@ else:
 
 # COMMAND ----------
 
-# DBTITLE 1,Enable Change Data Feed and create index
-
-# Delta Sync index requires Change Data Feed on the source table
-spark.sql(f"ALTER TABLE {catalog}.{schema}.sequence_embeddings SET TBLPROPERTIES (delta.enableChangeDataFeed = true)")
-print("Change Data Feed enabled on sequence_embeddings table")
+# DBTITLE 1,Enable Change Data Feed and create the human index
+spark.sql(
+    f"ALTER TABLE {catalog}.{schema}.gene_sequence_embeddings "
+    f"SET TBLPROPERTIES (delta.enableChangeDataFeed = true)"
+)
+print("Change Data Feed enabled on gene_sequence_embeddings table")
 
 from databricks.sdk.service.vectorsearch import (
     DeltaSyncVectorIndexSpecRequest,
@@ -69,13 +68,11 @@ from databricks.sdk.service.vectorsearch import (
     PipelineType,
 )
 
-source_table = f"{catalog}.{schema}.sequence_embeddings"
-index_name = f"{catalog}.{schema}.sequence_embedding_index"
+source_table = f"{catalog}.{schema}.gene_sequence_embeddings"
+index_name = f"{catalog}.{schema}.gene_sequence_embedding_index"
 
-# Idempotent create-or-sync: try to create, and if the index already exists
-# (ResourceAlreadyExists), fall back to a sync. Driving off create() rather than
-# get_index() avoids a flaky get_index throwing on an existing index and then
-# erroring on create — which fails the whole workflow on re-runs.
+# Idempotent create-or-sync (see 04): drive off create(), fall back to sync on
+# "already exists", so workflow re-runs stay green once the index exists.
 try:
     print(f"Creating Delta Sync index '{index_name}' over {source_table}...")
     w.vector_search_indexes.create_index(
@@ -120,14 +117,12 @@ else:
 # DBTITLE 1,Test query
 print("Running test query to verify index...")
 test_embedding = spark.table(source_table).limit(1).collect()[0]["embedding"]
-
 results = w.vector_search_indexes.query_index(
     index_name=index_name,
     columns=["seq_id"],
     query_vector=test_embedding,
     num_results=5,
 )
-
 print("Test query results:")
 for row in results.result.data_array:
     print(f"  {row}")

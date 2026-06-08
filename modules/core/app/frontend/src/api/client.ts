@@ -65,6 +65,10 @@ import type {
   RunInfoResponse,
   RunSummaryResponse,
   SavedAnnotationsResponse,
+  SeedMotifsResponse,
+  MoleculeOptimizeStartResponse,
+  MolOptStatus,
+  MolOptTopKResponse,
   SequenceSearchResponse,
   TrajectoryResponse,
   SimilarityResponse,
@@ -194,10 +198,51 @@ export const api = {
       `/api/large_molecule/resolve_gene?gene=${encodeURIComponent(gene)}`,
     ),
 
-  inverseFolding: (pdb: string) =>
+  genmolSeedMotifs: (p: { gene?: string; sequence?: string }) =>
+    request<SeedMotifsResponse>(
+      `/api/small_molecule/genmol/seed_motifs?gene=${encodeURIComponent(
+        p.gene || '',
+      )}&sequence=${encodeURIComponent(p.sequence || '')}`,
+    ),
+
+  molOptStart: (body: {
+    seed_smiles: string[]
+    num_samples: number
+    num_iterations: number
+    select_top: number
+    dock_top_k: number
+    qed_min: number
+    tox_max: number
+    temperature: number
+    randomness: number
+    target_sequence?: string
+    target_label?: string
+    dock_per_iter?: number
+    dock_samples?: number
+    mlflow_experiment?: string
+    mlflow_run_name: string
+  }) =>
+    request<MoleculeOptimizeStartResponse>('/api/small_molecule/molecule_optimization/start', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  molOptStatus: (run_id: string) =>
+    request<MolOptStatus>(
+      `/api/small_molecule/molecule_optimization/status?run_id=${encodeURIComponent(run_id)}`,
+    ),
+  molOptTopK: (run_id: string) =>
+    request<MolOptTopKResponse>(
+      `/api/small_molecule/molecule_optimization/top-k?run_id=${encodeURIComponent(run_id)}`,
+    ),
+  molOptSearch: (by: 'run_name' | 'experiment_name', text: string) =>
+    request<DBSearchResponse>(
+      `/api/small_molecule/molecule_optimization/search?by=${by}&text=${encodeURIComponent(text)}`,
+    ),
+
+  inverseFolding: (args: { pdb: string; experiment_name?: string; run_name?: string }) =>
     request<InverseFoldingResponse>('/api/large_molecule/inverse_folding', {
       method: 'POST',
-      body: JSON.stringify({ pdb }),
+      body: JSON.stringify(args),
     }),
 
   proteinDesign: (body: {

@@ -3,7 +3,7 @@ dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
 dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
-dbutils.widgets.text("workload_type", "GPU_SMALL", "Workload Type for endpoints")
+dbutils.widgets.text("workload_type", "GPU_MEDIUM", "Workload Type for endpoints")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")

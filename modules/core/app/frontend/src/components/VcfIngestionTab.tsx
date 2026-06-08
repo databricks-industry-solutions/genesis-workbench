@@ -47,7 +47,11 @@ export function VcfIngestionTab() {
     if (row?.output_vcf) setVcfPath(row.output_vcf)
   }, [selectedVcRun, picker.data])
 
-  const start = useMutation({ mutationFn: api.vcfIngestionStart })
+  const [searchToken, setSearchToken] = useState(0)
+  const start = useMutation({
+    mutationFn: api.vcfIngestionStart,
+    onSuccess: () => setSearchToken((t) => t + 1),
+  })
   const canStart =
     !start.isPending && vcfPath.trim() && tableName.trim() && runName.trim()
 
@@ -174,6 +178,7 @@ export function VcfIngestionTab() {
         detailLabel="VCF path"
         initialText="vcf_ingestion"
         viewableStatuses={['ingestion_complete']}
+        searchToken={searchToken}
         renderDialog={(run) => <VcfIngestionDetailsBody run={run} />}
       />
     </div>

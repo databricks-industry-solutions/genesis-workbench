@@ -6,7 +6,7 @@ from typing import Optional
 
 import mlflow
 from databricks.sdk import WorkspaceClient
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from genesis_workbench.models import set_mlflow_experiment
 from pydantic import BaseModel, Field
@@ -14,7 +14,9 @@ from pydantic import BaseModel, Field
 from app.auth import CurrentUserDep
 from app.routers.large_molecule import _build_user_info
 from app.services import admet_safety as admet_pipeline
+from app.services import genmol as genmol_svc
 from app.services import ligand_binder_design as ligand_pipeline
+from app.services import molecule_optimization as mol_opt
 from app.services import molecular_docking as docking
 from app.services import motif_scaffolding as motif_pipeline
 from app.services.molstar import molstar_html_multibody
@@ -565,3 +567,171 @@ def admet_stream(payload: AdmetRequest, user: CurrentUserDep):
         media_type="text/event-stream",
         headers=_SSE_HEADERS,
     )
+
+
+# ── GenMol — generative small-molecule design ──────────────────────────────────
+
+class GenMolGenerateRequest(BaseModel):
+    # Each seed: "" => de novo; a SMILES fragment => scaffold decoration.
+    seeds: list[str] = Field(default_factory=lambda: [""])
+    num_molecules: int = 20
+    temperature: float = 1.0
+    randomness: float = 1.0
+    scoring: str = "qed"  # qed | logp
+    unique: bool = True
+
+
+class GenMolMolecule(BaseModel):
+    seed: str
+    smiles: str
+    score: Optional[float] = None
+
+
+class GenMolGenerateResponse(BaseModel):
+    molecules: list[GenMolMolecule]
+
+
+@router.post("/genmol/generate/stream")
+def genmol_generate_stream(payload: GenMolGenerateRequest, user: CurrentUserDep):
+    """SSE generate. GenMol scales to zero, so the first call cold-starts
+    (~30-60s) — streaming keeps the connection alive past proxy timeouts."""
+    if not user.email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "User email missing from headers")
+    seeds = [s.strip() for s in payload.seeds] if payload.seeds else [""]
+    if not seeds:
+        seeds = [""]
+
+    def work(progress_cb):
+        progress_cb(5, "Submitting to GenMol")
+        progress_cb(
+            20,
+            "Generating molecules — the endpoint may cold-start (~30-60s on first call)",
+        )
+        mols = genmol_svc.generate(
+            seeds=seeds,
+            num_molecules=payload.num_molecules,
+            temperature=payload.temperature,
+            randomness=payload.randomness,
+            scoring=payload.scoring,
+            unique=payload.unique,
+        )
+        progress_cb(95, f"Generated {len(mols)} molecule(s)")
+        return {"molecules": mols}
+
+    return StreamingResponse(
+        stream_with_progress(work),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
+
+
+class SeedMotif(BaseModel):
+    scaffold: str
+    count: int
+    best_pchembl: Optional[float] = None
+    example_smiles: str
+
+
+class SeedMotifsResponse(BaseModel):
+    gene: Optional[str] = None
+    motifs: list[SeedMotif]
+
+
+@router.get("/genmol/seed_motifs", response_model=SeedMotifsResponse)
+def genmol_seed_motifs(
+    _: CurrentUserDep,
+    gene: str = Query("", description="Target gene symbol, e.g. PARP1"),
+    sequence: str = Query("", description="Protein sequence to reverse-resolve to a gene"),
+):
+    """Binding motifs (Murcko scaffolds of known ChEMBL binders) for a target —
+    seed candidates for GenMol's fragment mode. Pass a gene, or a protein
+    sequence to reverse-resolve. Returns {gene, motifs:[]} (empty if the
+    target_binders table isn't built or the target has no known binders)."""
+    from app.services import target_motifs
+
+    return target_motifs.seed_motifs(gene=gene or None, sequence=sequence or None)
+
+
+# ── Guided Molecule Optimization ───────────────────────────────────────────────
+
+class MoleculeOptimizeRequest(BaseModel):
+    seed_smiles: list[str] = Field(..., min_length=1)  # binding-motif scaffolds
+    num_samples: int = 24
+    num_iterations: int = 5
+    select_top: int = 3
+    dock_top_k: int = 5
+    qed_min: float = 0.5          # hard constraint: keep molecules with QED >= this
+    tox_max: float = 0.3          # hard constraint: keep molecules with ClinTox <= this
+    temperature: float = 1.2
+    randomness: float = 2.0
+    target_sequence: str = ""      # target protein sequence (folded → docked in-reward)
+    target_label: str = ""         # gene symbol of the docking target, for MLflow logging
+    dock_per_iter: int = 8
+    dock_samples: int = 3
+    mlflow_experiment: str = "gwb_molecule_optimization"
+    mlflow_run_name: str = Field(..., min_length=1)
+
+
+class MoleculeOptimizeStartResponse(BaseModel):
+    mlflow_run_id: str
+    job_run_id: int
+    experiment_id: str
+    run_url: str = ""
+
+
+@router.post("/molecule_optimization/start", response_model=MoleculeOptimizeStartResponse)
+def molecule_optimization_start(payload: MoleculeOptimizeRequest, user: CurrentUserDep):
+    if not user.email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "User email missing from headers")
+    seeds = [s.strip() for s in payload.seed_smiles if s and s.strip()]
+    if not seeds:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "At least one seed SMILES is required")
+    try:
+        res = mol_opt.start_molecule_optimization_job(
+            user_email=user.email,
+            mlflow_experiment=payload.mlflow_experiment,
+            mlflow_run_name=payload.mlflow_run_name,
+            seed_smiles=seeds,
+            num_samples=payload.num_samples,
+            num_iterations=payload.num_iterations,
+            select_top=payload.select_top,
+            dock_top_k=payload.dock_top_k,
+            qed_min=payload.qed_min,
+            tox_max=payload.tox_max,
+            temperature=payload.temperature,
+            randomness=payload.randomness,
+            target_sequence=payload.target_sequence,
+            target_label=payload.target_label,
+            dock_per_iter=payload.dock_per_iter,
+            dock_samples=payload.dock_samples,
+        )
+    except Exception as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Failed to start optimization: {e}")
+    return MoleculeOptimizeStartResponse(
+        mlflow_run_id=res["mlflow_run_id"],
+        job_run_id=res["job_run_id"],
+        experiment_id=res["experiment_id"],
+        run_url=res.get("run_url", ""),
+    )
+
+
+@router.get("/molecule_optimization/status")
+def molecule_optimization_status(_: CurrentUserDep, run_id: str = Query(..., min_length=1)):
+    return mol_opt.get_run_status(run_id)
+
+
+@router.get("/molecule_optimization/top-k")
+def molecule_optimization_top_k(_: CurrentUserDep, run_id: str = Query(..., min_length=1)):
+    # Returns {"top_k": [...valid...], "explored": [...other attempts...]}.
+    return mol_opt.load_top_k(run_id)
+
+
+@router.get("/molecule_optimization/search")
+def molecule_optimization_search(
+    user: CurrentUserDep,
+    by: str = Query("run_name"),
+    text: str = Query(""),
+):
+    if not user.email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "User email missing from headers")
+    return {"runs": mol_opt.search_runs(user.email, by, text)}

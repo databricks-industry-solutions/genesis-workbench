@@ -30,7 +30,8 @@ resources:
         - name: user_email
           default: ${var.current_user}
         - name: workload_type
-          default: ${var.gpu_small_setting}
+          # A10 (24 GB) — ESMFold OOMs a T4/GPU_SMALL on longer (e.g. human) proteins.
+          default: ${var.gpu_medium_setting}
 
 
       job_clusters:
