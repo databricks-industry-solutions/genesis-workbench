@@ -135,8 +135,8 @@ resources:
             spark_conf:
               spark.master: local[*, 4]
               spark.databricks.cluster.profile: singleNode
-            node_type_id: ${var.t4_node_type} 
-            driver_node_type_id: ${var.t4_node_type}
+            node_type_id: ${var.a10_node_type}
+            driver_node_type_id: ${var.a10_node_type}
             custom_tags:
               ResourceClass: SingleNode
               work_type: protein_folding
