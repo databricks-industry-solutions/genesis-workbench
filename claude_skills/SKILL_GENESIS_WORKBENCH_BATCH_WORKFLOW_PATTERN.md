@@ -67,6 +67,8 @@ These each cost a deploy cycle when they slipped in. Read them before writing co
 
 13. **Deploy under the `ci-demo` profile.** `update.sh` / `bundle deploy` use ambient auth; bare invocation hits the wrong workspace (`default` profile) and fakes a terraform `lineage mismatch`. Always `DATABRICKS_CONFIG_PROFILE=ci-demo ./update.sh aws …` (and same for submodule `bundle deploy`). Never hand-edit terraform state.
 
+14. **The run must show in Search Past Runs *immediately* after submit — auto-search, don't make the user click Search.** Wire a `searchToken` (a counter) bumped in the dispatch mutation's `onSuccess`, passed to `RunSearchSection` (or the bespoke section). The shared `RunSearchSection` runs the search when the token changes and **auto-refreshes every 10s while any run is in progress** (`isInProgress = !viewableStatuses.includes(status) && status not failed/error`). Two real causes of "it doesn't show up like other screens": (a) no auto-search after submit, and (b) **the search default doesn't match the run naming** — AlphaFold defaulted to `experiment_name='alphafold'` but its experiment is `structure_prediction` (the *run* is `alphafold_<ts>`), so it matched nothing. Default `mode='run_name'` with a needle that prefixes the run name (`mol_opt`, `enzyme_opt`, `alphafold`). New search-result features should reuse `RunSearchSection` (which bakes all of this in) rather than hand-rolling a search panel.
+
 ## The five layers
 
 Every batch workflow has these five pieces. Each links to the freshest reference (Guided Enzyme Optimization) — copy from there when adding a new feature.

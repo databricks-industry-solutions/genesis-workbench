@@ -33,6 +33,8 @@ export function StructurePredictionTab() {
   const [expName, setExpName] = useState('structure_prediction')
   const [runName, setRunName] = useState(`esmfold_${ts()}`)
   const [viewerHtml, setViewerHtml] = useState<string | null>(null)
+  // Bumped after an AlphaFold job dispatch so the search panel auto-loads the run.
+  const [afSearchToken, setAfSearchToken] = useState(0)
 
   const isAsync = model === 'AlphaFold2'
 
@@ -46,7 +48,10 @@ export function StructurePredictionTab() {
     },
     onSuccess: (data) => {
       if ('viewer_html' in data) setViewerHtml(data.viewer_html)
-      else qc.invalidateQueries({ queryKey: ['alphafold', 'search'] })
+      else {
+        qc.invalidateQueries({ queryKey: ['alphafold', 'search'] })
+        setAfSearchToken((t) => t + 1)
+      }
     },
   })
 
@@ -185,7 +190,7 @@ export function StructurePredictionTab() {
         {/* Right: viewer (ESMFold/Boltz) or AlphaFold search + results. */}
         <div className="space-y-3">
           {isAsync ? (
-            <AlphaFoldSearchResults />
+            <AlphaFoldSearchResults searchToken={afSearchToken} />
           ) : (
             <>
               <WorkflowProgress

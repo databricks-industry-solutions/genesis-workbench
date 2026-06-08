@@ -32,6 +32,8 @@ export function GuidedMoleculeOptimizationTab() {
   const [dockPerIter, setDockPerIter] = useState(8)
   const [experiment, setExperiment] = useState('gwb_molecule_optimization')
   const [runName, setRunName] = useState(`mol_opt_${ts()}`)
+  // Bumped after a successful dispatch so Search Past Runs auto-loads the new run.
+  const [searchToken, setSearchToken] = useState(0)
 
   // Find binding motif from target → seed scaffold(s).
   const [gene, setGene] = useState('')
@@ -62,6 +64,7 @@ export function GuidedMoleculeOptimizationTab() {
         mlflow_experiment: experiment,
         mlflow_run_name: runName,
       }),
+    onSuccess: () => setSearchToken((t) => t + 1),
   })
 
   return (
@@ -293,6 +296,7 @@ export function GuidedMoleculeOptimizationTab() {
             initialText="mol_opt"
             viewableStatuses={['complete']}
             detailColClass="min-w-[80px]"
+            searchToken={searchToken}
             renderDialog={(run) => <MolOptResultBody run={run} />}
           />
         </div>

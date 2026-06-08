@@ -1,7 +1,7 @@
 // AlphaFold "Search Past Runs" + result viewer — rendered as the right panel of
 // the Structure Prediction tab when the AlphaFold model is selected (AlphaFold
 // is async, so you fold via the shared input panel then find the result here).
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 
@@ -15,8 +15,11 @@ import { cn } from '@/lib/utils'
 
 type SearchMode = 'experiment_name' | 'run_name'
 
-export function AlphaFoldSearchResults() {
-  const [searchMode, setSearchMode] = useState<SearchMode>('experiment_name')
+export function AlphaFoldSearchResults({ searchToken }: { searchToken?: number } = {}) {
+  // Default to run-name search: AlphaFold runs are named `alphafold_<ts>` while
+  // the experiment is `structure_prediction`, so an experiment_name='alphafold'
+  // default would match nothing right after submit.
+  const [searchMode, setSearchMode] = useState<SearchMode>('run_name')
   const [searchText, setSearchText] = useState('alphafold')
   const [searchedAt, setSearchedAt] = useState<number>(0)
   const [viewing, setViewing] = useState<AlphaFoldRun | null>(null)
@@ -25,7 +28,21 @@ export function AlphaFoldSearchResults() {
     queryKey: ['alphafold', 'search', searchMode, searchText, searchedAt],
     queryFn: () => api.alphafoldSearch(searchMode, searchText),
     enabled: searchedAt > 0,
+    // Auto-refresh while a run is still folding so status advances on its own.
+    refetchInterval: (q) => {
+      const runs = (q.state.data?.runs ?? []) as AlphaFoldRun[]
+      const inProgress = runs.some(
+        (r) => r.status !== 'fold_complete' && r.status !== 'failed' && !r.status.startsWith('error'),
+      )
+      return inProgress ? 10_000 : false
+    },
   })
+
+  // Auto-run the search right after a successful submit (parent bumps searchToken)
+  // so the freshly pre-created run shows without a manual Search click.
+  useEffect(() => {
+    if (searchToken) setSearchedAt(searchToken)
+  }, [searchToken])
 
   const columns = useMemo<ColumnDef<AlphaFoldRun, unknown>[]>(
     () => [

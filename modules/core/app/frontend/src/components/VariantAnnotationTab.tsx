@@ -47,7 +47,11 @@ export function VariantAnnotationTab() {
     if (row?.output_table) setVariantsTable(row.output_table)
   }, [selectedIngRun, picker.data])
 
-  const start = useMutation({ mutationFn: api.variantAnnotationStart })
+  const [searchToken, setSearchToken] = useState(0)
+  const start = useMutation({
+    mutationFn: api.variantAnnotationStart,
+    onSuccess: () => setSearchToken((t) => t + 1),
+  })
 
   const canStart =
     !start.isPending &&
@@ -227,6 +231,7 @@ export function VariantAnnotationTab() {
         detailLabel="Variants table"
         initialText="annotation"
         viewableStatuses={['annotation_complete']}
+        searchToken={searchToken}
         renderDialog={(run) => <AnnotationResultsBody run={run} />}
       />
     </div>

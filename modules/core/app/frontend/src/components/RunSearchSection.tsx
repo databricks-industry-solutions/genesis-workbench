@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 
@@ -7,10 +7,6 @@ import { Dialog } from '@/components/Dialog'
 import { InProgressBadge } from '@/components/InProgressBadge'
 import type { DBRunRow, DBSearchResponse } from '@/types/api'
 import { cn } from '@/lib/utils'
-
-// Genomics workflow statuses that mean "the job is still running"
-// (mirrors _IN_PROGRESS in backend/app/services/genomics.py).
-const DB_IN_PROGRESS_STATUSES = new Set(['started', 'phenotype_prepared'])
 
 /**
  * Generic "Search Past Runs" block for the Genomics tabs. Each tab
@@ -29,6 +25,11 @@ type Props = {
    * paths. Tabs with short detail (e.g. "4/5 iters") pass a slimmer one so the
    * table fits without horizontal scrolling. */
   detailColClass?: string
+  /** Bump this (e.g. `setToken(t => t + 1)`) right after a successful dispatch
+   * to auto-run the search — so the freshly pre-created run shows up without the
+   * user clicking Search. While any run is still in progress the table also
+   * auto-refreshes, so status advances on its own. */
+  searchToken?: number
 }
 
 export function RunSearchSection({
@@ -39,6 +40,7 @@ export function RunSearchSection({
   viewableStatuses,
   renderDialog,
   detailColClass = 'min-w-[280px]',
+  searchToken,
 }: Props) {
   const qc = useQueryClient()
   const [mode, setMode] = useState<'run_name' | 'experiment_name'>('run_name')
@@ -55,6 +57,7 @@ export function RunSearchSection({
       const data = await qc.fetchQuery({
         queryKey: [...searchKey, mode, text],
         queryFn: () => searchFn(mode, text),
+        staleTime: 0,
       })
       setRows(data.runs)
     } catch (e) {
@@ -63,6 +66,31 @@ export function RunSearchSection({
       setSearching(false)
     }
   }
+
+  // Keep a ref to the latest runSearch so effects can call it without
+  // re-subscribing on every mode/text keystroke.
+  const runSearchRef = useRef(runSearch)
+  runSearchRef.current = runSearch
+
+  // Auto-run the search when the parent bumps searchToken (right after a submit)
+  // so the freshly pre-created run appears without a manual Search click.
+  useEffect(() => {
+    if (!searchToken) return
+    runSearchRef.current()
+  }, [searchToken])
+
+  // A run is "in progress" until it reaches a viewable (terminal) status or fails.
+  const isInProgress = (s: string) =>
+    !viewableStatuses.includes(s) && s !== 'failed' && !s.startsWith('error')
+
+  // While anything is still running, refresh on an interval so status advances
+  // on its own (no need to re-click Search).
+  const anyInProgress = rows.some((r) => isInProgress(r.status))
+  useEffect(() => {
+    if (!anyInProgress) return
+    const id = setInterval(() => runSearchRef.current(), 10_000)
+    return () => clearInterval(id)
+  }, [anyInProgress])
 
   const columns = useMemo<ColumnDef<DBRunRow, unknown>[]>(
     () => [
@@ -144,9 +172,7 @@ export function RunSearchSection({
     [detailLabel, viewableStatuses, detailColClass],
   )
 
-  const inProgressCount = rows.filter((r) =>
-    DB_IN_PROGRESS_STATUSES.has(r.status),
-  ).length
+  const inProgressCount = rows.filter((r) => isInProgress(r.status)).length
 
   return (
     <section className="space-y-3 border-t border-border pt-4">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 
@@ -86,8 +86,10 @@ export function EnzymeOptimizationTab() {
     setReferences((cur) => (cur.length ? cur : defaults.data!.default_references))
   }, [defaults.data])
 
+  const [searchToken, setSearchToken] = useState(0)
   const start = useMutation({
     mutationFn: api.enzymeOptStart,
+    onSuccess: () => setSearchToken((t) => t + 1),
   })
 
   const smokeTest = useMutation({
@@ -543,7 +545,7 @@ export function EnzymeOptimizationTab() {
         </div>
       </div>
 
-      <SearchPastRunsSection />
+      <SearchPastRunsSection searchToken={searchToken} />
     </div>
   )
 }
@@ -654,7 +656,7 @@ function _isViewable(status: string): boolean {
   return status.startsWith('iter_') && status.endsWith('_complete')
 }
 
-function SearchPastRunsSection() {
+function SearchPastRunsSection({ searchToken }: { searchToken?: number } = {}) {
   const qc = useQueryClient()
   const [mode, setMode] = useState<SearchMode>('run_name')
   const [text, setText] = useState('enzyme_opt')
@@ -667,6 +669,32 @@ function SearchPastRunsSection() {
   })
 
   const runs = search.data?.runs ?? []
+
+  // Keep a ref to the latest fetch so effects fire without re-subscribing.
+  const doSearchRef = useRef<() => void>(() => {})
+  doSearchRef.current = () => {
+    qc.fetchQuery({
+      queryKey: ['enzyme_opt', 'search', mode, text],
+      queryFn: () => api.enzymeOptSearch(mode, text),
+      staleTime: 0,
+    })
+  }
+
+  // Auto-run the search right after a successful dispatch (parent bumps the
+  // token) so the freshly pre-created run appears without clicking Search.
+  useEffect(() => {
+    if (searchToken) doSearchRef.current()
+  }, [searchToken])
+
+  // While anything is still running, refresh on an interval so status advances.
+  const anyInProgress = runs.some(
+    (r) => r.job_status && r.job_status !== 'complete' && r.job_status !== 'failed',
+  )
+  useEffect(() => {
+    if (!anyInProgress) return
+    const id = setInterval(() => doSearchRef.current(), 10_000)
+    return () => clearInterval(id)
+  }, [anyInProgress])
 
   const tableColumns = useMemo<ColumnDef<EnzymeRunRow, unknown>[]>(
     () => [

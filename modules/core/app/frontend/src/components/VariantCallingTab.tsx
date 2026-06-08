@@ -41,7 +41,11 @@ export function VariantCallingTab() {
     setOutVol((cur) => cur || d.output_volume_path)
   }, [defaults.data])
 
-  const start = useMutation({ mutationFn: api.variantCallingStart })
+  const [searchToken, setSearchToken] = useState(0)
+  const start = useMutation({
+    mutationFn: api.variantCallingStart,
+    onSuccess: () => setSearchToken((t) => t + 1),
+  })
   const canStart =
     !start.isPending &&
     r1.trim() &&
@@ -199,6 +203,7 @@ export function VariantCallingTab() {
         detailLabel="FASTQ R1"
         initialText="variant_calling"
         viewableStatuses={['alignment_complete']}
+        searchToken={searchToken}
         renderDialog={(run) => <VariantCallingDetailsBody run={run} />}
       />
     </div>
