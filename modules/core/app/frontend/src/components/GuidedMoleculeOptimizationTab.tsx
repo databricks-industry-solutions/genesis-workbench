@@ -283,9 +283,9 @@ export function GuidedMoleculeOptimizationTab() {
           )}
         </div>
 
-        {/* Right: Search past runs (standard workflow pattern). */}
+        {/* Right: Search past runs (standard workflow pattern — RunSearchSection
+            renders its own "Search Past Runs" header + in-progress badge). */}
         <div>
-          <h4 className="mb-2 text-sm font-semibold">Search past runs</h4>
           <RunSearchSection
             searchKey={['molopt', 'search'] as const}
             searchFn={api.molOptSearch}
@@ -316,6 +316,9 @@ function MolOptResultBody({ run }: { run: DBRunRow }) {
   const meanTraj = status.data?.mean_reward_history ?? []
   const maxReward = Math.max(0.001, ...traj.map((p) => p.value))
   const molecules = topk.data?.top_k ?? []
+  // Only show the Dock column when this run actually docked (target provided);
+  // otherwise it's an all-"—" column. New runs dock the full shortlist.
+  const hasDock = molecules.some((m) => m.dock_confidence != null)
 
   const columns: ColumnDef<MolOptTopKItem, unknown>[] = [
     { id: 'idx', header: '#', cell: ({ row }) => row.index + 1 },
@@ -324,7 +327,9 @@ function MolOptResultBody({ run }: { run: DBRunRow }) {
     { id: 'reward', header: 'Reward', cell: ({ row }) => fmt(row.original.reward) },
     { id: 'qed', header: 'QED', cell: ({ row }) => fmt(row.original.qed) },
     { id: 'tox', header: 'ClinTox', cell: ({ row }) => fmt(row.original.tox) },
-    { id: 'dock', header: 'Dock', cell: ({ row }) => fmt(row.original.dock_confidence) },
+    ...(hasDock
+      ? [{ id: 'dock', header: 'Dock', cell: ({ row }) => fmt(row.original.dock_confidence) } as ColumnDef<MolOptTopKItem, unknown>]
+      : []),
     {
       id: 'clip', header: '',
       cell: ({ row }) => (

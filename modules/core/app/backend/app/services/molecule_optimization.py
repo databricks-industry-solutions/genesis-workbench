@@ -20,9 +20,26 @@ from databricks.sdk import WorkspaceClient
 from genesis_workbench.models import set_mlflow_experiment
 from mlflow.tracking import MlflowClient
 
-from app.services.databricks_links import job_run_url
+from app.services.databricks_links import job_run_url, mlflow_run_url
 
 logger = logging.getLogger(__name__)
+
+# Emoji block progress bar — same style as enzyme_optimization / genomics search
+# tables so every Search Past Runs progress column looks consistent.
+_PROGRESS_MAP = {
+    "submitted": "🟩⬜⬜⬜",
+    "running": "🟩🟩🟩⬜",
+    "complete": "🟩🟩🟩🟩",
+    "failed": "🟥",
+    "unknown": "⬜⬜⬜⬜",
+}
+
+
+def _progress(status: str) -> str:
+    if not status:
+        return _PROGRESS_MAP["unknown"]
+    return _PROGRESS_MAP.get(status, _PROGRESS_MAP["unknown"])
+
 
 ORCHESTRATOR_JOB_NAME = "run_molecule_optimization_gwb"
 _job_id_cache: dict[str, int] = {}
@@ -212,30 +229,26 @@ def search_runs(user_email: str, by: str, text: str) -> list[dict]:
     def _g(r, col):
         return r[col] if col in r and pd.notna(r[col]) else None
 
-    try:
-        job_id = _resolve_orchestrator_job_id()
-    except Exception:
-        job_id = None
-
     out = []
     for _, r in runs.iterrows():
         status = str(_g(r, "tags.job_status") or "")
         n_iter = _g(r, "params.num_iterations")
         done = _g(r, "metrics.iterations_completed")
-        jrid = _g(r, "tags.job_run_id")
+        exp_id = str(r["experiment_id"])
         detail = (
             f"{int(float(done)) if done is not None else '—'}"
             f"/{int(float(n_iter)) if n_iter is not None else '—'} iters"
         )
-        # Conform to DBRunRow (the shared RunSearchSection contract).
+        # Conform to DBRunRow (the shared RunSearchSection contract). The Run
+        # column links to the MLflow run page; progress is the shared emoji bar.
         out.append({
             "run_id": str(r["run_id"]),
             "run_name": str(_g(r, "tags.mlflow.runName") or ""),
-            "experiment_name": exp_map.get(str(r["experiment_id"]), ""),
+            "experiment_name": exp_map.get(exp_id, ""),
             "status": status,
-            "progress": status,
+            "progress": _progress(status),
             "detail": detail,
             "start_time_ms": (int(r["start_time"].timestamp() * 1000) if "start_time" in r and pd.notna(r["start_time"]) else None),
-            "run_url": (job_run_url(job_id, int(float(jrid))) if (job_id and jrid is not None) else ""),
+            "run_url": mlflow_run_url(exp_id, str(r["run_id"])),
         })
     return out

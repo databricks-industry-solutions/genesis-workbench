@@ -278,6 +278,17 @@ with _run_ctx:
     # Global top-K (reward already includes the dock term for docked candidates).
     top = sorted(best_by_smiles.values(), key=lambda x: x["reward"], reverse=True)[:DOCK_TOP_K]
 
+    # Dock the final shortlist so every top-K row carries a binding confidence
+    # (per-iter docking only covers a subset, leaving the View's Dock column
+    # blank for shortlisted molecules that were never docked). When a target was
+    # provided, this guarantees the column is populated.
+    if DOCK_ENABLED:
+        for row in top:
+            if row.get("dock_confidence") is None:
+                row["dock_confidence"] = dock_confidence(row["smiles"])
+                row["reward"] = full_reward(row)
+        top = sorted(top, key=lambda x: x["reward"], reverse=True)
+
     mlflow.log_dict({"top_k": top}, "top_k.json")
     mlflow.log_metric("iterations_completed", N)
     mlflow.set_tag("job_status", "complete")
