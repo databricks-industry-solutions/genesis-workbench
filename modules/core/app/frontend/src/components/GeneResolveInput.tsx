@@ -37,14 +37,17 @@ export function GeneResolveInput({ onResolved }: { onResolved: (sequence: string
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
     }
-    const onDown = (e: MouseEvent) => {
+    const onDown = (e: Event) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener('keydown', onKey)
-    document.addEventListener('mousedown', onDown)
+    // CAPTURE-phase pointerdown: fires before any ancestor that stopPropagation()s
+    // a bubble-phase mousedown — otherwise clicking the page never closes this
+    // popover (only Esc does). Matches ClipboardPaste.
+    document.addEventListener('pointerdown', onDown, true)
     return () => {
       document.removeEventListener('keydown', onKey)
-      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('pointerdown', onDown, true)
     }
   }, [open])
 
