@@ -128,7 +128,9 @@ export function AdmetSafetyTab() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(360px,460px)_1fr]">
         {/* Left form */}
         <div className="space-y-3">
-          <label className="block text-xs">
+          {/* Plain div (not <label>): a <label> proxies dead-area clicks to its first
+              labelable descendant — here the ClipboardPaste button — popping the clipboard. */}
+          <div className="block text-xs">
             <div className="mb-1 flex items-center justify-between gap-2">
               <span className="block uppercase tracking-wide text-muted-foreground">
                 SMILES (one per line)
@@ -145,6 +147,7 @@ export function AdmetSafetyTab() {
               />
             </div>
             <textarea
+              aria-label="SMILES (one per line)"
               rows={8}
               value={smilesText}
               onChange={(e) => setSmilesText(e.target.value)}
@@ -154,7 +157,7 @@ export function AdmetSafetyTab() {
             <span className="mt-1 block text-[10px] text-muted-foreground">
               {smilesList.length} molecule{smilesList.length === 1 ? '' : 's'} parsed
             </span>
-          </label>
+          </div>
 
           <div className="space-y-2 rounded-md border border-border bg-card p-3 text-xs">
             <div className="mb-1 font-medium uppercase tracking-wide text-muted-foreground">

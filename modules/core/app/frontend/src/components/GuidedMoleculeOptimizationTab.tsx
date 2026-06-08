@@ -193,7 +193,9 @@ export function GuidedMoleculeOptimizationTab() {
             )}
           </div>
 
-          <label className="block text-xs">
+          {/* Plain div (not <label>): a <label> proxies dead-area clicks to its first
+              labelable descendant — here the ClipboardPaste button — popping the clipboard. */}
+          <div className="block text-xs">
             <div className="mb-1 flex items-center justify-between gap-2">
               <span className="block uppercase tracking-wide text-muted-foreground">
                 Seed scaffold SMILES — one per line
@@ -210,13 +212,14 @@ export function GuidedMoleculeOptimizationTab() {
               />
             </div>
             <textarea
+              aria-label="Seed scaffold SMILES — one per line"
               rows={4}
               value={seeds}
               onChange={(e) => setSeeds(e.target.value)}
               placeholder="O=C(c1cccc(Cc2n[nH]c(=O)c3ccccc23)c1)N1CCNCC1"
               className="w-full rounded-md border border-border bg-background p-3 font-mono text-xs"
             />
-          </label>
+          </div>
 
           <div className="grid grid-cols-2 gap-3 text-xs">
             <label className="block">

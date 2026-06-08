@@ -230,7 +230,9 @@ export function LigandBinderDesignTab() {
           </div>
 
           {inputMode === 'smiles' ? (
-            <label className="block text-xs">
+            // Plain div (not <label>): a <label> proxies dead-area clicks to its first
+            // labelable descendant — here the ClipboardPaste button — popping the clipboard.
+            <div className="block text-xs">
               <div className="mb-1 flex items-center justify-between gap-2">
                 <span className="block uppercase tracking-wide text-muted-foreground">
                   Ligand SMILES
@@ -238,12 +240,13 @@ export function LigandBinderDesignTab() {
                 <ClipboardPaste kind="molecule" label="Paste molecule" onPick={(it) => setSmiles(it.value)} />
               </div>
               <input
+                aria-label="Ligand SMILES"
                 value={smiles}
                 onChange={(e) => setSmiles(e.target.value)}
                 placeholder="COc(cc1)ccc1C#N"
                 className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
               />
-            </label>
+            </div>
           ) : (
             <>
               <label className="block text-xs">

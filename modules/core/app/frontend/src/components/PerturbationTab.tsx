@@ -243,7 +243,12 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
           </span>
         </label>
 
-        <label className="block text-xs">
+        {/* NOT a <label>: it contains the ClipboardPaste button, and a <label>
+            proxies clicks to its first labelable descendant (that button). With
+            this block stretched to the tall select's height by the grid, clicking
+            anywhere in it would open/toggle the popover. A <div> + aria-labelled
+            input avoids that. */}
+        <div className="block text-xs">
           <div className="mb-1 flex items-center justify-between gap-2">
             <span className="uppercase tracking-wide text-muted-foreground">
               Or add custom genes (comma-separated)
@@ -259,12 +264,13 @@ export function PerturbationTab({ runId }: { runId: string | null }) {
             value={extraGenes}
             onChange={(e) => setExtraGenes(e.target.value)}
             placeholder="e.g. TP53, BRCA1"
+            aria-label="Custom genes (comma-separated)"
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
           />
           <span className="mt-1 block text-[10px] text-muted-foreground">
             Must be in scGPT's vocabulary; otherwise the model ignores them.
           </span>
-        </label>
+        </div>
       </div>
 
       <div className="flex items-center justify-between">
