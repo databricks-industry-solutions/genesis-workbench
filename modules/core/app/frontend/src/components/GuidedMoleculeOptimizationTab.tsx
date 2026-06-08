@@ -364,7 +364,7 @@ function MolOptResultBody({ run }: { run: DBRunRow }) {
   const explored = topk.data?.explored ?? []
   const qedMin = status.data?.qed_min
   const toxMax = status.data?.tox_max
-  const targetTxt = qedMin != null && toxMax != null ? ` (QED ≥ ${qedMin}, ClinTox ≤ ${toxMax})` : ''
+  const targetTxt = qedMin != null && toxMax != null ? ` (Drug-likeness ≥ ${qedMin}, Toxicity ≤ ${toxMax})` : ''
 
   // Shared columns; the explored table adds a "Meets targets" ✓/✗ so you can see
   // why each attempt didn't make the valid list. Dock column only when docked.
@@ -378,8 +378,8 @@ function MolOptResultBody({ run }: { run: DBRunRow }) {
       { id: 'smiles', header: 'SMILES', accessorKey: 'smiles',
         cell: ({ row }) => <span className="font-mono text-xs">{row.original.smiles}</span> },
       { id: 'reward', header: 'Reward', cell: ({ row }) => fmt(row.original.reward) },
-      { id: 'qed', header: 'QED', cell: ({ row }) => fmt(row.original.qed) },
-      { id: 'tox', header: 'ClinTox', cell: ({ row }) => fmtTox(row.original.tox) },
+      { id: 'qed', header: 'Drug-likeness (QED)', cell: ({ row }) => fmt(row.original.qed) },
+      { id: 'tox', header: 'Toxicity', cell: ({ row }) => fmtTox(row.original.tox) },
       ...(withFeasible
         ? [{ id: 'meets', header: 'Meets targets',
             cell: ({ row }: { row: { original: MolOptTopKItem } }) =>
