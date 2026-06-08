@@ -484,6 +484,32 @@ Use `[<module>, '<feature>', <subkey>]` as the queryKey, e.g.
 `['large_molecule', 'sequence_search', 'organism']`. Keep them stable so
 cache invalidation works across navigation.
 
+### Popovers, dropdowns, and modals — reuse, don't hand-roll (hard rule)
+Never write per-component "close on outside click / Esc" logic. There are
+shared primitives — use them so the behavior is correct and fixed in one place:
+
+- **Modals / full-screen dialogs** → `Dialog` (`Dialog.tsx`) or `Drawer`
+  (`Drawer.tsx`). They own the backdrop + Esc.
+- **Lightweight popovers / dropdowns** (e.g. `ClipboardPaste`,
+  `GeneResolveInput`) → the **`useOutsideDismiss(ref, onClose, enabled)`** hook
+  (`hooks/useOutsideDismiss.ts`):
+
+  ```tsx
+  const ref = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false)
+  useOutsideDismiss(ref, () => setOpen(false), open)
+  return <div ref={ref}>{/* trigger + (open && <panel/>) */}</div>
+  ```
+
+**Why it's a hook, not copied per component:** the dismiss listener MUST use a
+**capture-phase `pointerdown`** (not a bubble-phase `mousedown`). A bubble-phase
+listener can be silently blocked by an ancestor that calls `stopPropagation()`,
+leaving the popover stuck open on outside clicks while only Esc closes it — a
+real bug we hit in two separately-coded popovers. And **never** dismiss with a
+`fixed inset-0` backdrop on a non-modal popover: if it gets stuck it blocks all
+page interaction. The hook avoids both traps; copying the logic per page
+re-introduces them.
+
 ## Model Categories
 
 When registering models, use the correct `ModelCategory`:
