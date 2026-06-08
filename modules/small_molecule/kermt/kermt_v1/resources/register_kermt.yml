@@ -1,0 +1,54 @@
+resources:
+  jobs:
+    register_kermt:
+      name: register_kermt
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: stage_kermt_task
+          job_cluster_key: stage_cluster
+          notebook_task:
+            notebook_path: ../notebooks/01_register_kermt.py
+          max_retries: 0
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: user_email
+          default: ${var.current_user}
+        - name: cache_dir
+          default: ${var.cache_dir}
+        - name: grover_base_url
+          default: ${var.grover_base_url}
+        - name: tdc_group
+          default: Tox
+        - name: tdc_dataset
+          default: ClinTox
+        - name: target_name
+          default: toxicity
+
+      job_clusters:
+        - job_cluster_key: stage_cluster
+          new_cluster:
+            num_workers: 0
+            node_type_id: ${var.cpu_node_type}
+            driver_node_type_id: ${var.cpu_node_type}
+            spark_version: 15.4.x-scala2.12
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.databricks.unityCatalog.volumes.enabled: true
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+
+      tags: ${var.common_resource_tags}
