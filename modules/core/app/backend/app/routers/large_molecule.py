@@ -232,6 +232,7 @@ def alphafold_search(
                 protein_sequence=r.protein_sequence,
                 start_time_ms=r.start_time_ms,
                 status=r.status,
+                progress=r.progress,
                 run_url=r.run_url,
             )
             for r in rows
