@@ -178,10 +178,12 @@ print(os.environ['AF_FASTA_FILE'])
 # MAGIC source /miniconda3/bin/activate
 # MAGIC conda activate alphafold_env
 # MAGIC
-# MAGIC # Unified memory: let JAX spill past the 24 GB A10 VRAM into the node's host
-# MAGIC # RAM (g5.16xlarge has 256 GB) so long sequences — e.g. full-length BRCA1
-# MAGIC # (1863 aa) — fold without a RESOURCE_EXHAUSTED GPU OOM. AlphaFold's own
-# MAGIC # run_docker.py sets exactly these for the same reason.
+# MAGIC # Unified memory: let JAX spill past the GPU VRAM into the node's host RAM
+# MAGIC # (g4dn.4xlarge T4 has 16 GB VRAM + 64 GB RAM) so long sequences — e.g.
+# MAGIC # full-length BRCA1 (1863 aa, needs ~33 GB) — fold without a
+# MAGIC # RESOURCE_EXHAUSTED GPU OOM. AlphaFold's own run_docker.py sets these.
+# MAGIC # NOTE: the A10 (g5.16xlarge) regressed the featurize step on this old
+# MAGIC # env (jaxlib 0.3.25/cuda11.1), so we stay on the T4 + unified memory.
 # MAGIC export TF_FORCE_UNIFIED_MEMORY=1
 # MAGIC export XLA_PYTHON_CLIENT_MEM_FRACTION=4.0
 # MAGIC python ../scripts/run_alphafold_split.py ${FLAGS}
