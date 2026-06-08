@@ -68,14 +68,6 @@ export function AlphaFoldSearchResults({ searchToken }: { searchToken?: number }
       },
       { id: 'experiment_name', header: 'Experiment', accessorKey: 'experiment_name' },
       {
-        id: 'protein_sequence',
-        header: 'Sequence',
-        cell: (ctx) => {
-          const s = ctx.row.original.protein_sequence
-          return s.length > 40 ? `${s.slice(0, 40)}…` : s
-        },
-      },
-      {
         id: 'start',
         header: 'Start',
         cell: (ctx) =>
