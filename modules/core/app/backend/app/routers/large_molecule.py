@@ -157,6 +157,7 @@ class AlphaFoldRun(BaseModel):
     protein_sequence: str
     start_time_ms: int | None
     status: str
+    progress: str = ""
     run_url: str = ""
 
 

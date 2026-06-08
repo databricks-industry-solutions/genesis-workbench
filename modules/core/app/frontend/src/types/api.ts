@@ -165,6 +165,7 @@ export type AlphaFoldRun = {
   protein_sequence: string
   start_time_ms: number | null
   status: string
+  progress: string
   run_url: string
 }
 

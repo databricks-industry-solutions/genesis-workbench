@@ -15,13 +15,6 @@ import { cn } from '@/lib/utils'
 
 type SearchMode = 'experiment_name' | 'run_name'
 
-function statusBadge(status: string): string {
-  if (status === 'fold_complete') return '🟢 fold_complete'
-  if (status === 'started' || status === 'running') return '🟡 ' + status
-  if (status === 'failed' || status.startsWith('error')) return '🔴 ' + status
-  return '⚪ ' + status
-}
-
 export function AlphaFoldSearchResults() {
   const [searchMode, setSearchMode] = useState<SearchMode>('experiment_name')
   const [searchText, setSearchText] = useState('alphafold')
@@ -73,11 +66,8 @@ export function AlphaFoldSearchResults() {
             ? new Date(ctx.row.original.start_time_ms).toLocaleString()
             : '',
       },
-      {
-        id: 'status',
-        header: 'Status',
-        cell: (ctx) => statusBadge(ctx.row.original.status),
-      },
+      { id: 'status', header: 'Status', accessorKey: 'status' },
+      { id: 'progress', header: 'Progress', accessorKey: 'progress' },
       {
         id: 'view',
         header: '',
