@@ -23,6 +23,7 @@
 - [Motif Scaffolding](motif_scaffolding.md) — Transplant functional motifs into new protein scaffolds
 - [Guided Enzyme Optimization](enzyme_optimization.md) — Reward-weighted optimization loop on top of motif scaffolding; scores each candidate on motif fidelity, fold confidence, optional substrate complex, and four developability axes (solubility, anchor-relative half-life, melting temperature, immunogenic burden). Two generation modes: **Fast** (default, ~30 min, no GPU cost — endpoint-based AME with parent resampling between iterations) and **Accurate** (~30-60 min, ~$22 GPU — in-process AME with Feynman-Kac steering biasing diffusion toward developability)
 - [ADMET & Safety](admet_safety.md) — Profile molecules for drug-like properties and toxicity using ChemProp
+- [KERMT (ADMET fine-tune)](kermt_admet.md) — Fine-tune NVIDIA-BioNeMo KERMT (Kinetic GROVER Multi-Task GNN) on a SMILES+target assay, deploy it as a serving endpoint, and compare its toxicity/ADMET predictions side-by-side with ChemProp
 
 ## Single Cell
 
