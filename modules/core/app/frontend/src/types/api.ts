@@ -328,11 +328,21 @@ export type EnrichmentResponse = { terms: EnrichmentTerm[]; available_dbs: strin
 
 export type TrajectoryUmapPoint = { umap_0: number; umap_1: number; pseudotime: number }
 export type TrajectoryGenePoint = { pseudotime: number; expression: number }
+export type TrajectoryNode = {
+  cluster: string
+  umap_0: number
+  umap_1: number
+  pseudotime: number
+  n_cells: number
+}
+export type TrajectoryEdge = { source: string; target: string }
 export type TrajectoryResponse = {
   has_pseudotime: boolean
   umap_points: TrajectoryUmapPoint[]
   gene_points: TrajectoryGenePoint[]
   genes: string[]
+  trajectory_nodes?: TrajectoryNode[]
+  trajectory_edges?: TrajectoryEdge[]
 }
 
 export type RawDataResponse = {
