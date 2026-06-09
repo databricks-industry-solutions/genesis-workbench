@@ -19,6 +19,9 @@ dbutils.widgets.text("sql_warehouse_id", "", "SQL Warehouse Id")
 dbutils.widgets.text("ft_id", "", "Fine-tuned model id (from kermt_weights) to deploy")
 dbutils.widgets.text("model_name", "kermt_admet", "UC model name")
 dbutils.widgets.text("workload_type", "GPU_SMALL", "Serving workload type")
+# Labeled holdout for probability calibration (classification only). Preference order:
+# <checkpoint_dir>/calibration.csv (written by the fine-tune job) → this widget → none.
+dbutils.widgets.text("calibration_data_location", "", "Calibration holdout CSV (smiles + target); blank = use the checkpoint's calibration.csv")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
@@ -51,6 +54,7 @@ sql_warehouse_id = g("sql_warehouse_id")
 ft_id = g("ft_id")
 model_name = g("model_name")
 workload_type = g("workload_type")
+calibration_data_location = g("calibration_data_location")
 vol_root = f"/Volumes/{catalog}/{schema}/{cache_dir}"
 
 # Resolve the fine-tuned checkpoint location from kermt_weights.
@@ -115,6 +119,27 @@ class KermtADMETModel(PythonModel):
         self._model = load_checkpoint_for_prediction(ckpt0, cuda=args.cuda, current_args=args, logger=None)
         self._model.eval()
 
+        # Probability calibration (classification): a per-task Platt map
+        # {task: {"a": ..., "b": ...}} so calibrated = sigmoid(a*logit(p)+b).
+        # Stored as plain JSON params (no pickled class) so the serving env needs
+        # nothing extra. Empty/absent => raw model probabilities pass through.
+        import json as _json
+        self._calib = {}
+        calib_path = context.artifacts.get("calibration")
+        if calib_path and _os.path.exists(calib_path):
+            try:
+                with open(calib_path) as _f:
+                    self._calib = _json.load(_f) or {}
+            except Exception:
+                self._calib = {}
+
+    @staticmethod
+    def _apply_platt(p, a, b):
+        import numpy as _np
+        p = _np.clip(_np.asarray(p, dtype=float), 1e-6, 1 - 1e-6)
+        logit = _np.log(p / (1.0 - p))
+        return 1.0 / (1.0 + _np.exp(-(a * logit + b)))
+
     def predict(self, context, model_input, params=None):
         import pandas as pd
         from kermt.util.utils import get_data_from_smiles
@@ -129,7 +154,12 @@ class KermtADMETModel(PythonModel):
         preds, _ = _kermt_predict(model=self._model, data=data, args=self._args,
                                   batch_size=self._args.batch_size, loss_func=None,
                                   logger=None, shared_dict={}, scaler=self._scaler)
-        return pd.DataFrame(preds, columns=self._task_names)
+        df = pd.DataFrame(preds, columns=self._task_names)
+        # Apply per-task calibration where fitted (classification only).
+        for task, cal in (self._calib or {}).items():
+            if task in df.columns and cal and "a" in cal and "b" in cal:
+                df[task] = self._apply_platt(df[task].values, cal["a"], cal["b"])
+        return df
 
 # COMMAND ----------
 
@@ -141,7 +171,72 @@ _m = KermtADMETModel(); _m.load_context(_ctx)
 import pandas as pd
 _sample = ["CC(=O)Oc1ccccc1C(=O)O", "c1ccccc1", "CN1C=NC2=C1C(=O)N(C(=O)N2C)C"]
 _out = _m.predict(_ctx, pd.DataFrame({"smiles": _sample}))
-print("smoke test predictions:\n", _out)
+print("smoke test predictions (raw, uncalibrated):\n", _out)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Probability calibration (classification only)
+# MAGIC Fit a per-task **Platt** map on a labeled holdout (the checkpoint's `calibration.csv`,
+# MAGIC written by the fine-tune job, else `calibration_data_location`) so the served
+# MAGIC probabilities are comparable to ChemProp's — instead of the raw, miscalibrated sigmoid.
+# MAGIC The map is stored as plain JSON params and applied inside the PyFunc.
+
+# COMMAND ----------
+
+import json
+import numpy as np
+from sklearn.linear_model import LogisticRegression
+
+CALIB_PATH = "/local_disk0/calibration.json"
+calib: dict = {}
+
+calib_csv = None
+_ckpt_calib = f"{LOCAL_CKPT}/calibration.csv"
+if os.path.exists(_ckpt_calib):
+    calib_csv = _ckpt_calib
+elif calibration_data_location.strip():
+    calib_csv = calibration_data_location.strip()
+
+if dataset_type == "classification" and calib_csv:
+    print(f"Calibrating on holdout: {calib_csv}")
+    try:
+        hold = pd.read_csv(calib_csv)
+        raw = _m.predict(_ctx, pd.DataFrame({"smiles": hold["smiles"].astype(str).tolist()}))
+        for task in task_names:
+            if task not in hold.columns:
+                print(f"  {task}: not in holdout columns — skip")
+                continue
+            y = pd.to_numeric(hold[task], errors="coerce").to_numpy()
+            p = pd.to_numeric(raw[task], errors="coerce").to_numpy()
+            mask = ~(np.isnan(y) | np.isnan(p))
+            y, p = y[mask], p[mask]
+            n_pos = int((y == 1).sum())
+            if len(y) < 20 or n_pos < 5 or n_pos == len(y):
+                print(f"  {task}: too few/too-imbalanced ({len(y)} pts, {n_pos} pos) — skip calibration")
+                continue
+            pc = np.clip(p, 1e-6, 1 - 1e-6)
+            x = np.log(pc / (1 - pc)).reshape(-1, 1)
+            lr = LogisticRegression(solver="lbfgs").fit(x, y)  # regularized Platt (robust on small data)
+            calib[task] = {
+                "a": float(lr.coef_[0][0]), "b": float(lr.intercept_[0]),
+                "n": int(len(y)), "n_pos": n_pos,
+            }
+            print(f"  {task}: Platt a={calib[task]['a']:.3f} b={calib[task]['b']:.3f} "
+                  f"(n={len(y)}, pos={n_pos})")
+    except Exception as e:
+        print("Calibration skipped (error):", e)
+else:
+    print(f"No calibration (dataset_type={dataset_type}, holdout={calib_csv}). Serving raw probabilities.")
+
+with open(CALIB_PATH, "w") as _f:
+    json.dump(calib, _f)
+artifacts["calibration"] = CALIB_PATH
+
+# Verify the calibrated PyFunc loads + applies the map.
+_m2 = KermtADMETModel()
+_m2.load_context(PythonModelContext(artifacts=artifacts, model_config={}))
+print("smoke test predictions (calibrated):\n", _m2.predict(None, pd.DataFrame({"smiles": _sample})))
 
 # COMMAND ----------
 
@@ -158,7 +253,7 @@ with mlflow.start_run(run_name=f"register_{model_name}"):
     model_info = mlflow.pyfunc.log_model(
         artifact_path=model_name,
         python_model=KermtADMETModel(),
-        artifacts={"kermt_src": LOCAL_SRC, "checkpoint_dir": LOCAL_CKPT},
+        artifacts=artifacts,  # kermt_src + checkpoint_dir + calibration (Platt JSON)
         code_paths=[f"{LOCAL_SRC}/kermt", f"{LOCAL_SRC}/task"],
         signature=signature,
         input_example=pd.DataFrame({"smiles": _sample}),

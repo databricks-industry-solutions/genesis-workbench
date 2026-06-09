@@ -33,6 +33,11 @@ resources:
           default: kermt_admet
         - name: workload_type
           default: ${var.gpu_small_setting}
+        # Labeled holdout for probability calibration when the checkpoint has no
+        # calibration.csv (e.g. models fine-tuned before that was added). Defaults to
+        # the bundled TDC ClinTox test split.
+        - name: calibration_data_location
+          default: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/${var.cache_dir}/ft_data/clintox_test.csv
 
       job_clusters:
         - job_cluster_key: gpu_cluster

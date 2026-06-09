@@ -155,6 +155,13 @@ try:
             pass
         shutil.copytree(save_dir, weights_loc)
         print("weights ->", weights_loc)
+        # Carry the test split with the weights so the deploy job can fit probability
+        # calibration on a labeled holdout specific to this model.
+        try:
+            shutil.copy(local_test, f"{weights_loc}/calibration.csv")
+            print("calibration holdout ->", f"{weights_loc}/calibration.csv")
+        except Exception as _e:
+            print("could not stage calibration.csv:", _e)
 
         # --- record in kermt_weights ---
         ft_id = time.time_ns()
