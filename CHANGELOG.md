@@ -1,5 +1,49 @@
 # Genesis Workbench — Changelog
 
+## kermt_admet (2026-06-08) — KERMT: fine-tunable GNN ADMET model, served side-by-side with ChemProp
+
+Added **KERMT** (NVIDIA-BioNeMo *Kinetic GROVER Multi-Task*, Apache-2.0) as a fine-tunable small-molecule
+ADMET/tox model — a new `modules/small_molecule/kermt/kermt_v1` submodule plus the full app vertical. A
+user fine-tunes KERMT from GROVERbase on a SMILES+target assay, deploys the result as a serving endpoint,
+and the **ADMET & Safety** tab shows KERMT's prediction next to ChemProp's (the TEDDY/SCimilarity
+side-by-side pattern). Closes the long-parked "ADMET upgrade / KERMT" backlog item.
+
+### How it's built (decisions)
+
+- **No custom container — the ChemProp pattern on classic GPU compute.** KERMT is vendored at a pinned
+  commit and `%pip`-installed on a classic A10 (`15.4 gpu-ml`, py3.11) job; the BioNeMo container exists
+  only because BioNeMo ships container-only, which doesn't apply here.
+- **Lazy-import patch for `cuik_molmaker`.** KERMT hard-imports `cuik_molmaker` (conda-only, not on PyPI)
+  at module top, but every actual use is behind the `--use_cuikmolmaker_featurization` flag. We guard the
+  3 top-level imports (à la the proteina `remove_openbabel` fix) so KERMT runs **pip-only on the plain
+  RDKit featurization path** for *both* fine-tune and serving — which keeps the Model Serving env buildable
+  (avoids the GenMol serving-load saga).
+- **In-process PyFunc serving.** The deploy job wraps a fine-tuned checkpoint in an MLflow PyFunc that
+  loads the model once and predicts in-process (plain RDKit), returning the exact ChemProp ADMET contract
+  (`inputs=[smiles] → predictions=[{task: val}]`) so the ADMET service reuses its existing query path.
+- **Batch-workflow pattern for fine-tune.** Dispatch pre-creates the MLflow run (`feature=kermt_finetune`),
+  the orchestrator advances `job_status` (`submitted→training→complete/failed`), and `RunSearchSection`
+  shows it. The dispatch service resolves the job by name + queries `kermt_weights` via existing gwb
+  helpers — **no new library module / version bump** (avoids the app-env-reinstall 502 risk).
+- **NaN-sanitize the collator.** ClinTox salts/mixtures produce NaN/inf RDKit-2D descriptors that, with
+  `--no_features_scaling`, propagated to NaN model outputs (`roc_auc_score: Input contains NaN`); the
+  vendored collator now `np.nan_to_num`s them. Also pass `--warmup_epochs < epochs` (epochs==warmup zeroed
+  the LR-decay denominator → NaN LR).
+
+### Operational notes
+
+- GROVERbase weights are **OneDrive-only and not anonymously curl-able** (401/403) — pre-stage
+  `grover_base.pt` to `/Volumes/<catalog>/<schema>/kermt/pretrained/` once; the register job is
+  skip-if-exists with an overridable `grover_base_url`.
+- Default fine-tune sample = **TDC ClinTox** (validated: test AUC 0.922). The KERMT endpoint scale-to-zero
+  cold start is ~1 request; warmed predictions return in seconds.
+
+### Verified on ci-demo
+
+Register/stage (kermt_weights + ClinTox sample), ClinTox fine-tune (AUC 0.922, kermt_weights row +
+checkpoint + MLflow `complete`), deploy (`gwb_demo_kermt_admet_endpoint` READY, `model_deployments` row),
+live endpoint predicts in the ChemProp shape, settings/batch_models/app-perms provisioned.
+
 ## genmol_py311_deploy (2026-06-08) — Guided Molecule Design (GenMol), Inverse Folding, larger GPU endpoints, MLflow + UX consistency
 
 A batch of small-molecule, large-molecule, and app-wide improvements.

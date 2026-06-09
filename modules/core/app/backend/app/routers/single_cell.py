@@ -2167,6 +2167,7 @@ class TrajectoryUmapPoint(BaseModel):
     umap_0: float
     umap_1: float
     pseudotime: float
+    cluster: str = ""
 
 
 class TrajectoryGenePoint(BaseModel):
@@ -2174,11 +2175,32 @@ class TrajectoryGenePoint(BaseModel):
     expression: float
 
 
+class TrajectoryNode(BaseModel):
+    """A cluster centroid in UMAP space, for the trajectory backbone overlay."""
+    cluster: str
+    umap_0: float
+    umap_1: float
+    pseudotime: float
+    n_cells: int
+
+
+class TrajectoryEdge(BaseModel):
+    """A backbone edge between two cluster centroids, directed source→target
+    along increasing mean pseudotime."""
+    source: str
+    target: str
+
+
 class TrajectoryResponse(BaseModel):
     has_pseudotime: bool
     umap_points: list[TrajectoryUmapPoint]
     gene_points: list[TrajectoryGenePoint]
     genes: list[str]
+    # Cluster-to-cluster trajectory backbone: centroids + MST edges directed by
+    # pseudotime. Lets the UMAP show the inferred path between clusters, not just
+    # per-cell pseudotime colour.
+    trajectory_nodes: list[TrajectoryNode] = []
+    trajectory_edges: list[TrajectoryEdge] = []
 
 
 @router.post("/run-trajectory", response_model=TrajectoryResponse)
@@ -2197,6 +2219,7 @@ def run_trajectory(payload: TrajectoryRequest, _: CurrentUserDep) -> TrajectoryR
     genes = [c.replace("expr_", "") for c in expr_cols]
 
     sampled = df.sample(n=min(payload.max_points, len(df)), random_state=42)
+    has_cluster = "cluster" in df.columns
     umap_points: list[TrajectoryUmapPoint] = []
     if "UMAP_0" in df.columns and "UMAP_1" in df.columns:
         for _, row in sampled.iterrows():
@@ -2208,7 +2231,8 @@ def run_trajectory(payload: TrajectoryRequest, _: CurrentUserDep) -> TrajectoryR
                 continue
             if not (math.isfinite(x) and math.isfinite(y) and math.isfinite(t)):
                 continue
-            umap_points.append(TrajectoryUmapPoint(umap_0=x, umap_1=y, pseudotime=t))
+            cl = str(row["cluster"]) if has_cluster else ""
+            umap_points.append(TrajectoryUmapPoint(umap_0=x, umap_1=y, pseudotime=t, cluster=cl))
 
     gene_points: list[TrajectoryGenePoint] = []
     if payload.gene:
@@ -2231,11 +2255,65 @@ def run_trajectory(payload: TrajectoryRequest, _: CurrentUserDep) -> TrajectoryR
                 continue
             gene_points.append(TrajectoryGenePoint(pseudotime=t, expression=v))
 
+    # Cluster-to-cluster trajectory backbone: per-cluster UMAP centroids + a
+    # minimum-spanning-tree over them (Euclidean in UMAP space), with each edge
+    # directed from lower→higher mean pseudotime. Derived from the existing
+    # per-cell data so no re-analysis is needed.
+    traj_nodes: list[TrajectoryNode] = []
+    traj_edges: list[TrajectoryEdge] = []
+    if {"cluster", "UMAP_0", "UMAP_1"}.issubset(df.columns):
+        import numpy as _np
+
+        cg = df[["cluster", "UMAP_0", "UMAP_1", "dpt_pseudotime"]].dropna()
+        if not cg.empty:
+            cents = (
+                cg.groupby("cluster")
+                .agg(umap_0=("UMAP_0", "mean"), umap_1=("UMAP_1", "mean"),
+                     pseudotime=("dpt_pseudotime", "mean"), n=("UMAP_0", "size"))
+                .reset_index()
+            )
+            clusters = cents["cluster"].astype(str).tolist()
+            pts = cents[["umap_0", "umap_1"]].to_numpy(dtype=float)
+            pst = cents["pseudotime"].to_numpy(dtype=float)
+            K = len(clusters)
+            for i in range(K):
+                traj_nodes.append(TrajectoryNode(
+                    cluster=clusters[i], umap_0=float(pts[i, 0]), umap_1=float(pts[i, 1]),
+                    pseudotime=float(pst[i]), n_cells=int(cents["n"].iloc[i]),
+                ))
+            if K >= 2:
+                # Prim's MST over centroid distances.
+                INF = float("inf")
+                in_tree = [False] * K
+                dist = [INF] * K
+                parent = [-1] * K
+                dist[0] = 0.0
+                for _ in range(K):
+                    u, best = -1, INF
+                    for v in range(K):
+                        if not in_tree[v] and dist[v] < best:
+                            best, u = dist[v], v
+                    if u == -1:
+                        break
+                    in_tree[u] = True
+                    for w in range(K):
+                        if not in_tree[w]:
+                            d = float(_np.hypot(pts[u, 0] - pts[w, 0], pts[u, 1] - pts[w, 1]))
+                            if d < dist[w]:
+                                dist[w], parent[w] = d, u
+                for v in range(K):
+                    a = parent[v]
+                    if a >= 0:
+                        src, tgt = (a, v) if pst[a] <= pst[v] else (v, a)
+                        traj_edges.append(TrajectoryEdge(source=clusters[src], target=clusters[tgt]))
+
     resp = TrajectoryResponse(
         has_pseudotime=True,
         umap_points=umap_points,
         gene_points=gene_points,
         genes=sorted(genes),
+        trajectory_nodes=traj_nodes,
+        trajectory_edges=traj_edges,
     )
     # Persist only the per-gene trace (skip the big per-cell pseudotime UMAP,
     # which is identical across genes) when a gene is selected.

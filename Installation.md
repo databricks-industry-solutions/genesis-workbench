@@ -105,7 +105,7 @@ The diagrams below show the sub-modules, Databricks workflows, and model-serving
 
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment_small_molecule.png" alt="Small Molecule module deployment" width="900"/>
 
-**Sub-modules:** `genmol`, `diffdock`, `chemprop`, `proteina_complexa`, `netsolp`, `pltnum`, `deepstabp`, `mhcflurry`
+**Sub-modules:** `genmol`, `kermt`, `diffdock`, `chemprop`, `proteina_complexa`, `netsolp`, `pltnum`, `deepstabp`, `mhcflurry`
 
 #### Genomics
 
