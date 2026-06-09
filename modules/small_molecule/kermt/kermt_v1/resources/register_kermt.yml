@@ -14,6 +14,14 @@ resources:
             notebook_path: ../notebooks/01_register_kermt.py
           max_retries: 0
 
+        - task_key: register_kermt_jobs_task
+          depends_on:
+            - task_key: stage_kermt_task
+          job_cluster_key: stage_cluster
+          notebook_task:
+            notebook_path: ../notebooks/register_kermt_jobs.py
+          max_retries: 0
+
       parameters:
         - name: catalog
           default: ${var.core_catalog_name}
@@ -33,6 +41,12 @@ resources:
           default: ClinTox
         - name: target_name
           default: toxicity
+        - name: kermt_finetune_job_id
+          default: ${resources.jobs.kermt_finetune.id}
+        - name: kermt_deploy_job_id
+          default: ${resources.jobs.kermt_deploy.id}
+        - name: databricks_app_name
+          default: genesis-workbench
 
       job_clusters:
         - job_cluster_key: stage_cluster
