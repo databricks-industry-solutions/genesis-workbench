@@ -356,6 +356,12 @@ export function AdmetSafetyTab() {
                                   {riskLabel(kermtPrimary)}
                                 </div>
                               )}
+                              <div
+                                className="mt-0.5 text-[9px] text-muted-foreground"
+                                title="Probabilities Platt-calibrated on the ClinTox holdout"
+                              >
+                                Calibrated · ClinTox
+                              </div>
                             </div>
                             <div className="rounded-md border border-border bg-muted/30 p-2 text-xs">
                               <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
