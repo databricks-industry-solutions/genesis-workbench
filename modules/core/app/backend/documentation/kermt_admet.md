@@ -20,7 +20,7 @@ ADMET (the same pattern as TEDDY running alongside SCimilarity for cell-type ann
 
 ## How to Use
 
-### Fine-tune (Small Molecule → **KERMT (ADMET fine-tune)**)
+### Fine-tune (NVIDIA BioNeMo → **KERMT**)
 
 1. The train/val/test CSV paths are pre-filled with the bundled TDC **ClinTox** sample
    (`/Volumes/<catalog>/<schema>/kermt/ft_data/clintox_{train,val,test}.csv`). Each CSV has a `smiles`

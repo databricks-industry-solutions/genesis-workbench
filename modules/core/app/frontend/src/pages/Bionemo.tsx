@@ -3,6 +3,7 @@
 import { Tabs } from '@/components/Tabs'
 import { BionemoFinetuneTab } from '@/components/bionemo/BionemoFinetuneTab'
 import { BionemoInferenceTab } from '@/components/bionemo/BionemoInferenceTab'
+import { KermtFinetuneTab } from '@/components/bionemo/KermtFinetuneTab'
 
 function Esm2Tab() {
   return (
@@ -28,6 +29,7 @@ export function BionemoPage() {
     <div className="space-y-6 px-8 py-8">
       <Tabs
         tabs={[
+          { id: 'kermt', label: 'KERMT', content: <KermtFinetuneTab /> },
           { id: 'esm2', label: 'ESM2', content: <Esm2Tab /> },
           { id: 'geneformer', label: 'Geneformer', content: <GeneformerTab /> },
         ]}

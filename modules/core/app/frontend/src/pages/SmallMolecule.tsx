@@ -2,7 +2,6 @@ import { Tabs } from '@/components/Tabs'
 import { AdmetSafetyTab } from '@/components/AdmetSafetyTab'
 import { DeployedModelsButton } from '@/components/DeployedModelsButton'
 import { GuidedMoleculeOptimizationTab } from '@/components/GuidedMoleculeOptimizationTab'
-import { KermtFinetuneTab } from '@/components/KermtFinetuneTab'
 import { LigandBinderDesignTab } from '@/components/LigandBinderDesignTab'
 import { MolecularDockingTab } from '@/components/MolecularDockingTab'
 import { MotifScaffoldingTab } from '@/components/MotifScaffoldingTab'
@@ -37,11 +36,6 @@ export function SmallMoleculePage() {
             id: 'admet',
             label: 'ADMET & Safety',
             content: <AdmetSafetyTab />,
-          },
-          {
-            id: 'kermt',
-            label: 'KERMT (ADMET fine-tune)',
-            content: <KermtFinetuneTab />,
           },
         ]}
       />

@@ -57,7 +57,7 @@ Drug-discovery essentials. Generate novel candidate molecules from a seed scaffo
 
 **Models bundled:** GenMol, KERMT, ChemProp, DiffDock, Proteina-Complexa, NetSolP-1.0, PLTNUM-ESM2, DeepSTABp, MHCflurry 2.x
 
-📖 [Guided Molecule Design](modules/core/app/backend/documentation/guided_molecule_design.md) · [Molecular Docking](modules/core/app/backend/documentation/molecular_docking.md) · [Protein Binder Design](modules/core/app/backend/documentation/protein_binder_design.md) · [Ligand Binder Design](modules/core/app/backend/documentation/ligand_binder_design.md) · [Motif Scaffolding](modules/core/app/backend/documentation/motif_scaffolding.md) · [ADMET & Safety](modules/core/app/backend/documentation/admet_safety.md) · [KERMT (ADMET fine-tune)](modules/core/app/backend/documentation/kermt_admet.md)
+📖 [Guided Molecule Design](modules/core/app/backend/documentation/guided_molecule_design.md) · [Molecular Docking](modules/core/app/backend/documentation/molecular_docking.md) · [Protein Binder Design](modules/core/app/backend/documentation/protein_binder_design.md) · [Ligand Binder Design](modules/core/app/backend/documentation/ligand_binder_design.md) · [Motif Scaffolding](modules/core/app/backend/documentation/motif_scaffolding.md) · [ADMET & Safety](modules/core/app/backend/documentation/admet_safety.md)
 
 ### Genomics
 Variant analysis at population scale. Call germline variants from FASTQ files with GPU-accelerated NVIDIA Parabricks, ingest VCFs into Delta tables for fast SQL/Spark queries, run genome-wide association studies (GWAS) using Glow, and annotate variants with ClinVar clinical-significance data. Inline interactive charts in the UI break down findings by gene, ACMG category, clinical significance, and zygosity.
@@ -67,9 +67,9 @@ Variant analysis at population scale. Call germline variants from FASTQ files wi
 📖 [Variant Calling](modules/core/app/backend/documentation/variant_calling.md) · [VCF Ingestion](modules/core/app/backend/documentation/vcf_ingestion.md) · [GWAS Analysis](modules/core/app/backend/documentation/gwas_analysis.md) · [Variant Annotation](modules/core/app/backend/documentation/variant_annotation.md)
 
 ### NVIDIA BioNeMo
-NVIDIA's generative AI framework for digital biology. The optional BioNeMo module ships container definitions and workflows that expose pre-trained BioNeMo models, starting with ESM-2 fine-tuning and inference. Containers are optimized for NVIDIA hardware and integrated into Genesis Workbench's job system, MLflow registry, and model-serving infrastructure.
+NVIDIA's generative AI framework for digital biology. The optional BioNeMo module ships container definitions and workflows that expose pre-trained BioNeMo models, starting with ESM-2 fine-tuning and inference. It also hosts the **KERMT** fine-tune workflow (Kinetic GROVER Multi-Task — a small-molecule ADMET GNN), whose served endpoint is compared side-by-side with ChemProp in the Small Molecule ADMET tab. Containers are optimized for NVIDIA hardware and integrated into Genesis Workbench's job system, MLflow registry, and model-serving infrastructure.
 
-📖 [ESM2 Fine-tuning & Inference](modules/core/app/backend/documentation/bionemo_esm2.md)
+📖 [ESM2 Fine-tuning & Inference](modules/core/app/backend/documentation/bionemo_esm2.md) · [KERMT (ADMET fine-tune)](modules/core/app/backend/documentation/kermt_admet.md)
 
 📚 **Full workflow catalog:** [documentation index](modules/core/app/backend/documentation/index.md)
 
