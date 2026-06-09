@@ -54,11 +54,26 @@ def predict_admet(smiles_list: list[str]) -> list[dict]:
     return [{"prediction": v} for v in raw]
 
 
+def predict_kermt(smiles_list: list[str]) -> list[dict]:
+    """KERMT (Kinetic GROVER Multi-Task) ADMET endpoint. Same flat
+    `inputs=[smi, …]` contract and `[{task: val}, …]` response shape as the
+    Chemprop ADMET head, so it renders side-by-side with Chemprop."""
+    raw = _query_chemprop(get_endpoint_name("KERMT ADMET"), smiles_list)
+    if not raw:
+        return []
+    if isinstance(raw, dict) and "predictions" in raw:
+        raw = raw["predictions"]
+    if isinstance(raw, list) and raw and isinstance(raw[0], dict):
+        return raw
+    return [{"prediction": v} for v in raw]
+
+
 def run_admet_profiling(
     smiles_list: list[str],
     run_bbbp: bool,
     run_clintox: bool,
     run_admet: bool,
+    run_kermt: bool = False,
     progress_callback: Callable[[int, str], None] | None = None,
 ) -> dict:
     """Run any subset of the three predictors. Returns `{bbbp?, clintox?,
@@ -68,7 +83,7 @@ def run_admet_profiling(
         if progress_callback:
             progress_callback(pct, msg)
 
-    enabled = [run_bbbp, run_clintox, run_admet]
+    enabled = [run_bbbp, run_clintox, run_admet, run_kermt]
     total_steps = sum(enabled) or 1
     step = 0
     warnings: list[str] = []
@@ -110,6 +125,17 @@ def run_admet_profiling(
             warnings.append(f"ADMET property prediction failed: {e}")
         step += 1
         _p(_step_pct(), "ADMET multi-task complete")
+
+    if run_kermt:
+        _p(10 + int(step / total_steps * 85), "Predicting with KERMT (GROVER multi-task)")
+        try:
+            out["kermt"] = predict_kermt(smiles_list)
+        except Exception as e:
+            logger.warning("KERMT ADMET failed: %s", e)
+            out["kermt"] = []
+            warnings.append(f"KERMT prediction failed: {e}")
+        step += 1
+        _p(_step_pct(), "KERMT prediction complete")
 
     out["warnings"] = warnings
     return out

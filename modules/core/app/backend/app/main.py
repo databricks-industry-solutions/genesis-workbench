@@ -13,6 +13,7 @@ from app.routers import (
     docs,
     genomics,
     health,
+    kermt,
     large_molecule,
     me,
     models,
@@ -62,6 +63,7 @@ app.include_router(single_cell.router)
 app.include_router(small_molecule.router)
 app.include_router(genomics.router)
 app.include_router(bionemo.router)
+app.include_router(kermt.router)
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 
