@@ -2167,6 +2167,7 @@ class TrajectoryUmapPoint(BaseModel):
     umap_0: float
     umap_1: float
     pseudotime: float
+    cluster: str = ""
 
 
 class TrajectoryGenePoint(BaseModel):
@@ -2218,6 +2219,7 @@ def run_trajectory(payload: TrajectoryRequest, _: CurrentUserDep) -> TrajectoryR
     genes = [c.replace("expr_", "") for c in expr_cols]
 
     sampled = df.sample(n=min(payload.max_points, len(df)), random_state=42)
+    has_cluster = "cluster" in df.columns
     umap_points: list[TrajectoryUmapPoint] = []
     if "UMAP_0" in df.columns and "UMAP_1" in df.columns:
         for _, row in sampled.iterrows():
@@ -2229,7 +2231,8 @@ def run_trajectory(payload: TrajectoryRequest, _: CurrentUserDep) -> TrajectoryR
                 continue
             if not (math.isfinite(x) and math.isfinite(y) and math.isfinite(t)):
                 continue
-            umap_points.append(TrajectoryUmapPoint(umap_0=x, umap_1=y, pseudotime=t))
+            cl = str(row["cluster"]) if has_cluster else ""
+            umap_points.append(TrajectoryUmapPoint(umap_0=x, umap_1=y, pseudotime=t, cluster=cl))
 
     gene_points: list[TrajectoryGenePoint] = []
     if payload.gene:

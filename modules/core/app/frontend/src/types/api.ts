@@ -326,7 +326,7 @@ export type EnrichmentTerm = {
 }
 export type EnrichmentResponse = { terms: EnrichmentTerm[]; available_dbs: string[] }
 
-export type TrajectoryUmapPoint = { umap_0: number; umap_1: number; pseudotime: number }
+export type TrajectoryUmapPoint = { umap_0: number; umap_1: number; pseudotime: number; cluster?: string }
 export type TrajectoryGenePoint = { pseudotime: number; expression: number }
 export type TrajectoryNode = {
   cluster: string

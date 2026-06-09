@@ -1699,6 +1699,25 @@ export function TrajectorySubTab({
 
   const clipAdd = useClipboard((s) => s.add)
 
+  // Saved cell-type annotations (if the user ran/saved SCimilarity or TEDDY) →
+  // cluster → cell type, surfaced on hover like the other plots. SCimilarity
+  // takes precedence; TEDDY fills any gaps.
+  const savedAnno = useQuery({
+    queryKey: ['sc', 'saved-anno', runId],
+    queryFn: () => api.singleCellSavedAnnotations(runId),
+    staleTime: 60_000,
+  })
+  const cellTypeByCluster = useMemo(() => {
+    const m: Record<string, string> = {}
+    Object.entries(savedAnno.data?.teddy?.cluster_to_cell_type ?? {}).forEach(([k, v]) => {
+      if (v) m[k] = v
+    })
+    savedAnno.data?.scimilarity?.annotations?.forEach((a) => {
+      if (a.predicted_cell_type) m[a.cluster] = a.predicted_cell_type
+    })
+    return m
+  }, [savedAnno.data])
+
   // Auto AI interpretation of the selected gene's dynamics along pseudotime.
   const trajNarrative = useMutation({
     mutationFn: () => {
@@ -1804,7 +1823,12 @@ export function TrajectorySubTab({
                   showscale: true,
                   colorbar: { title: { text: 'Pseudotime' } },
                 },
-                hovertemplate: 'Pseudotime: %{marker.color:.3f}<extra></extra>',
+                customdata: traj.data!.umap_points.map((p) => {
+                  const cl = p.cluster ?? ''
+                  const ct = cl ? cellTypeByCluster[cl] || '' : ''
+                  return [cl ? `Cluster ${cl}${ct ? ` · ${ct}` : ''}` : 'Cell']
+                }),
+                hovertemplate: '%{customdata[0]}<br>Pseudotime: %{marker.color:.3f}<extra></extra>',
                 showlegend: false,
               },
             ]
@@ -1824,8 +1848,13 @@ export function TrajectorySubTab({
                   line: { color: '#0b0b0b', width: 1.5 },
                   showscale: false,
                 },
+                customdata: nodes.map((n) => {
+                  const ct = cellTypeByCluster[n.cluster] || ''
+                  return [ct ? ` · ${ct}` : '', n.n_cells]
+                }),
                 hovertemplate:
-                  'Cluster %{text}<br>mean pseudotime %{marker.color:.3f}<extra></extra>',
+                  'Cluster %{text}%{customdata[0]}<br>mean pseudotime %{marker.color:.3f}'
+                  + '<br>%{customdata[1]} cells<extra></extra>',
                 showlegend: false,
               })
             }
