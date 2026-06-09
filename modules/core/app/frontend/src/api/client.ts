@@ -13,6 +13,10 @@ import type {
   BootstrapResponse,
   DBSearchResponse,
   DeployedModelsResponse,
+  KermtDefaults,
+  KermtDispatchResponse,
+  KermtFinetuneRequest,
+  KermtWeight,
   GenomicsDefaultsResponse,
   DockingExampleResponse,
   DocsResponse,
@@ -504,4 +508,22 @@ export const api = {
     request<BionemoFinetuneRunDetails>(
       `/api/bionemo/inference/run-details?run_id=${encodeURIComponent(run_id)}`,
     ),
+
+  // KERMT (fine-tune + deploy a small-molecule ADMET model)
+  kermtDefaults: () => request<KermtDefaults>('/api/kermt/defaults'),
+  kermtWeights: () => request<{ weights: KermtWeight[] }>('/api/kermt/weights'),
+  kermtFinetune: (body: KermtFinetuneRequest) =>
+    request<KermtDispatchResponse>('/api/kermt/finetune', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  kermtFinetuneSearch: (by: 'run_name' | 'experiment_name', text: string) =>
+    request<DBSearchResponse>(
+      `/api/kermt/finetune/search?by=${by}&text=${encodeURIComponent(text)}`,
+    ),
+  kermtDeploy: (body: { ft_id: string; model_name?: string; workload_type?: string }) =>
+    request<KermtDispatchResponse>('/api/kermt/deploy', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 }

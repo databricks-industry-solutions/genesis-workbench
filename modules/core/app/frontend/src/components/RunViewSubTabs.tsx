@@ -1688,6 +1688,7 @@ export function TrajectorySubTab({
   summary: RunSummaryResponse
 }) {
   const [gene, setGene] = useState<string | null>(null)
+  const [showBackbone, setShowBackbone] = useState(true)
 
   const traj = useQuery({
     queryKey: ['sc', 'trajectory', runId, gene],
@@ -1697,6 +1698,25 @@ export function TrajectorySubTab({
   })
 
   const clipAdd = useClipboard((s) => s.add)
+
+  // Saved cell-type annotations (if the user ran/saved SCimilarity or TEDDY) →
+  // cluster → cell type, surfaced on hover like the other plots. SCimilarity
+  // takes precedence; TEDDY fills any gaps.
+  const savedAnno = useQuery({
+    queryKey: ['sc', 'saved-anno', runId],
+    queryFn: () => api.singleCellSavedAnnotations(runId),
+    staleTime: 60_000,
+  })
+  const cellTypeByCluster = useMemo(() => {
+    const m: Record<string, string> = {}
+    Object.entries(savedAnno.data?.teddy?.cluster_to_cell_type ?? {}).forEach(([k, v]) => {
+      if (v) m[k] = v
+    })
+    savedAnno.data?.scimilarity?.annotations?.forEach((a) => {
+      if (a.predicted_cell_type) m[a.cluster] = a.predicted_cell_type
+    })
+    return m
+  }, [savedAnno.data])
 
   // Auto AI interpretation of the selected gene's dynamics along pseudotime.
   const trajNarrative = useMutation({
@@ -1725,6 +1745,15 @@ export function TrajectorySubTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [traj.data, gene])
 
+  // AI interpretation is the final stage of the gene flow (same pattern as DE /
+  // enrichment / perturbation): one progress bar runs through interpretation and
+  // the gene panel is revealed only once the narrative settles.
+  const hasGenePoints = (traj.data?.gene_points?.length ?? 0) > 0
+  const narrativeSettled = trajNarrative.isSuccess || trajNarrative.isError
+  const geneLoading = !!gene && traj.isFetching
+  const interpreting = !!gene && hasGenePoints && !traj.isFetching && !narrativeSettled
+  const showGeneResults = !!gene && hasGenePoints && narrativeSettled
+
   if (!summary.has_pseudotime) {
     return (
       <div className="rounded-md border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
@@ -1736,8 +1765,18 @@ export function TrajectorySubTab({
 
   return (
     <div className="space-y-4">
-      <header>
+      <header className="flex items-center justify-between gap-3">
         <h4 className="text-sm font-medium">Trajectory (diffusion pseudotime)</h4>
+        {(traj.data?.trajectory_nodes?.length ?? 0) > 0 && (
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={showBackbone}
+              onChange={(e) => setShowBackbone(e.target.checked)}
+            />
+            Show cluster trajectory
+          </label>
+        )}
       </header>
       {traj.isLoading && <div className="text-sm text-muted-foreground">Loading…</div>}
       {traj.error && (
@@ -1748,38 +1787,103 @@ export function TrajectorySubTab({
 
       {traj.data && traj.data.umap_points.length > 0 && (
         <div className="rounded-md border border-border bg-card p-2">
-          <Plot
-            data={[
+          {(() => {
+            const nodes = traj.data!.trajectory_nodes ?? []
+            const edges = traj.data!.trajectory_edges ?? []
+            const nodeById = Object.fromEntries(nodes.map((n) => [n.cluster, n]))
+            const drawBackbone = showBackbone && nodes.length > 0
+            // Directed edges between cluster centroids as plotly arrow annotations
+            // (low→high pseudotime). A handful of edges, so annotations are fine.
+            const edgeArrows = drawBackbone
+              ? edges.flatMap((e) => {
+                  const s = nodeById[e.source]
+                  const t = nodeById[e.target]
+                  if (!s || !t) return []
+                  return [
+                    {
+                      x: t.umap_0, y: t.umap_1, ax: s.umap_0, ay: s.umap_1,
+                      xref: 'x', yref: 'y', axref: 'x', ayref: 'y',
+                      showarrow: true, arrowhead: 3, arrowsize: 1.2, arrowwidth: 1.6,
+                      arrowcolor: 'rgba(229,231,235,0.85)', standoff: 10, startstandoff: 10,
+                    },
+                  ]
+                })
+              : []
+            const data: unknown[] = [
               {
                 type: 'scattergl' as const,
                 mode: 'markers' as const,
-                x: traj.data.umap_points.map((p) => p.umap_0),
-                y: traj.data.umap_points.map((p) => p.umap_1),
+                x: traj.data!.umap_points.map((p) => p.umap_0),
+                y: traj.data!.umap_points.map((p) => p.umap_1),
                 marker: {
-                  color: traj.data.umap_points.map((p) => p.pseudotime),
+                  color: traj.data!.umap_points.map((p) => p.pseudotime),
                   colorscale: 'Viridis',
                   size: 3,
-                  opacity: 0.75,
+                  opacity: 0.7,
                   showscale: true,
                   colorbar: { title: { text: 'Pseudotime' } },
                 },
-                hovertemplate: 'Pseudotime: %{marker.color:.3f}<extra></extra>',
-              } as never,
-            ]}
-            layout={{
-              title: { text: 'UMAP — coloured by pseudotime' },
-              height: 500,
-              paper_bgcolor: 'rgba(0,0,0,0)',
-              plot_bgcolor: 'rgba(0,0,0,0)',
-              font: { size: 11 },
-              xaxis: { title: { text: 'UMAP_0' }, gridcolor: '#333' },
-              yaxis: { title: { text: 'UMAP_1' }, gridcolor: '#333' },
-              margin: { l: 50, r: 20, t: 50, b: 50 },
-            }}
-            config={{ displaylogo: false, responsive: true }}
-            style={{ width: '100%' }}
-            useResizeHandler
-          />
+                customdata: traj.data!.umap_points.map((p) => {
+                  const cl = p.cluster ?? ''
+                  const ct = cl ? cellTypeByCluster[cl] || '' : ''
+                  return [cl ? `Cluster ${cl}${ct ? ` · ${ct}` : ''}` : 'Cell']
+                }),
+                hovertemplate: '%{customdata[0]}<br>Pseudotime: %{marker.color:.3f}<extra></extra>',
+                showlegend: false,
+              },
+            ]
+            if (drawBackbone) {
+              data.push({
+                type: 'scattergl' as const,
+                mode: 'markers+text' as const,
+                x: nodes.map((n) => n.umap_0),
+                y: nodes.map((n) => n.umap_1),
+                text: nodes.map((n) => n.cluster),
+                textposition: 'top center',
+                textfont: { size: 11, color: '#e5e7eb' },
+                marker: {
+                  size: 13,
+                  color: nodes.map((n) => n.pseudotime),
+                  colorscale: 'Viridis',
+                  line: { color: '#0b0b0b', width: 1.5 },
+                  showscale: false,
+                },
+                customdata: nodes.map((n) => {
+                  const ct = cellTypeByCluster[n.cluster] || ''
+                  return [ct ? ` · ${ct}` : '', n.n_cells]
+                }),
+                hovertemplate:
+                  'Cluster %{text}%{customdata[0]}<br>mean pseudotime %{marker.color:.3f}'
+                  + '<br>%{customdata[1]} cells<extra></extra>',
+                showlegend: false,
+              })
+            }
+            return (
+              <Plot
+                data={data as never[]}
+                layout={
+                  {
+                    title: {
+                      text: drawBackbone
+                        ? 'UMAP — pseudotime + cluster trajectory'
+                        : 'UMAP — coloured by pseudotime',
+                    },
+                    height: 500,
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    font: { size: 11 },
+                    xaxis: { title: { text: 'UMAP_0' }, gridcolor: '#333' },
+                    yaxis: { title: { text: 'UMAP_1' }, gridcolor: '#333' },
+                    margin: { l: 50, r: 20, t: 50, b: 50 },
+                    annotations: edgeArrows,
+                  } as never
+                }
+                config={{ displaylogo: false, responsive: true }}
+                style={{ width: '100%' }}
+                useResizeHandler
+              />
+            )
+          })()}
         </div>
       )}
 
@@ -1813,7 +1917,18 @@ export function TrajectorySubTab({
         )}
       </div>
 
-      {gene && (traj.data?.gene_points?.length ?? 0) > 0 && (
+      {gene && (geneLoading || interpreting) && (
+        <WorkflowProgress
+          active
+          title={`${gene} along pseudotime`}
+          stages={[
+            { label: 'Computing expression along pseudotime', estSeconds: 4 },
+            { label: 'Interpreting Results', estSeconds: 8 },
+          ]}
+        />
+      )}
+
+      {showGeneResults && (
         <NarrativePanel
           isPending={trajNarrative.isPending}
           data={trajNarrative.data}
@@ -1822,7 +1937,7 @@ export function TrajectorySubTab({
         />
       )}
 
-      {traj.data && traj.data.gene_points.length > 0 && gene && (
+      {showGeneResults && traj.data && traj.data.gene_points.length > 0 && (
         <div className="rounded-md border border-border bg-card p-2">
           {(() => {
             const xs = traj.data.gene_points.map((p) => p.pseudotime)

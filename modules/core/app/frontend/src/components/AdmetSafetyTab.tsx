@@ -46,6 +46,7 @@ export function AdmetSafetyTab() {
   const [runBbbp, setRunBbbp] = useState(true)
   const [runClintox, setRunClintox] = useState(true)
   const [runAdmet, setRunAdmet] = useState(true)
+  const [runKermt, setRunKermt] = useState(true)
   const [experiment, setExperiment] = useState('gwb_admet_safety')
   const [runName, setRunName] = useState(`admet_profiling_${ts()}`)
   const [expandedIdx, setExpandedIdx] = useState<number | null>(0)
@@ -56,6 +57,7 @@ export function AdmetSafetyTab() {
       run_bbbp: boolean
       run_clintox: boolean
       run_admet: boolean
+      run_kermt: boolean
       mlflow_experiment: string
       mlflow_run_name: string
     },
@@ -76,7 +78,7 @@ export function AdmetSafetyTab() {
     smilesList.length > 0 &&
     experiment.trim() &&
     runName.trim() &&
-    (runBbbp || runClintox || runAdmet)
+    (runBbbp || runClintox || runAdmet || runKermt)
 
   const runProfile = () =>
     profile.start({
@@ -84,6 +86,7 @@ export function AdmetSafetyTab() {
       run_bbbp: runBbbp,
       run_clintox: runClintox,
       run_admet: runAdmet,
+      run_kermt: runKermt,
       mlflow_experiment: experiment,
       mlflow_run_name: runName,
     })
@@ -94,7 +97,8 @@ export function AdmetSafetyTab() {
 
   const enabledStages = useMemo(() => {
     const stages: { label: string; pctEnd: number }[] = []
-    const enabledCount = Number(runBbbp) + Number(runClintox) + Number(runAdmet)
+    const enabledCount =
+      Number(runBbbp) + Number(runClintox) + Number(runAdmet) + Number(runKermt)
     if (enabledCount === 0) return stages
     const step = 85 / enabledCount
     let acc = 10
@@ -110,9 +114,13 @@ export function AdmetSafetyTab() {
       acc += step
       stages.push({ label: 'ADMET multi-task (Chemprop)', pctEnd: Math.round(acc) })
     }
+    if (runKermt) {
+      acc += step
+      stages.push({ label: 'KERMT toxicity (GROVER)', pctEnd: Math.round(acc) })
+    }
     stages.push({ label: 'Logging to MLflow', pctEnd: 100 })
     return stages
-  }, [runBbbp, runClintox, runAdmet])
+  }, [runBbbp, runClintox, runAdmet, runKermt])
 
   return (
     <div className="space-y-4">
@@ -186,6 +194,14 @@ export function AdmetSafetyTab() {
                 onChange={(e) => setRunAdmet(e.target.checked)}
               />
               <span>ADMET properties (multi-task regression)</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={runKermt}
+                onChange={(e) => setRunKermt(e.target.checked)}
+              />
+              <span>KERMT toxicity (GROVER — compare side-by-side with Chemprop)</span>
             </label>
           </div>
 
@@ -280,6 +296,12 @@ export function AdmetSafetyTab() {
                   const bbbp = profile.data!.bbbp?.[idx] ?? null
                   const clintox = profile.data!.clintox?.[idx] ?? null
                   const admetRow = profile.data!.admet?.[idx] ?? null
+                  const kermtRow = profile.data!.kermt?.[idx] ?? null
+                  const kermtPrimary = kermtRow
+                    ? ((Object.values(kermtRow).find(
+                        (v) => v != null && !Number.isNaN(v as number),
+                      ) as number | undefined) ?? null)
+                    : null
                   const admetPropCount = admetRow
                     ? Object.values(admetRow).filter((v) => v != null && !Number.isNaN(v as number))
                         .length
@@ -301,7 +323,7 @@ export function AdmetSafetyTab() {
                       </button>
                       {expanded && (
                         <div className="space-y-3 border-t border-border p-3">
-                          <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
                             <div className="rounded-md border border-border bg-muted/30 p-2 text-xs">
                               <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
                                 BBB penetration
@@ -315,7 +337,7 @@ export function AdmetSafetyTab() {
                             </div>
                             <div className="rounded-md border border-border bg-muted/30 p-2 text-xs">
                               <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                Toxicity risk
+                                Toxicity (Chemprop)
                               </div>
                               <div className="text-sm font-medium">{fmtPct(clintox)}</div>
                               {clintox != null && (
@@ -323,6 +345,23 @@ export function AdmetSafetyTab() {
                                   {riskLabel(clintox)}
                                 </div>
                               )}
+                            </div>
+                            <div className="rounded-md border border-primary/40 bg-primary/5 p-2 text-xs">
+                              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Toxicity (KERMT)
+                              </div>
+                              <div className="text-sm font-medium">{fmtPct(kermtPrimary)}</div>
+                              {kermtPrimary != null && (
+                                <div className={cn('mt-0.5 text-[10px]', riskColor(kermtPrimary))}>
+                                  {riskLabel(kermtPrimary)}
+                                </div>
+                              )}
+                              <div
+                                className="mt-0.5 text-[9px] text-muted-foreground"
+                                title="Probabilities Platt-calibrated on the ClinTox holdout"
+                              >
+                                Calibrated · ClinTox
+                              </div>
                             </div>
                             <div className="rounded-md border border-border bg-muted/30 p-2 text-xs">
                               <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -333,6 +372,25 @@ export function AdmetSafetyTab() {
                               </div>
                             </div>
                           </div>
+
+                          {kermtRow && Object.keys(kermtRow).length > 1 && (
+                            <div>
+                              <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                                KERMT breakdown
+                              </div>
+                              <div className="grid grid-cols-1 gap-1 text-xs sm:grid-cols-2">
+                                {Object.entries(kermtRow).map(([k, v]) => (
+                                  <div
+                                    key={k}
+                                    className="flex justify-between gap-3 rounded-md bg-primary/5 px-2 py-1"
+                                  >
+                                    <span className="text-muted-foreground">{k}</span>
+                                    <span className="font-mono">{fmtFloat(v as number)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
 
                           {admetRow && (
                             <div>

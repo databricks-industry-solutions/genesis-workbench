@@ -53,9 +53,9 @@ Protein structure prediction, design, and engineering. Fold proteins in seconds 
 📖 [Protein Structure Prediction](modules/core/app/backend/documentation/protein_structure_prediction.md) · [Protein Design](modules/core/app/backend/documentation/protein_design.md) · [Inverse Folding](modules/core/app/backend/documentation/inverse_folding.md) · [Sequence Similarity Search](modules/core/app/backend/documentation/sequence_search.md) · [Guided Enzyme Optimization](modules/core/app/backend/documentation/enzyme_optimization.md)
 
 ### Small Molecule
-Drug-discovery essentials. Generate novel candidate molecules from a seed scaffold or binding motif with **GenMol** in a hard-constraint generate→score→reseed loop (**Guided Molecule Design**), profile candidates for drug-like properties and toxicity with ChemProp, predict protein-ligand binding poses with DiffDock, design protein binders to a target protein or small molecule with Proteina-Complexa, and transplant functional motifs into new scaffolds. Each generated candidate can be scored on developability through NetSolP (solubility), PLTNUM-ESM2 (relative half-life), DeepSTABp (melting temperature), and MHCflurry (immunogenic burden).
+Drug-discovery essentials. Generate novel candidate molecules from a seed scaffold or binding motif with **GenMol** in a hard-constraint generate→score→reseed loop (**Guided Molecule Design**), profile candidates for drug-like properties and toxicity with ChemProp, predict protein-ligand binding poses with DiffDock, design protein binders to a target protein or small molecule with Proteina-Complexa, and transplant functional motifs into new scaffolds. Fine-tune **KERMT** (NVIDIA-BioNeMo's Kinetic GROVER Multi-Task GNN) on your own ADMET/tox assay and serve it side-by-side with ChemProp. Each generated candidate can be scored on developability through NetSolP (solubility), PLTNUM-ESM2 (relative half-life), DeepSTABp (melting temperature), and MHCflurry (immunogenic burden).
 
-**Models bundled:** GenMol, ChemProp, DiffDock, Proteina-Complexa, NetSolP-1.0, PLTNUM-ESM2, DeepSTABp, MHCflurry 2.x
+**Models bundled:** GenMol, KERMT, ChemProp, DiffDock, Proteina-Complexa, NetSolP-1.0, PLTNUM-ESM2, DeepSTABp, MHCflurry 2.x
 
 📖 [Guided Molecule Design](modules/core/app/backend/documentation/guided_molecule_design.md) · [Molecular Docking](modules/core/app/backend/documentation/molecular_docking.md) · [Protein Binder Design](modules/core/app/backend/documentation/protein_binder_design.md) · [Ligand Binder Design](modules/core/app/backend/documentation/ligand_binder_design.md) · [Motif Scaffolding](modules/core/app/backend/documentation/motif_scaffolding.md) · [ADMET & Safety](modules/core/app/backend/documentation/admet_safety.md)
 
@@ -67,9 +67,9 @@ Variant analysis at population scale. Call germline variants from FASTQ files wi
 📖 [Variant Calling](modules/core/app/backend/documentation/variant_calling.md) · [VCF Ingestion](modules/core/app/backend/documentation/vcf_ingestion.md) · [GWAS Analysis](modules/core/app/backend/documentation/gwas_analysis.md) · [Variant Annotation](modules/core/app/backend/documentation/variant_annotation.md)
 
 ### NVIDIA BioNeMo
-NVIDIA's generative AI framework for digital biology. The optional BioNeMo module ships container definitions and workflows that expose pre-trained BioNeMo models, starting with ESM-2 fine-tuning and inference. Containers are optimized for NVIDIA hardware and integrated into Genesis Workbench's job system, MLflow registry, and model-serving infrastructure.
+NVIDIA's generative AI framework for digital biology. The optional BioNeMo module ships container definitions and workflows that expose pre-trained BioNeMo models, starting with ESM-2 fine-tuning and inference. It also hosts the **KERMT** fine-tune workflow (Kinetic GROVER Multi-Task — a small-molecule ADMET GNN), whose served endpoint is compared side-by-side with ChemProp in the Small Molecule ADMET tab. Containers are optimized for NVIDIA hardware and integrated into Genesis Workbench's job system, MLflow registry, and model-serving infrastructure.
 
-📖 [ESM2 Fine-tuning & Inference](modules/core/app/backend/documentation/bionemo_esm2.md)
+📖 [ESM2 Fine-tuning & Inference](modules/core/app/backend/documentation/bionemo_esm2.md) · [KERMT (ADMET fine-tune)](modules/core/app/backend/documentation/kermt_admet.md)
 
 📚 **Full workflow catalog:** [documentation index](modules/core/app/backend/documentation/index.md)
 
@@ -125,6 +125,7 @@ Genesis Workbench ships open models and open datasets across all modules. Models
 | DiffDock | small_molecule / diffdock | gcorso/DiffDock v1.1.3 | Protein–ligand blind docking (diffusion) |
 | GenMol | small_molecule / genmol | `nvidia/NV-GenMol-89M-v2` | Generative small-molecule design (SAFE masked diffusion) |
 | Chemprop (BBBP / ClinTox / ADMET) | small_molecule / chemprop | `chemprop==2.2.3` | Blood-brain barrier, clinical toxicity, 10-property ADMET |
+| KERMT (Kinetic GROVER Multi-Task) | small_molecule / kermt | [NVIDIA-BioNeMo/KERMT](https://github.com/NVIDIA-BioNeMo/KERMT) (GROVERbase, Apache-2.0) | Fine-tunable GNN for small-molecule ADMET/tox property prediction (served side-by-side with ChemProp) |
 | NetSolP-1.0 | small_molecule / netsolp | tvinet/NetSolP-1.0 | Protein solubility prediction |
 | PLTNUM-ESM2 | small_molecule / pltnum | `sagawa/PLTNUM-ESM2-NIH3T3` | Protein half-life / stability |
 | DeepSTABp | small_molecule / deepstabp | CSBiology/deepStabP (ProtT5-XL) | Protein melting temperature (Tm) |

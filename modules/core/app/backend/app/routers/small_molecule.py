@@ -485,6 +485,7 @@ class AdmetRequest(BaseModel):
     run_bbbp: bool = True
     run_clintox: bool = True
     run_admet: bool = True
+    run_kermt: bool = False
     mlflow_experiment: str = Field("gwb_admet_safety", min_length=1)
     mlflow_run_name: str = Field(..., min_length=1)
 
@@ -495,6 +496,8 @@ class AdmetResponse(BaseModel):
     clintox: Optional[list[Optional[float]]] = None
     # Per-molecule dict keyed by ADMET task name (e.g. "Caco2", "Lipophilicity", etc).
     admet: Optional[list[dict]] = None
+    # KERMT per-molecule dict keyed by task name (shown side-by-side with Chemprop).
+    kermt: Optional[list[dict]] = None
     experiment_id: str
     run_id: str
     warnings: list[str]
@@ -509,10 +512,10 @@ def admet_stream(payload: AdmetRequest, user: CurrentUserDep):
     clean = [s.strip() for s in payload.smiles if s and s.strip()]
     if not clean:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "No SMILES provided")
-    if not (payload.run_bbbp or payload.run_clintox or payload.run_admet):
+    if not (payload.run_bbbp or payload.run_clintox or payload.run_admet or payload.run_kermt):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "Select at least one predictor (BBB, ClinTox, or ADMET)",
+            "Select at least one predictor (BBB, ClinTox, ADMET, or KERMT)",
         )
     user_info = _build_user_info(user, WorkspaceClient())
 
@@ -534,6 +537,7 @@ def admet_stream(payload: AdmetRequest, user: CurrentUserDep):
                 "run_bbbp": payload.run_bbbp,
                 "run_clintox": payload.run_clintox,
                 "run_admet": payload.run_admet,
+                "run_kermt": payload.run_kermt,
             })
 
             result = admet_pipeline.run_admet_profiling(
@@ -541,6 +545,7 @@ def admet_stream(payload: AdmetRequest, user: CurrentUserDep):
                 run_bbbp=payload.run_bbbp,
                 run_clintox=payload.run_clintox,
                 run_admet=payload.run_admet,
+                run_kermt=payload.run_kermt,
                 progress_callback=progress_cb,
             )
 
@@ -550,12 +555,15 @@ def admet_stream(payload: AdmetRequest, user: CurrentUserDep):
                 mlflow.log_dict({"clintox_predictions": result["clintox"]}, "clintox_results.json")
             if "admet" in result:
                 mlflow.log_dict({"admet_predictions": result["admet"]}, "admet_results.json")
+            if "kermt" in result:
+                mlflow.log_dict({"kermt_predictions": result["kermt"]}, "kermt_results.json")
 
             progress_cb(100, f"Done — profiled {len(clean)} molecule(s)")
             return {
                 "smiles": result["smiles"],
                 "bbbp": result.get("bbbp"),
                 "clintox": result.get("clintox"),
+                "kermt": result.get("kermt"),
                 "admet": result.get("admet"),
                 "experiment_id": str(experiment.experiment_id),
                 "run_id": mlflow_run_id,

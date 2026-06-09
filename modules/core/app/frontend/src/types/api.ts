@@ -326,13 +326,23 @@ export type EnrichmentTerm = {
 }
 export type EnrichmentResponse = { terms: EnrichmentTerm[]; available_dbs: string[] }
 
-export type TrajectoryUmapPoint = { umap_0: number; umap_1: number; pseudotime: number }
+export type TrajectoryUmapPoint = { umap_0: number; umap_1: number; pseudotime: number; cluster?: string }
 export type TrajectoryGenePoint = { pseudotime: number; expression: number }
+export type TrajectoryNode = {
+  cluster: string
+  umap_0: number
+  umap_1: number
+  pseudotime: number
+  n_cells: number
+}
+export type TrajectoryEdge = { source: string; target: string }
 export type TrajectoryResponse = {
   has_pseudotime: boolean
   umap_points: TrajectoryUmapPoint[]
   gene_points: TrajectoryGenePoint[]
   genes: string[]
+  trajectory_nodes?: TrajectoryNode[]
+  trajectory_edges?: TrajectoryEdge[]
 }
 
 export type RawDataResponse = {
@@ -552,10 +562,47 @@ export type AdmetResponse = {
   clintox: (number | null)[] | null
   /** Per-molecule dict keyed by ADMET task name. */
   admet: Record<string, number | null>[] | null
+  /** KERMT per-molecule dict keyed by task name (side-by-side with Chemprop). */
+  kermt?: Record<string, number | null>[] | null
   experiment_id: string
   run_id: string
   warnings: string[]
 }
+
+// ─── KERMT (fine-tune + deploy) ────────────────────────────────────────────
+
+export type KermtDefaults = {
+  train_data: string
+  validation_data: string
+  test_data: string
+  target_names: string
+  dataset_type: string
+}
+
+export type KermtWeight = {
+  ft_id: string // BIGINT as string
+  ft_label: string
+  dataset_type: string
+  task_names: string
+  run_id?: string | null
+  created_datetime?: string | null
+}
+
+export type KermtFinetuneRequest = {
+  finetune_label: string
+  train_data: string
+  validation_data: string
+  test_data: string
+  target_names: string
+  dataset_type: string
+  epochs: number
+  batch_size: number
+  ffn_hidden_size: number
+  experiment_name: string
+  run_name: string
+}
+
+export type KermtDispatchResponse = { job_run_id: number; run_url: string }
 
 // ─── Enzyme Optimization ──────────────────────────────────────────────────
 
