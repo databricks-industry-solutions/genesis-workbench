@@ -99,6 +99,18 @@ rm -f mcp_app/backend/lib/genesis_workbench-*.whl
 cp "$WHEEL" mcp_app/backend/lib/
 echo "Staged $WHEEL_NAME → mcp_app/backend/lib/"
 
+# Guarantee the staged wheels + dist are removed on ANY exit — success, a failed
+# `bundle deploy/run`, or Ctrl-C. The wheel is intentionally NOT gitignored (that
+# would exclude it from the DAB sync), so it must never be left behind to be
+# accidentally committed. A trap (vs. a trailing cleanup step) ensures this runs
+# even when an earlier step errors out.
+_cleanup_artifacts() {
+    rm -rf library/genesis_workbench/dist
+    rm -f app/backend/lib/genesis_workbench-*.whl
+    rm -f mcp_app/backend/lib/genesis_workbench-*.whl
+}
+trap _cleanup_artifacts EXIT
+
 if ! grep -wq "$WHEEL_NAME" app/requirements.txt; then
     echo "⚠️  app/requirements.txt does not reference $WHEEL_NAME — update it to match the pyproject version."
     exit 1
@@ -231,11 +243,9 @@ fi
 # excluded from the DAB sync, so the wheel must be present at deploy time and
 # deleted here instead.
 echo ""
-echo "▶️ Cleaning up local build artifacts"
+echo "▶️ Cleaning up local build artifacts (also guaranteed via EXIT trap)"
 echo ""
-rm -rf library/genesis_workbench/dist
-rm -f app/backend/lib/genesis_workbench-*.whl
-rm -f mcp_app/backend/lib/genesis_workbench-*.whl
+_cleanup_artifacts
 
 # Note: NOT writing .deployed here — update.sh is for redeploys, the
 # .deployed marker is owned by deploy.sh.
