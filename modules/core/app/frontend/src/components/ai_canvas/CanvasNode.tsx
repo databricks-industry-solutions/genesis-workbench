@@ -29,9 +29,10 @@ export function CanvasNode({ data, selected }: NodeProps) {
   const unavailable = cat ? !cat.available : false
   const connected = new Set(d.connectedInputs ?? [])
 
-  // An input shows its connection handle only while it's an "open slot" — empty
-  // inline value AND not wired. Once it has a typed value (and isn't wired), the
-  // handle is hidden (the field is "set"); clearing the value brings it back.
+  // Only *input* ports are convertible (inline value or wired). Params stay inline
+  // config. An input's handle shows while it's an "open slot" — blank inline value
+  // AND not wired. Type a value → handle hides; clear it → it returns; a wired
+  // input keeps its handle.
   const showInputHandle = (name: string) =>
     connected.has(name) || fieldIsBlank(d.inputs?.[name])
 

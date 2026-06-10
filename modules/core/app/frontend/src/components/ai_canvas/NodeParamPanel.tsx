@@ -34,7 +34,7 @@ export function NodeParamPanel({
   const category = cat?.category ?? 'endpoint'
 
   return (
-    <div className="flex h-full w-64 shrink-0 flex-col border-l border-border bg-card/40">
+    <div className="flex h-full w-80 shrink-0 flex-col border-l border-border bg-card/40">
       {/* Workflow name — always visible, auto-generated on start, editable. */}
       <div className="border-b border-border p-3">
         <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">

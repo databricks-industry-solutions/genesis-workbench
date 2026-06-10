@@ -287,8 +287,20 @@ function VortexCanvas() {
       }
       setNotice(null)
       setEdges((eds) => addEdge({ ...conn, animated: false }, eds))
+      // If the source is a still-unnamed IO node (Text/Volume/Delta Input), name
+      // it after the field it now feeds — so wired inputs are self-describing.
+      if (
+        src?.data.catalog?.category === 'io' &&
+        dstPort &&
+        src.data.label === src.data.catalog?.label
+      ) {
+        const newLabel = dstPort.label || dstPort.name
+        setNodes((nds) =>
+          nds.map((n) => (n.id === conn.source ? { ...n, data: { ...n.data, label: newLabel } } : n)),
+        )
+      }
     },
-    [nodes, setEdges, catalogByType, insertTransform],
+    [nodes, setNodes, setEdges, catalogByType, insertTransform],
   )
 
   // Double-click an edge to remove it (plus Backspace/Delete on a selected edge,
@@ -410,7 +422,7 @@ function VortexCanvas() {
   const banner = notice
 
   return (
-    <div className="flex h-[70vh] min-h-[520px] flex-col overflow-hidden rounded-md border border-border">
+    <div className="flex h-[86vh] min-h-[640px] flex-col overflow-hidden rounded-md border border-border">
       {/* Toolbar */}
       <div className="flex flex-col gap-2 border-b border-border bg-card/60 px-3 py-2">
         <div className="flex items-center gap-2">
