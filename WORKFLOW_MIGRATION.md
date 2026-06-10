@@ -64,6 +64,21 @@ Legend: ✅ done · 🟡 partial · ⬜ not yet.
 - **Out of scope:** single-cell DE/enrichment/trajectory/dotplot + AI narratives —
   in-app analytics/LLM, not endpoint/job capabilities.
 
+## Known limitations / future items
+- **Batch-job output doesn't flow back into the Vortex canvas dataflow.** The
+  orchestrator's `batch` branch (`notebooks/run_ai_canvas_workflow.py`) triggers the
+  job via `execute_workflow` (`jobs.run_now`) and **blocks** on
+  `wait_for_job_run_completion` (30s poll, 6h cap) — so mixed *endpoint → job*
+  workflows (e.g. Protein Design chain → AlphaFold fold) trigger-and-wait correctly.
+  BUT the node returns only `{job_run_id}`, not the job's output artifact. A node
+  wired *downstream* of a batch job receives the run id, not the result (jobs write
+  to a UC Volume / Delta table out-of-band). Fully data-connecting *job → downstream
+  canvas node* needs the batch branch to capture the job's output back into
+  `results[nid]` (e.g. read the run's MLflow artifact / output table). Endpoints +
+  chains + transforms already pass real values node-to-node.
+- **No parallel branches.** The orchestrator runs nodes in a single topological pass;
+  independent branches execute sequentially, not concurrently.
+
 ## How to migrate one (the repeatable recipe)
 1. **Register the capability** — add an endpoint contract (`capabilities._ENDPOINT_CONTRACTS`),
    a `prebuilt_workflows` row (job), or a new chain in `executor._CHAINS` (+ `RUNNABLE_CHAINS`).
