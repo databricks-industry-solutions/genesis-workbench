@@ -273,8 +273,13 @@ def _extract_json(text: str) -> dict:
         candidate = text[start : end + 1]
     try:
         return json.loads(candidate)
-    except json.JSONDecodeError as e:
-        raise GraphGenerationError(f"Could not parse graph JSON: {e}") from e
+    except json.JSONDecodeError:
+        # Cheap repair for the most common LLM slip: trailing commas before } or ].
+        repaired = re.sub(r",(\s*[}\]])", r"\1", candidate)
+        try:
+            return json.loads(repaired)
+        except json.JSONDecodeError as e:
+            raise GraphGenerationError(f"Could not parse graph JSON: {e}") from e
 
 
 def _auto_layout(nodes: list[dict], edges: list[dict]) -> None:
@@ -328,16 +333,27 @@ def generate_graph(goal: str, llm_endpoint: str) -> dict:
     system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(catalog=_catalog_prompt_lines(catalog))
 
     w = WorkspaceClient()
-    response = w.serving_endpoints.query(
-        name=llm_endpoint,
-        messages=[
-            ChatMessage(role=ChatMessageRole.SYSTEM, content=system_prompt),
-            ChatMessage(role=ChatMessageRole.USER, content=goal),
-        ],
-        max_tokens=1500,
-    )
-    raw = response.choices[0].message.content
-    parsed = _extract_json(raw)
+
+    def _attempt(extra_system: str = "") -> dict:
+        response = w.serving_endpoints.query(
+            name=llm_endpoint,
+            messages=[
+                ChatMessage(role=ChatMessageRole.SYSTEM, content=system_prompt + extra_system),
+                ChatMessage(role=ChatMessageRole.USER, content=goal),
+            ],
+            max_tokens=4000,      # headroom so larger graphs don't truncate mid-JSON
+            temperature=0.2,      # low temp → fewer JSON formatting slips
+        )
+        return _extract_json(response.choices[0].message.content)
+
+    try:
+        parsed = _attempt()
+    except GraphGenerationError:
+        # LLMs occasionally drop a comma in a big graph — one stricter retry.
+        parsed = _attempt(
+            "\n\nIMPORTANT: Respond with ONE strictly-valid JSON object only. Every array/"
+            "object element MUST be comma-separated; no trailing commas; no prose; no markdown."
+        )
 
     # Validate + normalize.
     clean_nodes: list[dict] = []
