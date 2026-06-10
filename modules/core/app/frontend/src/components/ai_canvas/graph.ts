@@ -152,19 +152,46 @@ export function ioTypeForDtype(dtype: string): string {
   return 'text_input'
 }
 
-// A graph is runnable only when every node's input port has an incoming edge.
-// IO source nodes (no inputs) are trivially satisfied. Returns a human-readable
-// "<node> · <port>" for each still-unconnected input so the UI can explain why
-// Run is disabled. Empty list ⇒ fully wired.
-export function unwiredPorts(nodes: VortexNode[], edges: VortexEdge[]): string[] {
-  const missing: string[] = []
+// A single reason the graph can't run yet, attributed to a node.
+export type ValidationIssue = { node: string; message: string }
+
+function isBlank(v: unknown): boolean {
+  return v === null || v === undefined || (typeof v === 'string' && v.trim() === '')
+}
+
+// Everything that must be fixed before a workflow can run, in order: each node's
+// input ports must be connected, required params filled, and IO sources must hold
+// a valid value (non-empty literal, /Volumes/ path, catalog.schema.table). Empty
+// list ⇒ runnable. Drives both the Run-button gate and the on-canvas error list.
+export function graphValidationErrors(nodes: VortexNode[], edges: VortexEdge[]): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
   for (const n of nodes) {
-    for (const p of n.data.catalog?.inputs ?? []) {
+    const cat = n.data.catalog
+    const label = n.data.label
+    const params = n.data.params ?? {}
+
+    // 1. Every input port needs an incoming edge.
+    for (const p of cat?.inputs ?? []) {
       const connected = edges.some((e) => e.target === n.id && e.targetHandle === p.name)
-      if (!connected) missing.push(`${n.data.label} · ${p.label || p.name}`)
+      if (!connected) issues.push({ node: label, message: `input “${p.label || p.name}” not connected` })
+    }
+
+    // 2. Required params must be filled (covers IO value/path/table — all required).
+    for (const pf of cat?.params ?? []) {
+      if (pf.required && isBlank(params[pf.name])) {
+        issues.push({ node: label, message: `${pf.label || pf.name} is empty` })
+      }
+    }
+
+    // 3. IO source format checks (only when a value is present).
+    if (n.data.typeKey === 'volume_input' && !isBlank(params.path) && !String(params.path).startsWith('/Volumes/')) {
+      issues.push({ node: label, message: 'path should start with /Volumes/' })
+    }
+    if (n.data.typeKey === 'delta_input' && !isBlank(params.table) && String(params.table).split('.').length !== 3) {
+      issues.push({ node: label, message: 'table should be catalog.schema.table' })
     }
   }
-  return missing
+  return issues
 }
 
 // Default param map for a freshly-dropped node, seeded from catalog defaults.

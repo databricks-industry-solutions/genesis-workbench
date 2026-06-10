@@ -29,11 +29,11 @@ import {
   autoLayout,
   defaultParams,
   fromCanvasGraph,
+  graphValidationErrors,
   ioTypeForDtype,
   nextNodeId,
   portsCompatible,
   toCanvasGraph,
-  unwiredPorts,
 } from './graph'
 import type { VortexEdge, VortexNode, VortexNodeData } from './graph'
 import type { CanvasNodeType } from '@/types/api'
@@ -396,14 +396,14 @@ function VortexCanvas() {
     )
   }, [statusData, setNodes])
 
-  // Run is gated on the graph being fully wired — every input port connected.
-  const missingWires = useMemo(() => unwiredPorts(nodes, edges), [nodes, edges])
-  const runnable = nodes.length > 0 && missingWires.length === 0
+  // Run is gated on the graph validating — inputs wired, required values filled.
+  const validationErrors = useMemo(() => graphValidationErrors(nodes, edges), [nodes, edges])
+  const runnable = nodes.length > 0 && validationErrors.length === 0
   const runDisabledReason =
     nodes.length === 0
       ? 'Add a node to begin'
-      : missingWires.length > 0
-        ? `Connect every input first:\n• ${missingWires.join('\n• ')}`
+      : validationErrors.length > 0
+        ? `Fix ${validationErrors.length} issue(s) before running`
         : ''
 
   // An in-flight dispatched run is one that's started but not yet terminal.
@@ -573,6 +573,23 @@ function VortexCanvas() {
               <div className="rounded-md border border-dashed border-border bg-card/70 px-4 py-3 text-center text-xs text-muted-foreground">
                 Drag a node from the left palette onto the canvas, or double-click one to add it.
               </div>
+            </div>
+          )}
+
+          {/* Validation checklist (top-left) — why Run is disabled. One line per
+              unmet requirement: unconnected inputs, empty values, bad paths. */}
+          {nodes.length > 0 && validationErrors.length > 0 && (
+            <div className="absolute left-2 top-2 z-10 max-h-[40%] w-64 overflow-y-auto rounded-md border border-red-500/40 bg-card/95 p-2 text-xs shadow-md">
+              <div className="mb-1 font-medium text-red-600 dark:text-red-400">
+                ⚠ {validationErrors.length} issue{validationErrors.length > 1 ? 's' : ''} to fix before running
+              </div>
+              <ul className="space-y-0.5 text-muted-foreground">
+                {validationErrors.map((e, i) => (
+                  <li key={i} className="leading-snug">
+                    <span className="font-medium text-foreground">{e.node}</span> · {e.message}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
