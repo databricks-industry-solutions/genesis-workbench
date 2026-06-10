@@ -499,6 +499,64 @@ _CHAIN_NODES: list[NodeType] = [
         inputs=[Port("smiles", PortType.SMILES)],
         outputs=[Port("profile", PortType.JSON, "ADMET profile")],
     ),
+    NodeType(
+        type="protein_binder_design", label="Protein Binder Design",
+        category=NodeCategory.BATCH, kind=_KIND_CHAIN, chain="protein_binder_design",
+        module="large_molecule",
+        requires_endpoints=["Proteina-Complexa Binder", "ESMFold"],
+        description="Chain: Proteina-Complexa binder design for a target protein "
+                    "(folds the target first if given a sequence; optional ESMFold "
+                    "validation of each design).",
+        inputs=[Port("target_pdb", PortType.PDB, "Target PDB"),
+                Port("target_sequence", PortType.SEQUENCE, "Target sequence (folded if no PDB)")],
+        outputs=[Port("designs", PortType.JSON, "Binder designs")],
+        params=[
+            ParamField("target_chain", "Target chain", "string", default="A"),
+            ParamField("hotspot_residues", "Hotspot residues", "string", default="",
+                       help="e.g. 45,46,89"),
+            ParamField("binder_length_min", "Binder length min", "int", default=50),
+            ParamField("binder_length_max", "Binder length max", "int", default=80),
+            ParamField("num_samples", "Samples", "int", default=2),
+            ParamField("validate_esmfold", "Validate (ESMFold)", "bool", default=False),
+        ],
+    ),
+    NodeType(
+        type="ligand_binder_design", label="Ligand Binder Design",
+        category=NodeCategory.BATCH, kind=_KIND_CHAIN, chain="ligand_binder_design",
+        module="small_molecule",
+        requires_endpoints=["Proteina-Complexa Ligand"],
+        description="Chain: Proteina-Complexa-Ligand protein binders for a ligand "
+                    "(expects a ligand PDB; optional ESMFold + DiffDock validation).",
+        inputs=[Port("ligand_pdb", PortType.PDB, "Ligand PDB")],
+        outputs=[Port("designs", PortType.JSON, "Protein binder designs")],
+        params=[
+            ParamField("binder_length_min", "Binder length min", "int", default=50),
+            ParamField("binder_length_max", "Binder length max", "int", default=80),
+            ParamField("num_samples", "Samples", "int", default=2),
+            ParamField("validate_esmfold", "Validate (ESMFold)", "bool", default=False),
+            ParamField("validate_diffdock", "Validate (DiffDock)", "bool", default=False),
+            ParamField("ligand_smiles", "Ligand SMILES", "string", default="",
+                       help="Needed for DiffDock validation."),
+        ],
+    ),
+    NodeType(
+        type="motif_scaffolding", label="Motif Scaffolding",
+        category=NodeCategory.BATCH, kind=_KIND_CHAIN, chain="motif_scaffolding",
+        module="small_molecule",
+        requires_endpoints=["Proteina-Complexa AME"],
+        description="Chain: Proteina-Complexa-AME scaffolds preserving a functional "
+                    "motif (optional ProteinMPNN optimisation + ESMFold validation).",
+        inputs=[Port("motif_pdb", PortType.PDB, "Motif PDB")],
+        outputs=[Port("scaffolds", PortType.JSON, "Scaffolds")],
+        params=[
+            ParamField("target_chain", "Motif chain", "string", default="B"),
+            ParamField("scaffold_length_min", "Scaffold length min", "int", default=50),
+            ParamField("scaffold_length_max", "Scaffold length max", "int", default=80),
+            ParamField("num_samples", "Samples", "int", default=2),
+            ParamField("optimize_mpnn", "Optimise (ProteinMPNN)", "bool", default=False),
+            ParamField("validate_esmfold", "Validate (ESMFold)", "bool", default=False),
+        ],
+    ),
 ]
 
 
