@@ -54,3 +54,20 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* Vortex: AI "thinking" shimmer for the ✨ generate star (no spinner). */
+@keyframes gwb-star-shimmer {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1);
+    filter: drop-shadow(0 0 2px rgba(250, 204, 21, 0.5));
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.18);
+    filter: drop-shadow(0 0 9px rgba(250, 204, 21, 1));
+  }
+}
+.gwb-star-shimmer {
+  animation: gwb-star-shimmer 1.1s ease-in-out infinite;
+}

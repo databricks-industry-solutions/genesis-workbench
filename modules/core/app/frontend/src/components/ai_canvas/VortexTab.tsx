@@ -562,7 +562,10 @@ function VortexCanvas() {
             disabled={generating}
             title="Show me how"
             aria-label="Show me how"
-            className="shrink-0 rounded-md px-1 text-base transition-transform hover:scale-125 disabled:opacity-40"
+            className={
+              'shrink-0 rounded-md px-1 text-base transition-transform hover:scale-125 ' +
+              (generating ? 'gwb-star-shimmer' : 'disabled:opacity-40')
+            }
           >
             ✨
           </button>
@@ -648,8 +651,8 @@ function VortexCanvas() {
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center pb-28">
               <div className="w-80 max-w-[80%] rounded-lg border border-border bg-card px-4 py-3 text-xs shadow-lg">
                 <div className="mb-2 flex items-center gap-2 font-medium text-foreground">
-                  <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-blue-500/30 border-t-blue-500" />
-                  ✨ Designing workflow…
+                  <span className="gwb-star-shimmer inline-block text-base leading-none">✨</span>
+                  Designing workflow…
                 </div>
                 {genThoughts.length === 0 ? (
                   <div className="italic text-muted-foreground">Thinking through the goal…</div>
