@@ -1089,7 +1089,7 @@ export type CanvasRunSummary = {
   start_time: string
   run_url: string
 }
-export type CanvasRunsResponse = { runs: CanvasRunSummary[] }
+export type CanvasRunsResponse = { runs: CanvasRunSummary[]; page: number; has_more: boolean }
 export type CanvasRunResultResponse = { result: Record<string, unknown> }
 
 export type TransformSuggestRequest = {

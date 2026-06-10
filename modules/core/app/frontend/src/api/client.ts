@@ -574,6 +574,8 @@ export const api = {
     request<CanvasRunStatusResponse>(`/api/ai_canvas/run/${encodeURIComponent(runId)}/status`),
   aiCanvasRunResult: (runId: string) =>
     request<CanvasRunResultResponse>(`/api/ai_canvas/run/${encodeURIComponent(runId)}/result`),
-  aiCanvasRuns: (text = '') =>
-    request<CanvasRunsResponse>(`/api/ai_canvas/runs${text ? `?text=${encodeURIComponent(text)}` : ''}`),
+  aiCanvasRuns: (text = '', page = 1) =>
+    request<CanvasRunsResponse>(
+      `/api/ai_canvas/runs?page=${page}${text ? `&text=${encodeURIComponent(text)}` : ''}`,
+    ),
 }

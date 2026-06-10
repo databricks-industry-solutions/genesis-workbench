@@ -836,12 +836,15 @@ def _experiment_ids() -> list[str]:
     return [e.experiment_id for e in exps]
 
 
-def search_runs(user_email: str, text: str = "") -> list[dict]:
-    """The user's ai_canvas runs (newest first), optionally filtered by run-name
-    substring. Modelled on enzyme_optimization.search_runs."""
+def search_runs(
+    user_email: str, text: str = "", page: int = 1, page_size: int = 20
+) -> tuple[list[dict], bool]:
+    """One page of the user's ai_canvas runs (newest first), optionally filtered
+    by run-name substring. Returns (rows, has_more). Modelled on
+    enzyme_optimization.search_runs."""
     exp_ids = _experiment_ids()
     if not exp_ids:
-        return []
+        return [], False
     df = mlflow.search_runs(
         filter_string=(
             f"tags.feature='{FEATURE_TAG}' AND "
@@ -852,15 +855,21 @@ def search_runs(user_email: str, text: str = "") -> list[dict]:
         order_by=["start_time DESC"],
     )
     if df.empty:
-        return []
+        return [], False
     if text:
         df = df[df["tags.mlflow.runName"].astype(str).str.contains(text, case=False, na=False)]
+    # Page the newest-first frame; fetch one extra row to know if more remain.
+    page = max(1, int(page or 1))
+    start_i = (page - 1) * page_size
+    window = df.iloc[start_i : start_i + page_size + 1]
+    has_more = len(window) > page_size
+    window = window.iloc[:page_size]
     out: list[dict] = []
     try:
         job_id = _resolve_orchestrator_job_id(WorkspaceClient())
     except Exception:
         job_id = 0
-    for _, r in df.iterrows():
+    for _, r in window.iterrows():
         job_run_id = str(r.get("tags.job_run_id", "") or "")
         start = r.get("start_time")
         out.append(
@@ -873,7 +882,7 @@ def search_runs(user_email: str, text: str = "") -> list[dict]:
                 "run_url": job_run_url(job_id, job_run_id) if job_id else "",
             }
         )
-    return out
+    return out, has_more
 
 
 def _safe_int(v) -> int | None:

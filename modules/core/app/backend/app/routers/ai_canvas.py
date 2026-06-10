@@ -262,6 +262,8 @@ class RunSummary(BaseModel):
 
 class RunsResponse(BaseModel):
     runs: list[RunSummary]
+    page: int = 1
+    has_more: bool = False
 
 
 class RunResultResponse(BaseModel):
@@ -302,8 +304,10 @@ def run_result(run_id: str, _: CurrentUserDep) -> RunResultResponse:
 
 
 @router.get("/runs", response_model=RunsResponse)
-def runs(user: CurrentUserDep, text: str = "") -> RunsResponse:
+def runs(user: CurrentUserDep, text: str = "", page: int = 1) -> RunsResponse:
     if not user.email:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "User email unavailable")
-    rows = svc.search_runs(user.email, text.strip())
-    return RunsResponse(runs=[RunSummary(**r) for r in rows])
+    rows, has_more = svc.search_runs(user.email, text.strip(), page=page, page_size=20)
+    return RunsResponse(
+        runs=[RunSummary(**r) for r in rows], page=max(1, page), has_more=has_more
+    )

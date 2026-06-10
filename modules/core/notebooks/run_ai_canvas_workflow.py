@@ -167,6 +167,22 @@ def run_node(node_id):
         return {first_out: value}
 
     if kind == "batch":
+        job_name = ex.get("job_name")
+        # Jobs with an output-collecting adapter (e.g. enzyme optimization) run via
+        # the shared executor: it pre-creates a per-node child MLflow run, dispatches
+        # the job into it, waits, and reads the job's output back — so a downstream
+        # node consumes the real result, not just a run id.
+        from genesis_workbench.executor import run_workflow_job, RUNNABLE_JOBS
+        if job_name in RUNNABLE_JOBS:
+            ctx = {
+                "catalog": catalog, "schema": schema, "sql_warehouse": sql_warehouse_id,
+                "user_email": user_email, "experiment_id": experiment.experiment_id,
+                "experiment_name": mlflow_experiment, "parent_run_id": active_run_id,
+                "node_id": node_id, "run_name": nodes[node_id].get("label", node_id),
+                "dev_user_prefix": os.environ.get("DEV_USER_PREFIX", "") or "",
+            }
+            return {first_out: run_workflow_job(job_name, inputs, params, w, ctx=ctx)}
+        # Fallback: plain trigger-and-wait; downstream nodes only get the run id.
         job_id = ex.get("job_id")
         if not job_id:
             raise RuntimeError(f"Node {node_id}: batch job id not resolved.")

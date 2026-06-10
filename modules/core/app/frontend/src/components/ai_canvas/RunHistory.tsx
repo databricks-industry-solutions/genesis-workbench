@@ -17,11 +17,12 @@ const STATUS_BADGE: Record<string, string> = {
 export function RunHistory() {
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
+  const [page, setPage] = useState(1)
   const [resultRunId, setResultRunId] = useState<string | null>(null)
 
   const runs = useQuery({
-    queryKey: ['ai_canvas', 'runs', text],
-    queryFn: () => api.aiCanvasRuns(text),
+    queryKey: ['ai_canvas', 'runs', text, page],
+    queryFn: () => api.aiCanvasRuns(text, page),
     enabled: open,
   })
 
@@ -41,7 +42,10 @@ export function RunHistory() {
       <Dialog open={open} onClose={() => setOpen(false)} title="Past runs" width="max-w-2xl">
         <input
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value)
+            setPage(1) // a new filter restarts from the first page
+          }}
           placeholder="Filter by run name…"
           className="mb-3 w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
         />
@@ -90,6 +94,27 @@ export function RunHistory() {
               </li>
             ))}
           </ul>
+        )}
+
+        {/* Pager — 20 most-recent per page. */}
+        {(page > 1 || runs.data?.has_more) && (
+          <div className="mt-3 flex items-center justify-between border-t border-border pt-2 text-xs">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1 || runs.isFetching}
+              className="rounded-md border border-border px-2.5 py-1 hover:bg-accent disabled:opacity-40"
+            >
+              ← Newer
+            </button>
+            <span className="text-muted-foreground">Page {page}</span>
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              disabled={!runs.data?.has_more || runs.isFetching}
+              className="rounded-md border border-border px-2.5 py-1 hover:bg-accent disabled:opacity-40"
+            >
+              Older →
+            </button>
+          </div>
         )}
       </Dialog>
 

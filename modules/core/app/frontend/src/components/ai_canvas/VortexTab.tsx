@@ -3,7 +3,7 @@
 // Visible name "Vortex"; feature id `ai_canvas`. This tab lets a user compose a
 // workflow from deployed endpoints, batch jobs, and data-IO nodes, then run it
 // (run dispatch + AI generation + save/load arrive in later increments).
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   Background,
   Controls,
@@ -35,7 +35,7 @@ import {
   portsCompatible,
   toCanvasGraph,
 } from './graph'
-import type { VortexEdge, VortexNode, VortexNodeData } from './graph'
+import type { VortexEdge, VortexNode } from './graph'
 import type { CanvasNodeType } from '@/types/api'
 
 const nodeTypes: NodeTypes = { vortex: CanvasNode }
@@ -88,8 +88,6 @@ function VortexCanvas() {
   // the user's workspace folder).
   const [experimentName, setExperimentName] = useState('gwb_ai_canvas')
   const [runName, setRunName] = useState(() => `vortex_${ts()}`)
-  // MLflow run id of the in-flight dispatch (drives the live status overlay).
-  const [activeRunId, setActiveRunId] = useState<string | null>(null)
 
   const catalogQuery = useQuery({
     queryKey: ['ai_canvas', 'catalog'],
@@ -358,7 +356,11 @@ function VortexCanvas() {
     setTimeout(() => rfRef.current?.fitView({ maxZoom: 1, duration: 300 }), 50)
   }, [nodes, edges, setNodes])
 
-  // ── run dispatch + live per-node status overlay ──────────────────────────────
+  // ── run dispatch ─────────────────────────────────────────────────────────────
+  // Dispatch is fire-and-forget: the orchestrator runs as a serverless job that
+  // can take minutes-to-hours (it blocks on any batch child jobs), so we don't
+  // poll live status here — we point the user to the Past Runs dialog and show a
+  // confirmation banner. Past Runs is the single source of run status.
   const run = useMutation({
     mutationFn: () =>
       api.aiCanvasRun({
@@ -366,35 +368,12 @@ function VortexCanvas() {
         experiment_name: experimentName.trim() || 'gwb_ai_canvas',
         run_name: runName.trim() || workflowName || 'ai_canvas_run',
       }),
-    onSuccess: (res) => {
-      setActiveRunId(res.mlflow_run_id)
-      setNotice(null) // running status is shown by the spinner, not the banner
+    onSuccess: () => {
+      setDismissed(null)
+      setNotice('▶ Workflow started — track its progress in the “Past Runs” dialog.')
     },
     onError: (err: Error) => setNotice(err.message),
   })
-
-  const runStatus = useQuery({
-    queryKey: ['ai_canvas', 'run-status', activeRunId],
-    queryFn: () => api.aiCanvasRunStatus(activeRunId as string),
-    enabled: activeRunId !== null,
-    // Poll while the orchestrator is in flight; stop once terminal.
-    refetchInterval: (q) => {
-      const s = q.state.data?.job_status
-      return s === 'complete' || s === 'failed' ? false : 4000
-    },
-  })
-
-  // Sync per-node statuses from the poll onto the canvas nodes (external → React).
-  const statusData = runStatus.data
-  useEffect(() => {
-    if (!statusData) return
-    setNodes((nds) =>
-      nds.map((n) => {
-        const s = statusData.node_status[n.id] as VortexNodeData['status'] | undefined
-        return s ? { ...n, data: { ...n.data, status: s } } : n
-      }),
-    )
-  }, [statusData, setNodes])
 
   // Run is gated on the graph validating — inputs wired, required values filled.
   const validationErrors = useMemo(() => graphValidationErrors(nodes, edges), [nodes, edges])
@@ -406,33 +385,12 @@ function VortexCanvas() {
         ? `Fix ${validationErrors.length} issue(s) before running`
         : ''
 
-  // An in-flight dispatched run is one that's started but not yet terminal.
-  const runTerminal =
-    statusData?.job_status === 'complete' || statusData?.job_status === 'failed'
-  const runInFlight = !!activeRunId && !runTerminal
+  // Centered spinner popup — AI generation / transform lookup only (runs are
+  // tracked in Past Runs, not with a live spinner).
+  const popupMessage = suggesting ?? (generate.isPending ? 'Generating workflow…' : null)
 
-  // Centered spinner popup — AI generation / transform lookup, OR a live run.
-  // The running status lives here (like the other transient spinners), NOT in
-  // the yellow banner; that's reserved for failures + important notices.
-  const runProgress = runInFlight
-    ? statusData
-      ? `Running… ${Object.values(statusData.node_status).filter((s) => s === 'complete').length}/${nodes.length} nodes done`
-      : 'Starting workflow…'
-    : null
-  const popupMessage =
-    suggesting ?? (generate.isPending ? 'Generating workflow…' : runProgress)
-
-  // Yellow banner: a terminal run outcome (complete/failed) or the latest notice.
-  // In-flight progress is shown by the spinner above. Dismissible until it changes.
-  const runOutcome =
-    activeRunId && statusData
-      ? statusData.job_status === 'complete'
-        ? '✅ Workflow complete.'
-        : statusData.job_status === 'failed'
-          ? '❌ Workflow failed — see Past runs for details.'
-          : null
-      : null
-  const banner = runOutcome ?? notice
+  // Yellow banner: the latest notice (dispatch confirmation, errors, warnings).
+  const banner = notice
 
   return (
     <div className="flex h-[70vh] min-h-[520px] flex-col overflow-hidden rounded-md border border-border">

@@ -372,6 +372,138 @@ _CHAINS = {
 RUNNABLE_CHAINS = set(_CHAINS)
 
 
+# ─── batch-job adapters: dispatch a predefined job, wait, read its output back ──
+# A batch node used to return only {job_run_id}, so a node wired downstream of it
+# got the id, not the result. These adapters close that gap: each pre-creates a
+# per-node child MLflow run (so artifacts don't collide across nodes/runs),
+# dispatches the predefined job *into that run*, waits for completion, then reads
+# the job's declared output back out — letting a batch job feed the next node on
+# the canvas. The job itself is unchanged: it already logs into the run id it's
+# handed (the same pre-created-run handoff the UI services use).
+
+_ENZYME_DEFAULT_WEIGHTS = {
+    "motif_rmsd": 1.0, "plddt": 1.3, "boltz": 0.5, "solubility": 1.0,
+    "half_life": 2.6, "thermostab": 1.0, "immuno": 1.5,
+}
+
+
+def _job_id_by_name(w: WorkspaceClient, name: str) -> int:
+    matches = list(w.jobs.list(name=name))
+    if not matches:
+        raise RuntimeError(f"Job '{name}' not found in this workspace.")
+    return int(matches[0].job_id)
+
+
+def _create_child_run(experiment_id, parent_run_id, node_id, run_name, user_email, feature):
+    """A per-node MLflow run the dispatched job logs into — nested under the
+    Vortex run and tagged so Past Runs can surface it."""
+    from mlflow.tracking import MlflowClient
+    r = MlflowClient().create_run(experiment_id=str(experiment_id), tags={
+        "origin": "genesis_workbench", "feature": feature, "created_by": user_email or "",
+        "mlflow.parentRunId": parent_run_id or "", "vortex_parent_run": parent_run_id or "",
+        "vortex_node": node_id or "", "job_status": "submitted",
+        "mlflow.runName": run_name or node_id or "node",
+    })
+    return r.info.run_id
+
+
+def _download_pdb_dir(run_id: str, artifact_path: str) -> dict:
+    """{name: pdb_string} for every *.pdb under an artifact dir; {} if absent."""
+    from mlflow.tracking import MlflowClient
+    out: dict = {}
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            local = MlflowClient().download_artifacts(run_id, artifact_path, dst_path=tmp)
+            for fn in sorted(os.listdir(local)):
+                if fn.endswith(".pdb"):
+                    with open(os.path.join(local, fn)) as f:
+                        out[fn[:-4]] = f.read()
+    except Exception as e:  # noqa: BLE001
+        logger.info("artifacts %s not available for run %s: %s", artifact_path, run_id, e)
+    return out
+
+
+def _job_enzyme_optimization(w, inputs, params, ctx, progress=None) -> dict:
+    """Guided Enzyme Optimization (reward-weighted GenMol loop). Mirrors the UI's
+    start_enzyme_optimization_job dispatch, but waits + reads the top-K candidate
+    PDBs back so a downstream node can consume them."""
+    import json as _json
+    import uuid as _uuid
+    from mlflow.tracking import MlflowClient
+
+    ins, p = inputs or {}, params or {}
+    motif_pdb = ins.get("motif_pdb")
+    if not motif_pdb:
+        raise RuntimeError("enzyme_optimization: motif_pdb input required")
+    substrate = str(ins.get("substrate_smiles") or p.get("substrate_smiles") or "")
+    cat, sch = ctx["catalog"], ctx["schema"]
+
+    _emit(progress, 5, "Uploading motif PDB to volume")
+    motif_path = f"/Volumes/{cat}/{sch}/enzyme_optimization/{_uuid.uuid4().hex[:12]}/motif.pdb"
+    w.files.upload(file_path=motif_path,
+                   contents=io.BytesIO(str(motif_pdb).encode("utf-8")), overwrite=True)
+
+    run_name = f"{ctx.get('run_name') or 'vortex'}::{ctx.get('node_id') or 'enzyme'}"
+    child = _create_child_run(ctx["experiment_id"], ctx.get("parent_run_id"),
+                              ctx.get("node_id"), run_name, ctx.get("user_email"),
+                              "enzyme_optimization")
+
+    num_samples = int(p.get("num_samples", 8) or 8)
+    num_iter = int(p.get("num_iterations", 10) or 10)
+    _emit(progress, 20, f"Dispatching enzyme optimization ({num_iter} iters × {num_samples} samples)")
+    job_id = _job_id_by_name(w, "run_enzyme_optimization_gwb")
+    run = w.jobs.run_now(job_id=job_id, job_parameters={
+        "catalog": cat, "schema": sch, "cache_dir": "enzyme_optimization",
+        "sql_warehouse_id": ctx.get("sql_warehouse", ""), "user_email": ctx.get("user_email", ""),
+        "mlflow_experiment": ctx.get("experiment_name", ""), "mlflow_run_name": run_name,
+        "mlflow_run_id": child, "motif_pdb_path": motif_path,
+        "motif_residues_csv": str(p.get("motif_residues_csv", "") or ""),
+        "target_chain": str(p.get("target_chain", "A") or "A"),
+        "scaffold_length_min": str(int(p.get("scaffold_length_min", 50) or 50)),
+        "scaffold_length_max": str(int(p.get("scaffold_length_max", 80) or 80)),
+        "num_samples": str(num_samples), "num_iterations": str(num_iter),
+        "substrate_smiles": substrate, "references_json": "[]",
+        "half_life_margin": "0.05", "weights_json": _json.dumps(_ENZYME_DEFAULT_WEIGHTS),
+        "resampling_temperature": "0.1", "strategy": "resample", "run_proteinmpnn": "true",
+        "dev_user_prefix": ctx.get("dev_user_prefix", "") or "",
+        "convergence_threshold": "0.01", "convergence_window": "2",
+        "target_reward": "", "best_k_target": "", "best_k_threshold": "",
+        "use_inprocess_ame": "false",
+    })
+    MlflowClient().set_tag(child, "job_run_id", str(run.run_id))
+
+    _emit(progress, 30, "Enzyme optimization running — this can take a while")
+    from .workbench import wait_for_job_run_completion
+    wait_for_job_run_completion(int(run.run_id), timeout=21600, poll_interval=30)
+
+    _emit(progress, 90, "Reading top candidates")
+    candidates = _download_pdb_dir(child, "results/topK_pdbs")
+    _emit(progress, 100, f"Enzyme optimization complete — {len(candidates)} candidate(s)")
+    return {"candidates": candidates, "child_run_id": child, "job_run_id": str(run.run_id)}
+
+
+_JOB_RUNNERS = {
+    "run_enzyme_optimization_gwb": _job_enzyme_optimization,
+    "enzyme_optimization": _job_enzyme_optimization,
+}
+# Jobs with an output-collecting adapter (vs. plain trigger-and-wait). A node
+# wired downstream of one of these receives the job's real output.
+RUNNABLE_JOBS = set(_JOB_RUNNERS)
+
+
+def run_workflow_job(job_name, inputs=None, params=None, workspace_client=None,
+                     *, ctx=None, progress=None) -> dict:
+    """Run a predefined batch job via its adapter (dispatch → wait → read output).
+    Raises if `job_name` has no adapter — callers should gate on RUNNABLE_JOBS and
+    fall back to plain trigger-and-wait. `ctx` carries the cluster context the
+    adapter needs (catalog/schema/sql_warehouse/user_email/experiment_id/
+    experiment_name/parent_run_id/node_id/run_name/dev_user_prefix)."""
+    fn = _JOB_RUNNERS.get(job_name or "")
+    if fn is None:
+        raise RuntimeError(f"No output-collecting adapter for job '{job_name}'.")
+    return fn(_w(workspace_client), inputs or {}, params or {}, ctx or {}, progress)
+
+
 # ─── transforms ──────────────────────────────────────────────────────────────
 
 
