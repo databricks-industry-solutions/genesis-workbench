@@ -38,6 +38,12 @@ unaffected (it already takes inputs+params as tool kwargs).
 - score / embedding → text (rarely typed; usually wired)
 - (params already carry their own editor type: int/float/bool/select/text/string)
 
+## Status
+**Increments 1–3 DONE** (app-only deploy, backward compatible): data model +
+orchestrator resolution (edge > inline), inline editors in NodeParamPanel, auto-IO
+retired, validation = wired-or-inline. Increment 4 (show inline values in the node
+card) is optional polish, pending.
+
 ## Increments
 1. **Backend data model + orchestrator** (no UX change yet):
    - FE `toCanvasGraph`/`fromCanvasGraph`: serialize `node.data.inputs` (inline values).
