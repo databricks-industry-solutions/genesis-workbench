@@ -212,6 +212,9 @@ function AssistantTab() {
   )
 }
 
+// ─── Search Documentation tab — soft-removed for now ────────────────────────
+// Restore by uncommenting this function and its <Tabs> entry in HomePage below.
+/*
 function SearchTab() {
   const [q, setQ] = useState('')
   const docs = useQuery({ queryKey: ['docs'], queryFn: api.docs })
@@ -260,6 +263,7 @@ function SearchTab() {
     </div>
   )
 }
+*/
 
 export function HomePage() {
   const bootstrap = useUserStore((s) => s.bootstrap)
@@ -282,9 +286,10 @@ export function HomePage() {
 
       <Tabs
         tabs={[
-          { id: 'assistant', label: 'AI Assistant', content: <AssistantTab /> },
-          { id: 'search', label: 'Search Documentation', content: <SearchTab /> },
           { id: 'vortex', label: 'Vortex', content: <VortexTab /> },
+          { id: 'assistant', label: 'AI Assistant', content: <AssistantTab /> },
+          // Soft-removed for now — uncomment (and the SearchTab function above) to restore.
+          // { id: 'search', label: 'Search Documentation', content: <SearchTab /> },
         ]}
       />
     </div>

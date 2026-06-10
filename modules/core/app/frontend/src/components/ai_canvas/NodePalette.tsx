@@ -1,12 +1,15 @@
-// Vortex (ai_canvas) — left palette. Drag a node type onto the canvas, or
-// double-click to drop it at the center.
+// Vortex (ai_canvas) — left palette. Groups (Data / Live Models / Prebuilt
+// Workflows) are collapsible (expanded by default). Drag a node onto the
+// canvas, or double-click to drop it at center.
 import { useMemo, useState } from 'react'
 
 import { cn } from '@/lib/utils'
+import { MaterialIcon } from '@/components/MaterialIcon'
 import { CATEGORY_STYLE } from './graph'
 import type { CanvasNodeType } from '@/types/api'
 
-const CATEGORY_ORDER: CanvasNodeType['category'][] = ['io', 'endpoint', 'batch']
+// Dataflow order: inputs (Data) → Transforms → Live Models → Prebuilt Workflows.
+const CATEGORY_ORDER: CanvasNodeType['category'][] = ['io', 'transform', 'endpoint', 'batch']
 
 export function NodePalette({
   catalog,
@@ -16,10 +19,18 @@ export function NodePalette({
   onAdd: (nodeType: CanvasNodeType) => void
 }) {
   const [filter, setFilter] = useState('')
+  // Collapsed groups (empty = all expanded by default).
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const toggle = (cat: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      next.has(cat) ? next.delete(cat) : next.add(cat)
+      return next
+    })
 
   const grouped = useMemo(() => {
     const f = filter.trim().toLowerCase()
-    const groups: Record<string, CanvasNodeType[]> = { io: [], endpoint: [], batch: [] }
+    const groups: Record<string, CanvasNodeType[]> = { io: [], transform: [], endpoint: [], batch: [] }
     for (const n of catalog) {
       if (f && !n.label.toLowerCase().includes(f) && !n.description.toLowerCase().includes(f)) continue
       groups[n.category]?.push(n)
@@ -41,35 +52,56 @@ export function NodePalette({
         {CATEGORY_ORDER.map((cat) => {
           const items = grouped[cat]
           if (!items || items.length === 0) return null
+          const style = CATEGORY_STYLE[cat]
+          const isCollapsed = collapsed.has(cat)
           return (
             <div key={cat} className="mb-3">
-              <div className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {CATEGORY_STYLE[cat].label}
-              </div>
-              <div className="space-y-1">
-                {items.map((n) => (
-                  <button
-                    key={n.type}
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('application/vortex-node', n.type)
-                      e.dataTransfer.effectAllowed = 'move'
-                    }}
-                    onDoubleClick={() => onAdd(n)}
-                    title={n.description + (n.available ? '' : ' — not currently deployed')}
-                    className={cn(
-                      'w-full cursor-grab rounded-md border bg-background px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent',
-                      CATEGORY_STYLE[cat].ring,
-                      !n.available && 'opacity-50',
-                    )}
-                  >
-                    <div className="truncate font-medium text-foreground">{n.label}</div>
-                    {!n.available && (
-                      <div className="text-[10px] text-destructive">not deployed</div>
-                    )}
-                  </button>
-                ))}
-              </div>
+              <button
+                onClick={() => toggle(cat)}
+                className="mb-1 flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left hover:bg-accent/40"
+              >
+                <MaterialIcon
+                  name="expand_more"
+                  className={cn(
+                    'text-[16px] text-muted-foreground transition-transform',
+                    isCollapsed && '-rotate-90',
+                  )}
+                />
+                <MaterialIcon name={style.icon} className={cn('text-[15px]', style.iconColor)} />
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {style.label}
+                </span>
+                <span className="ml-auto text-[10px] text-muted-foreground/70">{items.length}</span>
+              </button>
+              {!isCollapsed && (
+                <div className="space-y-1">
+                  {items.map((n) => (
+                    <button
+                      key={n.type}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('application/vortex-node', n.type)
+                        e.dataTransfer.effectAllowed = 'move'
+                      }}
+                      onDoubleClick={() => onAdd(n)}
+                      title={n.description + (n.available ? '' : ' — not currently deployed')}
+                      className={cn(
+                        'flex w-full cursor-grab items-center gap-1.5 rounded-md border-l-2 border border-border bg-background px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent',
+                        style.ring,
+                        !n.available && 'opacity-50',
+                      )}
+                    >
+                      <MaterialIcon name={style.icon} className={cn('shrink-0 text-[14px]', style.iconColor)} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium text-foreground">{n.label}</span>
+                        {!n.available && (
+                          <span className="block text-[10px] text-destructive">not deployed</span>
+                        )}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )
         })}

@@ -26,6 +26,7 @@ import { NodeParamPanel } from './NodeParamPanel'
 import { RunHistory } from './RunHistory'
 import { WorkflowLibrary } from './WorkflowLibrary'
 import {
+  autoLayout,
   defaultParams,
   fromCanvasGraph,
   nextNodeId,
@@ -37,6 +38,13 @@ import type { CanvasNodeType } from '@/types/api'
 
 const nodeTypes: NodeTypes = { vortex: CanvasNode }
 
+// Auto-generated default workflow name, e.g. "vortex_20260609_1355".
+function defaultWorkflowName(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `vortex_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`
+}
+
 function VortexCanvas() {
   const theme = useThemeStore((s) => s.theme)
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -46,10 +54,13 @@ function VortexCanvas() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<VortexEdge>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // Transient "Finding a transform…" overlay (with spinner) during the AI lookup.
+  const [suggesting, setSuggesting] = useState<string | null>(null)
   const [goal, setGoal] = useState('')
   // Track the loaded workflow so Save updates it (vs. always creating a copy).
-  const [loadedId, setLoadedId] = useState<number | null>(null)
-  const [loadedName, setLoadedName] = useState('')
+  const [loadedId, setLoadedId] = useState<string | null>(null)
+  // Editable workflow name, auto-generated on start (shown in the right panel).
+  const [workflowName, setWorkflowName] = useState(defaultWorkflowName)
   // MLflow run id of the in-flight dispatch (drives the live status overlay).
   const [activeRunId, setActiveRunId] = useState<string | null>(null)
 
@@ -75,7 +86,7 @@ function VortexCanvas() {
     (graph: Parameters<typeof fromCanvasGraph>[0]) => {
       const { nodes: ns, edges: es } = fromCanvasGraph(graph, catalogByType)
       setNodes(ns)
-      setEdges(es.map((e) => ({ ...e, animated: true })))
+      setEdges(es.map((e) => ({ ...e, animated: false })))
       setSelectedId(null)
     },
     [catalogByType, setNodes, setEdges],
@@ -85,8 +96,7 @@ function VortexCanvas() {
     mutationFn: (g: string) => api.aiCanvasGenerate({ goal: g }),
     onSuccess: (res) => {
       loadGraph(res.graph)
-      setLoadedId(null) // a generated graph is new/unsaved
-      setLoadedName('')
+      setLoadedId(null) // a generated graph is new/unsaved (keep the current name)
       setNotice(
         res.graph.nodes.length
           ? `Generated a ${res.graph.nodes.length}-node workflow — edit it, then Run.`
@@ -143,7 +153,41 @@ function VortexCanvas() {
     e.dataTransfer.dropEffect = 'move'
   }, [])
 
-  // ── connect edges with dtype validation ─────────────────────────────────────
+  // ── insert an AI-picked transform between source → target (rewires through it) ──
+  const insertTransform = useCallback(
+    (conn: Connection, tcat: CanvasNodeType, params: Record<string, unknown>) => {
+      const src = nodes.find((n) => n.id === conn.source)
+      const dst = nodes.find((n) => n.id === conn.target)
+      const mid =
+        src && dst
+          ? { x: (src.position.x + dst.position.x) / 2, y: (src.position.y + dst.position.y) / 2 + 30 }
+          : { x: 200, y: 160 }
+      const id = nextNodeId(tcat.type)
+      const tNode: VortexNode = {
+        id,
+        type: 'vortex',
+        position: mid,
+        data: { typeKey: tcat.type, label: tcat.label, params: { ...defaultParams(tcat), ...params }, catalog: tcat },
+      }
+      const inPort = tcat.inputs[0]?.name
+      const outPort = tcat.outputs[0]?.name
+      const nextNodes = [...nodes, tNode]
+      const nextEdges = addEdge(
+        { source: id, sourceHandle: outPort, target: conn.target, targetHandle: conn.targetHandle, animated: false },
+        addEdge(
+          { source: conn.source, sourceHandle: conn.sourceHandle, target: id, targetHandle: inPort, animated: false },
+          edges,
+        ),
+      )
+      // Re-tidy the graph so the inserted node doesn't overlap, then refit.
+      setNodes(autoLayout(nextNodes, nextEdges))
+      setEdges(nextEdges)
+      setTimeout(() => rfRef.current?.fitView({ maxZoom: 1, duration: 300 }), 50)
+    },
+    [nodes, edges, setNodes, setEdges],
+  )
+
+  // ── connect edges; on a dtype mismatch, let AI auto-insert a bridging transform ──
   const onConnect = useCallback(
     (conn: Connection) => {
       const src = nodes.find((n) => n.id === conn.source)
@@ -151,15 +195,36 @@ function VortexCanvas() {
       const srcPort = src?.data.catalog?.outputs.find((p) => p.name === conn.sourceHandle)
       const dstPort = dst?.data.catalog?.inputs.find((p) => p.name === conn.targetHandle)
       if (srcPort && dstPort && !portsCompatible(srcPort.dtype, dstPort.dtype)) {
-        setNotice(
-          `Can't connect ${srcPort.dtype} → ${dstPort.dtype}. Outputs must match the target input type.`,
-        )
+        const fail = `Can't connect ${srcPort.dtype} → ${dstPort.dtype}. Outputs must match the target input type.`
+        setNotice(null)
+        setSuggesting(`Finding a transform for ${srcPort.dtype} → ${dstPort.dtype}…`)
+        api
+          .aiCanvasSuggestTransform({
+            source_dtype: srcPort.dtype,
+            target_dtype: dstPort.dtype,
+            source_label: src?.data.label ?? '',
+            target_label: dst?.data.label ?? '',
+          })
+          .then((res) => {
+            setSuggesting(null)
+            const tcat = res.type ? catalogByType.get(res.type) : undefined
+            if (tcat) {
+              insertTransform(conn, tcat, res.params ?? {})
+              setNotice(`Inserted “${tcat.label}” to convert ${srcPort.dtype} → ${dstPort.dtype}.`)
+            } else {
+              setNotice(fail)
+            }
+          })
+          .catch(() => {
+            setSuggesting(null)
+            setNotice(fail)
+          })
         return
       }
       setNotice(null)
-      setEdges((eds) => addEdge({ ...conn, animated: true }, eds))
+      setEdges((eds) => addEdge({ ...conn, animated: false }, eds))
     },
-    [nodes, setEdges],
+    [nodes, setEdges, catalogByType, insertTransform],
   )
 
   // ── param panel callbacks ───────────────────────────────────────────────────
@@ -191,15 +256,21 @@ function VortexCanvas() {
     setEdges([])
     setSelectedId(null)
     setLoadedId(null)
-    setLoadedName('')
+    setWorkflowName(defaultWorkflowName())
   }, [setNodes, setEdges])
+
+  // Tidy the whole graph left→right and refit (manual button + after auto-insert).
+  const autoArrange = useCallback(() => {
+    setNodes(autoLayout(nodes, edges))
+    setTimeout(() => rfRef.current?.fitView({ maxZoom: 1, duration: 300 }), 50)
+  }, [nodes, edges, setNodes])
 
   // ── run dispatch + live per-node status overlay ──────────────────────────────
   const run = useMutation({
     mutationFn: () =>
       api.aiCanvasRun({
         graph: toCanvasGraph(nodes, edges),
-        run_name: loadedName || 'ai_canvas_run',
+        run_name: workflowName || 'ai_canvas_run',
       }),
     onSuccess: (res) => {
       setActiveRunId(res.mlflow_run_id)
@@ -254,21 +325,28 @@ function VortexCanvas() {
             <WorkflowLibrary
               graph={toCanvasGraph(nodes, edges)}
               loadedId={loadedId}
-              loadedName={loadedName}
+              loadedName={workflowName}
               disabled={nodes.length === 0}
               onLoad={(detail) => {
                 loadGraph(detail.graph)
                 setLoadedId(detail.workflow_id)
-                setLoadedName(detail.name)
+                setWorkflowName(detail.name)
                 setNotice(`Loaded "${detail.name}".`)
               }}
               onSaved={(id, name) => {
                 setLoadedId(id)
-                setLoadedName(name)
+                setWorkflowName(name)
                 setNotice(`Saved "${name}".`)
               }}
             />
             <RunHistory />
+            <button
+              onClick={autoArrange}
+              disabled={nodes.length === 0}
+              className="rounded-md border border-border px-2.5 py-1 text-xs hover:bg-accent disabled:opacity-40"
+            >
+              Auto arrange
+            </button>
             <button
               onClick={clearCanvas}
               disabled={nodes.length === 0}
@@ -317,7 +395,8 @@ function VortexCanvas() {
 
       <div className="flex min-h-0 flex-1">
         {catalogQuery.isLoading ? (
-          <div className="flex w-56 items-center justify-center border-r border-border text-xs text-muted-foreground">
+          <div className="flex w-56 items-center justify-center gap-2 border-r border-border text-xs text-muted-foreground">
+            <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-500/30 border-t-blue-500" />
             Loading nodes…
           </div>
         ) : (
@@ -337,6 +416,12 @@ function VortexCanvas() {
             onPaneClick={() => setSelectedId(null)}
             colorMode={theme}
             fitView
+            // Cap the fit zoom at 1× so node text renders at its true px size
+            // (matching the left-panel font); without this, a sparse graph
+            // fit-to-view magnifies the nodes and the text looks oversized.
+            fitViewOptions={{ maxZoom: 1 }}
+            minZoom={0.3}
+            maxZoom={1.5}
             proOptions={{ hideAttribution: true }}
           >
             <Background />
@@ -351,10 +436,22 @@ function VortexCanvas() {
               </div>
             </div>
           )}
+
+          {/* Transient AI "finding a transform" popup (with spinner). */}
+          {suggesting && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+              <div className="flex items-center gap-2.5 rounded-lg border border-border bg-card px-4 py-2.5 text-xs text-foreground shadow-lg">
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-blue-500/30 border-t-blue-500" />
+                {suggesting}
+              </div>
+            </div>
+          )}
         </div>
 
         <NodeParamPanel
           node={selectedNode}
+          workflowName={workflowName}
+          onChangeWorkflowName={setWorkflowName}
           onChangeParam={onChangeParam}
           onRename={onRename}
           onDelete={onDeleteSelected}

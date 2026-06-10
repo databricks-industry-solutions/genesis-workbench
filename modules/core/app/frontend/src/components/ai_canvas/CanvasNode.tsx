@@ -1,9 +1,15 @@
-// Vortex (ai_canvas) — custom React Flow node with one typed handle per port.
+// Vortex (ai_canvas) — custom React Flow node.
+//
+// Layout: a fixed-width rounded card with a colored title band (label left,
+// group icon right) and a body that lists the node's set param values — one
+// truncated line each, auto-growing as more are set. The node is tinted by its
+// group (category) color. Full description shows on hover (title attr).
 import { Handle, Position } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
 
 import { cn } from '@/lib/utils'
-import { CATEGORY_STYLE, dtypeColor } from './graph'
+import { MaterialIcon } from '@/components/MaterialIcon'
+import { CATEGORY_STYLE, dtypeColor, formatParamValue } from './graph'
 import type { VortexNodeData } from './graph'
 
 const STATUS_DOT: Record<string, string> = {
@@ -22,15 +28,23 @@ export function CanvasNode({ data, selected }: NodeProps) {
   const outputs = cat?.outputs ?? []
   const unavailable = cat ? !cat.available : false
 
+  // "Main param values" = params with a non-empty effective value (set or
+  // defaulted). Each renders as one no-wrap, ellipsis-truncated line.
+  const paramRows = (cat?.params ?? [])
+    .map((p) => ({ label: p.label || p.name, value: d.params?.[p.name] ?? p.default }))
+    .map((r) => ({ label: r.label, text: formatParamValue(r.value) }))
+    .filter((r) => r.text !== '—')
+
   // Spread handles evenly along the left (inputs) / right (outputs) edges.
   const handleTop = (i: number, n: number) => `${((i + 1) / (n + 1)) * 100}%`
 
   return (
     <div
+      title={cat?.description || d.label}
       className={cn(
-        'min-w-[170px] rounded-md border-2 bg-card shadow-sm',
-        style.ring,
-        selected && 'ring-2 ring-primary ring-offset-1 ring-offset-background',
+        'w-32 overflow-hidden rounded-md border bg-card shadow-sm',
+        style.border,
+        selected && 'ring-1 ring-primary',
         unavailable && 'opacity-60',
       )}
     >
@@ -41,28 +55,38 @@ export function CanvasNode({ data, selected }: NodeProps) {
           id={p.name}
           type="target"
           position={Position.Left}
-          style={{ top: handleTop(i, inputs.length), background: dtypeColor(p.dtype), width: 10, height: 10 }}
+          style={{ top: handleTop(i, inputs.length), background: dtypeColor(p.dtype), width: 7, height: 7 }}
           title={`${p.label} (${p.dtype})`}
         />
       ))}
 
-      <div className="px-3 py-2">
-        <div className="flex items-center gap-2">
-          {d.status && (
-            <span className={cn('h-2 w-2 shrink-0 rounded-full', STATUS_DOT[d.status] ?? 'bg-muted')} />
-          )}
-          <span className="truncate text-sm font-semibold text-foreground">{d.label}</span>
-        </div>
-        <div className="mt-1 flex items-center gap-1.5">
-          <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-medium', style.chip)}>
+      {/* Title band */}
+      <div className={cn('flex items-center gap-1 px-1.5 py-0.5', style.band)}>
+        {d.status && (
+          <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', STATUS_DOT[d.status] ?? 'bg-muted')} />
+        )}
+        <span className="min-w-0 flex-1 truncate text-xs font-bold leading-tight">{d.label}</span>
+        <MaterialIcon name={style.icon} className={cn('shrink-0 text-[12px]', style.iconColor)} />
+      </div>
+
+      {/* Body — main param values, one truncated line each */}
+      <div className="px-1.5 py-0.5">
+        {unavailable && (
+          <div className="mb-px inline-block rounded bg-destructive/15 px-1 py-px text-[10px] font-medium text-destructive">
+            not deployed
+          </div>
+        )}
+        {paramRows.length > 0 ? (
+          paramRows.map((r) => (
+            <div key={r.label} className="truncate text-xs leading-tight text-foreground">
+              <span className="text-muted-foreground">{r.label}:</span> {r.text}
+            </div>
+          ))
+        ) : (
+          <div className="truncate text-xs italic leading-tight text-muted-foreground">
             {style.label}
-          </span>
-          {unavailable && (
-            <span className="rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
-              not deployed
-            </span>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Output handles */}
@@ -72,7 +96,7 @@ export function CanvasNode({ data, selected }: NodeProps) {
           id={p.name}
           type="source"
           position={Position.Right}
-          style={{ top: handleTop(i, outputs.length), background: dtypeColor(p.dtype), width: 10, height: 10 }}
+          style={{ top: handleTop(i, outputs.length), background: dtypeColor(p.dtype), width: 7, height: 7 }}
           title={`${p.label} (${p.dtype})`}
         />
       ))}

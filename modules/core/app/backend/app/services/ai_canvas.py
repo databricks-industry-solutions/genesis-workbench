@@ -18,6 +18,7 @@ from dataclasses import dataclass
 import mlflow
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.serving import ChatMessage, ChatMessageRole
+from databricks.sdk.service.workspace import ImportFormat
 from mlflow.tracking import MlflowClient
 
 from genesis_workbench.models import (
@@ -31,6 +32,7 @@ from genesis_workbench.workbench import (
     UserInfo,
     execute_non_select_query,
     execute_select_query,
+    get_user_settings,
 )
 
 from app.services.ai_canvas_registry import (
@@ -66,6 +68,8 @@ def _serialize_node(node: NodeType, available: bool) -> dict:
         "type": node.type,
         "label": node.label,
         "category": str(node.category),
+        "kind": node.kind,            # "" | databricks_job | endpoint_chain | mcp
+        "chain": node.chain,          # endpoint_chain handler id (else None)
         "description": node.description,
         "module": node.module,
         "available": available,
@@ -128,6 +132,29 @@ def _batch_job_names() -> set[str]:
     return names
 
 
+# Prebuilt-workflow jobs (genomics, fine-tunes, KERMT, …) aren't all registered
+# as batch_models — they're plain Jobs. List every job name once (cached for the
+# app's lifetime; deploys restart the app) so availability reflects what's
+# actually deployed without a per-node lookup.
+_all_job_names_cache: set[str] | None = None
+
+
+def _all_job_names() -> set[str]:
+    global _all_job_names_cache
+    if _all_job_names_cache is not None:
+        return _all_job_names_cache
+    names: set[str] = set()
+    try:
+        for j in WorkspaceClient().jobs.list():
+            settings = getattr(j, "settings", None)
+            if settings and settings.name:
+                names.add(str(settings.name))
+    except Exception as e:  # noqa: BLE001 — degrade gracefully
+        logger.warning("catalog: jobs list failed: %s", e)
+    _all_job_names_cache = names
+    return names
+
+
 def _generic_endpoint_node(short: str, display_name: str) -> dict:
     """A deployed endpoint with no curated schema — exposed as a permissive
     single-in / single-out JSON node so it's still composable. Keyed on the UC
@@ -157,7 +184,7 @@ def build_catalog() -> list[dict]:
     - Deployed endpoints with no curated entry: appended as generic nodes.
     """
     deployed_shorts, short_to_display = _deployed_endpoints()
-    batch_jobs = _batch_job_names()
+    batch_jobs = _batch_job_names() | _all_job_names()
 
     catalog: list[dict] = []
     curated_shorts: set[str] = set()
@@ -168,8 +195,15 @@ def build_catalog() -> list[dict]:
                 curated_shorts.add(short)
             available = bool(short) and short in deployed_shorts
         elif node.category == NodeCategory.BATCH:
-            available = node.job_name in batch_jobs
-        else:  # IO
+            if node.kind == "endpoint_chain":
+                # A composite chain is runnable iff every endpoint it needs is deployed.
+                available = all(
+                    (DISPLAY_TO_UC.get(name) or "") in deployed_shorts
+                    for name in node.requires_endpoints
+                )
+            else:  # databricks_job
+                available = node.job_name in batch_jobs
+        else:  # IO + TRANSFORM — always available (no external dependency)
             available = True
         catalog.append(_serialize_node(node, available))
 
@@ -353,6 +387,74 @@ def generate_graph(goal: str, llm_endpoint: str) -> dict:
     return {"nodes": clean_nodes, "edges": clean_edges}
 
 
+# ─── AI transform suggestion (auto-bridge incompatible connections) ──────────
+
+
+def _transform_catalog_lines() -> str:
+    """One line per transform node-type for the suggestion prompt."""
+    lines: list[str] = []
+    for n in CURATED_NODES:
+        if n.category != NodeCategory.TRANSFORM:
+            continue
+        ins = ", ".join(f"{p.name}:{p.dtype}" for p in n.inputs) or "—"
+        outs = ", ".join(f"{p.name}:{p.dtype}" for p in n.outputs) or "—"
+        params = ", ".join(
+            f.name + (f"({'/'.join(f.options)})" if f.options else "") for f in n.params
+        ) or "—"
+        lines.append(f'- type="{n.type}": {n.label}. in[{ins}] out[{outs}] params[{params}]')
+    return "\n".join(lines)
+
+
+_TRANSFORM_SUGGEST_PROMPT = """You wire nodes in a bioinformatics workflow canvas. The user connected an output of \
+dtype "{src}" (from "{src_label}") into an input of dtype "{dst}" (on "{dst_label}"), but the dtypes don't \
+directly match. Pick exactly ONE transform from the list that converts a "{src}" value into a "{dst}" value, \
+and fill its params sensibly for that conversion. If NONE can bridge it, return null for type.
+
+Transforms:
+{transforms}
+
+Respond with ONLY a JSON object, no prose, no markdown:
+{{"type": "<transform type, or null>", "params": {{}}}}"""
+
+
+def suggest_transform(
+    *, source_dtype: str, target_dtype: str,
+    source_label: str = "", target_label: str = "", llm_endpoint: str,
+) -> dict | None:
+    """Ask the LLM to pick a single transform node (+params) that bridges an
+    incompatible source-output → target-input connection. Returns
+    {type, label, params} or None if nothing fits / the call fails."""
+    transforms = {n.type: n for n in CURATED_NODES if n.category == NodeCategory.TRANSFORM}
+    prompt = _TRANSFORM_SUGGEST_PROMPT.format(
+        src=source_dtype, dst=target_dtype,
+        src_label=source_label or source_dtype, dst_label=target_label or target_dtype,
+        transforms=_transform_catalog_lines(),
+    )
+    try:
+        response = WorkspaceClient().serving_endpoints.query(
+            name=llm_endpoint,
+            messages=[
+                ChatMessage(role=ChatMessageRole.SYSTEM, content=prompt),
+                ChatMessage(role=ChatMessageRole.USER, content="Choose the transform."),
+            ],
+            max_tokens=300,
+        )
+        parsed = _extract_json(response.choices[0].message.content)
+    except Exception as e:  # noqa: BLE001 — fail-soft to the mismatch message
+        logger.info("suggest_transform failed (%s→%s): %s", source_dtype, target_dtype, e)
+        return None
+
+    ttype = parsed.get("type")
+    if not ttype or ttype not in transforms:
+        return None
+    nt = transforms[ttype]
+    valid = {f.name for f in nt.params}
+    suggested = parsed.get("params") if isinstance(parsed.get("params"), dict) else {}
+    merged = {f.name: f.default for f in nt.params if f.default is not None}
+    merged.update({k: v for k, v in suggested.items() if k in valid})
+    return {"type": nt.type, "label": nt.label, "params": merged}
+
+
 # ─── Workflow persistence (ai_canvas_workflows table) ────────────────────────
 
 
@@ -367,13 +469,41 @@ def _table() -> str:
     return f"{os.environ['CORE_CATALOG_NAME']}.{os.environ['CORE_SCHEMA_NAME']}.ai_canvas_workflows"
 
 
+def _safe_filename(name: str) -> str:
+    """A filesystem-safe slug for the workflow JSON filename."""
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "_", name.strip()) or "workflow"
+    return slug[:120]
+
+
+def _save_graph_to_experiment_folder(user_email: str, name: str, graph: dict) -> None:
+    """Best-effort: write the graph JSON to the user's MLflow experiment folder
+    (from Profile settings) under a new `/ai_canvas` subfolder, so saved
+    workflows are visible/portable alongside the user's experiments. Never
+    raises — a workspace-write hiccup must not fail the (table-backed) save."""
+    try:
+        folder = get_user_settings(user_email=user_email).get("mlflow_experiment_folder")
+        if not folder:
+            return
+        base = f"/Workspace/Users/{user_email}/{folder}/ai_canvas"
+        w = WorkspaceClient()
+        w.workspace.mkdirs(base)
+        w.workspace.upload(
+            f"{base}/{_safe_filename(name)}.json",
+            io.BytesIO(json.dumps(graph, indent=2).encode("utf-8")),
+            format=ImportFormat.AUTO,
+            overwrite=True,
+        )
+    except Exception as e:  # noqa: BLE001 — best-effort mirror of the DB save
+        logger.info("ai_canvas: experiment-folder save skipped for %s: %s", user_email, e)
+
+
 def save_workflow(
     *,
     user_email: str,
     name: str,
     description: str,
     graph: dict,
-    workflow_id: int | None = None,
+    workflow_id: int | str | None = None,
 ) -> int:
     """Insert a new workflow or update an existing one (owned by the user).
     Returns the workflow_id. Graph is stored as JSON text in `graph_json`."""
@@ -399,6 +529,8 @@ def save_workflow(
                     deactivated_timestamp = NULL
                 WHERE workflow_id = {int(workflow_id)} AND created_by = {_sql_str(user_email)}"""
         )
+    # Mirror the graph JSON into the user's MLflow experiment folder (best-effort).
+    _save_graph_to_experiment_folder(user_email, name, graph)
     return int(workflow_id)
 
 
@@ -414,7 +546,7 @@ def list_workflows(user_email: str) -> list[dict]:
     for _, r in df.iterrows():
         out.append(
             {
-                "workflow_id": int(r["workflow_id"]),
+                "workflow_id": str(int(r["workflow_id"])),  # BIGINT → string for JS
                 "name": str(r["workflow_name"]),
                 "description": str(r["workflow_description"] or ""),
                 "updated_date": str(r["updated_date"]),
@@ -439,7 +571,7 @@ def get_workflow(workflow_id: int, user_email: str) -> dict | None:
     except (TypeError, json.JSONDecodeError):
         graph = {"nodes": [], "edges": []}
     return {
-        "workflow_id": int(r["workflow_id"]),
+        "workflow_id": str(int(r["workflow_id"])),  # BIGINT → string for JS
         "name": str(r["workflow_name"]),
         "description": str(r["workflow_description"] or ""),
         "graph": graph,
@@ -531,8 +663,19 @@ def _exec_descriptor(type_key: str, w: WorkspaceClient) -> dict:
             logger.info("exec: endpoint %s not resolvable: %s", nt.endpoint_display_name, e)
         return ex
     if nt.category == NodeCategory.BATCH:
+        # Endpoint-chain composites aren't Databricks jobs — run-wiring lands in a
+        # later increment. Emit a descriptor the orchestrator treats as not-yet-
+        # runnable (never falls through to a job dispatch with no job_name).
+        if nt.kind == "endpoint_chain":
+            return {"kind": "chain", "chain": nt.chain,
+                    "inputs": ports[0], "outputs": ports[1], "runnable": False}
         return {"kind": "batch", "job_id": _resolve_batch_job_id(nt.job_name, w),
                 "job_name": nt.job_name, "inputs": ports[0], "outputs": ports[1]}
+    if nt.category == NodeCategory.TRANSFORM:
+        # Deterministic reshape op (read_text_file / extract_field / …). Execution
+        # wiring lands with the run path; flagged not-yet-runnable until then.
+        return {"kind": "transform", "op": nt.type,
+                "inputs": ports[0], "outputs": ports[1], "runnable": False}
     return {"kind": "unknown"}
 
 

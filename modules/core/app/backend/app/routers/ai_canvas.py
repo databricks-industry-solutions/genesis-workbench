@@ -118,22 +118,56 @@ def generate(payload: GenerateRequest, _: CurrentUserDep) -> GenerateResponse:
     return GenerateResponse(graph=Graph(**graph))
 
 
+class TransformSuggestRequest(BaseModel):
+    source_dtype: str
+    target_dtype: str
+    source_label: str = ""
+    target_label: str = ""
+
+
+class TransformSuggestResponse(BaseModel):
+    type: str | None = None
+    label: str | None = None
+    params: dict = Field(default_factory=dict)
+
+
+@router.post("/transform-suggest", response_model=TransformSuggestResponse)
+def transform_suggest(
+    payload: TransformSuggestRequest, _: CurrentUserDep
+) -> TransformSuggestResponse:
+    """When two ports' dtypes don't match, suggest a transform node that bridges
+    them. Returns type=None if nothing fits (the UI then shows the mismatch)."""
+    endpoint = get_settings().llm_endpoint_name
+    if not endpoint:
+        return TransformSuggestResponse(type=None)
+    res = svc.suggest_transform(
+        source_dtype=payload.source_dtype,
+        target_dtype=payload.target_dtype,
+        source_label=payload.source_label,
+        target_label=payload.target_label,
+        llm_endpoint=endpoint,
+    )
+    return TransformSuggestResponse(**res) if res else TransformSuggestResponse(type=None)
+
+
 # ─── Workflow persistence ────────────────────────────────────────────────────
 
 
+# workflow_id is a time_ns() BIGINT — it MUST cross to the React UI as a string
+# or JS rounds it (exceeds Number.MAX_SAFE_INTEGER) and Load lookups miss.
 class SaveWorkflowRequest(BaseModel):
-    workflow_id: int | None = None
+    workflow_id: str | None = None
     name: str = Field(..., min_length=1)
     description: str = ""
     graph: Graph
 
 
 class SaveWorkflowResponse(BaseModel):
-    workflow_id: int
+    workflow_id: str
 
 
 class WorkflowSummary(BaseModel):
-    workflow_id: int
+    workflow_id: str
     name: str
     description: str
     updated_date: str
@@ -144,7 +178,7 @@ class WorkflowListResponse(BaseModel):
 
 
 class WorkflowDetail(BaseModel):
-    workflow_id: int
+    workflow_id: str
     name: str
     description: str
     graph: Graph
@@ -164,7 +198,7 @@ def save_workflow(payload: SaveWorkflowRequest, user: CurrentUserDep) -> SaveWor
         )
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Save failed: {e}")
-    return SaveWorkflowResponse(workflow_id=wid)
+    return SaveWorkflowResponse(workflow_id=str(wid))
 
 
 @router.get("/workflows", response_model=WorkflowListResponse)
@@ -176,7 +210,7 @@ def list_workflows(user: CurrentUserDep) -> WorkflowListResponse:
 
 
 @router.get("/workflows/{workflow_id}", response_model=WorkflowDetail)
-def get_workflow(workflow_id: int, user: CurrentUserDep) -> WorkflowDetail:
+def get_workflow(workflow_id: str, user: CurrentUserDep) -> WorkflowDetail:
     if not user.email:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "User email unavailable")
     wf = svc.get_workflow(workflow_id, user.email)
@@ -186,7 +220,7 @@ def get_workflow(workflow_id: int, user: CurrentUserDep) -> WorkflowDetail:
 
 
 @router.delete("/workflows/{workflow_id}")
-def delete_workflow(workflow_id: int, user: CurrentUserDep) -> dict:
+def delete_workflow(workflow_id: str, user: CurrentUserDep) -> dict:
     if not user.email:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "User email unavailable")
     svc.deactivate_workflow(workflow_id, user.email)

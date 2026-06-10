@@ -14,6 +14,8 @@ import type {
   CanvasSaveWorkflowResponse,
   CanvasWorkflowDetail,
   CanvasWorkflowListResponse,
+  TransformSuggestRequest,
+  TransformSuggestResponse,
   BatchModelsResponse,
   BionemoDefaultsResponse,
   BionemoDispatchResponse,
@@ -554,9 +556,14 @@ export const api = {
     }),
   aiCanvasListWorkflows: () =>
     request<CanvasWorkflowListResponse>('/api/ai_canvas/workflows'),
-  aiCanvasGetWorkflow: (id: number) =>
+  aiCanvasSuggestTransform: (body: TransformSuggestRequest) =>
+    request<TransformSuggestResponse>('/api/ai_canvas/transform-suggest', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  aiCanvasGetWorkflow: (id: string) =>
     request<CanvasWorkflowDetail>(`/api/ai_canvas/workflows/${id}`),
-  aiCanvasDeleteWorkflow: (id: number) =>
+  aiCanvasDeleteWorkflow: (id: string) =>
     request<{ ok: boolean }>(`/api/ai_canvas/workflows/${id}`, { method: 'DELETE' }),
   aiCanvasRun: (body: CanvasRunRequest) =>
     request<CanvasRunResponse>('/api/ai_canvas/run', {

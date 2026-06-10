@@ -28,8 +28,9 @@ from enum import StrEnum
 
 class NodeCategory(StrEnum):
     ENDPOINT = "endpoint"   # real-time model serving endpoint (seconds)
-    BATCH = "batch"         # long-running Databricks job (minutes → hours)
+    BATCH = "batch"         # "Prebuilt Workflows" — job OR endpoint-chain OR (future) MCP
     IO = "io"               # data input / output (UC Volume, Delta table)
+    TRANSFORM = "transform" # reshape/parse/map one node's output to the next node's input
 
 
 # Port data types. Edges are valid when the upstream output dtype matches the
@@ -73,6 +74,16 @@ class NodeType:
     category: NodeCategory
     description: str = ""
     module: str | None = None   # single_cell | large_molecule | small_molecule | genomics
+    # A "Prebuilt Workflow" (category BATCH) is a higher-level capability whose
+    # execution kind is NOT necessarily a Databricks job. `kind` distinguishes:
+    #   "databricks_job"  → dispatched as a Jobs run (job_name)
+    #   "endpoint_chain"  → an app-orchestrated chain of real-time endpoints
+    #                       (e.g. Protein Design, ADMET Screen); chain id in `chain`
+    #   "mcp"             → (future) a tool exposed by the MCP server app
+    # ENDPOINT/IO nodes leave this empty (their category implies execution).
+    kind: str = ""
+    chain: str | None = None                   # endpoint_chain → app chain handler id
+    requires_endpoints: list[str] = field(default_factory=list)  # chain availability gate (DISPLAY_TO_UC keys)
     # Invocation handle (exactly one is meaningful per category):
     endpoint_display_name: str | None = None   # ENDPOINT → DISPLAY_TO_UC key
     job_name: str | None = None                # BATCH → Jobs API name
@@ -134,6 +145,71 @@ _IO_NODES: list[NodeType] = [
         inputs=[Port("data", PortType.ANY, "Result")],
         params=[
             ParamField("name", "Artifact name", "string", default="result"),
+        ],
+    ),
+]
+
+
+# ─── Transform nodes ─────────────────────────────────────────────────────────
+# Reshape/parse/map the output of one node into the input shape of the next.
+# Deterministic, no model/job calls. `kind="transform"`; the node `type` is the
+# op the orchestrator switches on. (Execution wiring lands with the run path.)
+
+_KIND_TRANSFORM = "transform"
+
+_TRANSFORM_NODES: list[NodeType] = [
+    NodeType(
+        type="read_text_file", label="Read Text File", category=NodeCategory.TRANSFORM,
+        kind=_KIND_TRANSFORM,
+        description="Read a UC Volume text file into a string (e.g. a sequence or SMILES).",
+        inputs=[Port("file", PortType.PATH, "File path")],
+        outputs=[Port("text", PortType.ANY, "Text")],
+    ),
+    NodeType(
+        type="parse_fasta", label="Parse FASTA", category=NodeCategory.TRANSFORM,
+        kind=_KIND_TRANSFORM,
+        description="Parse a FASTA file into a list of sequences.",
+        inputs=[Port("file", PortType.PATH, "FASTA path")],
+        outputs=[Port("sequences", PortType.SEQUENCES, "Sequences")],
+    ),
+    NodeType(
+        type="csv_column", label="CSV Column", category=NodeCategory.TRANSFORM,
+        kind=_KIND_TRANSFORM,
+        description="Extract one column from a CSV / table as a list of values.",
+        inputs=[Port("table", PortType.ANY, "Table or CSV")],
+        outputs=[Port("values", PortType.ANY, "Values")],
+        params=[ParamField("column", "Column name", "string", required=True)],
+    ),
+    NodeType(
+        type="extract_field", label="Extract Field", category=NodeCategory.TRANSFORM,
+        kind=_KIND_TRANSFORM,
+        description="Pull a single value out of a JSON object by key / dotted path "
+                    "(e.g. predictions.0.smiles).",
+        inputs=[Port("data", PortType.JSON, "JSON")],
+        outputs=[Port("value", PortType.ANY, "Value")],
+        params=[ParamField("path", "Field path", "string", required=True,
+                           help="Dotted path, e.g. results.0.pdb")],
+    ),
+    NodeType(
+        type="field_mapper", label="Field Mapper", category=NodeCategory.TRANSFORM,
+        kind=_KIND_TRANSFORM,
+        description="Map named output fields to the named input fields the next node "
+                    "expects (declarative {target: source-path} mapping).",
+        inputs=[Port("data", PortType.JSON, "JSON")],
+        outputs=[Port("mapped", PortType.JSON, "Mapped JSON")],
+        params=[ParamField("mappings", "Mappings (JSON)", "text", default="{}",
+                           help='e.g. {"sequence": "predictions.0.seq"}')],
+    ),
+    NodeType(
+        type="select_top_k", label="Select / Top-K", category=NodeCategory.TRANSFORM,
+        kind=_KIND_TRANSFORM,
+        description="Keep the top K items of a JSON list, ranked by a field.",
+        inputs=[Port("items", PortType.JSON, "Items")],
+        outputs=[Port("top", PortType.JSON, "Top items")],
+        params=[
+            ParamField("k", "K", "int", default=5),
+            ParamField("by", "Rank by field", "string", default=""),
+            ParamField("order", "Order", "select", default="desc", options=["desc", "asc"]),
         ],
     ),
 ]
@@ -260,37 +336,175 @@ _ENDPOINT_NODES: list[NodeType] = [
 ]
 
 
-# ─── Curated batch-job nodes ─────────────────────────────────────────────────
-# `job_name` is matched against the live Jobs API at dispatch time.
+# ─── Prebuilt Workflows ──────────────────────────────────────────────────────
+# Category BATCH groups all higher-level capabilities under the "Prebuilt
+# Workflows" palette section — regardless of how they execute. `kind` records
+# the execution model (see NodeType). Job-backed entries set `job_name` (matched
+# against the live Jobs API); endpoint-chain composites set `chain` +
+# `requires_endpoints` (availability gated on those endpoints being deployed).
 
-_BATCH_NODES: list[NodeType] = [
+_KIND_JOB = "databricks_job"
+_KIND_CHAIN = "endpoint_chain"
+
+_WORKFLOW_NODES: list[NodeType] = [
+    # ── Genomics suite ──
     NodeType(
-        type="alphafold2", label="AlphaFold2", category=NodeCategory.BATCH,
-        module="large_molecule", job_name="run_alphafold",
-        description="High-accuracy structure prediction (batch job).",
+        type="variant_calling", label="Variant Calling", category=NodeCategory.BATCH,
+        kind=_KIND_JOB, module="genomics", job_name="gwas_parabricks_alignment",
+        description="Align FASTQ reads to a reference genome and call variants (Parabricks).",
+        inputs=[Port("fastq_r1", PortType.PATH, "FASTQ R1"),
+                Port("fastq_r2", PortType.PATH, "FASTQ R2")],
+        outputs=[Port("vcf", PortType.PATH, "VCF")],
+        params=[
+            ParamField("reference_genome_path", "Reference genome path", "string"),
+            ParamField("output_volume_path", "Output volume path", "string"),
+        ],
+    ),
+    NodeType(
+        type="vcf_ingestion", label="VCF Ingestion", category=NodeCategory.BATCH,
+        kind=_KIND_JOB, module="genomics", job_name="vcf_ingestion_glow",
+        description="Ingest a VCF file into a Delta table for downstream analysis.",
+        inputs=[Port("vcf", PortType.PATH, "VCF path")],
+        outputs=[Port("table", PortType.TABLE, "Variants table")],
+        params=[ParamField("output_table_name", "Output table", "string", required=True,
+                           help="catalog.schema.table")],
+    ),
+    NodeType(
+        type="variant_annotation", label="Variant Annotation", category=NodeCategory.BATCH,
+        kind=_KIND_JOB, module="genomics", job_name="variant_annotation_clinical",
+        description="Annotate variants against ClinVar with gene-panel filtering.",
+        inputs=[Port("table", PortType.TABLE, "Variants table")],
+        outputs=[Port("annotations", PortType.TABLE, "Annotated variants")],
+        params=[
+            ParamField("gene_panel_mode", "Gene panel", "select", default="custom",
+                       options=["custom", "acmg"]),
+            ParamField("gene_regions", "Gene regions", "string", default="",
+                       help="Used when panel = custom (e.g. BRCA1,BRCA2)."),
+        ],
+    ),
+    NodeType(
+        type="gwas", label="GWAS", category=NodeCategory.BATCH,
+        kind=_KIND_JOB, module="genomics", job_name="gwas_glow_analysis",
+        description="Genome-wide association study over called variants + phenotype.",
+        inputs=[Port("vcf", PortType.PATH, "VCF path"),
+                Port("phenotype", PortType.PATH, "Phenotype path")],
+        outputs=[Port("results", PortType.TABLE, "GWAS results")],
+        params=[
+            ParamField("phenotype_column", "Phenotype column", "string", default="phenotype"),
+            ParamField("contigs", "Contigs", "string", default="6"),
+            ParamField("pvalue_threshold", "p-value threshold", "float", default=0.01),
+        ],
+    ),
+    # ── Structure prediction ──
+    NodeType(
+        type="alphafold2", label="AlphaFold Structure Prediction", category=NodeCategory.BATCH,
+        kind=_KIND_JOB, module="large_molecule", job_name="run_alphafold",
+        description="High-accuracy 3D structure prediction from a protein sequence.",
         inputs=[Port("sequence", PortType.SEQUENCE)],
         outputs=[Port("pdb", PortType.PDB)],
     ),
+    # ── Guided optimization loops ──
     NodeType(
         type="enzyme_optimization", label="Guided Enzyme Optimization",
-        category=NodeCategory.BATCH, module="small_molecule",
+        category=NodeCategory.BATCH, kind=_KIND_JOB, module="large_molecule",
         job_name="run_enzyme_optimization_gwb",
-        description="Reward-weighted enzyme design loop (batch job).",
-        inputs=[Port("pdb", PortType.PDB)],
+        description="Reward-weighted enzyme design loop (GenMol → score → reseed).",
+        inputs=[Port("motif_pdb", PortType.PDB, "Motif PDB"),
+                Port("substrate_smiles", PortType.SMILES, "Substrate")],
         outputs=[Port("candidates", PortType.JSON)],
+        params=[
+            ParamField("motif_residues_csv", "Motif residues", "string"),
+            ParamField("num_samples", "Samples / iter", "int", default=8),
+            ParamField("num_iterations", "Iterations", "int", default=10),
+        ],
     ),
     NodeType(
-        type="variant_annotation", label="Variant Annotation",
-        category=NodeCategory.BATCH, module="genomics",
-        job_name="run_variant_annotation",
-        description="Annotate variants (ClinVar + gene filtering).",
-        inputs=[Port("data", PortType.TABLE)],
-        outputs=[Port("annotations", PortType.TABLE)],
+        type="molecule_optimization", label="Guided Molecule Optimization",
+        category=NodeCategory.BATCH, kind=_KIND_JOB, module="small_molecule",
+        job_name="run_molecule_optimization_gwb",
+        description="Reward-weighted small-molecule design loop (GenMol → score → reseed).",
+        inputs=[Port("seed_smiles", PortType.SMILES, "Seed SMILES"),
+                Port("target_sequence", PortType.SEQUENCE, "Target (optional)")],
+        outputs=[Port("top_k", PortType.JSON, "Top candidates")],
+        params=[
+            ParamField("num_iterations", "Iterations", "int", default=5),
+            ParamField("num_samples", "Samples / iter", "int", default=24),
+            ParamField("qed_min", "QED min", "float", default=0.0),
+            ParamField("tox_max", "Tox max", "float", default=1.0),
+        ],
+    ),
+    # ── Fine-tuning ──
+    NodeType(
+        type="esm2_finetune", label="Fine-Tune ESM2", category=NodeCategory.BATCH,
+        kind=_KIND_JOB, module="large_molecule", job_name="bionemo_esm_finetune_job",
+        description="Fine-tune ESM2 on a labeled sequence dataset (BioNeMo).",
+        inputs=[Port("train_data", PortType.PATH, "Train CSV"),
+                Port("validation_data", PortType.PATH, "Validation CSV")],
+        outputs=[Port("weights", PortType.PATH, "Fine-tuned weights")],
+        params=[
+            ParamField("esm_variant", "ESM2 variant", "select", default="650M",
+                       options=["8M", "35M", "150M", "650M"]),
+            ParamField("task_type", "Task", "select", default="regression",
+                       options=["regression", "classification"]),
+            ParamField("num_steps", "Steps", "int", default=50),
+        ],
+    ),
+    NodeType(
+        type="kermt_finetune", label="Fine-Tune KERMT", category=NodeCategory.BATCH,
+        kind=_KIND_JOB, module="small_molecule", job_name="kermt_finetune_job",
+        description="Fine-tune KERMT (GROVER) on a toxicity / ADMET dataset.",
+        inputs=[Port("train_data", PortType.PATH, "Train CSV"),
+                Port("validation_data", PortType.PATH, "Validation CSV"),
+                Port("test_data", PortType.PATH, "Test CSV")],
+        outputs=[Port("ft_id", PortType.JSON, "Fine-tune id")],
+        params=[
+            ParamField("target_names", "Target column(s)", "string", default="toxicity"),
+            ParamField("dataset_type", "Dataset type", "select", default="classification",
+                       options=["classification", "regression"]),
+            ParamField("epochs", "Epochs", "int", default=20),
+        ],
+    ),
+    NodeType(
+        type="kermt_deploy", label="Deploy KERMT", category=NodeCategory.BATCH,
+        kind=_KIND_JOB, module="small_molecule", job_name="kermt_deploy_job",
+        description="Register a fine-tuned KERMT model as a real-time ADMET endpoint.",
+        inputs=[Port("ft_id", PortType.JSON, "Fine-tune id")],
+        outputs=[Port("endpoint", PortType.JSON, "Endpoint")],
+        params=[ParamField("model_name", "Model name", "string", default="kermt_admet")],
+    ),
+]
+
+# ── Endpoint-chain composites (kind = endpoint_chain) ──
+# Not Databricks jobs — app-orchestrated chains of real-time endpoints. They sit
+# in the same "Prebuilt Workflows" group and (eventually) become MCP tools.
+# Availability is gated on `requires_endpoints` being deployed (DISPLAY_TO_UC keys).
+
+_CHAIN_NODES: list[NodeType] = [
+    NodeType(
+        type="protein_design", label="Protein Design", category=NodeCategory.BATCH,
+        kind=_KIND_CHAIN, chain="protein_design", module="large_molecule",
+        requires_endpoints=["RFDiffusion", "ProteinMPNN", "ESMFold"],
+        description="Chain: RFDiffusion → ProteinMPNN → ESMFold to design + validate "
+                    "binders around a marked region.",
+        inputs=[Port("sequence", PortType.SEQUENCE, "Sequence ([region] marked)")],
+        outputs=[Port("designs", PortType.JSON, "Designs")],
+        params=[ParamField("n_rfdiffusion_hits", "RFDiffusion designs", "int", default=4)],
+    ),
+    NodeType(
+        type="admet_screen", label="ADMET Screen", category=NodeCategory.BATCH,
+        kind=_KIND_CHAIN, chain="admet_screen", module="small_molecule",
+        requires_endpoints=["Chemprop ADMET"],
+        description="Chain: run ADMET / toxicity predictors (Chemprop ADMET, BBBP, "
+                    "ClinTox, KERMT) over a SMILES set and combine the profile.",
+        inputs=[Port("smiles", PortType.SMILES)],
+        outputs=[Port("profile", PortType.JSON, "ADMET profile")],
     ),
 ]
 
 
-CURATED_NODES: list[NodeType] = _IO_NODES + _ENDPOINT_NODES + _BATCH_NODES
+CURATED_NODES: list[NodeType] = (
+    _IO_NODES + _TRANSFORM_NODES + _ENDPOINT_NODES + _WORKFLOW_NODES + _CHAIN_NODES
+)
 
 # Fast lookups used by the catalog builder + executors.
 CURATED_BY_TYPE: dict[str, NodeType] = {n.type: n for n in CURATED_NODES}
@@ -298,5 +512,5 @@ CURATED_BY_ENDPOINT: dict[str, NodeType] = {
     n.endpoint_display_name: n for n in _ENDPOINT_NODES if n.endpoint_display_name
 }
 CURATED_BY_JOB: dict[str, NodeType] = {
-    n.job_name: n for n in _BATCH_NODES if n.job_name
+    n.job_name: n for n in _WORKFLOW_NODES if n.job_name
 }

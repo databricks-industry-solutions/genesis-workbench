@@ -1003,7 +1003,7 @@ export type CanvasParam = {
 export type CanvasNodeType = {
   type: string
   label: string
-  category: 'endpoint' | 'batch' | 'io'
+  category: 'endpoint' | 'batch' | 'io' | 'transform'
   description: string
   module: string | null
   available: boolean
@@ -1042,21 +1042,22 @@ export type CanvasGenerateRequest = { goal: string }
 export type CanvasGenerateResponse = { graph: CanvasGraph }
 
 export type CanvasSaveWorkflowRequest = {
-  workflow_id?: number | null
+  // BIGINT id — string across the wire so JS doesn't round it.
+  workflow_id?: string | null
   name: string
   description?: string
   graph: CanvasGraph
 }
-export type CanvasSaveWorkflowResponse = { workflow_id: number }
+export type CanvasSaveWorkflowResponse = { workflow_id: string }
 export type CanvasWorkflowSummary = {
-  workflow_id: number
+  workflow_id: string
   name: string
   description: string
   updated_date: string
 }
 export type CanvasWorkflowListResponse = { workflows: CanvasWorkflowSummary[] }
 export type CanvasWorkflowDetail = {
-  workflow_id: number
+  workflow_id: string
   name: string
   description: string
   graph: CanvasGraph
@@ -1086,3 +1087,15 @@ export type CanvasRunSummary = {
 }
 export type CanvasRunsResponse = { runs: CanvasRunSummary[] }
 export type CanvasRunResultResponse = { result: Record<string, unknown> }
+
+export type TransformSuggestRequest = {
+  source_dtype: string
+  target_dtype: string
+  source_label?: string
+  target_label?: string
+}
+export type TransformSuggestResponse = {
+  type: string | null
+  label: string | null
+  params: Record<string, unknown>
+}

@@ -15,10 +15,10 @@ export function WorkflowLibrary({
   disabled,
 }: {
   graph: CanvasGraph
-  loadedId: number | null
+  loadedId: string | null
   loadedName: string
   onLoad: (detail: CanvasWorkflowDetail) => void
-  onSaved: (id: number, name: string) => void
+  onSaved: (id: string, name: string) => void
   disabled: boolean
 }) {
   const qc = useQueryClient()
@@ -49,7 +49,7 @@ export function WorkflowLibrary({
   })
 
   const load = useMutation({
-    mutationFn: (id: number) => api.aiCanvasGetWorkflow(id),
+    mutationFn: (id: string) => api.aiCanvasGetWorkflow(id),
     onSuccess: (detail) => {
       onLoad(detail)
       setLibOpen(false)
@@ -57,7 +57,7 @@ export function WorkflowLibrary({
   })
 
   const del = useMutation({
-    mutationFn: (id: number) => api.aiCanvasDeleteWorkflow(id),
+    mutationFn: (id: string) => api.aiCanvasDeleteWorkflow(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['ai_canvas', 'workflows'] }),
   })
 
