@@ -248,13 +248,14 @@ Node types (connect an output port to an input port only when their dtypes match
 {catalog}
 
 Rules:
+- PREFER building the workflow around at least one **Prebuilt Workflow** (a node whose category is `batch` — e.g. Guided Enzyme Optimization, Guided Molecule Optimization, Protein Design, ADMET Screen, AlphaFold, GWAS). These are the platform's headline multi-step capabilities; make one the centerpiece whenever the goal allows.
+- Build a complete, realistic pipeline, not a single node: an input → (optional transforms) → a Prebuilt Workflow (and/or a few chained endpoints) → optional follow-up analysis → output_sink. Aim for roughly 4–7 nodes when the goal supports it.
 - Start with an input node (volume_input, delta_input, or text_input) that provides the initial data.
 - End with an output_sink node that collects the final result.
 - Use each node's `type` EXACTLY as written above. Do not invent node types.
 - Give every node a unique `id` (e.g. "n1", "n2") and a short human `label`.
-- Only add edges between compatible ports; set sourceHandle to the source node's output port name and targetHandle to the target node's input port name.
+- Only add edges between compatible ports; set sourceHandle to the source node's output port name and targetHandle to the target node's input port name. If two ports' dtypes don't match, insert a transform node between them.
 - Fill `params` with sensible values where helpful; otherwise use {{}}.
-- Keep the graph minimal — only the nodes needed to accomplish the goal.
 
 Respond with ONLY a JSON object, no prose, no markdown fences, in exactly this shape:
 {{"nodes":[{{"id":"n1","type":"<type>","label":"<label>","params":{{}}}}],

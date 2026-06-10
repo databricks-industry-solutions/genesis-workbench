@@ -39,16 +39,17 @@ import type { CanvasNodeType } from '@/types/api'
 
 const nodeTypes: NodeTypes = { vortex: CanvasNode }
 
-// Fun, catalog-valid example goals for the ✨ "Show me how" button.
+// Fun, catalog-valid example goals for the ✨ "Show me how" button. Each leans on
+// a Prebuilt Workflow (Guided Enzyme/Molecule Optimization, Protein Design, ADMET
+// Screen, AlphaFold, GWAS) so the generated graph reads as a real pipeline.
 const EXAMPLE_GOALS = [
-  'Fold a protein sequence and predict its solubility',
-  'Dock a small molecule into a predicted protein structure',
-  'Design a protein binder around a target and validate it',
-  'Run an ADMET screen on a candidate molecule',
-  'Predict structure with AlphaFold and check thermostability',
-  'Annotate genetic variants from a VCF and flag pathogenic ones',
-  'Generate molecules and screen them for toxicity',
-  'Embed a protein sequence and predict its half-life',
+  'Guided enzyme optimization on a motif, then fold the best candidate and check solubility',
+  'Design a protein around a target with Protein Design, then predict thermostability',
+  'Run an ADMET screen on a molecule, then guided molecule optimization on the winners',
+  'Optimize an enzyme for a substrate and validate the top design with AlphaFold',
+  'Predict structure with AlphaFold, dock a ligand, and screen it for toxicity',
+  'Call variants from a FASTQ, run GWAS, and annotate the pathogenic hits',
+  'Generate molecules, ADMET-screen them, then optimize the best for a target',
 ]
 
 // Timestamp slug for default names, e.g. "20260609_135501".
