@@ -118,10 +118,15 @@ final_outputs = {}  # output_sink label -> value
 
 
 def gather_inputs(node_id):
-    """Map this node's input-port names to upstream output values."""
+    """Resolve this node's input-port values: inline value typed on the node,
+    overridden by an upstream edge if one is wired to that port (convertible
+    fields). Precedence: edge > inline."""
     node = nodes[node_id]
     in_ports = node.get("exec", {}).get("inputs", [])
-    collected = {}
+    # Start from inline values typed on the node.
+    inline = node.get("inputs", {}) or {}
+    collected = {p: inline[p] for p in in_ports if inline.get(p) not in (None, "")}
+    # Wired edges override the inline value for their target port.
     for src_id, src_port, dst_port in incoming.get(node_id, []):
         src_out = results.get(src_id, {})
         value = src_out.get(src_port) if src_port else (next(iter(src_out.values()), None))

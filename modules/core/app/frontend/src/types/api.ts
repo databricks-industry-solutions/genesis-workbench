@@ -1023,6 +1023,8 @@ export type CanvasGraphNode = {
   type: string
   label: string
   params: Record<string, unknown>
+  // Inline values for input ports; a wired edge overrides at run time.
+  inputs?: Record<string, unknown>
   position: { x: number; y: number }
 }
 

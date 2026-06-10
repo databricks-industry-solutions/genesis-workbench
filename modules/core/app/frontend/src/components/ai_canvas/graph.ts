@@ -12,6 +12,9 @@ export type VortexNodeData = {
   typeKey: string
   label: string
   params: Record<string, unknown>
+  // Inline values for input ports (convertible fields). A wired edge to a port
+  // overrides its inline value at run time.
+  inputs?: Record<string, unknown>
   catalog: CanvasNodeType | null
   status?: NodeStatus
   // Derived for display: true when this node has unmet validation requirements
@@ -173,10 +176,14 @@ export function graphValidationErrors(nodes: VortexNode[], edges: VortexEdge[]):
     const label = n.data.label
     const params = n.data.params ?? {}
 
-    // 1. Every input port needs an incoming edge.
+    // 1. Every input field must be satisfied: wired from upstream OR filled inline
+    //    (convertible fields — a value can be typed on the node or piped in).
     for (const p of cat?.inputs ?? []) {
       const connected = edges.some((e) => e.target === n.id && e.targetHandle === p.name)
-      if (!connected) issues.push({ nodeId: n.id, node: label, message: `input “${p.label || p.name}” not connected` })
+      const inlineSet = !isBlank(n.data.inputs?.[p.name])
+      if (!connected && !inlineSet) {
+        issues.push({ nodeId: n.id, node: label, message: `${p.label || p.name} is empty (type a value or wire it)` })
+      }
     }
 
     // 2. Required params must be filled (covers IO value/path/table — all required).
@@ -206,6 +213,12 @@ export function defaultParams(cat: CanvasNodeType): Record<string, unknown> {
   return out
 }
 
+// Inline editor kind for an input port, derived from its dtype. Big text blobs
+// (PDB / JSON / multi-sequence) get a textarea; everything else a single line.
+export function inputEditorIsTextarea(dtype: string): boolean {
+  return dtype === 'pdb' || dtype === 'json' || dtype === 'sequences'
+}
+
 // React Flow nodes/edges -> the persisted/executable graph JSON.
 export function toCanvasGraph(nodes: VortexNode[], edges: VortexEdge[]): CanvasGraph {
   return {
@@ -214,6 +227,7 @@ export function toCanvasGraph(nodes: VortexNode[], edges: VortexEdge[]): CanvasG
       type: n.data.typeKey,
       label: n.data.label,
       params: n.data.params ?? {},
+      inputs: n.data.inputs ?? {},
       position: { x: Math.round(n.position.x), y: Math.round(n.position.y) },
     })),
     edges: edges.map((e) => ({
@@ -240,6 +254,7 @@ export function fromCanvasGraph(
         typeKey: n.type,
         label: n.label || cat?.label || n.type,
         params: n.params ?? {},
+        inputs: n.inputs ?? {},
         catalog: cat,
       },
     }

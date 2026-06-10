@@ -1,7 +1,7 @@
-// Vortex (ai_canvas) — right panel to inspect/edit the selected node's params.
-import { CATEGORY_STYLE } from './graph'
+// Vortex (ai_canvas) — right panel to inspect/edit the selected node's inputs + params.
+import { CATEGORY_STYLE, dtypeColor, inputEditorIsTextarea } from './graph'
 import type { VortexNode } from './graph'
-import type { CanvasParam } from '@/types/api'
+import type { CanvasParam, CanvasPort } from '@/types/api'
 
 export function NodeParamPanel({
   node,
@@ -12,6 +12,8 @@ export function NodeParamPanel({
   runName,
   onChangeRunName,
   onChangeParam,
+  onChangeInput,
+  wiredInputs,
   onRename,
   onDelete,
 }: {
@@ -23,6 +25,8 @@ export function NodeParamPanel({
   runName: string
   onChangeRunName: (name: string) => void
   onChangeParam: (name: string, value: unknown) => void
+  onChangeInput: (name: string, value: unknown) => void
+  wiredInputs: Set<string>
   onRename: (label: string) => void
   onDelete: () => void
 }) {
@@ -92,32 +96,48 @@ export function NodeParamPanel({
           </div>
 
           <div className="flex-1 space-y-3 overflow-auto p-3">
-            {cat && cat.params.length === 0 && (
-              <p className="text-xs text-muted-foreground">No parameters for this node.</p>
+            {/* Inputs — editable inline, or fed by an upstream connection. */}
+            {cat && cat.inputs.length > 0 && (
+              <div className="space-y-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Inputs
+                </div>
+                {cat.inputs.map((p) => (
+                  <InputField
+                    key={p.name}
+                    port={p}
+                    value={node.data.inputs?.[p.name]}
+                    wired={wiredInputs.has(p.name)}
+                    onChange={(v) => onChangeInput(p.name, v)}
+                  />
+                ))}
+              </div>
             )}
-            {cat?.params.map((p) => (
-              <ParamInput
-                key={p.name}
-                param={p}
-                value={node.data.params?.[p.name]}
-                onChange={(v) => onChangeParam(p.name, v)}
-              />
-            ))}
 
-            {cat && (cat.inputs.length > 0 || cat.outputs.length > 0) && (
+            {cat && cat.params.length > 0 && (
+              <div className="space-y-3 border-t border-border pt-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Parameters
+                </div>
+                {cat.params.map((p) => (
+                  <ParamInput
+                    key={p.name}
+                    param={p}
+                    value={node.data.params?.[p.name]}
+                    onChange={(v) => onChangeParam(p.name, v)}
+                  />
+                ))}
+              </div>
+            )}
+
+            {cat && cat.inputs.length === 0 && cat.params.length === 0 && (
+              <p className="text-xs text-muted-foreground">No inputs or parameters for this node.</p>
+            )}
+
+            {cat && cat.outputs.length > 0 && (
               <div className="border-t border-border pt-2 text-[11px] text-muted-foreground">
-                {cat.inputs.length > 0 && (
-                  <div>
-                    <span className="font-medium">Inputs:</span>{' '}
-                    {cat.inputs.map((p) => `${p.label} (${p.dtype})`).join(', ')}
-                  </div>
-                )}
-                {cat.outputs.length > 0 && (
-                  <div className="mt-1">
-                    <span className="font-medium">Outputs:</span>{' '}
-                    {cat.outputs.map((p) => `${p.label} (${p.dtype})`).join(', ')}
-                  </div>
-                )}
+                <span className="font-medium">Outputs:</span>{' '}
+                {cat.outputs.map((p) => `${p.label} (${p.dtype})`).join(', ')}
               </div>
             )}
           </div>
@@ -133,6 +153,70 @@ export function NodeParamPanel({
         </>
       )}
     </div>
+  )
+}
+
+// An input port: editable inline by default, or shown as "fed by a connection"
+// (disabled) when an upstream edge is wired to it.
+function InputField({
+  port,
+  value,
+  wired,
+  onChange,
+}: {
+  port: CanvasPort
+  value: unknown
+  wired: boolean
+  onChange: (v: unknown) => void
+}) {
+  const dot = (
+    <span
+      className="inline-block h-2 w-2 shrink-0 rounded-full"
+      style={{ background: dtypeColor(port.dtype) }}
+    />
+  )
+  const header = (
+    <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-foreground">
+      {dot}
+      {port.label || port.name}
+      <span className="text-[10px] font-normal text-muted-foreground">({port.dtype})</span>
+    </div>
+  )
+
+  if (wired) {
+    return (
+      <label className="block">
+        {header}
+        <div className="rounded-md border border-dashed border-border bg-muted/30 px-2 py-1 text-xs italic text-muted-foreground">
+          ← supplied by a connected node
+        </div>
+      </label>
+    )
+  }
+
+  const control = inputEditorIsTextarea(port.dtype) ? (
+    <textarea
+      value={String(value ?? '')}
+      onChange={(e) => onChange(e.target.value)}
+      rows={3}
+      placeholder={`Paste ${port.dtype}…`}
+      className="w-full rounded-md border border-border bg-background px-2 py-1 font-mono text-xs"
+    />
+  ) : (
+    <input
+      type="text"
+      value={String(value ?? '')}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={`Type a ${port.dtype}, or wire a node`}
+      className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs"
+    />
+  )
+
+  return (
+    <label className="block">
+      {header}
+      {control}
+    </label>
   )
 }
 

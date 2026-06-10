@@ -77,6 +77,9 @@ class GraphNode(BaseModel):
     type: str
     label: str
     params: dict = {}
+    # Inline values for input ports (convertible fields). A wired edge to a port
+    # overrides its inline value at run time; see the orchestrator's gather_inputs.
+    inputs: dict = {}
     position: dict = {"x": 0, "y": 0}
 
 

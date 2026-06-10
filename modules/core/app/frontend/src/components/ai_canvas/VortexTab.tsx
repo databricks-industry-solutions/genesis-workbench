@@ -30,7 +30,6 @@ import {
   defaultParams,
   fromCanvasGraph,
   graphValidationErrors,
-  ioTypeForDtype,
   nextNodeId,
   portsCompatible,
   toCanvasGraph,
@@ -116,6 +115,15 @@ function VortexCanvas() {
     () => nodes.find((n) => n.id === selectedId) ?? null,
     [nodes, selectedId],
   )
+  // Input ports of the selected node that are fed by an edge (their inline editor
+  // is disabled — the upstream value wins).
+  const wiredInputs = useMemo(
+    () =>
+      new Set(
+        edges.filter((e) => e.target === selectedId).map((e) => e.targetHandle ?? ''),
+      ),
+    [edges, selectedId],
+  )
 
   // Replace the canvas with a graph (from AI generation or a loaded workflow).
   const loadGraph = useCallback(
@@ -160,68 +168,22 @@ function VortexCanvas() {
   }, [generate])
 
   // ── add a node ─────────────────────────────────────────────────────────────
-  // Prebuilt workflows (category `batch` — chains + jobs) land pre-wired: every
-  // input port gets a matching IO source (Text/Volume/Delta input) and every
-  // output a collecting Output sink, so the graph is runnable on drop. The user
-  // just fills in the IO values. Other node kinds drop bare (they're meant to be
-  // chained onto an existing graph).
-  const makeNode = (cat: CanvasNodeType, position: { x: number; y: number }, id?: string): VortexNode => ({
-    id: id ?? nextNodeId(cat.type),
-    type: 'vortex',
-    position,
-    data: { typeKey: cat.type, label: cat.label, params: defaultParams(cat), catalog: cat },
-  })
-
+  // Convertible fields: a node's input ports are editable inline (right panel) or
+  // wired from upstream — so a dropped node is self-contained, no auto-spawned IO
+  // nodes. Seed inline `inputs` empty; the user types values or draws edges.
   const addNode = useCallback(
     (cat: CanvasNodeType, position: { x: number; y: number }) => {
-      const mainId = nextNodeId(cat.type)
-      const main = makeNode(cat, position, mainId)
-
-      if (cat.category !== 'batch' || (cat.inputs.length === 0 && cat.outputs.length === 0)) {
-        setNodes((nds) => [...nds, main])
-        setSelectedId(mainId)
-        return
+      const id = nextNodeId(cat.type)
+      const node: VortexNode = {
+        id,
+        type: 'vortex',
+        position,
+        data: { typeKey: cat.type, label: cat.label, params: defaultParams(cat), inputs: {}, catalog: cat },
       }
-
-      // Auto-create + wire the surrounding IO nodes.
-      const extraNodes: VortexNode[] = []
-      const conns: Connection[] = []
-      cat.inputs.forEach((port, i) => {
-        const ioCat = catalogByType.get(ioTypeForDtype(port.dtype))
-        if (!ioCat) return
-        const io = makeNode(ioCat, { x: position.x - 260, y: position.y + i * 120 })
-        extraNodes.push(io)
-        conns.push({
-          source: io.id,
-          sourceHandle: ioCat.outputs[0]?.name ?? null,
-          target: mainId,
-          targetHandle: port.name,
-        })
-      })
-      cat.outputs.forEach((port, i) => {
-        const sinkCat = catalogByType.get('output_sink')
-        if (!sinkCat) return
-        const sink = makeNode(sinkCat, { x: position.x + 260, y: position.y + i * 120 })
-        extraNodes.push(sink)
-        conns.push({
-          source: mainId,
-          sourceHandle: port.name,
-          target: sink.id,
-          targetHandle: sinkCat.inputs[0]?.name ?? null,
-        })
-      })
-
-      const nextNodes = [...nodes, main, ...extraNodes]
-      const nextEdges = conns.reduce<VortexEdge[]>(
-        (eds, c) => addEdge({ ...c, animated: false }, eds),
-        edges,
-      )
-      setNodes(autoLayout(nextNodes, nextEdges))
-      setEdges(nextEdges)
-      setSelectedId(mainId)
-      setTimeout(() => rfRef.current?.fitView({ maxZoom: 1, duration: 300 }), 50)
+      setNodes((nds) => [...nds, node])
+      setSelectedId(id)
     },
-    [nodes, edges, catalogByType, setNodes, setEdges],
+    [setNodes],
   )
 
   const addNodeAtCenter = useCallback(
@@ -349,6 +311,12 @@ function VortexCanvas() {
   const onChangeParam = useCallback(
     (name: string, value: unknown) =>
       patchSelected((n) => ({ ...n, data: { ...n.data, params: { ...n.data.params, [name]: value } } })),
+    [patchSelected],
+  )
+  // Inline value for an input port (convertible fields).
+  const onChangeInput = useCallback(
+    (name: string, value: unknown) =>
+      patchSelected((n) => ({ ...n, data: { ...n.data, inputs: { ...n.data.inputs, [name]: value } } })),
     [patchSelected],
   )
   const onRename = useCallback(
@@ -620,6 +588,8 @@ function VortexCanvas() {
           runName={runName}
           onChangeRunName={setRunName}
           onChangeParam={onChangeParam}
+          onChangeInput={onChangeInput}
+          wiredInputs={wiredInputs}
           onRename={onRename}
           onDelete={onDeleteSelected}
         />
