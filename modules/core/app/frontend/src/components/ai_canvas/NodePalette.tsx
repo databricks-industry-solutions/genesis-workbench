@@ -8,8 +8,8 @@ import { MaterialIcon } from '@/components/MaterialIcon'
 import { CATEGORY_STYLE } from './graph'
 import type { CanvasNodeType } from '@/types/api'
 
-// Dataflow order: inputs (Data) → Transforms → Live Models → Prebuilt Workflows.
-const CATEGORY_ORDER: CanvasNodeType['category'][] = ['io', 'transform', 'endpoint', 'batch']
+// Prebuilt Workflows first (headline), then Serving Endpoints, Transforms, Data.
+const CATEGORY_ORDER: CanvasNodeType['category'][] = ['batch', 'endpoint', 'transform', 'io']
 
 export function NodePalette({
   catalog,

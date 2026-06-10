@@ -104,20 +104,76 @@ def _chain_admet_screen(w: WorkspaceClient, inputs: dict, params: dict) -> dict:
     return out
 
 
+def _reindex_chain_pdb(pdb_text: str, chain_id: str = "A") -> str:
+    """Reindex chain residues contiguously (RFDiffusion inpainting needs it).
+    Uses BioPython — imported lazily so the core stays import-light; callers that
+    run this chain must have `biopython` installed."""
+    import os
+    import tempfile
+
+    from Bio import PDB
+    from Bio.PDB import PDBParser
+
+    with tempfile.NamedTemporaryFile(suffix=".pdb") as f:
+        with open(f.name, "w") as fw:
+            fw.write(pdb_text)
+        structure = PDBParser().get_structure("s", f.name)
+    chain = structure[0][chain_id]
+    new_struct = PDB.Structure.Structure("new")
+    new_model = PDB.Model.Model(0)
+    new_chain = PDB.Chain.Chain(chain_id)
+    for i, residue in enumerate((r for r in chain if r.id[0] == " "), start=1):
+        residue.id = (" ", i, " ")
+        new_chain.add(residue)
+    new_model.add(new_chain)
+    new_struct.add(new_model)
+    io_ = PDB.PDBIO()
+    io_.set_structure(new_struct)
+    with tempfile.NamedTemporaryFile(suffix=".pdb") as f:
+        io_.save(f.name)
+        with open(f.name) as fh:
+            return fh.read()
+
+
 def _chain_protein_design(w: WorkspaceClient, inputs: dict, params: dict) -> dict:
-    # The full RFDiffusion -> ProteinMPNN -> ESMFold orchestration (region parsing,
-    # N designs) lives in the UI service today; porting it to a dep-free core is a
-    # focused follow-up. Registered now, executed next.
-    raise NotImplementedError(
-        "protein_design chain execution is not yet wired into the shared executor."
-    )
+    """ESMFold -> reindex -> RFDiffusion x N -> ProteinMPNN -> ESMFold each design.
+    Returns the initial + designed structures (lean data; the UI adds the viewer +
+    alignment on top). Endpoint payloads mirror services/protein.py."""
+    seq_in = str((inputs or {}).get("sequence", ""))
+    start_idx, end_idx = seq_in.find("["), seq_in.find("]")
+    raw = seq_in.replace("[", "").replace("]", "")
+    n = int((params or {}).get("n_rfdiffusion_hits", 1) or 1)
+
+    esmfold = get_endpoint_name_for_uc_model("esmfold")
+    rfdiffusion = get_endpoint_name_for_uc_model("rfdiffusion_inpainting")
+    proteinmpnn = get_endpoint_name_for_uc_model("proteinmpnn")
+
+    def _fold(seq: str) -> str:
+        return w.serving_endpoints.query(name=esmfold, inputs=[seq]).predictions[0]
+
+    initial = _fold(raw)
+    modified = _reindex_chain_pdb(initial, "A")
+
+    designed_pdbs = [
+        w.serving_endpoints.query(
+            name=rfdiffusion,
+            inputs=[{"pdb": modified, "start_idx": start_idx, "end_idx": end_idx}],
+        ).predictions[0]
+        for _ in range(n)
+    ]
+    seqs: list[str] = []
+    for pdb in designed_pdbs:
+        r = w.serving_endpoints.query(
+            name=proteinmpnn, dataframe_records=[{"pdb": pdb, "fixed_positions": ""}]
+        ).predictions
+        seqs.extend(r if isinstance(r, list) else [r])
+    return {"initial": initial, "sequences": seqs, "designs": [_fold(s) for s in seqs]}
 
 
 _CHAINS = {"admet_screen": _chain_admet_screen, "protein_design": _chain_protein_design}
 
-# Chains that actually execute today (adapters use this to avoid exposing a tool
-# that only errors). protein_design lands when its orchestration is ported.
-RUNNABLE_CHAINS = {"admet_screen"}
+# Both chains execute now (protein_design needs biopython where it runs).
+RUNNABLE_CHAINS = {"admet_screen", "protein_design"}
 
 
 # ─── transforms ──────────────────────────────────────────────────────────────

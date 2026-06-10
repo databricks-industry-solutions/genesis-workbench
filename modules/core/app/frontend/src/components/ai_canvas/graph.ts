@@ -37,7 +37,7 @@ export const CATEGORY_STYLE: Record<
     iconColor: 'text-emerald-600 dark:text-emerald-400',
   },
   endpoint: {
-    label: 'Live Models',
+    label: 'Serving Endpoints',
     icon: 'bolt',
     border: 'border-blue-500/50',
     band: 'bg-blue-500/15 text-blue-700 dark:text-blue-300',
