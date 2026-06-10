@@ -8,4 +8,4 @@ mlflow[databricks]
 parasail==1.3.4
 biopython==1.84
 rdkit==2025.3.6
-backend/lib/genesis_workbench-0.1.7-py3-none-any.whl
+backend/lib/genesis_workbench-0.1.8-py3-none-any.whl

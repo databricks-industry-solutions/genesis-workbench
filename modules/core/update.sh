@@ -156,6 +156,14 @@ echo ""
 # wheel from this Volume. Copying it afterwards would install a stale wheel, or
 # fail with "ModuleNotFoundError: No module named 'genesis_workbench'" on a fresh
 # Volume. Each module's notebooks also %pip install from here.
+# Remove stale genesis_workbench wheels first — the ai_canvas orchestrator
+# installs by globbing "genesis_workbench*" in this Volume, so leftover older
+# versions make that pick ambiguous (and can install a stale wheel).
+for vfile in $(databricks fs ls "dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries" 2>/dev/null | grep -E '^genesis_workbench-.*\.whl$'); do
+  echo "Removing stale wheel $vfile from UC Volume"
+  databricks fs rm "dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$vfile" || true
+done
+
 for file in library/genesis_workbench/dist/*.whl; do
   if [ -f "$file" ]; then
     filename=$(basename "$file")

@@ -197,8 +197,7 @@ def _dig(obj, dotted: str):
     return cur
 
 
-def _run_transform(w: WorkspaceClient, cap: Capability, inputs: dict, params: dict):
-    op = cap.op
+def _run_transform(w: WorkspaceClient, op: str, inputs: dict, params: dict):
     inputs, params = inputs or {}, params or {}
     if op == "read_text_file":
         return {"text": _read_volume_text(w, inputs.get("file"))}
@@ -264,5 +263,24 @@ def execute_capability(
             raise RuntimeError(f"No executor for chain '{cap.chain_id}'.")
         return fn(w, inputs or {}, params or {})
     if cap.kind == TRANSFORM:
-        return _run_transform(w, cap, inputs or {}, params or {})
+        return _run_transform(w, cap.op, inputs or {}, params or {})
     raise RuntimeError(f"Unknown capability kind '{cap.kind}'.")
+
+
+# ─── direct entry points for the Vortex orchestrator (by id, no Capability) ──
+
+
+def run_chain(chain_id: str, inputs: dict | None = None, params: dict | None = None,
+              workspace_client: WorkspaceClient | None = None):
+    """Run an endpoint-chain by id. Used by the canvas orchestrator, which has
+    the node's exec descriptor (not a full Capability)."""
+    fn = _CHAINS.get(chain_id or "")
+    if fn is None:
+        raise RuntimeError(f"No executor for chain '{chain_id}'.")
+    return fn(_w(workspace_client), inputs or {}, params or {})
+
+
+def run_transform(op: str, inputs: dict | None = None, params: dict | None = None,
+                  workspace_client: WorkspaceClient | None = None) -> dict:
+    """Run a transform op by name. Returns {output_port: value}."""
+    return _run_transform(_w(workspace_client), op, inputs or {}, params or {})

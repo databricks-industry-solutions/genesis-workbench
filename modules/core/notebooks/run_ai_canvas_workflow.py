@@ -45,7 +45,7 @@ print(gwb_library_path)
 # COMMAND ----------
 
 # MAGIC %pip install {gwb_library_path} --force-reinstall
-# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0
+# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0 biopython==1.84
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
@@ -174,6 +174,16 @@ def run_node(node_id):
         run_id = execute_workflow(int(job_id), job_params)
         wait_for_job_run_completion(int(run_id), timeout=21600, poll_interval=30)
         return {first_out: {"job_run_id": run_id}}
+
+    if kind == "chain":
+        # Endpoint-chain (Protein Design / ADMET Screen) via the shared executor.
+        from genesis_workbench.executor import run_chain
+        return {first_out: run_chain(ex.get("chain"), inputs, params, w)}
+
+    if kind == "transform":
+        # Deterministic reshape via the shared executor; returns {out_port: value}.
+        from genesis_workbench.executor import run_transform
+        return run_transform(ex.get("op"), inputs, params, w)
 
     raise RuntimeError(f"Node {node_id}: unknown exec kind '{kind}'")
 
