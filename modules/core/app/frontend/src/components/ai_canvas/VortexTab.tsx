@@ -74,9 +74,19 @@ function VortexCanvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState<VortexNode>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<VortexEdge>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  // Yellow banner: reserved for critical warnings / errors that persist until
+  // dismissed. Routine confirmations go to the auto-disappearing canvas toast.
   const [notice, setNotice] = useState<string | null>(null)
   // The banner message the user dismissed (hidden until the message changes).
   const [dismissed, setDismissed] = useState<string | null>(null)
+  // Transient toast on top of the canvas — auto-clears after a few seconds.
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimer = useRef<number | undefined>(undefined)
+  const showToast = useCallback((msg: string) => {
+    setToast(msg)
+    if (toastTimer.current) window.clearTimeout(toastTimer.current)
+    toastTimer.current = window.setTimeout(() => setToast(null), 3500)
+  }, [])
   // Transient "Finding a transform…" overlay (with spinner) during the AI lookup.
   const [suggesting, setSuggesting] = useState<string | null>(null)
   const [goal, setGoal] = useState('')
@@ -132,7 +142,7 @@ function VortexCanvas() {
     onSuccess: (res) => {
       loadGraph(res.graph)
       setLoadedId(null) // a generated graph is new/unsaved (keep the current name)
-      setNotice(
+      showToast(
         res.graph.nodes.length
           ? `Generated a ${res.graph.nodes.length}-node workflow — edit it, then Run.`
           : 'No nodes generated. Try rephrasing your goal.',
@@ -301,7 +311,7 @@ function VortexCanvas() {
             const tcat = res.type ? catalogByType.get(res.type) : undefined
             if (tcat) {
               insertTransform(conn, tcat, res.params ?? {})
-              setNotice(`Inserted “${tcat.label}” to convert ${srcPort.dtype} → ${dstPort.dtype}.`)
+              showToast(`Inserted “${tcat.label}” to convert ${srcPort.dtype} → ${dstPort.dtype}.`)
             } else {
               setNotice(fail)
             }
@@ -369,8 +379,7 @@ function VortexCanvas() {
         run_name: runName.trim() || workflowName || 'ai_canvas_run',
       }),
     onSuccess: () => {
-      setDismissed(null)
-      setNotice('▶ Workflow started — track its progress in the “Past Runs” dialog.')
+      showToast('▶ Workflow started — track its progress in the “Past Runs” dialog.')
     },
     onError: (err: Error) => setNotice(err.message),
   })
@@ -410,12 +419,12 @@ function VortexCanvas() {
                 loadGraph(detail.graph)
                 setLoadedId(detail.workflow_id)
                 setWorkflowName(detail.name)
-                setNotice(`Loaded "${detail.name}".`)
+                showToast(`Loaded "${detail.name}".`)
               }}
               onSaved={(id, name) => {
                 setLoadedId(id)
                 setWorkflowName(name)
-                setNotice(`Saved "${name}".`)
+                showToast(`Saved "${name}".`)
               }}
             />
             <RunHistory />
@@ -548,6 +557,16 @@ function VortexCanvas() {
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {/* Auto-disappearing toast (top-center) for transient confirmations.
+              Critical warnings use the persistent yellow banner instead. */}
+          {toast && (
+            <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2">
+              <div className="rounded-full border border-border bg-foreground/90 px-3.5 py-1.5 text-xs text-background shadow-lg">
+                {toast}
+              </div>
             </div>
           )}
 
