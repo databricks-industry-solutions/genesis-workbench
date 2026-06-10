@@ -499,7 +499,7 @@ function VortexCanvas() {
   const banner = notice
 
   return (
-    <div className="flex h-[86vh] min-h-[640px] flex-col overflow-hidden rounded-md border border-border">
+    <div className="flex h-[calc(86vh-28px)] min-h-[620px] flex-col overflow-hidden rounded-md border border-border">
       {/* Toolbar */}
       <div className="flex flex-col gap-2 border-b border-border bg-card/60 px-3 py-2">
         <div className="flex items-center gap-2">
