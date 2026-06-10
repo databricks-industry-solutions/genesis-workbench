@@ -23,7 +23,7 @@ from databricks.sdk import WorkspaceClient
 from mcp.server.fastmcp import FastMCP
 
 from genesis_workbench.models import ModelCategory, get_deployed_models
-from genesis_workbench.workbench import initialize
+from genesis_workbench.workbench import execute_select_query, initialize
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gwb_mcp")
@@ -77,6 +77,60 @@ def _make_endpoint_tool(ep: dict):
     return call_endpoint
 
 
+def _prebuilt_workflows() -> list[dict]:
+    """Prebuilt-workflow capabilities from the `prebuilt_workflows` Delta
+    registry (the workflows counterpart to the endpoints registry)."""
+    cat = os.environ["CORE_CATALOG_NAME"]
+    schema = os.environ["CORE_SCHEMA_NAME"]
+    try:
+        df = execute_select_query(
+            f"SELECT workflow_key, label, kind, module, job_name, inputs_json, "
+            f"outputs_json, params_json, description FROM {cat}.{schema}.prebuilt_workflows "
+            f"WHERE is_active = true"
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("prebuilt_workflows read failed: %s", e)
+        return []
+    out: list[dict] = []
+    for _, r in df.iterrows():
+        out.append({k: (None if r[k] is None else str(r[k])) for k in
+                    ("workflow_key", "label", "kind", "module", "job_name",
+                     "inputs_json", "outputs_json", "params_json", "description")})
+    return out
+
+
+def _job_id_for(job_name: str):
+    for j in WorkspaceClient().jobs.list(name=job_name):
+        return int(j.job_id)
+    return None
+
+
+def _make_workflow_tool(wf: dict):
+    def run_workflow(parameters: dict | None = None) -> dict:
+        w = WorkspaceClient()
+        job_id = _job_id_for(wf["job_name"])
+        if job_id is None:
+            raise RuntimeError(f"Job '{wf['job_name']}' not found / not deployed.")
+        run = w.jobs.run_now(job_id=job_id, job_parameters=parameters or {})
+        host = os.environ.get("DATABRICKS_HOST", "").rstrip("/")
+        return {
+            "run_id": str(run.run_id),
+            "job_id": str(job_id),
+            "run_url": f"{host}/jobs/{job_id}/runs/{run.run_id}" if host else "",
+            "status_tool": "get_workflow_run_status",
+        }
+
+    return run_workflow
+
+
+def _fmt_io(spec_json: str | None) -> str:
+    try:
+        items = json.loads(spec_json or "[]")
+        return ", ".join(f"{p.get('name')}:{p.get('dtype', p.get('type', 'any'))}" for p in items) or "—"
+    except Exception:  # noqa: BLE001
+        return "—"
+
+
 def _register_tools() -> int:
     seen: set[str] = set()
     for ep in _deployed_endpoints():
@@ -94,21 +148,62 @@ def _register_tools() -> int:
             ),
         )
 
+    workflows = _prebuilt_workflows()
+    n_wf = 0
+    for wf in workflows:
+        # Endpoint-chain composites aren't dispatchable yet (shared executor lands
+        # with the run-wiring) — list them in capabilities but don't add a tool.
+        if wf["kind"] != "databricks_job" or not wf["job_name"]:
+            continue
+        tool_name = f"workflow_{_slug(wf['workflow_key'])}"
+        if tool_name in seen:
+            continue
+        seen.add(tool_name)
+        n_wf += 1
+        mcp.add_tool(
+            _make_workflow_tool(wf),
+            name=tool_name,
+            description=(
+                f"Dispatch the '{wf['label']}' Genesis Workbench workflow ({wf['module']}). "
+                f"{wf['description']} Inputs: [{_fmt_io(wf['inputs_json'])}]; "
+                f"params: [{_fmt_io(wf['params_json'])}]. Pass `parameters` as a dict of "
+                f"job parameters; returns the run id + URL (poll get_workflow_run_status)."
+            ),
+        )
+
+    def get_workflow_run_status(run_id: str) -> dict:
+        """Status of a dispatched workflow run by its run id (life-cycle +
+        result state + a link)."""
+        w = WorkspaceClient()
+        run = w.jobs.get_run(run_id=int(run_id))
+        st = run.state
+        host = os.environ.get("DATABRICKS_HOST", "").rstrip("/")
+        return {
+            "run_id": str(run_id),
+            "life_cycle_state": st.life_cycle_state.value if st and st.life_cycle_state else None,
+            "result_state": st.result_state.value if st and st.result_state else None,
+            "run_url": f"{host}/jobs/{run.job_id}/runs/{run_id}" if host and run.job_id else "",
+        }
+
+    mcp.add_tool(get_workflow_run_status, name="get_workflow_run_status")
+
     def list_capabilities() -> list[dict]:
-        """List the Genesis Workbench capabilities (deployed model-serving
-        endpoints) currently available as MCP tools — display name, module,
-        endpoint, and the tool name to call."""
-        return [
-            {
-                "tool": f"endpoint_{_slug(e['display_name'])}",
-                "display_name": e["display_name"],
-                "module": e["module"],
-                "endpoint": e["endpoint_name"],
-            }
-            for e in _deployed_endpoints()
-        ]
+        """List all Genesis Workbench capabilities exposed as MCP tools: deployed
+        model-serving endpoints and prebuilt workflows (with the tool name to
+        call). Endpoint-chain workflows are listed but not yet dispatchable."""
+        caps: list[dict] = []
+        for e in _deployed_endpoints():
+            caps.append({"kind": "endpoint", "tool": f"endpoint_{_slug(e['display_name'])}",
+                         "label": e["display_name"], "module": e["module"]})
+        for wf in _prebuilt_workflows():
+            runnable = wf["kind"] == "databricks_job" and bool(wf["job_name"])
+            caps.append({"kind": wf["kind"],
+                         "tool": f"workflow_{_slug(wf['workflow_key'])}" if runnable else None,
+                         "label": wf["label"], "module": wf["module"], "runnable": runnable})
+        return caps
 
     mcp.add_tool(list_capabilities, name="list_capabilities")
+    logger.info("Registered %d endpoint + %d workflow tools", len(seen) - n_wf, n_wf)
     return len(seen)
 
 
