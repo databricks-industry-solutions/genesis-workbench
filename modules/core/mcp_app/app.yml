@@ -1,0 +1,16 @@
+command:
+  - "sh"
+  - "-c"
+  - "uvicorn mcp_server:app --app-dir backend --host 0.0.0.0 --port ${DATABRICKS_APP_PORT:-8000}"
+
+env:
+  - name: SQL_WAREHOUSE
+    valueFrom: "sql_warehouse"
+  - name: CORE_CATALOG_NAME
+    valueFrom: "core_catalog_name"
+  - name: CORE_SCHEMA_NAME
+    valueFrom: "core_schema_name"
+  - name: DEV_USER_PREFIX
+    valueFrom: "dev_user_prefix"
+  - name: DATABRICKS_APP_NAME
+    value: "mcp-genesis-workbench"
