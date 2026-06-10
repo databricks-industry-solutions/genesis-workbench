@@ -79,7 +79,10 @@ logger = logging.getLogger(__name__)
 
 
 def _w(workspace_client: WorkspaceClient | None = None) -> WorkspaceClient:
-    return workspace_client or WorkspaceClient()
+    # Heavy realtime models (RFDiffusion, Proteina-Complexa, ESMFold on long
+    # sequences, DiffDock) can exceed the SDK's 60s default HTTP timeout for a
+    # single synchronous serving query — bump it so chains don't time out.
+    return workspace_client or WorkspaceClient(http_timeout_seconds=600)
 
 
 # ─── endpoint ────────────────────────────────────────────────────────────────

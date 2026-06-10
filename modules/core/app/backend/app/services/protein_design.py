@@ -100,7 +100,7 @@ def make_designs(
         if progress_callback:
             progress_callback(pct, msg)
 
-    w = WorkspaceClient()  # app SP — endpoints need model-serving scope
+    w = WorkspaceClient(http_timeout_seconds=600)  # app SP; long timeout for heavy serving calls
 
     _p(2, "Setting up MLflow experiment")
     experiment = set_mlflow_experiment(

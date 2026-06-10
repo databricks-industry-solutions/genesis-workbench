@@ -61,7 +61,7 @@ def _hit_proteinmpnn_full_redesign(pdb_str: str) -> list[str]:
     geometry; we're only optimising side-chains on the scaffold."""
     endpoint_name = get_endpoint_name("ProteinMPNN")
     # ProteinMPNN's PyFunc V8 needs dataframe_records, not dataframe_split.
-    w = WorkspaceClient()
+    w = WorkspaceClient(http_timeout_seconds=600)
     response = w.serving_endpoints.query(
         name=endpoint_name,
         dataframe_records=[{"pdb": pdb_str, "fixed_positions": ""}],
@@ -89,7 +89,7 @@ def run_motif_scaffolding(
         if progress_callback:
             progress_callback(pct, msg)
 
-    w = WorkspaceClient()
+    w = WorkspaceClient(http_timeout_seconds=600)
 
     # Proteina-Complexa-AME → (ProteinMPNN) → (ESMFold) runs in the shared
     # executor chain; the UI keeps MLflow + SSE progress + viewer assembly.

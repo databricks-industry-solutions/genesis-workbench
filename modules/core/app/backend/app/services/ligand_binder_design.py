@@ -79,7 +79,7 @@ def run_ligand_binder_design(
         if progress_callback:
             progress_callback(pct, msg)
 
-    w = WorkspaceClient()
+    w = WorkspaceClient(http_timeout_seconds=600)
 
     # Step 1: resolve ligand → PDB (HETATM block). SMILES→PDB stays in the UI
     # (RDKit) so the shared executor core stays dependency-free.

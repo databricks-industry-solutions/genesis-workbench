@@ -79,7 +79,7 @@ def run_binder_design(
         if progress_callback:
             progress_callback(pct, msg)
 
-    w = WorkspaceClient()
+    w = WorkspaceClient(http_timeout_seconds=600)
 
     # Delegate the ESMFold(target) -> Proteina-Complexa -> ESMFold(validate)
     # chain to the shared executor (same code Vortex/MCP run). The UI keeps the
