@@ -80,12 +80,13 @@ function VortexCanvas() {
   // The banner message the user dismissed (hidden until the message changes).
   const [dismissed, setDismissed] = useState<string | null>(null)
   // Transient toast on top of the canvas — auto-clears after a few seconds.
-  const [toast, setToast] = useState<string | null>(null)
+  // `error` toasts render red (e.g. an invalid connection attempt).
+  const [toast, setToast] = useState<{ msg: string; error: boolean } | null>(null)
   const toastTimer = useRef<number | undefined>(undefined)
-  const showToast = useCallback((msg: string) => {
-    setToast(msg)
+  const showToast = useCallback((msg: string, error = false) => {
+    setToast({ msg, error })
     if (toastTimer.current) window.clearTimeout(toastTimer.current)
-    toastTimer.current = window.setTimeout(() => setToast(null), 3500)
+    toastTimer.current = window.setTimeout(() => setToast(null), error ? 4500 : 3500)
   }, [])
   // Transient "Finding a transform…" overlay (with spinner) during the AI lookup.
   const [suggesting, setSuggesting] = useState<string | null>(null)
@@ -313,12 +314,12 @@ function VortexCanvas() {
               insertTransform(conn, tcat, res.params ?? {})
               showToast(`Inserted “${tcat.label}” to convert ${srcPort.dtype} → ${dstPort.dtype}.`)
             } else {
-              setNotice(fail)
+              showToast(fail, true)
             }
           })
           .catch(() => {
             setSuggesting(null)
-            setNotice(fail)
+            showToast(fail, true)
           })
         return
       }
@@ -585,8 +586,15 @@ function VortexCanvas() {
               Critical warnings use the persistent yellow banner instead. */}
           {toast && (
             <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2">
-              <div className="rounded-full border border-border bg-foreground/90 px-3.5 py-1.5 text-xs text-background shadow-lg">
-                {toast}
+              <div
+                className={
+                  'rounded-full px-3.5 py-1.5 text-xs shadow-lg ' +
+                  (toast.error
+                    ? 'bg-red-600 font-medium text-white'
+                    : 'border border-border bg-foreground/90 text-background')
+                }
+              >
+                {toast.msg}
               </div>
             </div>
           )}

@@ -41,6 +41,7 @@ DISPLAY_TO_UC: dict[str, str] = {
     "AlphaFold2": "alphafold2",
     # Single Cell
     "scGPT Perturbation": "scgpt_perturbation",
+    "scGPT Embeddings": "scgpt",
     "TEDDY Annotation": "teddy",
 }
 

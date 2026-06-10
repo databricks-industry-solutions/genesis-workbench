@@ -301,24 +301,31 @@ _ENDPOINT_NODES: list[NodeType] = [
     ),
     NodeType(
         type="chemprop_admet", label="Chemprop ADMET", category=NodeCategory.ENDPOINT,
-        module="small_molecule", endpoint_display_name="Chemprop ADMET",
+        module="small_molecule", endpoint_display_name="Chemprop ADMET", invoke_style="inputs",
         description="ADMET property profile from a SMILES string.",
         inputs=[Port("smiles", PortType.SMILES)],
         outputs=[Port("admet", PortType.JSON)],
     ),
     NodeType(
         type="chemprop_bbbp", label="Chemprop BBBP", category=NodeCategory.ENDPOINT,
-        module="small_molecule", endpoint_display_name="Chemprop BBBP",
+        module="small_molecule", endpoint_display_name="Chemprop BBBP", invoke_style="inputs",
         description="Blood-brain-barrier penetration from SMILES.",
         inputs=[Port("smiles", PortType.SMILES)],
         outputs=[Port("bbbp", PortType.SCORE)],
     ),
     NodeType(
         type="chemprop_clintox", label="Chemprop ClinTox", category=NodeCategory.ENDPOINT,
-        module="small_molecule", endpoint_display_name="Chemprop ClinTox",
+        module="small_molecule", endpoint_display_name="Chemprop ClinTox", invoke_style="inputs",
         description="Clinical-toxicity likelihood from SMILES.",
         inputs=[Port("smiles", PortType.SMILES)],
         outputs=[Port("clintox", PortType.SCORE)],
+    ),
+    NodeType(
+        type="kermt_admet", label="KERMT ADMET", category=NodeCategory.ENDPOINT,
+        module="small_molecule", endpoint_display_name="KERMT ADMET", invoke_style="inputs",
+        description="KERMT (GROVER multi-task) ADMET / toxicity profile from a SMILES string.",
+        inputs=[Port("smiles", PortType.SMILES)],
+        outputs=[Port("admet", PortType.JSON)],
     ),
     NodeType(
         type="diffdock", label="DiffDock", category=NodeCategory.ENDPOINT,
@@ -327,20 +334,42 @@ _ENDPOINT_NODES: list[NodeType] = [
         inputs=[Port("pdb", PortType.PDB), Port("smiles", PortType.SMILES)],
         outputs=[Port("poses", PortType.JSON)],
     ),
-    # Single Cell
+    # Single Cell — these endpoints take an AnnData-style JSON payload (cells +
+    # obs/var), so the input port is a JSON blob (invoke_style="inputs" passes it
+    # through as inputs=[<payload>], matching the live services). Not typically
+    # produced by a single upstream node — wire from a Text/Delta input or an
+    # upstream single-cell step.
     NodeType(
-        type="teddy", label="TEDDY Annotation", category=NodeCategory.ENDPOINT,
-        module="single_cell", endpoint_display_name="TEDDY Annotation",
-        description="Joint cell-type + disease annotation.",
-        inputs=[Port("data", PortType.TABLE)],
-        outputs=[Port("annotations", PortType.TABLE)],
+        type="teddy", label="TEDDY-G Cell Embeddings", category=NodeCategory.ENDPOINT,
+        module="single_cell", endpoint_display_name="TEDDY Annotation", invoke_style="inputs",
+        description="TEDDY-G 400M cell embeddings from an AnnData payload "
+                    "(adata_sparsematrix + obs/var).",
+        inputs=[Port("cells", PortType.JSON, "AnnData payload")],
+        outputs=[Port("embedding", PortType.EMBEDDING)],
     ),
     NodeType(
         type="scgpt_perturbation", label="scGPT Perturbation", category=NodeCategory.ENDPOINT,
-        module="single_cell", endpoint_display_name="scGPT Perturbation",
-        description="Predict gene knockout / overexpression effects.",
-        inputs=[Port("data", PortType.TABLE)],
-        outputs=[Port("predictions", PortType.TABLE)],
+        module="single_cell", endpoint_display_name="scGPT Perturbation", invoke_style="inputs",
+        description="Predict gene knockout / overexpression effects (expression + "
+                    "gene_names + perturbation spec).",
+        inputs=[Port("cells", PortType.JSON, "Expression + perturbation payload")],
+        outputs=[Port("predictions", PortType.JSON)],
+    ),
+    NodeType(
+        type="scgpt_embeddings", label="scGPT Cell Embeddings", category=NodeCategory.ENDPOINT,
+        module="single_cell", endpoint_display_name="scGPT Embeddings", invoke_style="inputs",
+        description="scGPT cell embeddings from an AnnData payload.",
+        inputs=[Port("cells", PortType.JSON, "AnnData payload")],
+        outputs=[Port("embedding", PortType.EMBEDDING)],
+    ),
+    NodeType(
+        type="scimilarity_get_embedding", label="SCimilarity Embeddings",
+        category=NodeCategory.ENDPOINT, module="single_cell",
+        endpoint_display_name="SCimilarity Get Embedding", invoke_style="inputs",
+        description="SCimilarity cell embeddings from an AnnData payload "
+                    "(celltype_sample + obs).",
+        inputs=[Port("cells", PortType.JSON, "AnnData payload")],
+        outputs=[Port("embedding", PortType.EMBEDDING)],
     ),
 ]
 
