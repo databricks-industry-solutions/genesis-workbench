@@ -38,6 +38,18 @@ import type { CanvasNodeType } from '@/types/api'
 
 const nodeTypes: NodeTypes = { vortex: CanvasNode }
 
+// Fun, catalog-valid example goals for the ✨ "Show me how" button.
+const EXAMPLE_GOALS = [
+  'Fold a protein sequence and predict its solubility',
+  'Dock a small molecule into a predicted protein structure',
+  'Design a protein binder around a target and validate it',
+  'Run an ADMET screen on a candidate molecule',
+  'Predict structure with AlphaFold and check thermostability',
+  'Annotate genetic variants from a VCF and flag pathogenic ones',
+  'Generate molecules and screen them for toxicity',
+  'Embed a protein sequence and predict its half-life',
+]
+
 // Auto-generated default workflow name, e.g. "vortex_20260609_1355".
 function defaultWorkflowName(): string {
   const d = new Date()
@@ -105,6 +117,13 @@ function VortexCanvas() {
     },
     onError: (err: Error) => setNotice(err.message),
   })
+
+  // ✨ "Show me how" — drop in a random fun goal and generate it.
+  const tryRandom = useCallback(() => {
+    const g = EXAMPLE_GOALS[Math.floor(Math.random() * EXAMPLE_GOALS.length)]
+    setGoal(g)
+    generate.mutate(g)
+  }, [generate])
 
   // ── add a node ─────────────────────────────────────────────────────────────
   const addNode = useCallback(
@@ -302,6 +321,9 @@ function VortexCanvas() {
     )
   }, [statusData, setNodes])
 
+  // Centered spinner popup — shown while AI generates a workflow or finds a transform.
+  const popupMessage = suggesting ?? (generate.isPending ? 'Generating workflow…' : null)
+
   // Run banner is derived during render (not stored) so we don't setState in the effect.
   const runMessage =
     activeRunId && statusData
@@ -317,7 +339,6 @@ function VortexCanvas() {
       {/* Toolbar */}
       <div className="flex flex-col gap-2 border-b border-border bg-card/60 px-3 py-2">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold">Vortex</span>
           <span className="text-xs text-muted-foreground">
             Describe a goal and let AI draft the workflow, or build it by hand.
           </span>
@@ -370,7 +391,16 @@ function VortexCanvas() {
             if (goal.trim()) generate.mutate(goal.trim())
           }}
         >
-          <span className="text-sm">✨</span>
+          <button
+            type="button"
+            onClick={tryRandom}
+            disabled={generate.isPending}
+            title="Show me how"
+            aria-label="Show me how"
+            className="shrink-0 rounded-md px-1 text-base transition-transform hover:scale-125 disabled:opacity-40"
+          >
+            ✨
+          </button>
           <input
             value={goal}
             onChange={(e) => setGoal(e.target.value)}
@@ -437,12 +467,12 @@ function VortexCanvas() {
             </div>
           )}
 
-          {/* Transient AI "finding a transform" popup (with spinner). */}
-          {suggesting && (
+          {/* Transient AI spinner popup — generating a workflow or finding a transform. */}
+          {popupMessage && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
               <div className="flex items-center gap-2.5 rounded-lg border border-border bg-card px-4 py-2.5 text-xs text-foreground shadow-lg">
                 <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-blue-500/30 border-t-blue-500" />
-                {suggesting}
+                {popupMessage}
               </div>
             </div>
           )}
