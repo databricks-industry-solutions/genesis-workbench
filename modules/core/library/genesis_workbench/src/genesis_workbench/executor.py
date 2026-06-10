@@ -283,15 +283,19 @@ def _chain_protein_binder_design(w, inputs, params, progress=None) -> dict:
     designs = []
     for i, r in enumerate(rows):
         binder_pdb = r.get("pdb_output")
+        validated = False
         if validate:
             _emit(progress, 50 + int((i + 1) / max(len(rows), 1) * 45),
                   f"Validating design {i + 1}/{len(rows)} (ESMFold)")
             try:
-                binder_pdb = _esmfold_pdb(w, str(r.get("sequence", ""))) or binder_pdb
+                folded = _esmfold_pdb(w, str(r.get("sequence", "")))
+                if folded:
+                    binder_pdb, validated = folded, True
             except Exception as e:  # noqa: BLE001
                 logger.info("protein_binder esmfold validate failed: %s", e)
         designs.append({"sample_id": str(r.get("sample_id", "")), "sequence": str(r.get("sequence", "")),
-                        "rewards": float(r.get("rewards", 0) or 0), "binder_pdb": binder_pdb})
+                        "rewards": float(r.get("rewards", 0) or 0), "binder_pdb": binder_pdb,
+                        "esmfold_validated": validated})
     _emit(progress, 100, "Binder design complete")
     return {"designs": designs, "target_pdb": target_pdb}
 
@@ -360,15 +364,17 @@ def _chain_motif_scaffolding(w, inputs, params, progress=None) -> dict:
             except Exception as e:  # noqa: BLE001
                 logger.info("motif proteinmpnn failed: %s", e)
         esmfold_pdb = None
+        validated = False
         if validate:
             _emit(progress, 60 + int((i + 1) / max(len(rows), 1) * 30), f"Folding scaffold {i + 1}/{len(rows)}")
             try:
                 esmfold_pdb = _esmfold_pdb(w, mpnn_seq or seq)
+                validated = esmfold_pdb is not None
             except Exception as e:  # noqa: BLE001
                 logger.info("motif esmfold failed: %s", e)
         scaffolds.append({"sample_id": str(r.get("sample_id", "")), "sequence": seq, "mpnn_sequence": mpnn_seq,
                           "rewards": float(r.get("rewards", 0) or 0), "pdb_output": str(r.get("pdb_output", "")),
-                          "esmfold_pdb": esmfold_pdb})
+                          "esmfold_pdb": esmfold_pdb, "esmfold_validated": validated})
     _emit(progress, 100, "Motif scaffolding complete")
     return {"scaffolds": scaffolds, "motif_pdb": motif_pdb}
 

@@ -21,7 +21,7 @@ Legend: ✅ done · 🟡 partial · ⬜ not yet.
 | AlphaFold | job | ✅ (`run_alphafold`) | ⬜ (UI dispatches directly) |
 | Inverse Folding | endpoint (ProteinMPNN) | ✅ (endpoint exists) | ⬜ |
 | **Protein Design** | chain | ✅ | ✅ **(done — `make_designs` delegates)** |
-| Protein Binder Design | chain (`protein_binder_design`) | ✅ **(built)** | ⬜ (Phase B) |
+| Protein Binder Design | chain (`protein_binder_design`) | ✅ | ✅ **(delegates)** |
 | Guided Enzyme Optimization | job | ✅ (`run_enzyme_optimization_gwb`) | ⬜ |
 
 ## Small Molecule
@@ -29,8 +29,8 @@ Legend: ✅ done · 🟡 partial · ⬜ not yet.
 |---|---|---|---|
 | ADMET & Safety | chain (`admet_screen`) | ✅ | 🟡 (chain exists + has progress; ADMET tab still bespoke for per-predictor toggles) |
 | DiffDock (docking) | endpoint | ✅ | ⬜ |
-| Ligand Binder Design | chain (`ligand_binder_design`) | ✅ **(built)** | ⬜ (Phase B) |
-| Motif Scaffolding | chain (`motif_scaffolding`) | ✅ **(built)** | ⬜ (Phase B) |
+| Ligand Binder Design | chain (`ligand_binder_design`) | ✅ | ✅ **(delegates)** |
+| Motif Scaffolding | chain (`motif_scaffolding`) | ✅ | ✅ **(delegates)** |
 | GenMol Generate | endpoint | ✅ | ⬜ |
 | Guided Molecule Optimization | job | ✅ (`run_molecule_optimization_gwb`) | ⬜ |
 
@@ -52,14 +52,13 @@ Legend: ✅ done · 🟡 partial · ⬜ not yet.
 | DE / Enrichment / Trajectory / Dotplot | in-app compute (not an endpoint/job) | ⬜ (out of scope — UI analytics) | ⬜ |
 
 ## Summary
-- **Fully converted (capability + UI delegates):** Protein Design.
+- **Fully converted (capability + UI delegates):** Protein Design, Protein Binder
+  Design, Ligand Binder Design, Motif Scaffolding (all 4 chain UIs delegate to
+  `run_chain`, keeping MLflow + Mol* + SSE on top). **Phase B complete.**
 - **Capability exists, UI not delegating:** all deployed endpoints + every seeded
   job (genomics ×4, AlphaFold, Enzyme/Molecule Opt, ESM2/KERMT fine-tune, KERMT
   deploy) + ADMET (chain). These are usable in Vortex/MCP already; the UI just
   hasn't been pointed at the core.
-- **Chain built, UI not delegating (Phase B):** Protein Binder Design, Ligand Binder
-  Design, Motif Scaffolding — all 5 chains now live in `executor._CHAINS` + the
-  `prebuilt_workflows` registry, usable in Vortex/MCP. UI services still bespoke.
 - **Not a capability yet:** Single Cell Processing (job, not registered).
 - **Out of scope:** single-cell DE/enrichment/trajectory/dotplot + AI narratives —
   in-app analytics/LLM, not endpoint/job capabilities.

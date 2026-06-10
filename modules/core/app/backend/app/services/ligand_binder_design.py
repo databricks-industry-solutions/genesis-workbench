@@ -81,7 +81,8 @@ def run_ligand_binder_design(
 
     w = WorkspaceClient()
 
-    # Step 1: resolve ligand → PDB (HETATM block) -------------------------
+    # Step 1: resolve ligand → PDB (HETATM block). SMILES→PDB stays in the UI
+    # (RDKit) so the shared executor core stays dependency-free.
     if not ligand_pdb:
         if not ligand_smiles:
             raise ValueError("Either ligand_pdb or ligand_smiles must be provided")
@@ -89,97 +90,37 @@ def run_ligand_binder_design(
         ligand_pdb = smiles_to_pdb(ligand_smiles.strip())
     _p(12, "Ligand structure ready")
 
-    # Step 2: Proteina-Complexa-Ligand binder generation -------------------
-    _p(15, f"Generating {num_samples} protein binder(s) for the ligand")
-    results_df = hit_proteina_complexa_ligand(
-        target_pdb=ligand_pdb,
-        binder_length_min=binder_length_min,
-        binder_length_max=binder_length_max,
-        num_samples=num_samples,
+    # Steps 2-4 (Proteina-Complexa-Ligand → ESMFold → DiffDock) run in the shared
+    # executor chain; the UI keeps MLflow + SSE progress + viewer assembly.
+    from genesis_workbench.executor import run_chain
+
+    result = run_chain(
+        "ligand_binder_design",
+        {"ligand_pdb": ligand_pdb},
+        {
+            "binder_length_min": binder_length_min,
+            "binder_length_max": binder_length_max,
+            "num_samples": num_samples,
+            "validate_esmfold": validate_esmfold,
+            "validate_diffdock": validate_diffdock,
+            "ligand_smiles": ligand_smiles or "",
+        },
+        w,
+        progress=_p,
     )
-    if results_df.empty:
-        _p(100, "Proteina-Complexa-Ligand returned no designs")
-        return {"designs": [], "ligand_pdb": ligand_pdb, "warnings": []}
-    _p(50 if not (validate_esmfold or validate_diffdock) else 35,
-       f"Got {len(results_df)} candidate(s)")
-
+    designs = result.get("designs", [])
+    total = len(designs)
     warnings: list[str] = []
-    total = len(results_df)
-
-    # Step 3: ESMFold per design (optional) -------------------------------
-    if validate_esmfold:
-        esmfold_pdbs: list[str | None] = []
-        for i, (_, row) in enumerate(results_df.iterrows()):
-            pct = 35 + int(((i + 1) / total) * 25)
-            _p(pct, f"Folding design {i + 1}/{total} with ESMFold")
-            try:
-                esmfold_pdbs.append(hit_esmfold(w, str(row["sequence"])))
-            except Exception as e:
-                logger.warning("ESMFold failed for design %d: %s", i + 1, e)
-                esmfold_pdbs.append(None)
-        results_df["esmfold_pdb"] = esmfold_pdbs
-        failed = sum(1 for p in esmfold_pdbs if p is None)
+    if validate_esmfold and total:
+        failed = sum(1 for d in designs if not d.get("esmfold_pdb"))
         if failed:
             warnings.append(
                 f"ESMFold validation failed for {failed}/{total} design(s); using CA backbone."
             )
-
-    # Step 4: DiffDock per design (optional) -------------------------------
-    if validate_diffdock and ligand_smiles and ligand_smiles.strip():
-        dock_sdfs: list[str | None] = []
-        dock_scores: list[float | None] = []
-        for i, (_, row) in enumerate(results_df.iterrows()):
-            pct = 60 + int(((i + 1) / total) * 30)
-            _p(pct, f"Docking design {i + 1}/{total} with DiffDock")
-            try:
-                # ESMFold-validated structure preferred; fall back to the
-                # CA-only backbone from Proteina-Complexa-Ligand.
-                dock_pdb = (
-                    row.get("esmfold_pdb") if "esmfold_pdb" in results_df.columns else None
-                ) or row["pdb_output"]
-                dock_df = docking.hit_diffdock(
-                    dock_pdb, ligand_smiles, samples_per_complex=5
-                )
-                best = dock_df.sort_values("confidence", ascending=False).iloc[0]
-                sdf = str(best["ligand_sdf"])
-                # DiffDock returns "ERROR…" inline for per-pose failures.
-                if sdf.startswith("ERROR"):
-                    dock_sdfs.append(None)
-                    dock_scores.append(None)
-                else:
-                    dock_sdfs.append(sdf)
-                    dock_scores.append(float(best["confidence"]))
-            except Exception as e:
-                logger.warning("DiffDock failed for design %d: %s", i + 1, e)
-                dock_sdfs.append(None)
-                dock_scores.append(None)
-        results_df["best_dock_sdf"] = dock_sdfs
-        results_df["dock_confidence"] = dock_scores
-        dock_failed = sum(1 for s in dock_sdfs if s is None)
+    if validate_diffdock and ligand_smiles and ligand_smiles.strip() and total:
+        dock_failed = sum(1 for d in designs if not d.get("best_dock_sdf"))
         if dock_failed:
             warnings.append(
                 f"DiffDock validation failed for {dock_failed}/{total} design(s); docked pose unavailable."
             )
-
-    designs: list[dict] = []
-    for _, row in results_df.iterrows():
-        designs.append(
-            {
-                "sample_id": str(row.get("sample_id", "")),
-                "sequence": str(row.get("sequence", "")),
-                "rewards": float(row.get("rewards", 0.0) or 0.0),
-                "pdb_output": str(row.get("pdb_output", "")),
-                "esmfold_pdb": (
-                    str(row["esmfold_pdb"]) if row.get("esmfold_pdb") else None
-                ) if "esmfold_pdb" in results_df.columns else None,
-                "best_dock_sdf": (
-                    str(row["best_dock_sdf"]) if row.get("best_dock_sdf") else None
-                ) if "best_dock_sdf" in results_df.columns else None,
-                "dock_confidence": (
-                    float(row["dock_confidence"]) if row.get("dock_confidence") is not None else None
-                ) if "dock_confidence" in results_df.columns else None,
-            }
-        )
-
-    _p(95, "Assembling response")
-    return {"designs": designs, "ligand_pdb": ligand_pdb, "warnings": warnings}
+    return {"designs": designs, "ligand_pdb": result.get("ligand_pdb", ligand_pdb), "warnings": warnings}
