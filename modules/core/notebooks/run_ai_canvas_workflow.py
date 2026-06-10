@@ -67,10 +67,31 @@ mlflow_run_name = dbutils.widgets.get("mlflow_run_name")
 mlflow_run_id = dbutils.widgets.get("mlflow_run_id") or None
 graph_path = dbutils.widgets.get("graph_path")
 
-from genesis_workbench.workbench import initialize, execute_workflow, wait_for_job_run_completion
+# Early failed-status guard: if setup fails before the run body starts, flip the
+# pre-created MLflow run's job_status to "failed" so Past Runs doesn't sit at
+# "submitted" forever. (mlflow is available after the %pip restartPython above.)
+import mlflow
+from mlflow.tracking import MlflowClient
 
-databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
-initialize(core_catalog_name=catalog, core_schema_name=schema, sql_warehouse_id=sql_warehouse_id, token=databricks_token)
+
+def _mark_run_failed(msg):
+    if not mlflow_run_id:
+        return
+    try:
+        c = MlflowClient()
+        c.set_tag(mlflow_run_id, "job_status", "failed")
+        c.set_tag(mlflow_run_id, "failure_reason", str(msg)[:500])
+    except Exception:
+        pass
+
+
+try:
+    from genesis_workbench.workbench import initialize, execute_workflow, wait_for_job_run_completion
+    databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
+    initialize(core_catalog_name=catalog, core_schema_name=schema, sql_warehouse_id=sql_warehouse_id, token=databricks_token)
+except Exception as _setup_exc:
+    _mark_run_failed(_setup_exc)
+    raise
 
 # COMMAND ----------
 
@@ -86,40 +107,46 @@ from genesis_workbench.models import set_mlflow_experiment
 
 # Long HTTP timeout: this client makes the synchronous serving-endpoint calls for
 # chain/endpoint nodes, and heavy realtime models can exceed the SDK's 60s default.
-w = WorkspaceClient(config=Config(http_timeout_seconds=600))
-
-# Load the enriched graph the dispatcher uploaded.
-with open(graph_path) as f:
-    graph = json.load(f)
-
-nodes = {n["id"]: n for n in graph.get("nodes", [])}
-edges = graph.get("edges", [])
-print(f"Loaded graph: {len(nodes)} nodes, {len(edges)} edges")
+try:
+    w = WorkspaceClient(config=Config(http_timeout_seconds=600))
+    # Load the enriched graph the dispatcher uploaded.
+    with open(graph_path) as f:
+        graph = json.load(f)
+    nodes = {n["id"]: n for n in graph.get("nodes", [])}
+    edges = graph.get("edges", [])
+    print(f"Loaded graph: {len(nodes)} nodes, {len(edges)} edges")
+except Exception as _setup_exc:
+    _mark_run_failed(_setup_exc)
+    raise
 
 # COMMAND ----------
 
 # ── topological order (Kahn) ─────────────────────────────────────────────────
-succ = {nid: [] for nid in nodes}
-indeg = {nid: 0 for nid in nodes}
-incoming = {nid: [] for nid in nodes}  # (src_id, src_port, dst_port)
-for e in edges:
-    s, t = e.get("source"), e.get("target")
-    if s in nodes and t in nodes:
-        succ[s].append(t)
-        indeg[t] += 1
-        incoming[t].append((s, e.get("sourceHandle"), e.get("targetHandle")))
+try:
+    succ = {nid: [] for nid in nodes}
+    indeg = {nid: 0 for nid in nodes}
+    incoming = {nid: [] for nid in nodes}  # (src_id, src_port, dst_port)
+    for e in edges:
+        s, t = e.get("source"), e.get("target")
+        if s in nodes and t in nodes:
+            succ[s].append(t)
+            indeg[t] += 1
+            incoming[t].append((s, e.get("sourceHandle"), e.get("targetHandle")))
 
-order, queue = [], [nid for nid, d in indeg.items() if d == 0]
-while queue:
-    nid = queue.pop(0)
-    order.append(nid)
-    for s in succ[nid]:
-        indeg[s] -= 1
-        if indeg[s] == 0:
-            queue.append(s)
-if len(order) != len(nodes):
-    raise RuntimeError("Workflow graph has a cycle — cannot execute.")
-print("Execution order:", order)
+    order, queue = [], [nid for nid, d in indeg.items() if d == 0]
+    while queue:
+        nid = queue.pop(0)
+        order.append(nid)
+        for s in succ[nid]:
+            indeg[s] -= 1
+            if indeg[s] == 0:
+                queue.append(s)
+    if len(order) != len(nodes):
+        raise RuntimeError("Workflow graph has a cycle — cannot execute.")
+    print("Execution order:", order)
+except Exception as _setup_exc:
+    _mark_run_failed(_setup_exc)
+    raise
 
 # COMMAND ----------
 
@@ -270,8 +297,9 @@ try:
         mlflow.set_tag("job_status", "complete")
         print("✅ Workflow complete")
 except Exception as exc:  # noqa: BLE001
-    if active_run_id:
+    cid = active_run_id or mlflow_run_id
+    if cid:
         client = MlflowClient()
-        client.set_tag(active_run_id, "job_status", "failed")
-        client.set_tag(active_run_id, "failure_reason", str(exc)[:500])
+        client.set_tag(cid, "job_status", "failed")
+        client.set_tag(cid, "failure_reason", str(exc)[:500])
     raise

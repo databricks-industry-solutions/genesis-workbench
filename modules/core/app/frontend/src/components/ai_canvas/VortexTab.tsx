@@ -21,6 +21,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { useThemeStore } from '@/stores/theme'
 import { CanvasNode } from './CanvasNode'
+import { GenerateSparkle } from './GenerateSparkle'
 import { NodePalette } from './NodePalette'
 import { NodeParamPanel } from './NodeParamPanel'
 import { RunHistory } from './RunHistory'
@@ -562,10 +563,7 @@ function VortexCanvas() {
             disabled={generating}
             title="Show me how"
             aria-label="Show me how"
-            className={
-              'shrink-0 rounded-md px-1 text-base transition-transform hover:scale-125 ' +
-              (generating ? 'gwb-star-shimmer' : 'disabled:opacity-40')
-            }
+            className="shrink-0 rounded-md px-1 text-base transition-transform hover:scale-125 disabled:opacity-40"
           >
             ✨
           </button>
@@ -651,7 +649,7 @@ function VortexCanvas() {
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center pb-28">
               <div className="w-80 max-w-[80%] rounded-lg border border-border bg-card px-4 py-3 text-xs shadow-lg">
                 <div className="mb-2 flex items-center gap-2 font-medium text-foreground">
-                  <span className="gwb-star-shimmer inline-block text-base leading-none">✨</span>
+                  <GenerateSparkle size={22} />
                   Designing workflow…
                 </div>
                 {genThoughts.length === 0 ? (

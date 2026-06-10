@@ -55,19 +55,20 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Vortex: AI "thinking" shimmer for the ✨ generate star (no spinner). */
-@keyframes gwb-star-shimmer {
+/* Vortex: AI "thinking" sparkle — each star scales big↔small, staggered so they
+   twinkle alternately. Used only in the generation dialog (not the toolbar star). */
+@keyframes gwb-twinkle {
   0%, 100% {
-    opacity: 0.6;
-    transform: scale(1);
-    filter: drop-shadow(0 0 2px rgba(250, 204, 21, 0.5));
+    transform: scale(0.5);
+    opacity: 0.55;
   }
   50% {
+    transform: scale(1.12);
     opacity: 1;
-    transform: scale(1.18);
-    filter: drop-shadow(0 0 9px rgba(250, 204, 21, 1));
   }
 }
-.gwb-star-shimmer {
-  animation: gwb-star-shimmer 1.1s ease-in-out infinite;
+.gwb-twinkle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: gwb-twinkle 1.3s ease-in-out infinite;
 }
