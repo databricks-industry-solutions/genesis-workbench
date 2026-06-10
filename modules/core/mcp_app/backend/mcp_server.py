@@ -14,9 +14,12 @@ workflow tools backed by a new prebuilt-workflows registry + shared executor.
 """
 from __future__ import annotations
 
+import inspect
+import json
 import logging
 import os
 import re
+from typing import Optional
 
 import uvicorn
 from databricks.sdk import WorkspaceClient
@@ -105,13 +108,39 @@ def _job_id_for(job_name: str):
     return None
 
 
+_PYTYPE = {"int": int, "float": float, "bool": bool}
+
+
+def _arg_fields(wf: dict) -> list[tuple]:
+    """Typed args for a workflow tool: required inputs (str) + optional params
+    (typed, default None → falls back to the job's own defaults). Returns
+    (name, annotation, required) tuples."""
+    fields: list[tuple] = []
+    seen: set[str] = set()
+    for p in json.loads(wf.get("inputs_json") or "[]"):
+        n = p.get("name")
+        if n and n not in seen:
+            seen.add(n)
+            fields.append((n, str, True))
+    for p in json.loads(wf.get("params_json") or "[]"):
+        n = p.get("name")
+        if n and n not in seen:
+            seen.add(n)
+            fields.append((n, Optional[_PYTYPE.get(p.get("type"), str)], False))
+    return fields
+
+
 def _make_workflow_tool(wf: dict):
-    def run_workflow(parameters: dict | None = None) -> dict:
+    fields = _arg_fields(wf)
+
+    def impl(**kwargs) -> dict:
         w = WorkspaceClient()
         job_id = _job_id_for(wf["job_name"])
         if job_id is None:
             raise RuntimeError(f"Job '{wf['job_name']}' not found / not deployed.")
-        run = w.jobs.run_now(job_id=job_id, job_parameters=parameters or {})
+        # Only pass set args; unset optional params defer to the job's defaults.
+        params = {k: str(v) for k, v in kwargs.items() if v is not None}
+        run = w.jobs.run_now(job_id=job_id, job_parameters=params)
         host = os.environ.get("DATABRICKS_HOST", "").rstrip("/")
         return {
             "run_id": str(run.run_id),
@@ -120,7 +149,19 @@ def _make_workflow_tool(wf: dict):
             "status_tool": "get_workflow_run_status",
         }
 
-    return run_workflow
+    sig_params = []
+    annotations: dict = {}
+    for name, ann, required in fields:
+        if required:
+            sig_params.append(inspect.Parameter(name, inspect.Parameter.KEYWORD_ONLY, annotation=ann))
+        else:
+            sig_params.append(
+                inspect.Parameter(name, inspect.Parameter.KEYWORD_ONLY, default=None, annotation=ann)
+            )
+        annotations[name] = ann
+    impl.__signature__ = inspect.Signature(sig_params)
+    impl.__annotations__ = annotations
+    return impl
 
 
 def _fmt_io(spec_json: str | None) -> str:
@@ -158,18 +199,21 @@ def _register_tools() -> int:
         tool_name = f"workflow_{_slug(wf['workflow_key'])}"
         if tool_name in seen:
             continue
+        try:
+            mcp.add_tool(
+                _make_workflow_tool(wf),
+                name=tool_name,
+                description=(
+                    f"Dispatch the '{wf['label']}' Genesis Workbench workflow ({wf['module']}). "
+                    f"{wf['description']} Returns the run id + URL — poll get_workflow_run_status. "
+                    f"Inputs are file paths / sequences / SMILES; optional params override job defaults."
+                ),
+            )
+        except Exception as e:  # noqa: BLE001 — one bad tool must not skip the rest
+            logger.warning("skipping workflow tool %s: %s", tool_name, e)
+            continue
         seen.add(tool_name)
         n_wf += 1
-        mcp.add_tool(
-            _make_workflow_tool(wf),
-            name=tool_name,
-            description=(
-                f"Dispatch the '{wf['label']}' Genesis Workbench workflow ({wf['module']}). "
-                f"{wf['description']} Inputs: [{_fmt_io(wf['inputs_json'])}]; "
-                f"params: [{_fmt_io(wf['params_json'])}]. Pass `parameters` as a dict of "
-                f"job parameters; returns the run id + URL (poll get_workflow_run_status)."
-            ),
-        )
 
     def get_workflow_run_status(run_id: str) -> dict:
         """Status of a dispatched workflow run by its run id (life-cycle +
