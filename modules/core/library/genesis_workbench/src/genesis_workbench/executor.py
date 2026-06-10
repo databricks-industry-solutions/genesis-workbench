@@ -142,6 +142,13 @@ def _as_list(v) -> list:
     return v if isinstance(v, list) else [v]
 
 
+def _as_bool(v) -> bool:
+    """Canvas/MCP params arrive as a real bool or a string ('true'/'false')."""
+    if isinstance(v, bool):
+        return v
+    return str(v).strip().lower() in ("true", "1", "yes")
+
+
 def _emit(progress, pct: int, msg: str) -> None:
     if progress:
         try:
@@ -450,25 +457,33 @@ def _job_enzyme_optimization(w, inputs, params, ctx, progress=None) -> dict:
 
     num_samples = int(p.get("num_samples", 8) or 8)
     num_iter = int(p.get("num_iterations", 10) or 10)
+    # Reward-axis weights: per-axis `weight_<axis>` params override the defaults.
+    weights = {ax: float(p.get(f"weight_{ax}", dflt) if p.get(f"weight_{ax}") not in (None, "") else dflt)
+               for ax, dflt in _ENZYME_DEFAULT_WEIGHTS.items()}
+    accurate = _as_bool(p.get("use_inprocess_ame", False))
+    job_name = "run_enzyme_optimization_gwb_inprocess_ame" if accurate else "run_enzyme_optimization_gwb"
     _emit(progress, 20, f"Dispatching enzyme optimization ({num_iter} iters × {num_samples} samples)")
-    job_id = _job_id_by_name(w, "run_enzyme_optimization_gwb")
+    job_id = _job_id_by_name(w, job_name)
     run = w.jobs.run_now(job_id=job_id, job_parameters={
         "catalog": cat, "schema": sch, "cache_dir": "enzyme_optimization",
         "sql_warehouse_id": ctx.get("sql_warehouse", ""), "user_email": ctx.get("user_email", ""),
         "mlflow_experiment": ctx.get("experiment_name", ""), "mlflow_run_name": run_name,
         "mlflow_run_id": child, "motif_pdb_path": motif_path,
         "motif_residues_csv": str(p.get("motif_residues_csv", "") or ""),
-        "target_chain": str(p.get("target_chain", "A") or "A"),
-        "scaffold_length_min": str(int(p.get("scaffold_length_min", 50) or 50)),
-        "scaffold_length_max": str(int(p.get("scaffold_length_max", 80) or 80)),
+        "target_chain": str(p.get("target_chain", "B") or "B"),
+        "scaffold_length_min": str(int(p.get("scaffold_length_min", 80) or 80)),
+        "scaffold_length_max": str(int(p.get("scaffold_length_max", 120) or 120)),
         "num_samples": str(num_samples), "num_iterations": str(num_iter),
         "substrate_smiles": substrate, "references_json": "[]",
-        "half_life_margin": "0.05", "weights_json": _json.dumps(_ENZYME_DEFAULT_WEIGHTS),
-        "resampling_temperature": "0.1", "strategy": "resample", "run_proteinmpnn": "true",
+        "half_life_margin": str(float(p.get("half_life_margin", 0.05) or 0.05)),
+        "weights_json": _json.dumps(weights),
+        "resampling_temperature": str(float(p.get("resampling_temperature", 0.1) or 0.1)),
+        "strategy": str(p.get("strategy", "resample") or "resample"),
+        "run_proteinmpnn": str(_as_bool(p.get("run_proteinmpnn", True))).lower(),
         "dev_user_prefix": ctx.get("dev_user_prefix", "") or "",
         "convergence_threshold": "0.01", "convergence_window": "2",
         "target_reward": "", "best_k_target": "", "best_k_threshold": "",
-        "use_inprocess_ame": "false",
+        "use_inprocess_ame": "true" if accurate else "false",
     })
     MlflowClient().set_tag(child, "job_run_id", str(run.run_id))
 
