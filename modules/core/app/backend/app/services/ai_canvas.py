@@ -778,6 +778,12 @@ def start_workflow_run(
         mlflow.set_tag("job_status", "submitted")
         mlflow.log_param("node_count", len(enriched["nodes"]))
         mlflow.log_param("edge_count", len(enriched["edges"]))
+        # Log the original graph (with positions/labels/types) so the Past-Runs
+        # result viewer can re-render the canvas read-only with per-node status.
+        try:
+            mlflow.log_dict(graph, "graph.json")
+        except Exception as e:  # noqa: BLE001
+            logger.info("could not log graph.json for run %s: %s", mlflow_run_id, e)
         try:
             job_run = w.jobs.run_now(
                 job_id=job_id,
@@ -834,18 +840,38 @@ def get_run_status(run_id: str) -> dict:
     }
 
 
-def get_run_result(run_id: str) -> dict:
-    """Download the orchestrator's results artifact; empty if not logged yet."""
-    client = MlflowClient()
+def _download_run_json(client, run_id: str, artifact_path: str):
+    import tempfile
     try:
-        import tempfile
         with tempfile.TemporaryDirectory() as tmp:
-            local = client.download_artifacts(run_id, "results/workflow_results.json", dst_path=tmp)
+            local = client.download_artifacts(run_id, artifact_path, dst_path=tmp)
             with open(local) as f:
                 return json.load(f)
     except Exception as e:  # noqa: BLE001
-        logger.info("results not available for run %s: %s", run_id, e)
-        return {}
+        logger.info("%s not available for run %s: %s", artifact_path, run_id, e)
+        return None
+
+
+def get_run_result(run_id: str) -> dict:
+    """Everything the Past-Runs result viewer needs: the workflow outputs, the
+    graph (to re-render the canvas read-only), and per-node status/errors."""
+    client = MlflowClient()
+    node_status: dict = {}
+    node_error: dict = {}
+    try:
+        tags = client.get_run(run_id).data.tags
+        node_status = {k.split(":", 2)[1]: v for k, v in tags.items()
+                       if k.startswith("node:") and k.endswith(":status")}
+        node_error = {k.split(":", 2)[1]: v for k, v in tags.items()
+                      if k.startswith("node:") and k.endswith(":error")}
+    except Exception as e:  # noqa: BLE001
+        logger.info("tags not available for run %s: %s", run_id, e)
+    return {
+        "result": _download_run_json(client, run_id, "results/workflow_results.json") or {},
+        "graph": _download_run_json(client, run_id, "graph.json"),
+        "node_status": node_status,
+        "node_error": node_error,
+    }
 
 
 def _experiment_ids() -> list[str]:

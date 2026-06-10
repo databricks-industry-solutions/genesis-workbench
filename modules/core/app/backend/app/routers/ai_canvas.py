@@ -299,6 +299,9 @@ class RunsResponse(BaseModel):
 
 class RunResultResponse(BaseModel):
     result: dict
+    graph: dict | None = None
+    node_status: dict = {}
+    node_error: dict = {}
 
 
 @router.post("/run", response_model=RunResponse)
@@ -331,7 +334,11 @@ def run_status(run_id: str, _: CurrentUserDep) -> RunStatusResponse:
 
 @router.get("/run/{run_id}/result", response_model=RunResultResponse)
 def run_result(run_id: str, _: CurrentUserDep) -> RunResultResponse:
-    return RunResultResponse(result=svc.get_run_result(run_id))
+    d = svc.get_run_result(run_id)
+    return RunResultResponse(
+        result=d.get("result", {}), graph=d.get("graph"),
+        node_status=d.get("node_status", {}), node_error=d.get("node_error", {}),
+    )
 
 
 @router.get("/runs", response_model=RunsResponse)

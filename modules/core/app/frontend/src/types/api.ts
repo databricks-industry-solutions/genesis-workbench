@@ -1092,7 +1092,12 @@ export type CanvasRunSummary = {
   run_url: string
 }
 export type CanvasRunsResponse = { runs: CanvasRunSummary[]; page: number; has_more: boolean }
-export type CanvasRunResultResponse = { result: Record<string, unknown> }
+export type CanvasRunResultResponse = {
+  result: Record<string, unknown>
+  graph: CanvasGraph | null
+  node_status: Record<string, string>
+  node_error: Record<string, string>
+}
 
 export type TransformSuggestRequest = {
   source_dtype: string

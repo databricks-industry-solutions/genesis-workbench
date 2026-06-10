@@ -5,6 +5,8 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { Dialog } from '@/components/Dialog'
 import { cn } from '@/lib/utils'
+import { ResultGraph } from './ResultGraph'
+import type { CanvasGraph } from '@/types/api'
 
 const STATUS_BADGE: Record<string, string> = {
   submitted: 'bg-muted text-muted-foreground',
@@ -19,6 +21,7 @@ export function RunHistory() {
   const [text, setText] = useState('')
   const [page, setPage] = useState(1)
   const [resultRunId, setResultRunId] = useState<string | null>(null)
+  const [resultTab, setResultTab] = useState<'workflow' | 'outputs'>('workflow')
 
   const runs = useQuery({
     queryKey: ['ai_canvas', 'runs', text, page],
@@ -93,6 +96,7 @@ export function RunHistory() {
                 <button
                   onClick={() => {
                     setResultRunId(r.run_id)
+                    setResultTab('workflow')
                     result.mutate(r.run_id)
                   }}
                   disabled={!['complete', 'failed'].includes(r.job_status)}
@@ -131,20 +135,128 @@ export function RunHistory() {
         open={resultRunId !== null}
         onClose={() => setResultRunId(null)}
         title="Workflow result"
-        width="max-w-2xl"
+        width="max-w-4xl"
       >
         {result.isPending ? (
           <p className="text-sm text-muted-foreground">Loading result…</p>
-        ) : result.data && Object.keys(result.data.result).length > 0 ? (
-          <pre className="max-h-[60vh] overflow-auto rounded-md border border-border bg-muted/30 p-3 text-xs">
-            {JSON.stringify(result.data.result, null, 2)}
-          </pre>
         ) : (
-          <p className="text-sm text-muted-foreground">
-            No result artifact yet — the run may still be in progress or produced no output.
-          </p>
+          <>
+            {/* Tabs */}
+            <div className="mb-3 flex gap-1 border-b border-border">
+              {(['workflow', 'outputs'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setResultTab(t)}
+                  className={cn(
+                    '-mb-px border-b-2 px-3 py-1.5 text-xs font-medium capitalize',
+                    resultTab === t
+                      ? 'border-primary text-foreground'
+                      : 'border-transparent text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {t}
+                </button>
+              ))}
+              <div className="ml-auto flex items-center gap-3 pb-1 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> passed</span>
+                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" /> failed</span>
+                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-400" /> skipped</span>
+              </div>
+            </div>
+
+            {resultTab === 'workflow' ? (
+              result.data?.graph ? (
+                <ResultGraph
+                  graph={result.data.graph as CanvasGraph}
+                  nodeStatus={result.data.node_status ?? {}}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No saved graph for this run (older run, or it failed before the graph was logged).
+                </p>
+              )
+            ) : (
+              <OutputsTab data={result.data} />
+            )}
+          </>
         )}
       </Dialog>
     </>
+  )
+}
+
+// Per-node outputs + errors as collapsible expanders.
+function OutputsTab({
+  data,
+}: {
+  data:
+    | {
+        result: Record<string, unknown>
+        graph: CanvasGraph | null
+        node_status: Record<string, string>
+        node_error: Record<string, string>
+      }
+    | undefined
+}) {
+  if (!data) return <p className="text-sm text-muted-foreground">No result.</p>
+  const res = (data.result ?? {}) as {
+    node_outputs?: Record<string, unknown>
+    final_outputs?: Record<string, unknown>
+  }
+  const labels = new Map<string, string>(
+    (data.graph?.nodes ?? []).map((n) => [n.id, n.label || n.type]),
+  )
+  const nodeOutputs = res.node_outputs ?? {}
+  const finalOutputs = res.final_outputs ?? {}
+  const errors = data.node_error ?? {}
+  const status = data.node_status ?? {}
+  const ids = Object.keys(nodeOutputs)
+  const hasErrors = Object.keys(errors).length > 0
+
+  if (ids.length === 0 && Object.keys(finalOutputs).length === 0 && !hasErrors) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No outputs captured — the run may have produced no result.
+      </p>
+    )
+  }
+
+  const row = (key: string, title: string, badge: string | undefined, body: unknown, err?: string) => (
+    <details key={key} className="rounded-md border border-border">
+      <summary className="cursor-pointer px-3 py-2 text-xs font-medium">
+        {title}
+        {badge && (
+          <span
+            className={cn(
+              'ml-2 rounded px-1.5 py-0.5 text-[10px]',
+              badge === 'complete'
+                ? 'bg-emerald-500/15 text-emerald-600'
+                : badge === 'failed'
+                  ? 'bg-destructive/15 text-destructive'
+                  : 'bg-muted text-muted-foreground',
+            )}
+          >
+            {badge === 'complete' ? 'passed' : badge === 'failed' ? 'failed' : 'skipped'}
+          </span>
+        )}
+      </summary>
+      <div className="border-t border-border p-2">
+        {err && <p className="mb-2 text-xs text-destructive">⚠ {err}</p>}
+        <pre className="max-h-72 overflow-auto rounded bg-muted/30 p-2 text-[11px] leading-snug">
+          {typeof body === 'string' ? body : JSON.stringify(body, null, 2)}
+        </pre>
+      </div>
+    </details>
+  )
+
+  return (
+    <div className="max-h-[58vh] space-y-2 overflow-auto">
+      {ids.map((id) => row(id, labels.get(id) ?? id, status[id], nodeOutputs[id], errors[id]))}
+      {Object.entries(finalOutputs).map(([name, val]) => row(`final-${name}`, `Output · ${name}`, 'complete', val))}
+      {/* errors on nodes that produced no output (e.g. failed before returning) */}
+      {Object.entries(errors)
+        .filter(([id]) => !(id in nodeOutputs))
+        .map(([id, err]) => row(`err-${id}`, labels.get(id) ?? id, status[id] ?? 'failed', {}, err))}
+    </div>
   )
 }

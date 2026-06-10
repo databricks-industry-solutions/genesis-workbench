@@ -52,16 +52,26 @@ export function CanvasNode({ data, selected }: NodeProps) {
   // Spread handles evenly along the left (inputs) / right (outputs) edges.
   const handleTop = (i: number, n: number) => `${((i + 1) / (n + 1)) * 100}%`
 
+  // Read-only result view sets data.status → ring by run outcome (green/red/grey).
+  // The editor leaves status unset → fall back to the validation ring.
+  const statusRing =
+    d.status === 'complete'
+      ? 'ring-2 ring-emerald-500'
+      : d.status === 'failed'
+        ? 'ring-2 ring-red-500'
+        : d.status
+          ? 'ring-2 ring-slate-400/70' // pending/skipped/running
+          : null
+
   return (
     <div
       title={cat?.description || d.label}
       className={cn(
         'w-32 overflow-hidden rounded-md border bg-card shadow-sm',
         style.border,
-        // Validation status ring: red when this node has unmet requirements,
-        // subtle green when it's good to go. Selection uses a separate outline
-        // (different CSS property) so both can show at once.
-        d.invalid ? 'ring-2 ring-red-500' : 'ring-1 ring-emerald-500/60',
+        // Run-status ring (result viewer) takes precedence; otherwise the
+        // validation ring (red = unmet requirements, green = good to go).
+        statusRing ?? (d.invalid ? 'ring-2 ring-red-500' : 'ring-1 ring-emerald-500/60'),
         selected && 'outline outline-2 outline-primary outline-offset-1',
         unavailable && 'opacity-60',
       )}
