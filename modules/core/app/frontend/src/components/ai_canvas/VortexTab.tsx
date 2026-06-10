@@ -35,7 +35,7 @@ import {
   toCanvasGraph,
 } from './graph'
 import type { VortexEdge, VortexNode } from './graph'
-import type { CanvasNodeType } from '@/types/api'
+import type { CanvasGraph, CanvasNodeType } from '@/types/api'
 
 const nodeTypes: NodeTypes = { vortex: CanvasNode }
 
@@ -147,26 +147,100 @@ function VortexCanvas() {
     [catalogByType, setNodes, setEdges],
   )
 
-  const generate = useMutation({
-    mutationFn: (g: string) => api.aiCanvasGenerate({ goal: g }),
-    onSuccess: (res) => {
-      loadGraph(res.graph)
-      setLoadedId(null) // a generated graph is new/unsaved (keep the current name)
-      showToast(
-        res.graph.nodes.length
-          ? `Generated a ${res.graph.nodes.length}-node workflow — edit it, then Run.`
-          : 'No nodes generated. Try rephrasing your goal.',
-      )
+  // Streamed generation: the model's plan arrives as `thought` events (shown as a
+  // live feed) then a `result` event carrying the graph. fetch + manual SSE framing
+  // (EventSource is GET-only) — mirrors useSseMutation.
+  const [generating, setGenerating] = useState(false)
+  const [genThoughts, setGenThoughts] = useState<string[]>([])
+  const genCtrl = useRef<AbortController | null>(null)
+  const runGenerate = useCallback(
+    (goalText: string) => {
+      const g = goalText.trim()
+      if (!g) return
+      genCtrl.current?.abort()
+      const ctrl = new AbortController()
+      genCtrl.current = ctrl
+      setGenerating(true)
+      setGenThoughts([])
+      setNotice(null)
+      ;(async () => {
+        try {
+          const res = await fetch('/api/ai_canvas/generate/stream', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+            body: JSON.stringify({ goal: g }),
+            signal: ctrl.signal,
+          })
+          if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+          const reader = res.body.getReader()
+          const dec = new TextDecoder()
+          let buf = ''
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buf += dec.decode(value, { stream: true })
+            let sep
+            while ((sep = buf.indexOf('\n\n')) !== -1) {
+              const frame = buf.slice(0, sep)
+              buf = buf.slice(sep + 2)
+              if (!frame || frame.startsWith(':')) continue
+              let event = 'message'
+              let dataLine = ''
+              for (const line of frame.split('\n')) {
+                if (line.startsWith('event:')) event = line.slice(6).trim()
+                else if (line.startsWith('data:')) dataLine += line.slice(5).trim()
+              }
+              if (!dataLine) continue
+              let payload: { text?: string; message?: string; nodes?: unknown[] }
+              try {
+                payload = JSON.parse(dataLine)
+              } catch {
+                continue
+              }
+              if (event === 'thought' && payload.text) {
+                setGenThoughts((t) => [...t, payload.text as string])
+              } else if (event === 'result') {
+                loadGraph(payload as CanvasGraph)
+                setLoadedId(null)
+                setGenerating(false)
+                genCtrl.current = null
+                const n = (payload.nodes as unknown[] | undefined)?.length ?? 0
+                showToast(
+                  n
+                    ? `Generated a ${n}-node workflow — edit it, then Run.`
+                    : 'No nodes generated. Try rephrasing your goal.',
+                )
+                return
+              } else if (event === 'error') {
+                setNotice(payload.message ?? 'Generation failed.')
+                setGenerating(false)
+                genCtrl.current = null
+                return
+              }
+            }
+          }
+          if (genCtrl.current === ctrl) {
+            setGenerating(false)
+            genCtrl.current = null
+          }
+        } catch (e) {
+          if ((e as Error).name === 'AbortError') return
+          setNotice((e as Error).message)
+          setGenerating(false)
+          genCtrl.current = null
+        }
+      })()
     },
-    onError: (err: Error) => setNotice(err.message),
-  })
+    [loadGraph, showToast],
+  )
 
   // ✨ "Show me how" — drop in a random fun goal and generate it.
   const tryRandom = useCallback(() => {
     const g = EXAMPLE_GOALS[Math.floor(Math.random() * EXAMPLE_GOALS.length)]
     setGoal(g)
-    generate.mutate(g)
-  }, [generate])
+    runGenerate(g)
+  }, [runGenerate])
 
   // ── add a node ─────────────────────────────────────────────────────────────
   // Convertible fields: a node's input ports are editable inline (right panel) or
@@ -417,7 +491,9 @@ function VortexCanvas() {
 
   // Centered spinner popup — AI generation / transform lookup only (runs are
   // tracked in Past Runs, not with a live spinner).
-  const popupMessage = suggesting ?? (generate.isPending ? 'Generating workflow…' : null)
+  // Centered spinner popup: transform-lookup only. Generation has its own live
+  // thoughts panel (rendered separately while `generating`).
+  const popupMessage = suggesting
 
   // Yellow banner: the latest notice (dispatch confirmation, errors, warnings).
   const banner = notice
@@ -477,13 +553,13 @@ function VortexCanvas() {
           className="flex items-center gap-2"
           onSubmit={(e) => {
             e.preventDefault()
-            if (goal.trim()) generate.mutate(goal.trim())
+            runGenerate(goal)
           }}
         >
           <button
             type="button"
             onClick={tryRandom}
-            disabled={generate.isPending}
+            disabled={generating}
             title="Show me how"
             aria-label="Show me how"
             className="shrink-0 rounded-md px-1 text-base transition-transform hover:scale-125 disabled:opacity-40"
@@ -498,10 +574,10 @@ function VortexCanvas() {
           />
           <button
             type="submit"
-            disabled={!goal.trim() || generate.isPending}
+            disabled={!goal.trim() || generating}
             className="shrink-0 rounded-md border border-primary/50 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 disabled:opacity-40"
           >
-            {generate.isPending ? 'Generating…' : 'Generate workflow'}
+            {generating ? 'Generating…' : 'Generate workflow'}
           </button>
         </form>
       </div>
@@ -558,10 +634,32 @@ function VortexCanvas() {
             <MiniMap pannable zoomable />
           </ReactFlow>
 
-          {nodes.length === 0 && !catalogQuery.isLoading && !popupMessage && (
+          {nodes.length === 0 && !catalogQuery.isLoading && !popupMessage && !generating && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="rounded-md border border-dashed border-border bg-card/70 px-4 py-3 text-center text-xs text-muted-foreground">
                 Drag a node from the left palette onto the canvas, or double-click one to add it.
+              </div>
+            </div>
+          )}
+
+          {/* Live "thinking" feed while the AI designs the workflow — the model's
+              plan streams in as bullets, then the graph renders. */}
+          {generating && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center pb-28">
+              <div className="w-80 max-w-[80%] rounded-lg border border-border bg-card px-4 py-3 text-xs shadow-lg">
+                <div className="mb-2 flex items-center gap-2 font-medium text-foreground">
+                  <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-blue-500/30 border-t-blue-500" />
+                  ✨ Designing workflow…
+                </div>
+                {genThoughts.length === 0 ? (
+                  <div className="italic text-muted-foreground">Thinking through the goal…</div>
+                ) : (
+                  <ul className="space-y-1 text-muted-foreground">
+                    {genThoughts.map((t, i) => (
+                      <li key={i} className="leading-snug">• {t}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
           )}

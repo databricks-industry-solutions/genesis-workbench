@@ -9,7 +9,11 @@ and result endpoints are added in subsequent increments.
 """
 from __future__ import annotations
 
+import json
+import time
+
 from fastapi import APIRouter, HTTPException, status
+from fastapi.responses import StreamingResponse
 from genesis_workbench.workbench import UserInfo
 from pydantic import BaseModel, Field
 
@@ -18,6 +22,7 @@ from app.config import get_settings
 from app.services import ai_canvas as svc
 
 router = APIRouter(prefix="/api/ai_canvas", tags=["ai_canvas"])
+_SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
 
 def _build_user_info(user: CurrentUser) -> UserInfo:
@@ -119,6 +124,29 @@ def generate(payload: GenerateRequest, _: CurrentUserDep) -> GenerateResponse:
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, f"Graph generation failed: {e}")
     return GenerateResponse(graph=Graph(**graph))
+
+
+@router.post("/generate/stream")
+def generate_stream(payload: GenerateRequest, _: CurrentUserDep) -> StreamingResponse:
+    """Streamed generation: emits `thought` events (the model's plan, paced for a
+    live feel) then a `result` event carrying the graph. Falls back to `error`."""
+    endpoint = get_settings().llm_endpoint_name
+
+    def _events():
+        if not endpoint:
+            yield f"event: error\ndata: {json.dumps({'message': 'LLM endpoint not configured'})}\n\n"
+            return
+        try:
+            plan, graph = svc.generate_plan_and_graph(payload.goal, endpoint)
+        except Exception as e:  # noqa: BLE001 — surface as an SSE error event
+            yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
+            return
+        for bullet in plan:
+            yield f"event: thought\ndata: {json.dumps({'text': bullet})}\n\n"
+            time.sleep(0.5)  # pace the reveal so thoughts read as a live feed
+        yield f"event: result\ndata: {json.dumps(graph)}\n\n"
+
+    return StreamingResponse(_events(), media_type="text/event-stream", headers=_SSE_HEADERS)
 
 
 class TransformSuggestRequest(BaseModel):

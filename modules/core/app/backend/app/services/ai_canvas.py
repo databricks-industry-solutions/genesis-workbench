@@ -257,8 +257,11 @@ Rules:
 - Only add edges between compatible ports; set sourceHandle to the source node's output port name and targetHandle to the target node's input port name. If two ports' dtypes don't match, insert a transform node between them.
 - Fill `params` with sensible values where helpful; otherwise use {{}}.
 
+Also include a `plan`: a list of 3-5 very short present-tense bullet strings narrating your reasoning as you design — which Prebuilt Workflow you center on and why, then each pipeline step (e.g. "Center on Guided Enzyme Optimization for the substrate", "Fold the top design with ESMFold", "Collect the best candidate"). Keep each bullet under ~10 words.
+
 Respond with ONLY a JSON object, no prose, no markdown fences, in exactly this shape:
-{{"nodes":[{{"id":"n1","type":"<type>","label":"<label>","params":{{}}}}],
+{{"plan":["<thought>","<thought>"],
+ "nodes":[{{"id":"n1","type":"<type>","label":"<label>","params":{{}}}}],
  "edges":[{{"source":"n1","target":"n2","sourceHandle":"<out_port>","targetHandle":"<in_port>"}}]}}"""
 
 
@@ -314,25 +317,22 @@ def _auto_layout(nodes: list[dict], edges: list[dict]) -> None:
         n["position"] = {"x": d * 240, "y": row * 130 + 20}
 
 
-def generate_graph(goal: str, llm_endpoint: str) -> dict:
-    """Turn a natural-language goal into a validated canvas graph.
-
-    Returns {"nodes": [...], "edges": [...]} using only node types present in
-    the live catalog. Invalid nodes/edges are dropped (fail-soft) so the user
-    always gets an editable starting point.
-    """
+def _catalog_ctx() -> tuple[set[str], dict]:
+    """(valid node types, ports_by_type) for validating an LLM-produced graph."""
     catalog = build_catalog()
     valid_types = {n["type"] for n in catalog}
     ports_by_type = {
-        n["type"]: (
-            {p["name"] for p in n["inputs"]},
-            {p["name"] for p in n["outputs"]},
-        )
+        n["type"]: ({p["name"] for p in n["inputs"]}, {p["name"] for p in n["outputs"]})
         for n in catalog
     }
+    return valid_types, ports_by_type
 
+
+def _llm_generate_parsed(goal: str, llm_endpoint: str) -> dict:
+    """Call the LLM once (with a one-shot stricter retry) and return parsed JSON
+    (which may carry `plan`, `nodes`, `edges`)."""
+    catalog = build_catalog()
     system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(catalog=_catalog_prompt_lines(catalog))
-
     w = WorkspaceClient()
 
     def _attempt(extra_system: str = "") -> dict:
@@ -348,14 +348,17 @@ def generate_graph(goal: str, llm_endpoint: str) -> dict:
         return _extract_json(response.choices[0].message.content)
 
     try:
-        parsed = _attempt()
+        return _attempt()
     except GraphGenerationError:
         # LLMs occasionally drop a comma in a big graph — one stricter retry.
-        parsed = _attempt(
+        return _attempt(
             "\n\nIMPORTANT: Respond with ONE strictly-valid JSON object only. Every array/"
             "object element MUST be comma-separated; no trailing commas; no prose; no markdown."
         )
 
+
+def _validate_graph(parsed: dict, valid_types: set[str], ports_by_type: dict) -> dict:
+    """Validate + normalize an LLM-produced graph; drop invalid nodes/edges."""
     # Validate + normalize.
     clean_nodes: list[dict] = []
     seen_ids: set[str] = set()
@@ -402,6 +405,21 @@ def generate_graph(goal: str, llm_endpoint: str) -> dict:
 
     _auto_layout(clean_nodes, clean_edges)
     return {"nodes": clean_nodes, "edges": clean_edges}
+
+
+def generate_graph(goal: str, llm_endpoint: str) -> dict:
+    """Goal → validated canvas graph (only catalog node types; fail-soft)."""
+    valid_types, ports_by_type = _catalog_ctx()
+    return _validate_graph(_llm_generate_parsed(goal, llm_endpoint), valid_types, ports_by_type)
+
+
+def generate_plan_and_graph(goal: str, llm_endpoint: str) -> tuple[list[str], dict]:
+    """Goal → (plan: short reasoning bullets, validated graph). Same single LLM
+    call as generate_graph; the plan is surfaced for the streamed 'thoughts' UX."""
+    valid_types, ports_by_type = _catalog_ctx()
+    parsed = _llm_generate_parsed(goal, llm_endpoint)
+    plan = [str(b).strip() for b in (parsed.get("plan") or []) if str(b).strip()][:6]
+    return plan, _validate_graph(parsed, valid_types, ports_by_type)
 
 
 # ─── AI transform suggestion (auto-bridge incompatible connections) ──────────
