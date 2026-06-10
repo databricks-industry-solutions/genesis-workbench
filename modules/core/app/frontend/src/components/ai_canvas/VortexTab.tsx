@@ -60,6 +60,15 @@ function ts(): string {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
 }
 
+// Filesystem-safe slug for an MLflow experiment/run name from a workflow title.
+function slug(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40)
+}
+
 // Auto-generated default workflow name, e.g. "vortex_20260609_1355".
 function defaultWorkflowName(): string {
   const d = new Date()
@@ -193,7 +202,12 @@ function VortexCanvas() {
                 else if (line.startsWith('data:')) dataLine += line.slice(5).trim()
               }
               if (!dataLine) continue
-              let payload: { text?: string; message?: string; nodes?: unknown[] }
+              let payload: {
+                text?: string
+                message?: string
+                graph?: CanvasGraph
+                name?: string
+              }
               try {
                 payload = JSON.parse(dataLine)
               } catch {
@@ -202,11 +216,23 @@ function VortexCanvas() {
               if (event === 'thought' && payload.text) {
                 setGenThoughts((t) => [...t, payload.text as string])
               } else if (event === 'result') {
-                loadGraph(payload as CanvasGraph)
+                const g = (payload.graph ?? payload) as CanvasGraph
+                loadGraph(g)
                 setLoadedId(null)
+                // Give the generated workflow a meaningful name → drives the
+                // workflow name, MLflow experiment, and run name.
+                const title = (payload.name || '').trim()
+                if (title) {
+                  setWorkflowName(title)
+                  const sl = slug(title)
+                  if (sl) {
+                    setExperimentName(`gwb_ai_canvas_${sl}`)
+                    setRunName(`${sl}_${ts()}`)
+                  }
+                }
                 setGenerating(false)
                 genCtrl.current = null
-                const n = (payload.nodes as unknown[] | undefined)?.length ?? 0
+                const n = g.nodes?.length ?? 0
                 showToast(
                   n
                     ? `Generated a ${n}-node workflow — edit it, then Run.`

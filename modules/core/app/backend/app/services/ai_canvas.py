@@ -260,8 +260,10 @@ Rules:
 
 Also include a `plan`: a list of 3-5 very short present-tense bullet strings narrating your reasoning as you design — which Prebuilt Workflow you center on and why, then each pipeline step (e.g. "Center on Guided Enzyme Optimization for the substrate", "Fold the top design with ESMFold", "Collect the best candidate"). Keep each bullet under ~10 words.
 
+Also include a `name`: a short Title Case workflow name (2-5 words) summarizing what it does, e.g. "Enzyme Optimization + Fold" or "ADMET Screen & Optimize". No punctuation beyond + & -.
+
 Respond with ONLY a JSON object, no prose, no markdown fences, in exactly this shape:
-{{"plan":["<thought>","<thought>"],
+{{"name":"<short title>","plan":["<thought>","<thought>"],
  "nodes":[{{"id":"n1","type":"<type>","label":"<label>","params":{{}}}}],
  "edges":[{{"source":"n1","target":"n2","sourceHandle":"<out_port>","targetHandle":"<in_port>"}}]}}"""
 
@@ -414,13 +416,14 @@ def generate_graph(goal: str, llm_endpoint: str) -> dict:
     return _validate_graph(_llm_generate_parsed(goal, llm_endpoint), valid_types, ports_by_type)
 
 
-def generate_plan_and_graph(goal: str, llm_endpoint: str) -> tuple[list[str], dict]:
-    """Goal → (plan: short reasoning bullets, validated graph). Same single LLM
-    call as generate_graph; the plan is surfaced for the streamed 'thoughts' UX."""
+def generate_plan_and_graph(goal: str, llm_endpoint: str) -> tuple[list[str], dict, str]:
+    """Goal → (plan bullets, validated graph, short workflow name). Same single
+    LLM call as generate_graph; plan + name surface in the streamed 'thoughts' UX."""
     valid_types, ports_by_type = _catalog_ctx()
     parsed = _llm_generate_parsed(goal, llm_endpoint)
     plan = [str(b).strip() for b in (parsed.get("plan") or []) if str(b).strip()][:6]
-    return plan, _validate_graph(parsed, valid_types, ports_by_type)
+    name = str(parsed.get("name") or "").strip()[:60]
+    return plan, _validate_graph(parsed, valid_types, ports_by_type), name
 
 
 # ─── AI transform suggestion (auto-bridge incompatible connections) ──────────
