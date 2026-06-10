@@ -44,7 +44,11 @@ export function CanvasNode({ data, selected }: NodeProps) {
       className={cn(
         'w-32 overflow-hidden rounded-md border bg-card shadow-sm',
         style.border,
-        selected && 'ring-1 ring-primary',
+        // Validation status ring: red when this node has unmet requirements,
+        // subtle green when it's good to go. Selection uses a separate outline
+        // (different CSS property) so both can show at once.
+        d.invalid ? 'ring-2 ring-red-500' : 'ring-1 ring-emerald-500/60',
+        selected && 'outline outline-2 outline-primary outline-offset-1',
         unavailable && 'opacity-60',
       )}
     >

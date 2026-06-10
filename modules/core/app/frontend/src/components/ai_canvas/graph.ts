@@ -14,6 +14,9 @@ export type VortexNodeData = {
   params: Record<string, unknown>
   catalog: CanvasNodeType | null
   status?: NodeStatus
+  // Derived for display: true when this node has unmet validation requirements
+  // (unconnected input / empty required value). Drives the red/green node border.
+  invalid?: boolean
 }
 
 export type VortexNode = Node<VortexNodeData>
@@ -152,8 +155,8 @@ export function ioTypeForDtype(dtype: string): string {
   return 'text_input'
 }
 
-// A single reason the graph can't run yet, attributed to a node.
-export type ValidationIssue = { node: string; message: string }
+// A single reason the graph can't run yet, attributed to a node (id + label).
+export type ValidationIssue = { nodeId: string; node: string; message: string }
 
 function isBlank(v: unknown): boolean {
   return v === null || v === undefined || (typeof v === 'string' && v.trim() === '')
@@ -173,22 +176,22 @@ export function graphValidationErrors(nodes: VortexNode[], edges: VortexEdge[]):
     // 1. Every input port needs an incoming edge.
     for (const p of cat?.inputs ?? []) {
       const connected = edges.some((e) => e.target === n.id && e.targetHandle === p.name)
-      if (!connected) issues.push({ node: label, message: `input “${p.label || p.name}” not connected` })
+      if (!connected) issues.push({ nodeId: n.id, node: label, message: `input “${p.label || p.name}” not connected` })
     }
 
     // 2. Required params must be filled (covers IO value/path/table — all required).
     for (const pf of cat?.params ?? []) {
       if (pf.required && isBlank(params[pf.name])) {
-        issues.push({ node: label, message: `${pf.label || pf.name} is empty` })
+        issues.push({ nodeId: n.id, node: label, message: `${pf.label || pf.name} is empty` })
       }
     }
 
     // 3. IO source format checks (only when a value is present).
     if (n.data.typeKey === 'volume_input' && !isBlank(params.path) && !String(params.path).startsWith('/Volumes/')) {
-      issues.push({ node: label, message: 'path should start with /Volumes/' })
+      issues.push({ nodeId: n.id, node: label, message: 'path should start with /Volumes/' })
     }
     if (n.data.typeKey === 'delta_input' && !isBlank(params.table) && String(params.table).split('.').length !== 3) {
-      issues.push({ node: label, message: 'table should be catalog.schema.table' })
+      issues.push({ nodeId: n.id, node: label, message: 'table should be catalog.schema.table' })
     }
   }
   return issues

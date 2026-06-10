@@ -387,6 +387,16 @@ function VortexCanvas() {
   // Run is gated on the graph validating — inputs wired, required values filled.
   const validationErrors = useMemo(() => graphValidationErrors(nodes, edges), [nodes, edges])
   const runnable = nodes.length > 0 && validationErrors.length === 0
+  // Per-node validity drives the red/green border. Inject as derived node data so
+  // CanvasNode can render it without us mutating the canonical `nodes` state.
+  const invalidIds = useMemo(
+    () => new Set(validationErrors.map((e) => e.nodeId)),
+    [validationErrors],
+  )
+  const flowNodes = useMemo(
+    () => nodes.map((n) => ({ ...n, data: { ...n.data, invalid: invalidIds.has(n.id) } })),
+    [nodes, invalidIds],
+  )
   const runDisabledReason =
     nodes.length === 0
       ? 'Add a node to begin'
@@ -511,7 +521,7 @@ function VortexCanvas() {
 
         <div ref={wrapperRef} className="relative min-w-0 flex-1" onDrop={onDrop} onDragOver={onDragOver}>
           <ReactFlow
-            nodes={nodes}
+            nodes={flowNodes}
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
