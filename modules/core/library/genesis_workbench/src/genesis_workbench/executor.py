@@ -90,17 +90,28 @@ def _as_list(v) -> list:
     return v if isinstance(v, list) else [v]
 
 
-def _chain_admet_screen(w: WorkspaceClient, inputs: dict, params: dict) -> dict:
+def _emit(progress, pct: int, msg: str) -> None:
+    if progress:
+        try:
+            progress(pct, msg)
+        except Exception:  # noqa: BLE001 — a bad callback must not break execution
+            pass
+
+
+def _chain_admet_screen(w: WorkspaceClient, inputs: dict, params: dict, progress=None) -> dict:
     """Run the deployed ADMET / toxicity predictors over a SMILES set and combine."""
     smiles = _as_list((inputs or {}).get("smiles"))
     out: dict = {"smiles": smiles}
-    for short, key in (("chemprop_admet", "admet"), ("chemprop_bbbp", "bbbp"),
-                       ("chemprop_clintox", "clintox"), ("kermt_admet", "kermt")):
+    preds = [("chemprop_admet", "admet", "ADMET (multi-task)"), ("chemprop_bbbp", "bbbp", "BBB penetration"),
+             ("chemprop_clintox", "clintox", "clinical toxicity"), ("kermt_admet", "kermt", "KERMT")]
+    for i, (short, key, label) in enumerate(preds):
+        _emit(progress, 10 + int(i / len(preds) * 85), f"Predicting {label}")
         try:
             ep = get_endpoint_name_for_uc_model(short)
             out[key] = w.serving_endpoints.query(name=ep, inputs=smiles).predictions
         except Exception as e:  # noqa: BLE001 — include only deployed predictors
             logger.info("admet_screen: %s unavailable: %s", short, e)
+    _emit(progress, 100, "ADMET screen complete")
     return out
 
 
@@ -135,10 +146,11 @@ def _reindex_chain_pdb(pdb_text: str, chain_id: str = "A") -> str:
             return fh.read()
 
 
-def _chain_protein_design(w: WorkspaceClient, inputs: dict, params: dict) -> dict:
+def _chain_protein_design(w: WorkspaceClient, inputs: dict, params: dict, progress=None) -> dict:
     """ESMFold -> reindex -> RFDiffusion x N -> ProteinMPNN -> ESMFold each design.
-    Returns the initial + designed structures (lean data; the UI adds the viewer +
-    alignment on top). Endpoint payloads mirror services/protein.py."""
+    Returns the initial + designed structures (lean data; the caller adds the
+    viewer + alignment + MLflow on top). Endpoint payloads mirror services/protein.py.
+    `progress(pct, msg)` fires at each stage if provided."""
     seq_in = str((inputs or {}).get("sequence", ""))
     start_idx, end_idx = seq_in.find("["), seq_in.find("]")
     raw = seq_in.replace("[", "").replace("]", "")
@@ -151,23 +163,33 @@ def _chain_protein_design(w: WorkspaceClient, inputs: dict, params: dict) -> dic
     def _fold(seq: str) -> str:
         return w.serving_endpoints.query(name=esmfold, inputs=[seq]).predictions[0]
 
+    _emit(progress, 5, "Folding original sequence (ESMFold)")
     initial = _fold(raw)
     modified = _reindex_chain_pdb(initial, "A")
 
-    designed_pdbs = [
-        w.serving_endpoints.query(
-            name=rfdiffusion,
-            inputs=[{"pdb": modified, "start_idx": start_idx, "end_idx": end_idx}],
-        ).predictions[0]
-        for _ in range(n)
-    ]
+    designed_pdbs = []
+    for i in range(n):
+        _emit(progress, 10 + int(i / max(n, 1) * 40), f"RFDiffusion scaffold {i + 1}/{n}")
+        designed_pdbs.append(
+            w.serving_endpoints.query(
+                name=rfdiffusion,
+                inputs=[{"pdb": modified, "start_idx": start_idx, "end_idx": end_idx}],
+            ).predictions[0]
+        )
     seqs: list[str] = []
-    for pdb in designed_pdbs:
+    for i, pdb in enumerate(designed_pdbs):
+        _emit(progress, 50 + int(i / max(len(designed_pdbs), 1) * 20),
+              f"ProteinMPNN sequence design {i + 1}/{len(designed_pdbs)}")
         r = w.serving_endpoints.query(
             name=proteinmpnn, dataframe_records=[{"pdb": pdb, "fixed_positions": ""}]
         ).predictions
         seqs.extend(r if isinstance(r, list) else [r])
-    return {"initial": initial, "sequences": seqs, "designs": [_fold(s) for s in seqs]}
+    designs = []
+    for i, s in enumerate(seqs):
+        _emit(progress, 70 + int(i / max(len(seqs), 1) * 25), f"Folding designed sequence {i + 1}/{len(seqs)}")
+        designs.append(_fold(s))
+    _emit(progress, 100, "Protein design complete")
+    return {"initial": initial, "sequences": seqs, "designs": designs}
 
 
 _CHAINS = {"admet_screen": _chain_admet_screen, "protein_design": _chain_protein_design}
@@ -248,10 +270,13 @@ def execute_capability(
     inputs: dict | None = None,
     params: dict | None = None,
     workspace_client: WorkspaceClient | None = None,
+    progress=None,
 ):
     """Run a capability. `inputs` maps input-port name -> value; `params` maps
     param name -> value. Endpoints/chains/transforms return results synchronously;
-    jobs return {run_id, run_url} (poll with `run_status`)."""
+    jobs return {run_id, run_url} (poll with `run_status`). `progress(pct, msg)`,
+    if given, fires at each chain stage — the caller decides what to do with it
+    (SSE, per-node status, MLflow), keeping this core presentation-agnostic."""
     w = _w(workspace_client)
     if cap.kind == ENDPOINT:
         return _query_endpoint(w, cap, inputs or {}, params or {})
@@ -261,7 +286,7 @@ def execute_capability(
         fn = _CHAINS.get(cap.chain_id or "")
         if fn is None:
             raise RuntimeError(f"No executor for chain '{cap.chain_id}'.")
-        return fn(w, inputs or {}, params or {})
+        return fn(w, inputs or {}, params or {}, progress)
     if cap.kind == TRANSFORM:
         return _run_transform(w, cap.op, inputs or {}, params or {})
     raise RuntimeError(f"Unknown capability kind '{cap.kind}'.")
@@ -271,13 +296,14 @@ def execute_capability(
 
 
 def run_chain(chain_id: str, inputs: dict | None = None, params: dict | None = None,
-              workspace_client: WorkspaceClient | None = None):
-    """Run an endpoint-chain by id. Used by the canvas orchestrator, which has
-    the node's exec descriptor (not a full Capability)."""
+              workspace_client: WorkspaceClient | None = None, progress=None):
+    """Run an endpoint-chain by id. Used by the canvas orchestrator + UI services,
+    which have the node's exec descriptor (not a full Capability). `progress(pct,
+    msg)` fires at each stage if given."""
     fn = _CHAINS.get(chain_id or "")
     if fn is None:
         raise RuntimeError(f"No executor for chain '{chain_id}'.")
-    return fn(_w(workspace_client), inputs or {}, params or {})
+    return fn(_w(workspace_client), inputs or {}, params or {}, progress)
 
 
 def run_transform(op: str, inputs: dict | None = None, params: dict | None = None,
