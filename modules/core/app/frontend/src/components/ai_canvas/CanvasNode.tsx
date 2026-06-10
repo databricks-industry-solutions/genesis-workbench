@@ -9,7 +9,7 @@ import type { NodeProps } from '@xyflow/react'
 
 import { cn } from '@/lib/utils'
 import { MaterialIcon } from '@/components/MaterialIcon'
-import { CATEGORY_STYLE, dtypeColor, formatParamValue } from './graph'
+import { CATEGORY_STYLE, dtypeColor, fieldIsBlank, formatParamValue } from './graph'
 import type { VortexNodeData } from './graph'
 
 const STATUS_DOT: Record<string, string> = {
@@ -27,6 +27,19 @@ export function CanvasNode({ data, selected }: NodeProps) {
   const inputs = cat?.inputs ?? []
   const outputs = cat?.outputs ?? []
   const unavailable = cat ? !cat.available : false
+  const connected = new Set(d.connectedInputs ?? [])
+
+  // An input shows its connection handle only while it's an "open slot" — empty
+  // inline value AND not wired. Once it has a typed value (and isn't wired), the
+  // handle is hidden (the field is "set"); clearing the value brings it back.
+  const showInputHandle = (name: string) =>
+    connected.has(name) || fieldIsBlank(d.inputs?.[name])
+
+  // Set inline input values render in the body (like params).
+  const inputRows = inputs
+    .map((p) => ({ label: p.label || p.name, value: d.inputs?.[p.name] }))
+    .filter((r) => !fieldIsBlank(r.value))
+    .map((r) => ({ label: r.label, text: formatParamValue(r.value) }))
 
   // "Main param values" = params with a non-empty effective value (set or
   // defaulted). Each renders as one no-wrap, ellipsis-truncated line.
@@ -52,17 +65,19 @@ export function CanvasNode({ data, selected }: NodeProps) {
         unavailable && 'opacity-60',
       )}
     >
-      {/* Input handles */}
-      {inputs.map((p, i) => (
-        <Handle
-          key={`in-${p.name}`}
-          id={p.name}
-          type="target"
-          position={Position.Left}
-          style={{ top: handleTop(i, inputs.length), background: dtypeColor(p.dtype), width: 7, height: 7 }}
-          title={`${p.label} (${p.dtype})`}
-        />
-      ))}
+      {/* Input handles — only for open slots (empty + unwired) or already-wired. */}
+      {inputs.map((p, i) =>
+        showInputHandle(p.name) ? (
+          <Handle
+            key={`in-${p.name}`}
+            id={p.name}
+            type="target"
+            position={Position.Left}
+            style={{ top: handleTop(i, inputs.length), background: dtypeColor(p.dtype), width: 7, height: 7 }}
+            title={`${p.label} (${p.dtype})`}
+          />
+        ) : null,
+      )}
 
       {/* Title band */}
       <div className={cn('flex items-center gap-1 px-1.5 py-0.5', style.band)}>
@@ -80,13 +95,17 @@ export function CanvasNode({ data, selected }: NodeProps) {
             not deployed
           </div>
         )}
-        {paramRows.length > 0 ? (
-          paramRows.map((r) => (
-            <div key={r.label} className="truncate text-xs leading-tight text-foreground">
-              <span className="text-muted-foreground">{r.label}:</span> {r.text}
-            </div>
-          ))
-        ) : (
+        {inputRows.map((r) => (
+          <div key={`in-${r.label}`} className="truncate text-xs leading-tight text-foreground">
+            <span className="text-muted-foreground">{r.label}:</span> {r.text}
+          </div>
+        ))}
+        {paramRows.map((r) => (
+          <div key={r.label} className="truncate text-xs leading-tight text-foreground">
+            <span className="text-muted-foreground">{r.label}:</span> {r.text}
+          </div>
+        ))}
+        {inputRows.length === 0 && paramRows.length === 0 && (
           <div className="truncate text-xs italic leading-tight text-muted-foreground">
             {style.label}
           </div>

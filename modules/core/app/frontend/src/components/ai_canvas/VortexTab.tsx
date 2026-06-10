@@ -371,9 +371,29 @@ function VortexCanvas() {
     () => new Set(validationErrors.map((e) => e.nodeId)),
     [validationErrors],
   )
+  // Per-node set of input ports fed by an edge (so CanvasNode shows a handle only
+  // while a field is empty AND unwired).
+  const connectedByNode = useMemo(() => {
+    const m = new Map<string, string[]>()
+    for (const e of edges) {
+      if (!e.target) continue
+      const arr = m.get(e.target) ?? []
+      arr.push(e.targetHandle ?? '')
+      m.set(e.target, arr)
+    }
+    return m
+  }, [edges])
   const flowNodes = useMemo(
-    () => nodes.map((n) => ({ ...n, data: { ...n.data, invalid: invalidIds.has(n.id) } })),
-    [nodes, invalidIds],
+    () =>
+      nodes.map((n) => ({
+        ...n,
+        data: {
+          ...n.data,
+          invalid: invalidIds.has(n.id),
+          connectedInputs: connectedByNode.get(n.id) ?? [],
+        },
+      })),
+    [nodes, invalidIds, connectedByNode],
   )
   const runDisabledReason =
     nodes.length === 0

@@ -15,6 +15,9 @@ export type VortexNodeData = {
   // Inline values for input ports (convertible fields). A wired edge to a port
   // overrides its inline value at run time.
   inputs?: Record<string, unknown>
+  // Derived for display: input-port names currently fed by an edge. An input's
+  // connection handle shows only while the field is empty AND unwired.
+  connectedInputs?: string[]
   catalog: CanvasNodeType | null
   status?: NodeStatus
   // Derived for display: true when this node has unmet validation requirements
@@ -217,6 +220,11 @@ export function defaultParams(cat: CanvasNodeType): Record<string, unknown> {
 // (PDB / JSON / multi-sequence) get a textarea; everything else a single line.
 export function inputEditorIsTextarea(dtype: string): boolean {
   return dtype === 'pdb' || dtype === 'json' || dtype === 'sequences'
+}
+
+// True when a field value is effectively empty (no inline value set).
+export function fieldIsBlank(v: unknown): boolean {
+  return v === null || v === undefined || (typeof v === 'string' && v.trim() === '')
 }
 
 // React Flow nodes/edges -> the persisted/executable graph JSON.

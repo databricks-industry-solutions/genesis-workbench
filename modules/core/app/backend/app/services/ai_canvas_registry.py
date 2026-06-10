@@ -404,8 +404,8 @@ _WORKFLOW_NODES: list[NodeType] = [
         description="Ingest a VCF file into a Delta table for downstream analysis.",
         inputs=[Port("vcf", PortType.PATH, "VCF path")],
         outputs=[Port("table", PortType.TABLE, "Variants table")],
-        params=[ParamField("output_table_name", "Output table", "string", required=True,
-                           help="catalog.schema.table")],
+        params=[ParamField("output_table_name", "Output table", "string",
+                           default="vortex_vcf_ingested", help="catalog.schema.table")],
     ),
     NodeType(
         type="variant_annotation", label="Variant Annotation", category=NodeCategory.BATCH,
@@ -519,8 +519,8 @@ _WORKFLOW_NODES: list[NodeType] = [
                 Port("evaluation_data", PortType.PATH, "Evaluation CSV")],
         outputs=[Port("weights", PortType.PATH, "Fine-tuned weights")],
         params=[
-            ParamField("finetune_label", "Fine-tune label", "string", required=True,
-                       help="Name for this fine-tune run (required)."),
+            ParamField("finetune_label", "Fine-tune label", "string", default="vortex_finetune",
+                       help="Name for this fine-tune run."),
             ParamField("esm_variant", "ESM2 variant", "select", default="650M",
                        options=["8M", "35M", "150M", "650M"]),
             ParamField("task_type", "Task", "select", default="regression",
@@ -545,8 +545,8 @@ _WORKFLOW_NODES: list[NodeType] = [
                 Port("test_data", PortType.PATH, "Test CSV")],
         outputs=[Port("ft_id", PortType.JSON, "Fine-tune id")],
         params=[
-            ParamField("finetune_label", "Fine-tune label", "string", required=True,
-                       help="Name for this fine-tune run (required)."),
+            ParamField("finetune_label", "Fine-tune label", "string", default="vortex_finetune",
+                       help="Name for this fine-tune run."),
             ParamField("target_names", "Target column(s)", "string", default="toxicity"),
             ParamField("dataset_type", "Dataset type", "select", default="classification",
                        options=["classification", "regression"]),
