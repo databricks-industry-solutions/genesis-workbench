@@ -255,6 +255,7 @@ Rules:
 - Use each node's `type` EXACTLY as written above. Do not invent node types.
 - Give every node a unique `id` (e.g. "n1", "n2") and a short human `label`.
 - Only add edges between compatible ports; set sourceHandle to the source node's output port name and targetHandle to the target node's input port name. If two ports' dtypes don't match, insert a transform node between them.
+- Protein Design (type="protein_design") redesigns a marked region: its `sequence` input MUST contain that region wrapped in square brackets, e.g. "MKT[AYIAK]QRQ". If you feed it a text_input, put the brackets in the value. If the goal has no region to redesign, do NOT use Protein Design.
 - Fill `params` with sensible values where helpful; otherwise use {{}}.
 
 Also include a `plan`: a list of 3-5 very short present-tense bullet strings narrating your reasoning as you design — which Prebuilt Workflow you center on and why, then each pipeline step (e.g. "Center on Guided Enzyme Optimization for the substrate", "Fold the top design with ESMFold", "Collect the best candidate"). Keep each bullet under ~10 words.

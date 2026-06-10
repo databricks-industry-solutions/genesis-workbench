@@ -219,6 +219,15 @@ def _chain_protein_design(w: WorkspaceClient, inputs: dict, params: dict, progre
     `progress(pct, msg)` fires at each stage if provided."""
     seq_in = str((inputs or {}).get("sequence", ""))
     start_idx, end_idx = seq_in.find("["), seq_in.find("]")
+    # The region to redesign MUST be marked with square brackets, e.g.
+    # MKT[AYIAK]QRQ… — RFDiffusion inpaints that span. Without it the contig
+    # indices are empty and RFDiffusion fails with a cryptic
+    # "invalid literal for int() with base 10: ''". Fail clearly instead.
+    if start_idx == -1 or end_idx == -1 or end_idx <= start_idx + 1:
+        raise RuntimeError(
+            "Protein Design needs a region to redesign: mark it in the sequence with "
+            "square brackets, e.g. MKT[AYIAK]QRQ. The provided sequence has no [ ] region."
+        )
     raw = seq_in.replace("[", "").replace("]", "")
     n = int((params or {}).get("n_rfdiffusion_hits", 1) or 1)
 
