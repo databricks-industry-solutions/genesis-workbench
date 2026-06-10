@@ -328,6 +328,15 @@ function VortexCanvas() {
     [nodes, setEdges, catalogByType, insertTransform],
   )
 
+  // Double-click an edge to remove it (plus Backspace/Delete on a selected edge,
+  // enabled via deleteKeyCode on the canvas).
+  const onEdgeDoubleClick = useCallback(
+    (_: React.MouseEvent, edge: VortexEdge) => {
+      setEdges((eds) => eds.filter((e) => e.id !== edge.id))
+    },
+    [setEdges],
+  )
+
   // ── param panel callbacks ───────────────────────────────────────────────────
   const patchSelected = useCallback(
     (mutate: (n: VortexNode) => VortexNode) => {
@@ -526,6 +535,8 @@ function VortexCanvas() {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onEdgeDoubleClick={onEdgeDoubleClick}
+            deleteKeyCode={['Backspace', 'Delete']}
             onInit={(inst) => (rfRef.current = inst)}
             nodeTypes={nodeTypes}
             onNodeClick={(_, n) => setSelectedId(n.id)}
