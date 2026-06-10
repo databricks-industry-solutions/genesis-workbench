@@ -389,6 +389,8 @@ _WORKFLOW_NODES: list[NodeType] = [
                        options=["custom", "acmg"]),
             ParamField("gene_regions", "Gene regions", "string", default="",
                        help="Used when panel = custom (e.g. BRCA1,BRCA2)."),
+            ParamField("pathogenic_vcf_path", "Pathogenic VCF path", "string", default="",
+                       help="Optional override (legacy/testing)."),
         ],
     ),
     NodeType(
@@ -400,8 +402,10 @@ _WORKFLOW_NODES: list[NodeType] = [
         outputs=[Port("results", PortType.TABLE, "GWAS results")],
         params=[
             ParamField("phenotype_column", "Phenotype column", "string", default="phenotype"),
-            ParamField("contigs", "Contigs", "string", default="6"),
-            ParamField("pvalue_threshold", "p-value threshold", "float", default=0.01),
+            ParamField("contigs", "Contigs", "string", default="",
+                       help="Comma-separated; empty = all contigs."),
+            ParamField("hwe_cutoff", "HWE cutoff", "string", default="1e-6"),
+            ParamField("pvalue_threshold", "p-value threshold", "string", default="5e-8"),
         ],
     ),
     # ── Structure prediction ──
@@ -465,8 +469,16 @@ _WORKFLOW_NODES: list[NodeType] = [
         params=[
             ParamField("num_iterations", "Iterations", "int", default=5),
             ParamField("num_samples", "Samples / iter", "int", default=24),
-            ParamField("qed_min", "QED min", "float", default=0.0),
-            ParamField("tox_max", "Tox max", "float", default=1.0),
+            ParamField("select_top", "Select top", "int", default=3),
+            ParamField("dock_top_k", "Dock top-K", "int", default=5),
+            ParamField("qed_min", "QED min (hard filter)", "float", default=0.5),
+            ParamField("tox_max", "ClinTox max (hard filter)", "float", default=0.3),
+            ParamField("temperature", "Sampling temperature", "float", default=1.2),
+            ParamField("randomness", "Randomness", "float", default=2.0),
+            ParamField("target_label", "Target label (gene)", "string", default="",
+                       help="Docking target gene symbol, for MLflow logging."),
+            ParamField("dock_per_iter", "Dock per iter", "int", default=8),
+            ParamField("dock_samples", "Dock samples", "int", default=3),
         ],
     ),
     # ── Fine-tuning ──
@@ -475,14 +487,24 @@ _WORKFLOW_NODES: list[NodeType] = [
         kind=_KIND_JOB, module="large_molecule", job_name="bionemo_esm_finetune_job",
         description="Fine-tune ESM2 on a labeled sequence dataset (BioNeMo).",
         inputs=[Port("train_data", PortType.PATH, "Train CSV"),
-                Port("validation_data", PortType.PATH, "Validation CSV")],
+                Port("evaluation_data", PortType.PATH, "Evaluation CSV")],
         outputs=[Port("weights", PortType.PATH, "Fine-tuned weights")],
         params=[
+            ParamField("finetune_label", "Fine-tune label", "string", required=True,
+                       help="Name for this fine-tune run (required)."),
             ParamField("esm_variant", "ESM2 variant", "select", default="650M",
                        options=["8M", "35M", "150M", "650M"]),
             ParamField("task_type", "Task", "select", default="regression",
                        options=["regression", "classification"]),
             ParamField("num_steps", "Steps", "int", default=50),
+            ParamField("should_use_lora", "Use LoRA", "bool", default=False),
+            ParamField("micro_batch_size", "Micro batch size", "int", default=2),
+            ParamField("precision", "Precision", "string", default="bf16-mixed"),
+            ParamField("mlp_ft_dropout", "MLP dropout", "float", default=0.25),
+            ParamField("mlp_hidden_size", "MLP hidden size", "int", default=256),
+            ParamField("mlp_target_size", "MLP target size", "int", default=1),
+            ParamField("mlp_lr", "MLP learning rate", "float", default=5e-3),
+            ParamField("mlp_lr_multiplier", "MLP LR multiplier", "float", default=1e2),
         ],
     ),
     NodeType(
@@ -494,10 +516,14 @@ _WORKFLOW_NODES: list[NodeType] = [
                 Port("test_data", PortType.PATH, "Test CSV")],
         outputs=[Port("ft_id", PortType.JSON, "Fine-tune id")],
         params=[
+            ParamField("finetune_label", "Fine-tune label", "string", required=True,
+                       help="Name for this fine-tune run (required)."),
             ParamField("target_names", "Target column(s)", "string", default="toxicity"),
             ParamField("dataset_type", "Dataset type", "select", default="classification",
                        options=["classification", "regression"]),
             ParamField("epochs", "Epochs", "int", default=20),
+            ParamField("batch_size", "Batch size", "int", default=16),
+            ParamField("ffn_hidden_size", "FFN hidden size", "int", default=700),
         ],
     ),
     NodeType(
@@ -506,7 +532,11 @@ _WORKFLOW_NODES: list[NodeType] = [
         description="Register a fine-tuned KERMT model as a real-time ADMET endpoint.",
         inputs=[Port("ft_id", PortType.JSON, "Fine-tune id")],
         outputs=[Port("endpoint", PortType.JSON, "Endpoint")],
-        params=[ParamField("model_name", "Model name", "string", default="kermt_admet")],
+        params=[
+            ParamField("model_name", "Model name", "string", default="kermt_admet"),
+            ParamField("workload_type", "Workload type", "string", default="",
+                       help="Serving workload size override (optional)."),
+        ],
     ),
 ]
 
@@ -534,6 +564,12 @@ _CHAIN_NODES: list[NodeType] = [
                     "ClinTox, KERMT) over a SMILES set and combine the profile.",
         inputs=[Port("smiles", PortType.SMILES)],
         outputs=[Port("profile", PortType.JSON, "ADMET profile")],
+        params=[
+            ParamField("run_admet", "Chemprop ADMET", "bool", default=True),
+            ParamField("run_bbbp", "BBBP", "bool", default=True),
+            ParamField("run_clintox", "ClinTox", "bool", default=True),
+            ParamField("run_kermt", "KERMT", "bool", default=False),
+        ],
     ),
     NodeType(
         type="protein_binder_design", label="Protein Binder Design",

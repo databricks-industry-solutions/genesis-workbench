@@ -158,11 +158,18 @@ def _emit(progress, pct: int, msg: str) -> None:
 
 
 def _chain_admet_screen(w: WorkspaceClient, inputs: dict, params: dict, progress=None) -> dict:
-    """Run the deployed ADMET / toxicity predictors over a SMILES set and combine."""
+    """Run the selected ADMET / toxicity predictors over a SMILES set and combine.
+    Per-predictor toggles (run_admet/run_bbbp/run_clintox/run_kermt) mirror the UI;
+    default ON except KERMT."""
+    p = params or {}
     smiles = _as_list((inputs or {}).get("smiles"))
     out: dict = {"smiles": smiles}
-    preds = [("chemprop_admet", "admet", "ADMET (multi-task)"), ("chemprop_bbbp", "bbbp", "BBB penetration"),
-             ("chemprop_clintox", "clintox", "clinical toxicity"), ("kermt_admet", "kermt", "KERMT")]
+    # (short, out-key, label, run-toggle-param, default-on)
+    candidates = [("chemprop_admet", "admet", "ADMET (multi-task)", "run_admet", True),
+                  ("chemprop_bbbp", "bbbp", "BBB penetration", "run_bbbp", True),
+                  ("chemprop_clintox", "clintox", "clinical toxicity", "run_clintox", True),
+                  ("kermt_admet", "kermt", "KERMT", "run_kermt", False)]
+    preds = [(s, k, lbl) for (s, k, lbl, tog, dflt) in candidates if _as_bool(p.get(tog, dflt))]
     for i, (short, key, label) in enumerate(preds):
         _emit(progress, 10 + int(i / len(preds) * 85), f"Predicting {label}")
         try:
