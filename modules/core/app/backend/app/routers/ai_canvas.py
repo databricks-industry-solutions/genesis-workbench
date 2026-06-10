@@ -232,6 +232,7 @@ def delete_workflow(workflow_id: str, user: CurrentUserDep) -> dict:
 
 class RunRequest(BaseModel):
     graph: Graph
+    experiment_name: str = Field("gwb_ai_canvas", min_length=1)
     run_name: str = Field("ai_canvas_run", min_length=1)
 
 
@@ -278,6 +279,7 @@ def run(payload: RunRequest, user: CurrentUserDep) -> RunResponse:
             user_info=_build_user_info(user),
             graph=payload.graph.model_dump(),
             run_name=payload.run_name,
+            experiment_name=payload.experiment_name,
         )
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Failed to dispatch workflow: {e}")

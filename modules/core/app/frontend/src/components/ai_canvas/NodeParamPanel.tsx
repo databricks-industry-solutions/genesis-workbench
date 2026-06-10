@@ -7,6 +7,10 @@ export function NodeParamPanel({
   node,
   workflowName,
   onChangeWorkflowName,
+  experimentName,
+  onChangeExperimentName,
+  runName,
+  onChangeRunName,
   onChangeParam,
   onRename,
   onDelete,
@@ -14,6 +18,10 @@ export function NodeParamPanel({
   node: VortexNode | null
   workflowName: string
   onChangeWorkflowName: (name: string) => void
+  experimentName: string
+  onChangeExperimentName: (name: string) => void
+  runName: string
+  onChangeRunName: (name: string) => void
   onChangeParam: (name: string, value: unknown) => void
   onRename: (label: string) => void
   onDelete: () => void
@@ -36,6 +44,30 @@ export function NodeParamPanel({
         />
         <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
           Saved to your MLflow experiment folder under <code>/ai_canvas</code>.
+        </p>
+
+        <label className="mt-3 block">
+          <span className="mb-1 block text-[10px] font-medium text-muted-foreground">
+            MLflow experiment
+          </span>
+          <input
+            value={experimentName}
+            onChange={(e) => onChangeExperimentName(e.target.value)}
+            placeholder="gwb_ai_canvas"
+            className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs"
+          />
+        </label>
+        <label className="mt-2 block">
+          <span className="mb-1 block text-[10px] font-medium text-muted-foreground">Run name</span>
+          <input
+            value={runName}
+            onChange={(e) => onChangeRunName(e.target.value)}
+            placeholder="vortex_…"
+            className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs"
+          />
+        </label>
+        <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
+          Runs log to <code>/Users/&lt;you&gt;/…/{'{experiment}'}</code> in your workspace.
         </p>
       </div>
 

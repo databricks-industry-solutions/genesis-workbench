@@ -50,6 +50,13 @@ const EXAMPLE_GOALS = [
   'Embed a protein sequence and predict its half-life',
 ]
 
+// Timestamp slug for default names, e.g. "20260609_135501".
+function ts(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
+}
+
 // Auto-generated default workflow name, e.g. "vortex_20260609_1355".
 function defaultWorkflowName(): string {
   const d = new Date()
@@ -73,6 +80,10 @@ function VortexCanvas() {
   const [loadedId, setLoadedId] = useState<string | null>(null)
   // Editable workflow name, auto-generated on start (shown in the right panel).
   const [workflowName, setWorkflowName] = useState(defaultWorkflowName)
+  // MLflow tracking inputs (defaulted like other screens; experiment lives in
+  // the user's workspace folder).
+  const [experimentName, setExperimentName] = useState('gwb_ai_canvas')
+  const [runName, setRunName] = useState(() => `vortex_${ts()}`)
   // MLflow run id of the in-flight dispatch (drives the live status overlay).
   const [activeRunId, setActiveRunId] = useState<string | null>(null)
 
@@ -289,7 +300,8 @@ function VortexCanvas() {
     mutationFn: () =>
       api.aiCanvasRun({
         graph: toCanvasGraph(nodes, edges),
-        run_name: workflowName || 'ai_canvas_run',
+        experiment_name: experimentName.trim() || 'gwb_ai_canvas',
+        run_name: runName.trim() || workflowName || 'ai_canvas_run',
       }),
     onSuccess: (res) => {
       setActiveRunId(res.mlflow_run_id)
@@ -482,6 +494,10 @@ function VortexCanvas() {
           node={selectedNode}
           workflowName={workflowName}
           onChangeWorkflowName={setWorkflowName}
+          experimentName={experimentName}
+          onChangeExperimentName={setExperimentName}
+          runName={runName}
+          onChangeRunName={setRunName}
           onChangeParam={onChangeParam}
           onRename={onRename}
           onDelete={onDeleteSelected}

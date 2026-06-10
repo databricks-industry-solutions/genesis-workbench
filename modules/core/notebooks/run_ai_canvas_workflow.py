@@ -181,7 +181,7 @@ def run_node(node_id):
 
 # ── run inside the pre-created MLflow run ────────────────────────────────────
 experiment = set_mlflow_experiment(
-    experiment_tag=mlflow_experiment, user_email=user_email, shared=True
+    experiment_tag=mlflow_experiment, user_email=user_email, shared=False
 )
 
 if mlflow_run_id:

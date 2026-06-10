@@ -1063,7 +1063,11 @@ export type CanvasWorkflowDetail = {
   graph: CanvasGraph
 }
 
-export type CanvasRunRequest = { graph: CanvasGraph; run_name: string }
+export type CanvasRunRequest = {
+  graph: CanvasGraph
+  experiment_name: string
+  run_name: string
+}
 export type CanvasRunResponse = {
   job_id: number
   job_run_id: number

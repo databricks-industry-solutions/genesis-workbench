@@ -718,14 +718,17 @@ def _upload_graph(graph: dict, catalog: str, schema: str) -> str:
 
 
 def start_workflow_run(
-    *, user_info: UserInfo, graph: dict, run_name: str
+    *, user_info: UserInfo, graph: dict, run_name: str,
+    experiment_name: str = EXPERIMENT_TAG,
 ) -> RunDispatchResult:
-    """Dispatch a canvas graph as one async orchestrator job run, logging to a
-    single shared MLflow experiment (one run per execution). Mirrors the
-    enzyme-optimization dispatcher: pre-create the MLflow run so search lights
-    up immediately, then run_now; flip to `failed` if dispatch raises."""
+    """Dispatch a canvas graph as one async orchestrator job run (one run per
+    execution). Logs to the user's own MLflow experiment folder
+    (/Users/<email>/<mlflow_experiment_folder>/<experiment_name>), like the other
+    workflows. Pre-creates the MLflow run so search lights up immediately, then
+    run_now; flips to `failed` if dispatch raises."""
     catalog = os.environ["CORE_CATALOG_NAME"]
     schema = os.environ["CORE_SCHEMA_NAME"]
+    experiment_name = (experiment_name or EXPERIMENT_TAG).strip()
 
     w = WorkspaceClient()
     job_id = _resolve_orchestrator_job_id(w)
@@ -733,7 +736,7 @@ def start_workflow_run(
     graph_path = _upload_graph(enriched, catalog, schema)
 
     experiment = set_mlflow_experiment(
-        experiment_tag=EXPERIMENT_TAG, user_email=user_info.user_email, shared=True
+        experiment_tag=experiment_name, user_email=user_info.user_email, shared=False
     )
 
     with mlflow.start_run(
@@ -754,7 +757,7 @@ def start_workflow_run(
                     "schema": schema,
                     "sql_warehouse_id": os.environ.get("SQL_WAREHOUSE", ""),
                     "user_email": user_info.user_email,
-                    "mlflow_experiment": EXPERIMENT_TAG,
+                    "mlflow_experiment": experiment_name,
                     "mlflow_run_name": run_name,
                     "mlflow_run_id": mlflow_run_id,
                     "graph_path": graph_path,
