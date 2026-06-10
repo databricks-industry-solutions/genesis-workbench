@@ -579,13 +579,13 @@ function VortexCanvas() {
           {/* Validation checklist (top-left) — why Run is disabled. One line per
               unmet requirement: unconnected inputs, empty values, bad paths. */}
           {nodes.length > 0 && validationErrors.length > 0 && (
-            <div className="absolute left-2 top-2 z-10 max-h-[40%] w-64 overflow-y-auto rounded-md border border-red-500/40 bg-card/95 p-2 text-xs shadow-md">
-              <div className="mb-1 font-medium text-red-600 dark:text-red-400">
+            <div className="absolute left-2 top-2 z-10 max-h-[40%] w-max max-w-[28rem] overflow-auto rounded-md border border-red-500/40 bg-card/95 p-2 text-xs shadow-md">
+              <div className="mb-1 whitespace-nowrap font-medium text-red-600 dark:text-red-400">
                 ⚠ {validationErrors.length} issue{validationErrors.length > 1 ? 's' : ''} to fix before running
               </div>
               <ul className="space-y-0.5 text-muted-foreground">
                 {validationErrors.map((e, i) => (
-                  <li key={i} className="leading-snug">
+                  <li key={i} className="whitespace-nowrap leading-snug">
                     <span className="font-medium text-foreground">{e.node}</span> · {e.message}
                   </li>
                 ))}
