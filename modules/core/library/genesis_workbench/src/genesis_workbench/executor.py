@@ -433,6 +433,20 @@ def _run_transform(w: WorkspaceClient, op: str, inputs: dict, params: dict):
         if by:
             items = sorted(items, key=lambda x: (x or {}).get(by, 0) if isinstance(x, dict) else 0, reverse=rev)
         return {"top": items[:k]}
+    if op == "smiles_to_pdb":
+        # RDKit ETKDGv3 -> MMFF94, same as the UI's ligand_binder_design.smiles_to_pdb.
+        # Lazy import keeps the core dep-free; rdkit is installed on the orchestrator
+        # cluster (and present in the UI app). Mirrors the BioPython lazy import.
+        from rdkit import Chem
+        from rdkit.Chem import AllChem
+        smiles = str(inputs.get("smiles") or params.get("smiles") or "").strip()
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            raise RuntimeError(f"Invalid SMILES: {smiles!r}")
+        mol = Chem.AddHs(mol)
+        AllChem.EmbedMolecule(mol, AllChem.ETKDGv3())
+        AllChem.MMFFOptimizeMolecule(mol)
+        return {"pdb": Chem.MolToPDBBlock(mol)}
     raise RuntimeError(f"Unknown transform op '{op}'")
 
 

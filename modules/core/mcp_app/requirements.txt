@@ -12,4 +12,4 @@ httpx-sse==0.4.3
 python-multipart==0.0.30
 anyio==4.13.0
 biopython==1.84
-backend/lib/genesis_workbench-0.1.10-py3-none-any.whl
+backend/lib/genesis_workbench-0.1.11-py3-none-any.whl

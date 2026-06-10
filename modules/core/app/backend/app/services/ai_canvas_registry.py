@@ -212,6 +212,15 @@ _TRANSFORM_NODES: list[NodeType] = [
             ParamField("order", "Order", "select", default="desc", options=["desc", "asc"]),
         ],
     ),
+    NodeType(
+        type="smiles_to_pdb", label="SMILES → PDB", category=NodeCategory.TRANSFORM,
+        kind=_KIND_TRANSFORM,
+        description="Convert a SMILES string into a 3D-embedded PDB block "
+                    "(RDKit ETKDGv3 → MMFF94) — feeds ligand-PDB inputs like "
+                    "Ligand Binder Design.",
+        inputs=[Port("smiles", PortType.SMILES, "SMILES")],
+        outputs=[Port("pdb", PortType.PDB, "Ligand PDB")],
+    ),
 ]
 
 

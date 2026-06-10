@@ -45,7 +45,7 @@ print(gwb_library_path)
 # COMMAND ----------
 
 # MAGIC %pip install {gwb_library_path} --force-reinstall
-# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0 biopython==1.84
+# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0 biopython==1.84 rdkit==2025.3.6
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------

@@ -368,7 +368,7 @@ function VortexCanvas() {
       }),
     onSuccess: (res) => {
       setActiveRunId(res.mlflow_run_id)
-      setNotice('Workflow dispatched — running…')
+      setNotice(null) // running status is shown by the spinner, not the banner
     },
     onError: (err: Error) => setNotice(err.message),
   })
@@ -396,9 +396,6 @@ function VortexCanvas() {
     )
   }, [statusData, setNodes])
 
-  // Centered spinner popup — shown while AI generates a workflow or finds a transform.
-  const popupMessage = suggesting ?? (generate.isPending ? 'Generating workflow…' : null)
-
   // Run is gated on the graph being fully wired — every input port connected.
   const missingWires = useMemo(() => unwiredPorts(nodes, edges), [nodes, edges])
   const runnable = nodes.length > 0 && missingWires.length === 0
@@ -409,19 +406,33 @@ function VortexCanvas() {
         ? `Connect every input first:\n• ${missingWires.join('\n• ')}`
         : ''
 
-  // Run banner is derived during render (not stored) so we don't setState in the effect.
-  const runMessage =
+  // An in-flight dispatched run is one that's started but not yet terminal.
+  const runTerminal =
+    statusData?.job_status === 'complete' || statusData?.job_status === 'failed'
+  const runInFlight = !!activeRunId && !runTerminal
+
+  // Centered spinner popup — AI generation / transform lookup, OR a live run.
+  // The running status lives here (like the other transient spinners), NOT in
+  // the yellow banner; that's reserved for failures + important notices.
+  const runProgress = runInFlight
+    ? statusData
+      ? `Running… ${Object.values(statusData.node_status).filter((s) => s === 'complete').length}/${nodes.length} nodes done`
+      : 'Starting workflow…'
+    : null
+  const popupMessage =
+    suggesting ?? (generate.isPending ? 'Generating workflow…' : runProgress)
+
+  // Yellow banner: a terminal run outcome (complete/failed) or the latest notice.
+  // In-flight progress is shown by the spinner above. Dismissible until it changes.
+  const runOutcome =
     activeRunId && statusData
       ? statusData.job_status === 'complete'
         ? '✅ Workflow complete.'
         : statusData.job_status === 'failed'
           ? '❌ Workflow failed — see Past runs for details.'
-          : `Running… ${Object.values(statusData.node_status).filter((s) => s === 'complete').length}/${nodes.length} nodes done`
+          : null
       : null
-
-  // Top banner: the live run message, else the latest notice. Hidden once the
-  // user dismisses it (until the message text changes).
-  const banner = runMessage ?? notice
+  const banner = runOutcome ?? notice
 
   return (
     <div className="flex h-[70vh] min-h-[520px] flex-col overflow-hidden rounded-md border border-border">

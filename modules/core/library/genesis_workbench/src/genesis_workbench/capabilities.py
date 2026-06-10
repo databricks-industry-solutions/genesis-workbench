@@ -182,6 +182,10 @@ _TRANSFORMS: list[Capability] = [
                params=[Param("k", "int", 5), Param("by", "string"),
                        Param("order", "select", "desc", ["desc", "asc"])],
                description="Keep the top K items of a JSON list, ranked by a field."),
+    Capability(id="transform:smiles_to_pdb", label="SMILES → PDB", kind=TRANSFORM,
+               op="smiles_to_pdb", inputs=[Port("smiles", "smiles")], outputs=[Port("pdb", "pdb")],
+               description="Convert a SMILES string into a 3D-embedded PDB block "
+                           "(RDKit ETKDGv3 → MMFF94)."),
 ]
 
 
