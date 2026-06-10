@@ -143,6 +143,30 @@ export function nextNodeId(typeKey: string): string {
   return `${typeKey}-${_counter}`
 }
 
+// The IO source node-type that feeds a given input dtype — mirrors the
+// orchestrator's io_kind handling: `path` reads from a UC Volume, `table` from
+// a Delta table, everything else is a literal the user types into a Text Input.
+export function ioTypeForDtype(dtype: string): string {
+  if (dtype === 'path') return 'volume_input'
+  if (dtype === 'table') return 'delta_input'
+  return 'text_input'
+}
+
+// A graph is runnable only when every node's input port has an incoming edge.
+// IO source nodes (no inputs) are trivially satisfied. Returns a human-readable
+// "<node> · <port>" for each still-unconnected input so the UI can explain why
+// Run is disabled. Empty list ⇒ fully wired.
+export function unwiredPorts(nodes: VortexNode[], edges: VortexEdge[]): string[] {
+  const missing: string[] = []
+  for (const n of nodes) {
+    for (const p of n.data.catalog?.inputs ?? []) {
+      const connected = edges.some((e) => e.target === n.id && e.targetHandle === p.name)
+      if (!connected) missing.push(`${n.data.label} · ${p.label || p.name}`)
+    }
+  }
+  return missing
+}
+
 // Default param map for a freshly-dropped node, seeded from catalog defaults.
 export function defaultParams(cat: CanvasNodeType): Record<string, unknown> {
   const out: Record<string, unknown> = {}

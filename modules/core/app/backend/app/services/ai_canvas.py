@@ -622,10 +622,20 @@ def _resolve_orchestrator_job_id(w: WorkspaceClient) -> int:
     cached = _job_id_cache.get(ORCHESTRATOR_JOB_NAME)
     if cached is not None:
         return cached
+    # The settings-table id goes stale on every redeploy (DAB recreates the job
+    # with a new id). Trust it only if the job still exists; otherwise fall back
+    # to a live name lookup and self-heal. Avoids "Job <id> does not exist" 502s.
     setting = get_job_id(ORCHESTRATOR_JOB_SETTING)
     if setting:
-        _job_id_cache[ORCHESTRATOR_JOB_NAME] = int(setting)
-        return int(setting)
+        try:
+            w.jobs.get(job_id=int(setting))
+            _job_id_cache[ORCHESTRATOR_JOB_NAME] = int(setting)
+            return int(setting)
+        except Exception as e:  # noqa: BLE001 — stale id; fall through to name lookup
+            logger.warning(
+                "Orchestrator job id %s from settings is stale (%s); "
+                "resolving '%s' by name instead.", setting, e, ORCHESTRATOR_JOB_NAME
+            )
     matches = list(w.jobs.list(name=ORCHESTRATOR_JOB_NAME))
     if not matches:
         raise RuntimeError(

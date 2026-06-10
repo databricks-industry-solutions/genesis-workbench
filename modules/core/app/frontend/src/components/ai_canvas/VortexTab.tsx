@@ -29,9 +29,11 @@ import {
   autoLayout,
   defaultParams,
   fromCanvasGraph,
+  ioTypeForDtype,
   nextNodeId,
   portsCompatible,
   toCanvasGraph,
+  unwiredPorts,
 } from './graph'
 import type { VortexEdge, VortexNode, VortexNodeData } from './graph'
 import type { CanvasNodeType } from '@/types/api'
@@ -149,19 +151,68 @@ function VortexCanvas() {
   }, [generate])
 
   // ── add a node ─────────────────────────────────────────────────────────────
+  // Prebuilt workflows (category `batch` — chains + jobs) land pre-wired: every
+  // input port gets a matching IO source (Text/Volume/Delta input) and every
+  // output a collecting Output sink, so the graph is runnable on drop. The user
+  // just fills in the IO values. Other node kinds drop bare (they're meant to be
+  // chained onto an existing graph).
+  const makeNode = (cat: CanvasNodeType, position: { x: number; y: number }, id?: string): VortexNode => ({
+    id: id ?? nextNodeId(cat.type),
+    type: 'vortex',
+    position,
+    data: { typeKey: cat.type, label: cat.label, params: defaultParams(cat), catalog: cat },
+  })
+
   const addNode = useCallback(
     (cat: CanvasNodeType, position: { x: number; y: number }) => {
-      const id = nextNodeId(cat.type)
-      const node: VortexNode = {
-        id,
-        type: 'vortex',
-        position,
-        data: { typeKey: cat.type, label: cat.label, params: defaultParams(cat), catalog: cat },
+      const mainId = nextNodeId(cat.type)
+      const main = makeNode(cat, position, mainId)
+
+      if (cat.category !== 'batch' || (cat.inputs.length === 0 && cat.outputs.length === 0)) {
+        setNodes((nds) => [...nds, main])
+        setSelectedId(mainId)
+        return
       }
-      setNodes((nds) => [...nds, node])
-      setSelectedId(id)
+
+      // Auto-create + wire the surrounding IO nodes.
+      const extraNodes: VortexNode[] = []
+      const conns: Connection[] = []
+      cat.inputs.forEach((port, i) => {
+        const ioCat = catalogByType.get(ioTypeForDtype(port.dtype))
+        if (!ioCat) return
+        const io = makeNode(ioCat, { x: position.x - 260, y: position.y + i * 120 })
+        extraNodes.push(io)
+        conns.push({
+          source: io.id,
+          sourceHandle: ioCat.outputs[0]?.name ?? null,
+          target: mainId,
+          targetHandle: port.name,
+        })
+      })
+      cat.outputs.forEach((port, i) => {
+        const sinkCat = catalogByType.get('output_sink')
+        if (!sinkCat) return
+        const sink = makeNode(sinkCat, { x: position.x + 260, y: position.y + i * 120 })
+        extraNodes.push(sink)
+        conns.push({
+          source: mainId,
+          sourceHandle: port.name,
+          target: sink.id,
+          targetHandle: sinkCat.inputs[0]?.name ?? null,
+        })
+      })
+
+      const nextNodes = [...nodes, main, ...extraNodes]
+      const nextEdges = conns.reduce<VortexEdge[]>(
+        (eds, c) => addEdge({ ...c, animated: false }, eds),
+        edges,
+      )
+      setNodes(autoLayout(nextNodes, nextEdges))
+      setEdges(nextEdges)
+      setSelectedId(mainId)
+      setTimeout(() => rfRef.current?.fitView({ maxZoom: 1, duration: 300 }), 50)
     },
-    [setNodes],
+    [nodes, edges, catalogByType, setNodes, setEdges],
   )
 
   const addNodeAtCenter = useCallback(
@@ -348,6 +399,16 @@ function VortexCanvas() {
   // Centered spinner popup — shown while AI generates a workflow or finds a transform.
   const popupMessage = suggesting ?? (generate.isPending ? 'Generating workflow…' : null)
 
+  // Run is gated on the graph being fully wired — every input port connected.
+  const missingWires = useMemo(() => unwiredPorts(nodes, edges), [nodes, edges])
+  const runnable = nodes.length > 0 && missingWires.length === 0
+  const runDisabledReason =
+    nodes.length === 0
+      ? 'Add a node to begin'
+      : missingWires.length > 0
+        ? `Connect every input first:\n• ${missingWires.join('\n• ')}`
+        : ''
+
   // Run banner is derived during render (not stored) so we don't setState in the effect.
   const runMessage =
     activeRunId && statusData
@@ -405,7 +466,8 @@ function VortexCanvas() {
             </button>
             <button
               onClick={() => run.mutate()}
-              disabled={nodes.length === 0 || run.isPending}
+              disabled={!runnable || run.isPending}
+              title={runDisabledReason}
               className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-40"
             >
               {run.isPending ? 'Dispatching…' : '▶ Run'}
