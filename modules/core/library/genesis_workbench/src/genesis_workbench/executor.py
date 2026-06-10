@@ -504,9 +504,281 @@ def _job_enzyme_optimization(w, inputs, params, ctx, progress=None) -> dict:
     return {"candidates": candidates, "child_run_id": child, "job_run_id": str(run.run_id)}
 
 
+# ─── shared dispatch + read-back helpers for the simpler adapters ─────────────
+
+
+def _child_for(ctx, feature):
+    """Per-node child MLflow run the dispatched job logs into."""
+    return _create_child_run(
+        ctx["experiment_id"], ctx.get("parent_run_id"), ctx.get("node_id"),
+        f"{ctx.get('run_name') or 'vortex'}::{ctx.get('node_id') or feature}",
+        ctx.get("user_email"), feature,
+    )
+
+
+def _dispatch_wait(w, job_name, job_params, child_run_id=None,
+                   run_id_key="mlflow_run_id", progress=None) -> str:
+    """Dispatch a predefined job (job_parameters string-coerced), tag the child
+    run with the job_run_id, and block until the JOB RUN reaches a terminal
+    state (so a job that crashes without updating its MLflow status still
+    resolves). Returns the job_run_id."""
+    jp = dict(job_params)
+    if child_run_id and run_id_key:
+        jp[run_id_key] = child_run_id
+    jp = {k: ("" if v is None else str(v)) for k, v in jp.items()}
+    run = w.jobs.run_now(job_id=_job_id_by_name(w, job_name), job_parameters=jp)
+    if child_run_id:
+        from mlflow.tracking import MlflowClient
+        try:
+            MlflowClient().set_tag(child_run_id, "job_run_id", str(run.run_id))
+        except Exception as e:  # noqa: BLE001
+            logger.info("could not tag job_run_id on %s: %s", child_run_id, e)
+    _emit(progress, 35, "Job running — this can take a while")
+    from .workbench import wait_for_job_run_completion
+    wait_for_job_run_completion(int(run.run_id), timeout=21600, poll_interval=30)
+    return str(run.run_id)
+
+
+def _run_tag(run_id, key, default=""):
+    from mlflow.tracking import MlflowClient
+    try:
+        return MlflowClient().get_run(run_id).data.tags.get(key, default)
+    except Exception as e:  # noqa: BLE001
+        logger.info("tag %s unavailable on run %s: %s", key, run_id, e)
+        return default
+
+
+def _run_param(run_id, key, default=""):
+    from mlflow.tracking import MlflowClient
+    try:
+        return MlflowClient().get_run(run_id).data.params.get(key, default)
+    except Exception as e:  # noqa: BLE001
+        logger.info("param %s unavailable on run %s: %s", key, run_id, e)
+        return default
+
+
+def _run_artifact_json(run_id, artifact_path):
+    from mlflow.tracking import MlflowClient
+    with tempfile.TemporaryDirectory() as tmp:
+        local = MlflowClient().download_artifacts(run_id, artifact_path, dst_path=tmp)
+        with open(local) as f:
+            return json.load(f)
+
+
+# ─── the simpler job adapters (genomics / structure / opt / fine-tune) ────────
+# Each job already logs into the mlflow run id it's handed (verified per job), so
+# we pre-create a child run, dispatch into it, wait, and read the declared output
+# (artifact / tag / param / volume / table) back out.
+
+
+def _job_variant_calling(w, inputs, params, ctx, progress=None) -> dict:
+    ins, p = inputs or {}, params or {}
+    child = _child_for(ctx, "gwas_alignment")
+    _emit(progress, 15, "Dispatching variant calling (Parabricks)")
+    jr = _dispatch_wait(w, "gwas_parabricks_alignment", {
+        "catalog": ctx["catalog"], "schema": ctx["schema"],
+        "fastq_r1": ins.get("fastq_r1", ""), "fastq_r2": ins.get("fastq_r2", ""),
+        "reference_genome_path": p.get("reference_genome_path", ""),
+        "output_volume_path": p.get("output_volume_path", ""),
+        "user_email": ctx.get("user_email", ""),
+    }, child_run_id=child, progress=progress)
+    _emit(progress, 100, "Variant calling complete")
+    return {"vcf": _run_param(child, "output_vcf"), "child_run_id": child, "job_run_id": jr}
+
+
+def _job_vcf_ingestion(w, inputs, params, ctx, progress=None) -> dict:
+    ins, p = inputs or {}, params or {}
+    child = _child_for(ctx, "vcf_ingestion")
+    _emit(progress, 15, "Dispatching VCF ingestion")
+    jr = _dispatch_wait(w, "vcf_ingestion_glow", {
+        "catalog": ctx["catalog"], "schema": ctx["schema"],
+        "sql_warehouse_id": ctx.get("sql_warehouse", ""),
+        "vcf_path": ins.get("vcf", ""), "output_table_name": p.get("output_table_name", ""),
+        "user_email": ctx.get("user_email", ""),
+    }, child_run_id=child, progress=progress)
+    _emit(progress, 100, "VCF ingestion complete")
+    return {"table": _run_tag(child, "output_table"), "child_run_id": child, "job_run_id": jr}
+
+
+def _job_variant_annotation(w, inputs, params, ctx, progress=None) -> dict:
+    ins, p = inputs or {}, params or {}
+    child = _child_for(ctx, "variant_annotation")
+    _emit(progress, 15, "Dispatching variant annotation (ClinVar)")
+    jr = _dispatch_wait(w, "variant_annotation_clinical", {
+        "catalog": ctx["catalog"], "schema": ctx["schema"],
+        "sql_warehouse_id": ctx.get("sql_warehouse", ""),
+        "variants_table": ins.get("table", ""), "gene_regions": p.get("gene_regions", ""),
+        "gene_panel_mode": p.get("gene_panel_mode", "custom"),
+        "pathogenic_vcf_path": p.get("pathogenic_vcf_path", ""),
+        "run_name": ctx.get("run_name", ""), "user_email": ctx.get("user_email", ""),
+    }, child_run_id=child, progress=progress)
+    _emit(progress, 100, "Variant annotation complete")
+    return {"annotations": _run_tag(child, "pathogenic_table"), "child_run_id": child, "job_run_id": jr}
+
+
+def _job_gwas(w, inputs, params, ctx, progress=None) -> dict:
+    ins, p = inputs or {}, params or {}
+    child = _child_for(ctx, "gwas")
+    _emit(progress, 15, "Dispatching GWAS")
+    jr = _dispatch_wait(w, "gwas_glow_analysis", {
+        "catalog": ctx["catalog"], "schema": ctx["schema"],
+        "vcf_path": ins.get("vcf", ""), "phenotype_path": ins.get("phenotype", ""),
+        "phenotype_column": p.get("phenotype_column", "phenotype"),
+        "contigs": p.get("contigs", ""), "hwe_cutoff": p.get("hwe_cutoff", "1e-6"),
+        "pvalue_threshold": p.get("pvalue_threshold", "5e-8"),
+        "user_email": ctx.get("user_email", ""),
+    }, child_run_id=child, progress=progress)
+    # Results land in a per-run Delta table keyed off the MLflow run id.
+    table = f"{ctx['catalog']}.{ctx['schema']}.gwas_results_{child.replace('-', '_')}"
+    _emit(progress, 100, "GWAS complete")
+    return {"results": table, "child_run_id": child, "job_run_id": jr}
+
+
+def _job_alphafold(w, inputs, params, ctx, progress=None) -> dict:
+    ins = inputs or {}
+    seq = str(ins.get("sequence", "")).strip()
+    if not seq:
+        raise RuntimeError("alphafold2: sequence input required")
+    child = _child_for(ctx, "alphafold")
+    _emit(progress, 15, "Dispatching AlphaFold")
+    # NB: this job reads the run id under "run_id" (not "mlflow_run_id").
+    jr = _dispatch_wait(w, "run_alphafold", {
+        "catalog": ctx["catalog"], "schema": ctx["schema"],
+        "protein_sequence": seq, "user_email": ctx.get("user_email", ""),
+    }, child_run_id=child, run_id_key="run_id", progress=progress)
+    _emit(progress, 90, "Reading folded structure")
+    cat, sch = ctx["catalog"], ctx["schema"]
+    # The run_id appears twice: OUTDIR results/{run_id} + AlphaFold's per-fasta subdir.
+    pdb_path = f"/Volumes/{cat}/{sch}/alphafold/results/{child}/{child}/ranked_0.pdb"
+    pdb = ""
+    try:
+        pdb = _read_volume_text(w, pdb_path)
+    except Exception as e:  # noqa: BLE001
+        logger.info("alphafold pdb not found at %s: %s", pdb_path, e)
+    _emit(progress, 100, "AlphaFold complete")
+    return {"pdb": pdb, "pdb_path": pdb_path, "child_run_id": child, "job_run_id": jr}
+
+
+def _job_molecule_optimization(w, inputs, params, ctx, progress=None) -> dict:
+    ins, p = inputs or {}, params or {}
+    seeds = [str(s) for s in _as_list(ins.get("seed_smiles")) if str(s).strip()]
+    if not seeds:
+        raise RuntimeError("molecule_optimization: seed_smiles input required")
+    child = _child_for(ctx, "molecule_optimization")
+    _emit(progress, 15, "Dispatching molecule optimization")
+    jr = _dispatch_wait(w, "run_molecule_optimization_gwb", {
+        "catalog": ctx["catalog"], "schema": ctx["schema"],
+        "sql_warehouse_id": ctx.get("sql_warehouse", ""), "user_email": ctx.get("user_email", ""),
+        "mlflow_experiment": ctx.get("experiment_name", ""), "mlflow_run_name": ctx.get("run_name", ""),
+        "seed_smiles_csv": ",".join(seeds),
+        "num_samples": int(p.get("num_samples", 24) or 24),
+        "num_iterations": int(p.get("num_iterations", 5) or 5),
+        "select_top": int(p.get("select_top", 3) or 3),
+        "dock_top_k": int(p.get("dock_top_k", 5) or 5),
+        "weights_json": json.dumps({"qed_min": float(p.get("qed_min", 0.5) or 0.5),
+                                    "tox_max": float(p.get("tox_max", 0.3) or 0.3)}),
+        "temperature": float(p.get("temperature", 1.2) or 1.2),
+        "randomness": float(p.get("randomness", 2.0) or 2.0),
+        "target_sequence": str(ins.get("target_sequence", "") or ""),
+        "dock_per_iter": int(p.get("dock_per_iter", 8) or 8),
+        "dock_samples": int(p.get("dock_samples", 3) or 3),
+    }, child_run_id=child, progress=progress)
+    _emit(progress, 90, "Reading top candidates")
+    top = {}
+    try:
+        data = _run_artifact_json(child, "top_k.json")
+        top = data.get("top_k", data) if isinstance(data, dict) else data
+    except Exception as e:  # noqa: BLE001
+        logger.info("molecule_optimization top_k.json unavailable: %s", e)
+    _emit(progress, 100, "Molecule optimization complete")
+    return {"top_k": top, "child_run_id": child, "job_run_id": jr}
+
+
+def _job_esm2_finetune(w, inputs, params, ctx, progress=None) -> dict:
+    ins, p = inputs or {}, params or {}
+    child = _child_for(ctx, "bionemo_esm_finetune")
+    _emit(progress, 15, "Dispatching ESM2 fine-tune")
+    jr = _dispatch_wait(w, "bionemo_esm_finetune_job", {
+        "user_email": ctx.get("user_email", ""), "esm_variant": p.get("esm_variant", "650M"),
+        "train_data_location": ins.get("train_data", ""),
+        "validation_data_location": ins.get("evaluation_data", ""),
+        "should_use_lora": "true" if _as_bool(p.get("should_use_lora", False)) else "false",
+        "finetune_label": p.get("finetune_label", ""), "task_type": p.get("task_type", "regression"),
+        "mlp_ft_dropout": float(p.get("mlp_ft_dropout", 0.25) or 0.25),
+        "mlp_hidden_size": int(p.get("mlp_hidden_size", 256) or 256),
+        "mlp_target_size": int(p.get("mlp_target_size", 1) or 1),
+        "experiment_name": ctx.get("experiment_name", ""),
+        "num_steps": int(p.get("num_steps", 50) or 50),
+        "lr": float(p.get("mlp_lr", 5e-3) or 5e-3),
+        "lr_multiplier": float(p.get("mlp_lr_multiplier", 1e2) or 1e2),
+        "micro_batch_size": int(p.get("micro_batch_size", 2) or 2),
+        "precision": p.get("precision", "bf16-mixed"),
+    }, child_run_id=child, progress=progress)
+    _emit(progress, 100, "ESM2 fine-tune complete")
+    return {"weights": _run_tag(child, "result_location"), "child_run_id": child, "job_run_id": jr}
+
+
+def _job_kermt_finetune(w, inputs, params, ctx, progress=None) -> dict:
+    ins, p = inputs or {}, params or {}
+    child = _child_for(ctx, "kermt_finetune")
+    _emit(progress, 15, "Dispatching KERMT fine-tune")
+    jr = _dispatch_wait(w, "kermt_finetune_job", {
+        "catalog": ctx["catalog"], "schema": ctx["schema"], "user_email": ctx.get("user_email", ""),
+        "train_data_location": ins.get("train_data", ""),
+        "validation_data_location": ins.get("validation_data", ""),
+        "test_data_location": ins.get("test_data", ""),
+        "target_names": p.get("target_names", "toxicity"),
+        "dataset_type": p.get("dataset_type", "classification"),
+        "finetune_label": p.get("finetune_label", ""),
+        "epochs": int(p.get("epochs", 20) or 20), "batch_size": int(p.get("batch_size", 16) or 16),
+        "ffn_hidden_size": int(p.get("ffn_hidden_size", 700) or 700),
+        "experiment_name": ctx.get("experiment_name", ""), "mlflow_run_name": ctx.get("run_name", ""),
+    }, child_run_id=child, progress=progress)
+    _emit(progress, 100, "KERMT fine-tune complete")
+    return {"ft_id": _run_tag(child, "ft_id"), "child_run_id": child, "job_run_id": jr}
+
+
+def _job_kermt_deploy(w, inputs, params, ctx, progress=None) -> dict:
+    """One-off deploy action — no MLflow run handoff; just dispatch + wait on the
+    job-run state, then return the model/endpoint name."""
+    ins, p = inputs or {}, params or {}
+    ft_id = ins.get("ft_id")
+    if ft_id in (None, ""):
+        raise RuntimeError("kermt_deploy: ft_id input required (from a KERMT fine-tune)")
+    model_name = str(p.get("model_name", "kermt_admet") or "kermt_admet")
+    jp = {"catalog": ctx["catalog"], "schema": ctx["schema"],
+          "user_email": ctx.get("user_email", ""),
+          "ft_id": ft_id if not isinstance(ft_id, dict) else ft_id.get("ft_id", ""),
+          "model_name": model_name}
+    if p.get("workload_type"):
+        jp["workload_type"] = p.get("workload_type")
+    _emit(progress, 15, "Dispatching KERMT deploy")
+    jr = _dispatch_wait(w, "kermt_deploy_job", jp, child_run_id=None, run_id_key=None, progress=progress)
+    _emit(progress, 100, "KERMT endpoint deployed")
+    return {"endpoint": model_name, "job_run_id": jr}
+
+
 _JOB_RUNNERS = {
     "run_enzyme_optimization_gwb": _job_enzyme_optimization,
     "enzyme_optimization": _job_enzyme_optimization,
+    "gwas_parabricks_alignment": _job_variant_calling,
+    "variant_calling": _job_variant_calling,
+    "vcf_ingestion_glow": _job_vcf_ingestion,
+    "vcf_ingestion": _job_vcf_ingestion,
+    "variant_annotation_clinical": _job_variant_annotation,
+    "variant_annotation": _job_variant_annotation,
+    "gwas_glow_analysis": _job_gwas,
+    "gwas": _job_gwas,
+    "run_alphafold": _job_alphafold,
+    "alphafold2": _job_alphafold,
+    "run_molecule_optimization_gwb": _job_molecule_optimization,
+    "molecule_optimization": _job_molecule_optimization,
+    "bionemo_esm_finetune_job": _job_esm2_finetune,
+    "esm2_finetune": _job_esm2_finetune,
+    "kermt_finetune_job": _job_kermt_finetune,
+    "kermt_finetune": _job_kermt_finetune,
+    "kermt_deploy_job": _job_kermt_deploy,
+    "kermt_deploy": _job_kermt_deploy,
 }
 # Jobs with an output-collecting adapter (vs. plain trigger-and-wait). A node
 # wired downstream of one of these receives the job's real output.

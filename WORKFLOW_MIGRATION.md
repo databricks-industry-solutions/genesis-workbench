@@ -65,19 +65,21 @@ Legend: ✅ done · 🟡 partial · ⬜ not yet.
   in-app analytics/LLM, not endpoint/job capabilities.
 
 ## Known limitations / future items
-- **Batch-job output doesn't flow back into the Vortex canvas dataflow.** The
-  orchestrator's `batch` branch (`notebooks/run_ai_canvas_workflow.py`) triggers the
-  job via `execute_workflow` (`jobs.run_now`) and **blocks** on
-  `wait_for_job_run_completion` (30s poll, 6h cap) — so mixed *endpoint → job*
-  workflows (e.g. Protein Design chain → AlphaFold fold) trigger-and-wait correctly.
-  BUT the node returns only `{job_run_id}`, not the job's output artifact. A node
-  wired *downstream* of a batch job receives the run id, not the result (jobs write
-  to a UC Volume / Delta table out-of-band). Fully data-connecting *job → downstream
-  canvas node* needs the batch branch to capture the job's output back into
-  `results[nid]` (e.g. read the run's MLflow artifact / output table). Endpoints +
-  chains + transforms already pass real values node-to-node.
+- **Batch-job output now flows into the canvas (DONE for all 10 jobs).** Each job
+  has an output-collecting adapter in `executor._JOB_RUNNERS`: the orchestrator
+  pre-creates a per-node child MLflow run, dispatches the job into it (run-id key
+  `mlflow_run_id`, except AlphaFold = `run_id`), waits on the JOB-RUN state, then
+  reads the job's output back — artifact (`top_k.json`, enzyme `results/topK_pdbs`),
+  Volume PDB (AlphaFold `…/results/{run}/{run}/ranked_0.pdb`), run tag
+  (`output_table`, `pathogenic_table`, `result_location`, `ft_id`), run param
+  (`output_vcf`), or derived Delta table (gwas `gwas_results_{run}`). So a node wired
+  downstream of a batch job receives the real value. Input parity to the UI is also
+  complete (node params + MCP seed). kermt_deploy is trigger-and-wait (no MLflow
+  handoff) and returns the endpoint/model name.
 - **No parallel branches.** The orchestrator runs nodes in a single topological pass;
   independent branches execute sequentially, not concurrently.
+- **Retry quirk (parked):** DAB drops `max_retries: 0` from the orchestrator job, so
+  the deployed task has no retry cap and can auto-retry once on failure. Fix TBD.
 
 ## How to migrate one (the repeatable recipe)
 1. **Register the capability** — add an endpoint contract (`capabilities._ENDPOINT_CONTRACTS`),
