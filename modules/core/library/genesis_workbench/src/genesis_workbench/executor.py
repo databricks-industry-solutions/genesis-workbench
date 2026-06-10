@@ -19,9 +19,61 @@ import os
 import tempfile
 
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.serving import DataframeSplitInput
 
 from .capabilities import CHAIN, ENDPOINT, JOB, TRANSFORM, Capability
 from .models import get_endpoint_name_for_uc_model
+
+
+# ─── shared endpoint-call helpers (dep-free) ─────────────────────────────────
+
+
+def _df_split(w: WorkspaceClient, short: str, columns: list[str], row: list) -> list[dict]:
+    """Query a `dataframe_split` endpoint (Proteina-Complexa variants, DiffDock)
+    by UC short name; returns the predictions as a list of dicts."""
+    ep = get_endpoint_name_for_uc_model(short)
+    resp = w.serving_endpoints.query(
+        name=ep, dataframe_split=DataframeSplitInput(columns=columns, data=[row])
+    )
+    preds = resp.predictions
+    if isinstance(preds, dict) and "predictions" in preds:
+        preds = preds["predictions"]
+    return [p for p in (preds or []) if isinstance(p, dict)]
+
+
+def _esmfold_pdb(w: WorkspaceClient, seq: str) -> str:
+    ep = get_endpoint_name_for_uc_model("esmfold")
+    return w.serving_endpoints.query(name=ep, inputs=[seq]).predictions[0]
+
+
+def _proteinmpnn_seqs(w: WorkspaceClient, pdb: str) -> list[str]:
+    ep = get_endpoint_name_for_uc_model("proteinmpnn")
+    preds = w.serving_endpoints.query(
+        name=ep, dataframe_records=[{"pdb": pdb, "fixed_positions": ""}]
+    ).predictions
+    if isinstance(preds, dict) and "predictions" in preds:
+        preds = preds["predictions"]
+    return [str(s) for s in (preds or [])]
+
+
+def _diffdock_best(w: WorkspaceClient, protein_pdb: str, ligand_smiles: str, n: int = 5):
+    """ESM-2 embed -> DiffDock; return (best_sdf, confidence) or (None, None)."""
+    emb = _df_split(w, "diffdock_esm_embeddings", ["protein_pdb"], [protein_pdb])
+    b64 = emb[0].get("embeddings_b64", "{}") if emb else "{}"
+    poses = _df_split(
+        w, "diffdock",
+        ["protein_pdb", "ligand_smiles", "samples_per_complex", "esm_embeddings_b64"],
+        [protein_pdb, ligand_smiles, n, b64],
+    )
+    best = None
+    for p in poses:
+        sdf = str(p.get("ligand_sdf", ""))
+        if sdf.startswith("ERROR"):
+            continue
+        c = float(p.get("confidence", -1e9) or -1e9)
+        if best is None or c > best[0]:
+            best = (c, sdf)
+    return (best[1], best[0]) if best else (None, None)
 
 logger = logging.getLogger(__name__)
 
@@ -192,10 +244,132 @@ def _chain_protein_design(w: WorkspaceClient, inputs: dict, params: dict, progre
     return {"initial": initial, "sequences": seqs, "designs": designs}
 
 
-_CHAINS = {"admet_screen": _chain_admet_screen, "protein_design": _chain_protein_design}
+_PC_COLS = ["target_pdb", "binder_length_min", "binder_length_max",
+            "num_samples", "hotspot_residues", "target_chain"]
 
-# Both chains execute now (protein_design needs biopython where it runs).
-RUNNABLE_CHAINS = {"admet_screen", "protein_design"}
+
+def _chain_protein_binder_design(w, inputs, params, progress=None) -> dict:
+    """Proteina-Complexa binder design for a target protein (+ optional ESMFold
+    validation). Target comes in as PDB, or as a sequence we fold first."""
+    p, ins = params or {}, inputs or {}
+    target_pdb = ins.get("target_pdb")
+    if not target_pdb:
+        seq = str(ins.get("target_sequence", "")).strip()
+        if not seq:
+            raise RuntimeError("protein_binder_design: target_pdb or target_sequence required")
+        _emit(progress, 5, "Folding target sequence (ESMFold)")
+        target_pdb = _esmfold_pdb(w, seq)
+    n = int(p.get("num_samples", 2) or 2)
+    _emit(progress, 20, f"Generating {n} binder design(s) (Proteina-Complexa)")
+    rows = _df_split(w, "proteina_complexa", _PC_COLS,
+                     [target_pdb, int(p.get("binder_length_min", 50) or 50),
+                      int(p.get("binder_length_max", 80) or 80), n,
+                      str(p.get("hotspot_residues", "") or ""), str(p.get("target_chain", "A") or "A")])
+    validate = bool(p.get("validate_esmfold", False))
+    designs = []
+    for i, r in enumerate(rows):
+        binder_pdb = r.get("pdb_output")
+        if validate:
+            _emit(progress, 50 + int((i + 1) / max(len(rows), 1) * 45),
+                  f"Validating design {i + 1}/{len(rows)} (ESMFold)")
+            try:
+                binder_pdb = _esmfold_pdb(w, str(r.get("sequence", ""))) or binder_pdb
+            except Exception as e:  # noqa: BLE001
+                logger.info("protein_binder esmfold validate failed: %s", e)
+        designs.append({"sample_id": str(r.get("sample_id", "")), "sequence": str(r.get("sequence", "")),
+                        "rewards": float(r.get("rewards", 0) or 0), "binder_pdb": binder_pdb})
+    _emit(progress, 100, "Binder design complete")
+    return {"designs": designs, "target_pdb": target_pdb}
+
+
+def _chain_ligand_binder_design(w, inputs, params, progress=None) -> dict:
+    """Proteina-Complexa-Ligand binder design for a ligand (PDB in — SMILES->PDB
+    stays in the caller). Optional ESMFold + DiffDock validation per design."""
+    p, ins = params or {}, inputs or {}
+    ligand_pdb = ins.get("ligand_pdb")
+    if not ligand_pdb:
+        raise RuntimeError("ligand_binder_design: ligand_pdb required (convert SMILES upstream)")
+    n = int(p.get("num_samples", 2) or 2)
+    _emit(progress, 15, f"Generating {n} protein binder(s) for the ligand")
+    rows = _df_split(w, "proteina_complexa_ligand", _PC_COLS,
+                     [ligand_pdb, int(p.get("binder_length_min", 50) or 50),
+                      int(p.get("binder_length_max", 80) or 80), n, "", "A"])
+    validate_fold = bool(p.get("validate_esmfold", False))
+    smiles = str(p.get("ligand_smiles", "") or "")
+    validate_dock = bool(p.get("validate_diffdock", False)) and bool(smiles)
+    designs = []
+    for i, r in enumerate(rows):
+        esmfold_pdb = None
+        if validate_fold:
+            _emit(progress, 35 + int((i + 1) / max(len(rows), 1) * 25), f"Folding design {i + 1}/{len(rows)}")
+            try:
+                esmfold_pdb = _esmfold_pdb(w, str(r.get("sequence", "")))
+            except Exception as e:  # noqa: BLE001
+                logger.info("ligand_binder esmfold failed: %s", e)
+        dock_sdf = dock_conf = None
+        if validate_dock:
+            _emit(progress, 60 + int((i + 1) / max(len(rows), 1) * 30), f"Docking design {i + 1}/{len(rows)}")
+            try:
+                dock_sdf, dock_conf = _diffdock_best(w, esmfold_pdb or r.get("pdb_output"), smiles, 5)
+            except Exception as e:  # noqa: BLE001
+                logger.info("ligand_binder diffdock failed: %s", e)
+        designs.append({"sample_id": str(r.get("sample_id", "")), "sequence": str(r.get("sequence", "")),
+                        "rewards": float(r.get("rewards", 0) or 0), "pdb_output": str(r.get("pdb_output", "")),
+                        "esmfold_pdb": esmfold_pdb, "best_dock_sdf": dock_sdf, "dock_confidence": dock_conf})
+    _emit(progress, 100, "Ligand binder design complete")
+    return {"designs": designs, "ligand_pdb": ligand_pdb}
+
+
+def _chain_motif_scaffolding(w, inputs, params, progress=None) -> dict:
+    """Proteina-Complexa-AME scaffold generation (+ optional ProteinMPNN
+    optimisation + ESMFold validation) preserving a functional motif."""
+    p, ins = params or {}, inputs or {}
+    motif_pdb = ins.get("motif_pdb")
+    if not motif_pdb:
+        raise RuntimeError("motif_scaffolding: motif_pdb required")
+    n = int(p.get("num_samples", 2) or 2)
+    _emit(progress, 10, f"Generating {n} scaffold(s) (Proteina-Complexa-AME)")
+    rows = _df_split(w, "proteina_complexa_ame", _PC_COLS,
+                     [motif_pdb, int(p.get("scaffold_length_min", 50) or 50),
+                      int(p.get("scaffold_length_max", 80) or 80), n, "", str(p.get("target_chain", "B") or "B")])
+    optimize = bool(p.get("optimize_mpnn", False))
+    validate = bool(p.get("validate_esmfold", False))
+    scaffolds = []
+    for i, r in enumerate(rows):
+        seq = str(r.get("sequence", ""))
+        mpnn_seq = None
+        if optimize:
+            _emit(progress, 35 + int((i + 1) / max(len(rows), 1) * 25), f"Optimising sequence {i + 1}/{len(rows)} (ProteinMPNN)")
+            try:
+                seqs = _proteinmpnn_seqs(w, str(r.get("pdb_output", "")))
+                mpnn_seq = seqs[0] if seqs else None
+            except Exception as e:  # noqa: BLE001
+                logger.info("motif proteinmpnn failed: %s", e)
+        esmfold_pdb = None
+        if validate:
+            _emit(progress, 60 + int((i + 1) / max(len(rows), 1) * 30), f"Folding scaffold {i + 1}/{len(rows)}")
+            try:
+                esmfold_pdb = _esmfold_pdb(w, mpnn_seq or seq)
+            except Exception as e:  # noqa: BLE001
+                logger.info("motif esmfold failed: %s", e)
+        scaffolds.append({"sample_id": str(r.get("sample_id", "")), "sequence": seq, "mpnn_sequence": mpnn_seq,
+                          "rewards": float(r.get("rewards", 0) or 0), "pdb_output": str(r.get("pdb_output", "")),
+                          "esmfold_pdb": esmfold_pdb})
+    _emit(progress, 100, "Motif scaffolding complete")
+    return {"scaffolds": scaffolds, "motif_pdb": motif_pdb}
+
+
+_CHAINS = {
+    "admet_screen": _chain_admet_screen,
+    "protein_design": _chain_protein_design,
+    "protein_binder_design": _chain_protein_binder_design,
+    "ligand_binder_design": _chain_ligand_binder_design,
+    "motif_scaffolding": _chain_motif_scaffolding,
+}
+
+# All chains execute (protein_design + the *_design chains touch ESMFold/Proteina;
+# none needs a heavy dep in the core — SMILES->PDB stays in the UI caller).
+RUNNABLE_CHAINS = set(_CHAINS)
 
 
 # ─── transforms ──────────────────────────────────────────────────────────────

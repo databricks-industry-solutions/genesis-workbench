@@ -21,7 +21,7 @@ Legend: ✅ done · 🟡 partial · ⬜ not yet.
 | AlphaFold | job | ✅ (`run_alphafold`) | ⬜ (UI dispatches directly) |
 | Inverse Folding | endpoint (ProteinMPNN) | ✅ (endpoint exists) | ⬜ |
 | **Protein Design** | chain | ✅ | ✅ **(done — `make_designs` delegates)** |
-| Protein Binder Design | chain | ⬜ (chain not built) | ⬜ |
+| Protein Binder Design | chain (`protein_binder_design`) | ✅ **(built)** | ⬜ (Phase B) |
 | Guided Enzyme Optimization | job | ✅ (`run_enzyme_optimization_gwb`) | ⬜ |
 
 ## Small Molecule
@@ -29,8 +29,8 @@ Legend: ✅ done · 🟡 partial · ⬜ not yet.
 |---|---|---|---|
 | ADMET & Safety | chain (`admet_screen`) | ✅ | 🟡 (chain exists + has progress; ADMET tab still bespoke for per-predictor toggles) |
 | DiffDock (docking) | endpoint | ✅ | ⬜ |
-| Ligand Binder Design | chain | ⬜ (chain not built) | ⬜ |
-| Motif Scaffolding | chain/workflow | ⬜ | ⬜ |
+| Ligand Binder Design | chain (`ligand_binder_design`) | ✅ **(built)** | ⬜ (Phase B) |
+| Motif Scaffolding | chain (`motif_scaffolding`) | ✅ **(built)** | ⬜ (Phase B) |
 | GenMol Generate | endpoint | ✅ | ⬜ |
 | Guided Molecule Optimization | job | ✅ (`run_molecule_optimization_gwb`) | ⬜ |
 
@@ -57,8 +57,10 @@ Legend: ✅ done · 🟡 partial · ⬜ not yet.
   job (genomics ×4, AlphaFold, Enzyme/Molecule Opt, ESM2/KERMT fine-tune, KERMT
   deploy) + ADMET (chain). These are usable in Vortex/MCP already; the UI just
   hasn't been pointed at the core.
-- **Not a capability yet (chains to build):** Protein Binder Design, Ligand Binder
-  Design, Motif Scaffolding; Single Cell Processing (job, not registered).
+- **Chain built, UI not delegating (Phase B):** Protein Binder Design, Ligand Binder
+  Design, Motif Scaffolding — all 5 chains now live in `executor._CHAINS` + the
+  `prebuilt_workflows` registry, usable in Vortex/MCP. UI services still bespoke.
+- **Not a capability yet:** Single Cell Processing (job, not registered).
 - **Out of scope:** single-cell DE/enrichment/trajectory/dotplot + AI narratives —
   in-app analytics/LLM, not endpoint/job capabilities.
 
