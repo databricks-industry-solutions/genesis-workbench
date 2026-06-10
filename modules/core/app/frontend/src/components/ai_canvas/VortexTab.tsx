@@ -73,6 +73,8 @@ function VortexCanvas() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<VortexEdge>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // The banner message the user dismissed (hidden until the message changes).
+  const [dismissed, setDismissed] = useState<string | null>(null)
   // Transient "Finding a transform…" overlay (with spinner) during the AI lookup.
   const [suggesting, setSuggesting] = useState<string | null>(null)
   const [goal, setGoal] = useState('')
@@ -108,9 +110,19 @@ function VortexCanvas() {
   const loadGraph = useCallback(
     (graph: Parameters<typeof fromCanvasGraph>[0]) => {
       const { nodes: ns, edges: es } = fromCanvasGraph(graph, catalogByType)
-      setNodes(ns)
-      setEdges(es.map((e) => ({ ...e, animated: false })))
+      const styledEdges = es.map((e) => ({ ...e, animated: false }))
       setSelectedId(null)
+      setNodes(ns)
+      // Apply edges only AFTER the new nodes have mounted + measured their
+      // handles — otherwise React Flow silently drops edges that reference
+      // not-yet-measured handles (the "missing edges on load" bug).
+      setEdges([])
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          setEdges(styledEdges)
+          rfRef.current?.fitView({ maxZoom: 1, duration: 300 })
+        }),
+      )
     },
     [catalogByType, setNodes, setEdges],
   )
@@ -346,6 +358,10 @@ function VortexCanvas() {
           : `Running… ${Object.values(statusData.node_status).filter((s) => s === 'complete').length}/${nodes.length} nodes done`
       : null
 
+  // Top banner: the live run message, else the latest notice. Hidden once the
+  // user dismisses it (until the message text changes).
+  const banner = runMessage ?? notice
+
   return (
     <div className="flex h-[70vh] min-h-[520px] flex-col overflow-hidden rounded-md border border-border">
       {/* Toolbar */}
@@ -429,9 +445,17 @@ function VortexCanvas() {
         </form>
       </div>
 
-      {(runMessage ?? notice) && (
-        <div className="border-b border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400">
-          {runMessage ?? notice}
+      {banner && banner !== dismissed && (
+        <div className="flex items-start gap-2 border-b border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400">
+          <span className="min-w-0 flex-1">{banner}</span>
+          <button
+            onClick={() => setDismissed(banner)}
+            aria-label="Dismiss message"
+            title="Dismiss"
+            className="shrink-0 rounded px-1 leading-none hover:bg-amber-500/20"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -471,7 +495,7 @@ function VortexCanvas() {
             <MiniMap pannable zoomable />
           </ReactFlow>
 
-          {nodes.length === 0 && !catalogQuery.isLoading && (
+          {nodes.length === 0 && !catalogQuery.isLoading && !popupMessage && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="rounded-md border border-dashed border-border bg-card/70 px-4 py-3 text-center text-xs text-muted-foreground">
                 Drag a node from the left palette onto the canvas, or double-click one to add it.
@@ -479,9 +503,10 @@ function VortexCanvas() {
             </div>
           )}
 
-          {/* Transient AI spinner popup — generating a workflow or finding a transform. */}
+          {/* Transient AI spinner popup — generating a workflow or finding a transform.
+              Sits a bit above center (pb-28) so it doesn't collide with centered content. */}
           {popupMessage && (
-            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center pb-28">
               <div className="flex items-center gap-2.5 rounded-lg border border-border bg-card px-4 py-2.5 text-xs text-foreground shadow-lg">
                 <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-blue-500/30 border-t-blue-500" />
                 {popupMessage}
