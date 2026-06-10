@@ -70,10 +70,10 @@ export function Layout() {
 
   return (
     <div className="flex h-full bg-background text-foreground">
-      {/* Sidebar: a STATIC chemical-structure SVG runs vertically behind logo + nav
-          (no animation), faded with a center highlight. Light theme gets a solid teal
-          base (the SVG carries a teal gradient + pale structures); dark theme stays
-          transparent — its SVG (translucent teal lines) renders over the app's dark bg. */}
+      {/* Sidebar: animated SVG runs vertically behind logo + nav. No internal separators.
+          Light theme gets a solid teal base (so the SVG's translucent gradient and pastel
+          icons read against a real teal surface, not over the white page bg). Dark theme
+          stays transparent — its SVG renders directly over the app's dark slate. */}
       <aside className="relative flex w-72 shrink-0 flex-col overflow-hidden border-r border-border bg-[#008080] dark:bg-transparent">
         <img
           src={sidebarBg}
