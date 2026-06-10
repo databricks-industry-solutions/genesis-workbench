@@ -41,6 +41,14 @@ for lib in libraries:
     if lib.name.startswith("genesis_workbench"):
         gwb_library_path = lib.path.replace("dbfs:", "")
 print(gwb_library_path)
+# Fail fast with a clear message if the wheel is missing (e.g. a redeploy was
+# swapping it on the Volume when this run launched) — otherwise the next cell
+# does `%pip install None` and dies later with a cryptic ModuleNotFoundError.
+if not gwb_library_path:
+    raise RuntimeError(
+        f"genesis_workbench wheel not found in /Volumes/{catalog}/{schema}/libraries "
+        "— a deploy may have been mid-flight. Re-run this workflow."
+    )
 
 # COMMAND ----------
 
