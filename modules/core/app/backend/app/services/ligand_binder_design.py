@@ -11,6 +11,7 @@ from typing import Callable
 
 import pandas as pd
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.core import Config
 
 from app.services import molecular_docking as docking
 from app.services.dataframe_endpoint import query_dataframe_endpoint
@@ -79,7 +80,7 @@ def run_ligand_binder_design(
         if progress_callback:
             progress_callback(pct, msg)
 
-    w = WorkspaceClient(http_timeout_seconds=600)
+    w = WorkspaceClient(config=Config(http_timeout_seconds=600))
 
     # Step 1: resolve ligand → PDB (HETATM block). SMILES→PDB stays in the UI
     # (RDKit) so the shared executor core stays dependency-free.

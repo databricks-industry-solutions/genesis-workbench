@@ -17,6 +17,7 @@ from typing import Callable
 
 import pandas as pd
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.core import Config
 
 from app.services.dataframe_endpoint import query_dataframe_endpoint
 from app.services.endpoints import get_endpoint_name
@@ -79,7 +80,7 @@ def run_binder_design(
         if progress_callback:
             progress_callback(pct, msg)
 
-    w = WorkspaceClient(http_timeout_seconds=600)
+    w = WorkspaceClient(config=Config(http_timeout_seconds=600))
 
     # Delegate the ESMFold(target) -> Proteina-Complexa -> ESMFold(validate)
     # chain to the shared executor (same code Vortex/MCP run). The UI keeps the

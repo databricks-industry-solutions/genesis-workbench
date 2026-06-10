@@ -19,6 +19,7 @@ import os
 import tempfile
 
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.core import Config
 from databricks.sdk.service.serving import DataframeSplitInput
 
 from .capabilities import CHAIN, ENDPOINT, JOB, TRANSFORM, Capability
@@ -82,7 +83,7 @@ def _w(workspace_client: WorkspaceClient | None = None) -> WorkspaceClient:
     # Heavy realtime models (RFDiffusion, Proteina-Complexa, ESMFold on long
     # sequences, DiffDock) can exceed the SDK's 60s default HTTP timeout for a
     # single synchronous serving query — bump it so chains don't time out.
-    return workspace_client or WorkspaceClient(http_timeout_seconds=600)
+    return workspace_client or WorkspaceClient(config=Config(http_timeout_seconds=600))
 
 
 # ─── endpoint ────────────────────────────────────────────────────────────────

@@ -11,6 +11,7 @@ from typing import Callable
 
 import pandas as pd
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.core import Config
 
 from app.services.dataframe_endpoint import query_dataframe_endpoint
 from app.services.endpoints import get_endpoint_name
@@ -61,7 +62,7 @@ def _hit_proteinmpnn_full_redesign(pdb_str: str) -> list[str]:
     geometry; we're only optimising side-chains on the scaffold."""
     endpoint_name = get_endpoint_name("ProteinMPNN")
     # ProteinMPNN's PyFunc V8 needs dataframe_records, not dataframe_split.
-    w = WorkspaceClient(http_timeout_seconds=600)
+    w = WorkspaceClient(config=Config(http_timeout_seconds=600))
     response = w.serving_endpoints.query(
         name=endpoint_name,
         dataframe_records=[{"pdb": pdb_str, "fixed_positions": ""}],
@@ -89,7 +90,7 @@ def run_motif_scaffolding(
         if progress_callback:
             progress_callback(pct, msg)
 
-    w = WorkspaceClient(http_timeout_seconds=600)
+    w = WorkspaceClient(config=Config(http_timeout_seconds=600))
 
     # Proteina-Complexa-AME → (ProteinMPNN) → (ESMFold) runs in the shared
     # executor chain; the UI keeps MLflow + SSE progress + viewer assembly.

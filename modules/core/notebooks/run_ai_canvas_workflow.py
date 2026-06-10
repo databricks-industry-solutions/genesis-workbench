@@ -80,12 +80,13 @@ import os
 
 import mlflow
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.core import Config
 from mlflow.tracking import MlflowClient
 from genesis_workbench.models import set_mlflow_experiment
 
 # Long HTTP timeout: this client makes the synchronous serving-endpoint calls for
 # chain/endpoint nodes, and heavy realtime models can exceed the SDK's 60s default.
-w = WorkspaceClient(http_timeout_seconds=600)
+w = WorkspaceClient(config=Config(http_timeout_seconds=600))
 
 # Load the enriched graph the dispatcher uploaded.
 with open(graph_path) as f:
