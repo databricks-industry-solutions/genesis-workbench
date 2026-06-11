@@ -30,11 +30,22 @@ Genesis Workbench is an open-source, Databricks-native blueprint that packages b
 
 ### AI-Assisted Workflows
 
-Beyond the per-model UI tabs, **Vortex** is a visual, drag-and-drop canvas for composing multi-step pipelines from any deployed model endpoint, prebuilt workflow, and data-input/output node — then running them on Databricks with full MLflow tracking. Describe a goal in plain language and an LLM **drafts the workflow** for you; it then **self-reviews its own draft** — catching dangling nodes, dead-end outputs, type-mismatched wiring, and pipelines that don't actually accomplish the goal — before handing it back, streaming its reasoning as it works. You can wire each input inline or from an upstream node, see a live validation checklist before running, and track every run under **Past Runs** with a read-only result canvas (per-node passed/failed/skipped), a JSON view/copy, and one-click **Re-run**. Workflows **fail loudly on bad data** (e.g. a step that resolves to null) instead of silently producing meaningless results.
+**Vortex** is a visual drag-and-drop canvas for composing and running multi-step pipelines on Databricks — or describe a goal in plain language and let AI build it.
+
+- **Compose visually** — wire deployed endpoints, prebuilt workflows, transforms, and data IO into one pipeline; each input is editable inline or fed from an upstream node.
+- **Generate from a goal** — an LLM drafts the workflow and streams its reasoning, then **self-reviews and repairs** its own draft (dangling nodes, dead-end outputs, type-mismatched wiring, pipelines that miss the goal).
+- **Validate before running** — a live checklist flags every unconnected input or bad value; Run stays gated until the graph is runnable.
+- **Track every run** — Past Runs with a per-node passed/failed/skipped result canvas, JSON view/copy, and one-click Re-run.
+- **Fail loudly on bad data** — a step that resolves to null fails the run instead of producing a meaningless result.
 
 ### MCP Support
 
-Genesis Workbench ships a companion **Model Context Protocol (MCP) server** — `mcp-genesis-workbench`, a Databricks App that exposes every deployed model endpoint and prebuilt workflow as MCP tools over streamable HTTP at `/mcp`. Any MCP client — the Databricks AI Playground, Claude, Cursor, or your own agents — can discover and call them: `endpoint_<name>` tools run synchronously and return predictions, `workflow_<name>` tools dispatch a Databricks job and return a run id to poll, and `list_capabilities` / `get_workflow_run_status` round out the surface. It reuses the same capability core as Vortex and runs as its own governed service principal, so every call stays attributable. The server is deployed automatically alongside the `core` module.
+A companion **Model Context Protocol (MCP) server** (`mcp-genesis-workbench`) exposes the platform to any MCP client — the Databricks AI Playground, Claude, Cursor, or your own agents. Deployed automatically with `core`.
+
+- **Endpoints & workflows as tools** — `endpoint_<name>` runs synchronously and returns predictions; `workflow_<name>` dispatches a job and returns a run id to poll.
+- **Discoverable** — `list_capabilities` and `get_workflow_run_status` round out the surface; streamable HTTP at `/mcp`.
+- **Same core as Vortex** — reuses the shared capability/executor code, so an MCP call runs the identical path as the UI.
+- **Governed** — runs as its own service principal, so every call stays attributable.
 
 ### Components
 
