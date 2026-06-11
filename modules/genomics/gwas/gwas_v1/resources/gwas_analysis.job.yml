@@ -9,12 +9,14 @@ resources:
 
       tasks:
         - task_key: prepare_phenotype
+          max_retries: 0
           job_cluster_key: gwas_spark_cluster
           notebook_task:
             notebook_path: ../notebooks/03_prepare_phenotype.py
             source: WORKSPACE
 
         - task_key: run_gwas
+          max_retries: 0
           depends_on:
             - task_key: prepare_phenotype
           job_cluster_key: gwas_spark_cluster
@@ -25,6 +27,7 @@ resources:
             source: WORKSPACE
 
         - task_key: save_results
+          max_retries: 0
           depends_on:
             - task_key: run_gwas
           job_cluster_key: gwas_spark_cluster
@@ -33,6 +36,8 @@ resources:
             source: WORKSPACE
 
         - task_key: mark_success
+          max_retries: 0
+          disable_auto_optimization: true
           depends_on:
             - task_key: save_results
           run_if: ALL_SUCCESS
@@ -45,6 +50,8 @@ resources:
           environment_key: default
 
         - task_key: mark_failure
+          max_retries: 0
+          disable_auto_optimization: true
           depends_on:
             - task_key: save_results
           run_if: AT_LEAST_ONE_FAILED

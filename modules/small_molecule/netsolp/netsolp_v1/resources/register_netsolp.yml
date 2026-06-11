@@ -25,6 +25,7 @@ resources:
 
       tasks:
         - task_key: register_netsolp_solubility
+          max_retries: 0
           job_cluster_key: netsolp_cpu_cluster
           notebook_task:
             notebook_path: ../notebooks/01_register_netsolp.py

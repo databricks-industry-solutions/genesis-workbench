@@ -1,5 +1,10 @@
 # Genesis Workbench Documentation
 
+## Platform
+
+- [AI-Assisted Workflow Generation (Vortex)](ai_assisted_workflows.md) — Visual drag-and-drop canvas for composing and running multi-step pipelines from endpoints, prebuilt workflows, transforms, and data IO; generate a workflow from a plain-language goal with an LLM that self-reviews and repairs its own draft, then track every run with per-node status, JSON view/copy, and one-click Re-run
+- [MCP Server](mcp_server.md) — Companion Model Context Protocol server (`mcp-genesis-workbench`) that exposes every deployed endpoint and prebuilt workflow as MCP tools over streamable HTTP, callable from the Databricks AI Playground, Claude, Cursor, or custom agents
+
 ## Genomics
 
 - [Variant Calling](variant_calling.md) — GPU-accelerated germline variant calling from FASTQ files using Parabricks

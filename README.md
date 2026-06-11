@@ -13,7 +13,6 @@ Generative AI is reshaping the life sciences. Foundation models trained on genom
 - **Knowledge synthesis at scale** — LLMs specialized in biomedical literature surface insights buried in millions of papers, accelerating hypothesis generation and reducing duplicated work.
 
 ## $${\color{orange}Challenges}$$
-<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/challenges.png" alt="Scientists overwhelmed by AI/infrastructure challenges" width="800"/>
 
 Despite the breakthroughs, the experts who can apply these models — biologists, geneticists, biochemists — spend most of their time on tasks far outside their training:
 
@@ -29,10 +28,35 @@ Despite the breakthroughs, the experts who can apply these models — biologists
 
 Genesis Workbench is an open-source, Databricks-native blueprint that packages biological foundation models behind an intuitive UI — so scientists can run them without managing GPU clusters, CUDA, model registries, or serving endpoints.
 
+### AI-Assisted Workflow Generation
+
+**Use the workbench declaratively — describe the science you want and get a runnable pipeline, no wiring or boilerplate.** This lowers the barrier from "I know how to build this" to "I know what I want", so more scientists can turn ideas into experiments and innovate faster. **Vortex** is the visual canvas that makes it happen.
+
+- **Compose visually** — wire deployed endpoints, prebuilt workflows, transforms, and data IO into one pipeline; each input is editable inline or fed from an upstream node.
+- **Generate from a goal** — an Agent drafts the workflow and streams its reasoning, then **self-reviews and repairs** its own draft (dangling nodes, dead-end outputs, type-mismatched wiring, pipelines that miss the goal).
+- **Validate before running** — a live checklist flags every unconnected input or bad value; Run stays gated until the graph is runnable.
+- **Track every run** — Past Runs with a per-node passed/failed/skipped result canvas, JSON view/copy, and one-click Re-run.
+- **Fail loudly on bad data** — a step that resolves to null fails the run instead of producing a meaningless result.
+
+### MCP Support
+
+**Genesis Workbench becomes a work horse for the broader AI ecosystem** — its models and workflows become tools any agent or MCP client can call, so the platform powers your assistants and pipelines instead of living in a silo. A companion **Model Context Protocol (MCP) server** (`mcp-genesis-workbench`) exposes it to the Databricks AI Playground, Claude, Cursor, or your own agents; deployed automatically with `core`.
+
+- **Endpoints & workflows as tools** — `endpoint_<name>` runs synchronously and returns predictions; `workflow_<name>` dispatches a job and returns a run id to poll.
+- **Discoverable** — `list_capabilities` and `get_workflow_run_status` round out the surface; streamable HTTP at `/mcp`.
+- **Same core as Vortex** — reuses the shared capability/executor code, so an MCP call runs the identical path as the UI.
+- **Governed** — runs as its own service principal, so every call stays attributable.
+
+### Components
+
+**Get started fast with prepackaged models and workflows — and clear patterns to customize and extend them with your own.**
+
 - **Pre-packaged biological models** ready to deploy: ESMFold, AlphaFold2, ProteinMPNN, RFDiffusion, scGPT, SCimilarity, Scanpy, rapids-singlecell (part of scverse), ChemProp, DiffDock, Boltz, NVIDIA Parabricks, NVIDIA BioNeMo and more.
 - **Tailored workflows** for protein design, drug discovery, single-cell analysis, and variant analysis — each surfaced as a UI tab with sane defaults.
 - **Built on Databricks primitives**: Asset Bundles, Workflows, Model Serving, MLflow, Unity Catalog, and Databricks Apps — so everything you run is governed, reproducible, and traceable.
 - **Modular and extensible**: each capability is an independent module that can be deployed and destroyed independently.
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/happy_scientists.png" alt="Scientists free to focus on the science with Genesis Workbench" width="800"/>
 
 ## $${\color{orange}Modules}$$
 

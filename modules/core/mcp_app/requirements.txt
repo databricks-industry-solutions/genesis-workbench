@@ -1,0 +1,15 @@
+uvicorn[standard]==0.32.1
+databricks-sdk==0.50.0
+databricks-sql-connector==4.0.2
+pydantic==2.13.4
+pydantic-settings==2.14.1
+mlflow[databricks]==2.22.0
+mcp==1.27.2
+starlette==0.41.3
+sse-starlette==3.0.3
+httpx==0.28.1
+httpx-sse==0.4.3
+python-multipart==0.0.30
+anyio==4.13.0
+biopython==1.84
+backend/lib/genesis_workbench-0.1.21-py3-none-any.whl

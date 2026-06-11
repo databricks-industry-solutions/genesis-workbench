@@ -16,6 +16,8 @@ resources:
           max_retries: 0
 
         - task_key: mark_success
+          max_retries: 0
+          disable_auto_optimization: true
           depends_on:
             - task_key: run_germline
           run_if: ALL_SUCCESS
@@ -28,6 +30,8 @@ resources:
           environment_key: default
 
         - task_key: mark_failure
+          max_retries: 0
+          disable_auto_optimization: true
           depends_on:
             - task_key: run_germline
           run_if: AT_LEAST_ONE_FAILED

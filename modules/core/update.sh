@@ -91,8 +91,32 @@ rm -f app/backend/lib/genesis_workbench-*.whl
 cp "$WHEEL" app/backend/lib/
 echo "Staged $WHEEL_NAME → app/backend/lib/"
 
+# Same staging for the sibling MCP app (mcp-genesis-workbench). The wheel is
+# NOT gitignored (gitignored files are excluded from the DAB sync) — it is
+# force-uploaded via databricks.yml sync.include and deleted in cleanup below.
+mkdir -p mcp_app/backend/lib
+rm -f mcp_app/backend/lib/genesis_workbench-*.whl
+cp "$WHEEL" mcp_app/backend/lib/
+echo "Staged $WHEEL_NAME → mcp_app/backend/lib/"
+
+# Guarantee the staged wheels + dist are removed on ANY exit — success, a failed
+# `bundle deploy/run`, or Ctrl-C. The wheel is intentionally NOT gitignored (that
+# would exclude it from the DAB sync), so it must never be left behind to be
+# accidentally committed. A trap (vs. a trailing cleanup step) ensures this runs
+# even when an earlier step errors out.
+_cleanup_artifacts() {
+    rm -rf library/genesis_workbench/dist
+    rm -f app/backend/lib/genesis_workbench-*.whl
+    rm -f mcp_app/backend/lib/genesis_workbench-*.whl
+}
+trap _cleanup_artifacts EXIT
+
 if ! grep -wq "$WHEEL_NAME" app/requirements.txt; then
     echo "⚠️  app/requirements.txt does not reference $WHEEL_NAME — update it to match the pyproject version."
+    exit 1
+fi
+if ! grep -wq "$WHEEL_NAME" mcp_app/requirements.txt; then
+    echo "⚠️  mcp_app/requirements.txt does not reference $WHEEL_NAME — update it to match the pyproject version."
     exit 1
 fi
 
@@ -144,11 +168,25 @@ echo ""
 # wheel from this Volume. Copying it afterwards would install a stale wheel, or
 # fail with "ModuleNotFoundError: No module named 'genesis_workbench'" on a fresh
 # Volume. Each module's notebooks also %pip install from here.
+# Copy the current wheel FIRST, then prune older versions — so the Volume always
+# holds at least the current wheel. (Removing-then-copying left a window where the
+# Volume had NO genesis_workbench wheel; an ai_canvas orchestrator run launched in
+# that window failed at import with "ModuleNotFoundError: No module named
+# 'genesis_workbench'" — its scan globs "genesis_workbench*" here and found nothing.)
 for file in library/genesis_workbench/dist/*.whl; do
   if [ -f "$file" ]; then
     filename=$(basename "$file")
     echo "Copying $filename to dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename"
     databricks fs cp library/genesis_workbench/dist/$filename dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$filename --overwrite
+  fi
+done
+
+# Prune any OTHER genesis_workbench wheels (stale versions), keeping the one just
+# copied — so the orchestrator's glob stays unambiguous and the Volume is never empty.
+for vfile in $(databricks fs ls "dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries" 2>/dev/null | grep -E '^genesis_workbench-.*\.whl$'); do
+  if [ "$vfile" != "$WHEEL_NAME" ]; then
+    echo "Removing stale wheel $vfile from UC Volume"
+    databricks fs rm "dbfs:/Volumes/$core_catalog_name/$core_schema_name/libraries/$vfile" || true
   fi
 done
 
@@ -166,25 +204,37 @@ echo ""
 
 databricks bundle run --target $TARGET genesis_workbench_app --var="$EXTRA_PARAMS"
 
+mcp_app_name=mcp-genesis-workbench
+
 if [ "$UI_ONLY" = "false" ]; then
     echo ""
-    echo "▶️ Granting app service principal access to catalog"
+    echo "▶️ Deploying MCP Application ($mcp_app_name)"
+    echo ""
+
+    databricks bundle run --target $TARGET mcp_genesis_workbench_app --var="$EXTRA_PARAMS"
+
+    echo ""
+    echo "▶️ Granting app service principals access to catalog"
     echo ""
 
     app_sp_id=$(databricks apps get $app_name --output json | jq -r '.service_principal_client_id')
-    echo "App service principal: $app_sp_id"
+    mcp_app_sp_id=$(databricks apps get $mcp_app_name --output json | jq -r '.service_principal_client_id')
+    echo "App service principals: $app_sp_id (UI), $mcp_app_sp_id (MCP)"
 
-    databricks grants update catalog $core_catalog_name --json "{\"changes\": [{\"principal\": \"$app_sp_id\", \"add\": [\"USE_CATALOG\"]}]}"
-    databricks grants update schema $core_catalog_name.$core_schema_name --json "{\"changes\": [{\"principal\": \"$app_sp_id\", \"add\": [\"USE_SCHEMA\", \"SELECT\", \"MODIFY\"]}]}"
+    for sp in "$app_sp_id" "$mcp_app_sp_id"; do
+        databricks grants update catalog $core_catalog_name --json "{\"changes\": [{\"principal\": \"$sp\", \"add\": [\"USE_CATALOG\"]}]}"
+        databricks grants update schema $core_catalog_name.$core_schema_name --json "{\"changes\": [{\"principal\": \"$sp\", \"add\": [\"USE_SCHEMA\", \"SELECT\", \"MODIFY\"]}]}"
+    done
 
-    echo "Catalog and schema permissions granted."
+    echo "Catalog and schema permissions granted (both apps)."
 
     echo ""
-    echo "▶️ Granting app permissions for endpoints, jobs, volumes, models"
+    echo "▶️ Granting app permissions for endpoints, jobs, volumes, models (both apps)"
     echo ""
     # NOTE: the genesis_workbench wheel is copied to the UC Volume earlier (right
     # after `bundle deploy`) because this serverless job %pip-installs it from there.
-    databricks bundle run --target $TARGET grant_app_permissions_job --var="$EXTRA_PARAMS"
+    # app_names (colon-separated) makes the grant notebook cover both app SPs.
+    databricks bundle run --target $TARGET grant_app_permissions_job --var="$EXTRA_PARAMS,app_names=$app_name:$mcp_app_name"
 else
     echo ""
     echo "▶️ --ui-only: skipping catalog grants, app-permissions job, and UC Volume library copy"
@@ -199,10 +249,9 @@ fi
 # excluded from the DAB sync, so the wheel must be present at deploy time and
 # deleted here instead.
 echo ""
-echo "▶️ Cleaning up local build artifacts"
+echo "▶️ Cleaning up local build artifacts (also guaranteed via EXIT trap)"
 echo ""
-rm -rf library/genesis_workbench/dist
-rm -f app/backend/lib/genesis_workbench-*.whl
+_cleanup_artifacts
 
 # Note: NOT writing .deployed here — update.sh is for redeploys, the
 # .deployed marker is owned by deploy.sh.

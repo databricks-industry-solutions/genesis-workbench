@@ -17,6 +17,7 @@ from typing import Callable
 
 import pandas as pd
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.core import Config
 
 from app.services.dataframe_endpoint import query_dataframe_endpoint
 from app.services.endpoints import get_endpoint_name
@@ -79,84 +80,35 @@ def run_binder_design(
         if progress_callback:
             progress_callback(pct, msg)
 
-    w = WorkspaceClient()
+    w = WorkspaceClient(config=Config(http_timeout_seconds=600))
 
-    # Step 1: resolve target → PDB ----------------------------------------
-    if not target_pdb:
-        if not target_sequence:
-            raise ValueError("Either target_pdb or target_sequence must be provided")
-        _p(5, "Folding target sequence with ESMFold")
-        target_pdb = hit_esmfold(w, target_sequence.strip())
-    _p(15, "Target PDB ready")
+    # Delegate the ESMFold(target) -> Proteina-Complexa -> ESMFold(validate)
+    # chain to the shared executor (same code Vortex/MCP run). The UI keeps the
+    # MLflow run + SSE progress (via `_p`) and assembles the viewer response.
+    from genesis_workbench.executor import run_chain
 
-    # Step 2: Proteina-Complexa binder design -----------------------------
-    _p(20, f"Generating {num_samples} binder design(s) with Proteina-Complexa")
-    results_df = hit_proteina_complexa(
-        target_pdb=target_pdb,
-        target_chain=target_chain,
-        hotspot_residues=hotspot_residues,
-        binder_length_min=binder_length_min,
-        binder_length_max=binder_length_max,
-        num_samples=num_samples,
+    result = run_chain(
+        "protein_binder_design",
+        {"target_pdb": target_pdb, "target_sequence": target_sequence},
+        {
+            "target_chain": target_chain,
+            "hotspot_residues": hotspot_residues,
+            "binder_length_min": binder_length_min,
+            "binder_length_max": binder_length_max,
+            "num_samples": num_samples,
+            "validate_esmfold": validate_esmfold,
+        },
+        w,
+        progress=_p,
     )
-    if results_df.empty:
-        _p(100, "Proteina-Complexa returned no designs")
-        return {
-            "designs": [],
-            "target_pdb": target_pdb,
-            "warnings": [],
-        }
-    _p(50, f"Proteina-Complexa returned {len(results_df)} design(s)")
-
-    # Step 3: optional ESMFold validation per design ----------------------
+    designs = result.get("designs", [])
     warnings: list[str] = []
-    if validate_esmfold:
-        esmfold_pdbs: list[str | None] = []
-        validated: list[bool] = []
-        total = len(results_df)
-        for i, (_, row) in enumerate(results_df.iterrows()):
-            pct = 50 + int(((i + 1) / total) * 45)
-            _p(pct, f"Validating design {i + 1}/{total} with ESMFold")
-            try:
-                pdb = hit_esmfold(w, str(row["sequence"]))
-                esmfold_pdbs.append(pdb)
-                validated.append(True)
-            except Exception as e:
-                logger.warning("ESMFold validation failed for design %d: %s", i + 1, e)
-                esmfold_pdbs.append(None)
-                validated.append(False)
-        results_df["esmfold_pdb"] = esmfold_pdbs
-        results_df["esmfold_validated"] = validated
-        failed = sum(1 for v in validated if not v)
+    if validate_esmfold and designs:
+        failed = sum(1 for d in designs if not d.get("esmfold_validated"))
         if failed:
-            warnings.append(
-                f"ESMFold validation failed for {failed}/{total} design(s)."
-            )
-
-    designs: list[dict] = []
-    for _, row in results_df.iterrows():
-        # Prefer the ESMFold-validated structure when available; fall back
-        # to the Proteina-Complexa CA-only backbone.
-        esmfold_pdb = row.get("esmfold_pdb") if "esmfold_pdb" in results_df.columns else None
-        pdb_output = row.get("pdb_output")
-        binder_pdb = esmfold_pdb or pdb_output or None
-        designs.append(
-            {
-                "sample_id": str(row.get("sample_id", "")),
-                "sequence": str(row.get("sequence", "")),
-                "rewards": float(row.get("rewards", 0.0) or 0.0),
-                "esmfold_validated": bool(
-                    row.get("esmfold_validated", False)
-                    if "esmfold_validated" in results_df.columns
-                    else False
-                ),
-                "binder_pdb": binder_pdb,
-            }
-        )
-
-    _p(96, "Assembling response")
+            warnings.append(f"ESMFold validation failed for {failed}/{len(designs)} design(s).")
     return {
         "designs": designs,
-        "target_pdb": target_pdb,
+        "target_pdb": result.get("target_pdb", target_pdb),
         "warnings": warnings,
     }

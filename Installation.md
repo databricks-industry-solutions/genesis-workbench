@@ -89,6 +89,8 @@ The diagrams below show the sub-modules, Databricks workflows, and model-serving
 
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment_core.png" alt="Core module deployment" width="900"/>
 
+Deploying `core` stands up **two** Databricks Apps: the main UI (`genesis-workbench`) and the **MCP server** (`mcp-genesis-workbench`). Both run as their own service principals; the deploy grants both access to the catalog, endpoints, jobs, volumes, and models. See [MCP Server](#mcp-server) below.
+
 #### Single Cell
 
 <img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/deployment_single_cell.png" alt="Single Cell module deployment" width="900"/>
@@ -238,5 +240,15 @@ cd modules/core
 ```
 
 **Never run `./deploy.sh core <cloud>` on a populated install** — its `initialize_core_job` drops and recreates the settings/models tables and you will lose all configuration. 
+
+### MCP Server
+
+Alongside the UI, the `core` deploy stands up a **Model Context Protocol (MCP) server** as a second Databricks App, `mcp-genesis-workbench`. It exposes every deployed model endpoint and prebuilt workflow as MCP tools (FastMCP, streamable HTTP) so MCP clients — the Databricks AI Playground, Claude, Cursor, or your own agents — can discover and call them.
+
+**Deployment** — the MCP app is deployed automatically by both `./deploy.sh core <cloud>` and a full `./update.sh <cloud>` (it is **skipped** by `./update.sh <cloud> --ui-only`). The deploy stages the `genesis_workbench` wheel + app code into `modules/core/mcp_app/`, deploys the `mcp_genesis_workbench_app` bundle resource, and runs `grant_app_permissions_job` for **both** app service principals (UI + MCP) — granting CAN_QUERY on serving endpoints, CAN_MANAGE_RUN on the orchestrator/workflow jobs, and the necessary volume/model/catalog access. No extra commands are required; to (re)deploy just the MCP app changes, run a full `./update.sh <cloud>`.
+
+**Connecting** — the server is reachable at `https://<mcp-genesis-workbench-app-url>/mcp` (find the app URL with `databricks apps get mcp-genesis-workbench`). In the Databricks AI Playground the `mcp-` server is auto-discovered; external clients register the `/mcp` URL over OAuth.
+
+**Tools** — call `list_capabilities` to enumerate what's available, then `endpoint_<name>` (synchronous, returns predictions) or `workflow_<name>` (dispatches a Job, returns a run id — poll `get_workflow_run_status`). All calls run as the MCP app's service principal. See the [MCP Server documentation](modules/core/app/backend/documentation/mcp_server.md) for details.
 
 

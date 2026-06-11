@@ -9,6 +9,7 @@ resources:
 
       tasks:
         - task_key: deploy_model_task
+          disable_auto_optimization: true
           notebook_task:
             notebook_path: ../../notebooks/deploy_model.py
           max_retries: 0 

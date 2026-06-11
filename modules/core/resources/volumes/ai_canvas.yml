@@ -1,0 +1,7 @@
+resources:
+  volumes:
+    ai_canvas:
+      name: ai_canvas
+      catalog_name: ${var.core_catalog_name}
+      schema_name: ${var.core_schema_name}
+      volume_type: MANAGED

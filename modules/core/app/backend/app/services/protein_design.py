@@ -17,6 +17,7 @@ import mlflow
 from Bio import PDB
 from Bio.PDB import PDBParser
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.core import Config
 from genesis_workbench.models import set_mlflow_experiment
 from genesis_workbench.workbench import UserInfo
 
@@ -100,7 +101,7 @@ def make_designs(
         if progress_callback:
             progress_callback(pct, msg)
 
-    w = WorkspaceClient()  # app SP — endpoints need model-serving scope
+    w = WorkspaceClient(config=Config(http_timeout_seconds=600))  # app SP; long timeout for heavy serving calls
 
     _p(2, "Setting up MLflow experiment")
     experiment = set_mlflow_experiment(
@@ -117,53 +118,25 @@ def make_designs(
         mlflow.log_param("sequence", sequence)
         mlflow.log_param("n_rfdiffusion_hits", n_rfdiffusion_hits)
 
-        seq_details = parse_sequence(sequence)
-        mlflow.log_param("seq_details", json.dumps(seq_details))
+        # Delegate the actual ESMFold -> reindex -> RFDiffusion -> ProteinMPNN ->
+        # ESMFold chain to the shared executor (same code Vortex/MCP run). The UI
+        # keeps the presentation: MLflow run + artifacts, SSE progress via `_p`.
+        from genesis_workbench.executor import run_chain
 
-        _p(5, "Folding original sequence (ESMFold)")
-        esmfold_initial = hit_esmfold(w, seq_details["sequence"])
-        mlflow.log_dict({"predictions": esmfold_initial}, "esmfold_initial_predictions.json")
-
-        with tempfile.NamedTemporaryFile(suffix=".pdb") as f:
-            with open(f.name, "w") as fw:
-                fw.write(esmfold_initial)
-            structure = PDBParser().get_structure("esmfold", f.name)
-
-        modified_pdb_text = extract_chain_reindex(structure, chain_id="A")
-        mlflow.log_dict({"modified_pdb_text": modified_pdb_text}, "modified_pdb_text.json")
-
-        designed_pdb_strs: list[str] = []
-        for i in range(n_rfdiffusion_hits):
-            _p(10 + int((i / max(n_rfdiffusion_hits, 1)) * 40),
-               f"RFDiffusion scaffold {i + 1}/{n_rfdiffusion_hits}")
-            designed_pdb = hit_rfdiffusion(
-                w,
-                {
-                    "pdb": modified_pdb_text,
-                    "start_idx": seq_details["start_idx"],
-                    "end_idx": seq_details["end_idx"],
-                },
-            )
-            designed_pdb_strs.append(designed_pdb)
-        mlflow.log_dict({"designed_pdb_strs": designed_pdb_strs}, "designed_pdb_strs.json")
-
-        all_seqs: list[str] = []
-        for i, pdb_ in enumerate(designed_pdb_strs):
-            _p(50 + int((i / max(len(designed_pdb_strs), 1)) * 20),
-               f"ProteinMPNN sequence design {i + 1}/{len(designed_pdb_strs)}")
-            all_seqs.extend(hit_proteinmpnn(w, pdb_))
-        mlflow.log_dict({"protein_mpnn_seqs": all_seqs}, "protein_mpnn_seqs.json")
-
-        all_pdbs: list[str] = []
-        for i, s in enumerate(all_seqs):
-            _p(70 + int((i / max(len(all_seqs), 1)) * 25),
-               f"Folding designed sequence {i + 1}/{len(all_seqs)}")
-            all_pdbs.append(hit_esmfold(w, s))
-        mlflow.log_dict({"all_pdb_results": all_pdbs}, "all_pdb_results.json")
+        result = run_chain(
+            "protein_design",
+            {"sequence": sequence},
+            {"n_rfdiffusion_hits": n_rfdiffusion_hits},
+            w,
+            progress=_p,
+        )
+        mlflow.log_dict({"predictions": result["initial"]}, "esmfold_initial_predictions.json")
+        mlflow.log_dict({"protein_mpnn_seqs": result["sequences"]}, "protein_mpnn_seqs.json")
+        mlflow.log_dict({"all_pdb_results": result["designs"]}, "all_pdb_results.json")
 
         return {
-            "initial": esmfold_initial,
-            "designed": all_pdbs,
+            "initial": result["initial"],
+            "designed": result["designs"],
             "experiment_id": experiment.experiment_id,
             "run_id": mlflow_run_id,
         }

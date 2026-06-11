@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.routers import (
+    ai_canvas,
     assistant,
     bionemo,
     bootstrap,
@@ -56,6 +57,7 @@ app.include_router(profile.router)
 app.include_router(settings.router)
 app.include_router(monitoring.router)
 app.include_router(assistant.router)
+app.include_router(ai_canvas.router)
 app.include_router(docs.router)
 app.include_router(models.router)
 app.include_router(large_molecule.router)

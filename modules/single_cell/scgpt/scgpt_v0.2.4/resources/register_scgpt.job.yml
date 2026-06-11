@@ -9,12 +9,15 @@ resources:
 
       tasks:
         - task_key: register_scgpt_task
+          max_retries: 0
           job_cluster_key: job_cluster_get_embedding
           notebook_task:
             notebook_path: ../notebooks/01_register_scgpt.py
 
         #this task need serverless runtime with python 3.11
         - task_key: update_model_catalog_scgpt_models_task
+          max_retries: 0
+          disable_auto_optimization: true
           depends_on:
             - task_key: "register_scgpt_task"
           notebook_task:
@@ -24,6 +27,7 @@ resources:
         # Uses its own parameter (perturb_model_name) to avoid colliding with
         # the job-level model_name=scgpt used by the embedding model
         - task_key: register_scgpt_perturbation_task
+          max_retries: 0
           depends_on:
             - task_key: "register_scgpt_task"
           job_cluster_key: job_cluster_get_embedding
@@ -31,6 +35,8 @@ resources:
             notebook_path: ../notebooks/03_register_scgpt_perturbation.py
 
         - task_key: import_scgpt_perturbation_task
+          max_retries: 0
+          disable_auto_optimization: true
           depends_on:
             - task_key: "register_scgpt_perturbation_task"
           notebook_task:

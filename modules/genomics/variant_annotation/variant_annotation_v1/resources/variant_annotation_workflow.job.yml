@@ -9,6 +9,7 @@ resources:
 
       tasks:
         - task_key: spike_pathogenic
+          max_retries: 0
           job_cluster_key: variant_annotation_cluster
           libraries:
             - jar: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/libraries/glow-spark3-assembly-2.0.4-SNAPSHOT.jar
@@ -17,6 +18,7 @@ resources:
             source: WORKSPACE
 
         - task_key: filter_and_annotate
+          max_retries: 0
           depends_on:
             - task_key: spike_pathogenic
           job_cluster_key: variant_annotation_cluster
@@ -27,6 +29,7 @@ resources:
             source: WORKSPACE
 
         - task_key: save_results
+          max_retries: 0
           depends_on:
             - task_key: filter_and_annotate
           job_cluster_key: variant_annotation_cluster
@@ -35,6 +38,8 @@ resources:
             source: WORKSPACE
 
         - task_key: mark_success
+          max_retries: 0
+          disable_auto_optimization: true
           depends_on:
             - task_key: save_results
           run_if: ALL_SUCCESS
@@ -47,6 +52,8 @@ resources:
           environment_key: default
 
         - task_key: mark_failure
+          max_retries: 0
+          disable_auto_optimization: true
           depends_on:
             - task_key: save_results
           run_if: AT_LEAST_ONE_FAILED

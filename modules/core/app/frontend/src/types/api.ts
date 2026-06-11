@@ -981,3 +981,132 @@ export type MolOptRun = {
   iterations_completed: number | null
   start_time_ms: number | null
 }
+
+// ─── Vortex (ai_canvas) ──────────────────────────────────────────────────────
+
+export type CanvasPort = {
+  name: string
+  dtype: string
+  label: string
+}
+
+export type CanvasParam = {
+  name: string
+  label: string
+  type: 'string' | 'int' | 'float' | 'bool' | 'select' | 'text'
+  default: unknown
+  options: string[]
+  required: boolean
+  help: string
+}
+
+export type CanvasNodeType = {
+  type: string
+  label: string
+  category: 'endpoint' | 'batch' | 'io' | 'transform'
+  description: string
+  module: string | null
+  available: boolean
+  inputs: CanvasPort[]
+  outputs: CanvasPort[]
+  params: CanvasParam[]
+}
+
+export type CanvasCatalogResponse = {
+  nodes: CanvasNodeType[]
+}
+
+// The persisted/executable graph. `position` is kept so a saved workflow
+// reloads with the same canvas layout.
+export type CanvasGraphNode = {
+  id: string
+  type: string
+  label: string
+  params: Record<string, unknown>
+  // Inline values for input ports; a wired edge overrides at run time.
+  inputs?: Record<string, unknown>
+  position: { x: number; y: number }
+}
+
+export type CanvasGraphEdge = {
+  source: string
+  target: string
+  sourceHandle?: string | null
+  targetHandle?: string | null
+}
+
+export type CanvasGraph = {
+  nodes: CanvasGraphNode[]
+  edges: CanvasGraphEdge[]
+}
+
+export type CanvasGenerateRequest = { goal: string }
+export type CanvasGenerateResponse = { graph: CanvasGraph }
+
+export type CanvasSaveWorkflowRequest = {
+  // BIGINT id — string across the wire so JS doesn't round it.
+  workflow_id?: string | null
+  name: string
+  description?: string
+  graph: CanvasGraph
+}
+export type CanvasSaveWorkflowResponse = { workflow_id: string }
+export type CanvasWorkflowSummary = {
+  workflow_id: string
+  name: string
+  description: string
+  updated_date: string
+}
+export type CanvasWorkflowListResponse = { workflows: CanvasWorkflowSummary[] }
+export type CanvasWorkflowDetail = {
+  workflow_id: string
+  name: string
+  description: string
+  graph: CanvasGraph
+}
+
+export type CanvasRunRequest = {
+  graph: CanvasGraph
+  experiment_name: string
+  run_name: string
+}
+export type CanvasRunResponse = {
+  job_id: number
+  job_run_id: number
+  mlflow_run_id: string
+  experiment_id: string
+}
+export type CanvasRunStatusResponse = {
+  status: string
+  job_status: string
+  node_status: Record<string, string>
+  node_error: Record<string, string>
+  run_name: string
+}
+export type CanvasRunSummary = {
+  run_id: string
+  run_name: string
+  job_status: string
+  node_count: number | null
+  start_time: string
+  run_url: string
+}
+export type CanvasRunsResponse = { runs: CanvasRunSummary[]; page: number; has_more: boolean }
+export type CanvasRunResultResponse = {
+  result: Record<string, unknown>
+  graph: CanvasGraph | null
+  node_status: Record<string, string>
+  node_error: Record<string, string>
+}
+
+export type TransformSuggestRequest = {
+  source_dtype: string
+  target_dtype: string
+  source_label?: string
+  target_label?: string
+}
+export type TransformSuggestResponse = {
+  type: string | null
+  label: string | null
+  params: Record<string, unknown>
+}

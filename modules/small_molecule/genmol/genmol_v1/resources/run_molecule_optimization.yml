@@ -28,6 +28,7 @@ resources:
 
       tasks:
         - task_key: run_loop
+          max_retries: 0
           job_cluster_key: molecule_optimization_cpu_cluster
           notebook_task:
             notebook_path: ../notebooks/03_run_molecule_optimization.py

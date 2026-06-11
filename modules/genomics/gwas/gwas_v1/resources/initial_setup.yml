@@ -9,12 +9,14 @@ resources:
 
       tasks:
         - task_key: download_reference_genome
+          max_retries: 0
           job_cluster_key: gwas_setup_cluster
           notebook_task:
             notebook_path: ../notebooks/01_download_reference_genome.py
             source: WORKSPACE
 
         - task_key: initialize
+          disable_auto_optimization: true
           depends_on:
             - task_key: download_reference_genome
           notebook_task:

@@ -9,6 +9,7 @@ resources:
 
       tasks:
         - task_key: build_te_wheel
+          max_retries: 0
           job_cluster_key: gpu_cluster
           notebook_task:
             notebook_path: ../../notebooks/build_transformer_engine.py

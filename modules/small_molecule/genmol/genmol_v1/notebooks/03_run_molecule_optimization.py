@@ -62,6 +62,7 @@ print("GWB library:", gwb_library_path)
 import json
 import mlflow
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.core import Config
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
@@ -97,7 +98,10 @@ initialize(core_catalog_name=catalog, core_schema_name=schema,
 
 GENMOL_EP = get_endpoint_name_for_uc_model("genmol")
 CLINTOX_EP = get_endpoint_name_for_uc_model("chemprop_clintox")
-w = WorkspaceClient()
+# DiffDock docking can run several minutes per call (samples_per_complex on a
+# cold/loaded GPU), well past the SDK's default 5-minute request timeout — bump
+# to 30 min so per-iteration docking doesn't raise TimeoutError mid-run.
+w = WorkspaceClient(config=Config(http_timeout_seconds=1800))
 
 # COMMAND ----------
 

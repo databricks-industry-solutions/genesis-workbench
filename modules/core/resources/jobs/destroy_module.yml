@@ -9,6 +9,7 @@ resources:
 
       tasks:
         - task_key: destroy_module_task
+          disable_auto_optimization: true
           notebook_task:
             notebook_path: ../../notebooks/destroy_module.py
           max_retries: 0 
