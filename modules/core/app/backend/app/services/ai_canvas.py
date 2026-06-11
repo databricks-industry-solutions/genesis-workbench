@@ -29,11 +29,6 @@ from genesis_workbench.models import (
     set_mlflow_experiment,
 )
 from genesis_workbench.capabilities import ParamValidationError, validate_params
-from genesis_workbench.node_catalog import (
-    NODE_CATALOG_TABLE,
-    node_catalog_ddl,
-    node_to_dict,
-)
 from genesis_workbench.workbench import (
     UserInfo,
     execute_non_select_query,
@@ -224,31 +219,6 @@ def build_catalog() -> list[dict]:
         len(catalog), len(deployed_shorts), len(batch_jobs),
     )
     return catalog
-
-
-def publish_node_catalog(source: str = "builtin") -> int:
-    """Publish the in-code CURATED_NODES to the `node_catalog` table — the single
-    runtime source of truth the wheel (MCP/executor) and (later) Vortex read.
-
-    Full-overwrite of this `source`'s rows (idempotent); rows from other sources
-    (e.g. future "mcp:<server>" external tools) are left untouched. Authoring stays
-    in code (CURATED_NODES); this just mirrors it to the table. Returns row count."""
-    cat, schema = os.environ["CORE_CATALOG_NAME"], os.environ["CORE_SCHEMA_NAME"]
-    tbl = f"{cat}.{schema}.{NODE_CATALOG_TABLE}"
-    execute_non_select_query(node_catalog_ddl(cat, schema))
-    execute_non_select_query(f"DELETE FROM {tbl} WHERE source = {_sql_str(source)}")
-    rows = [
-        f"({_sql_str(n.type)}, {_sql_str(str(n.category))}, {_sql_str(n.kind or '')}, "
-        f"{_sql_str(n.module)}, {_sql_str(source)}, {_sql_str(json.dumps(node_to_dict(n)))}, true)"
-        for n in CURATED_NODES
-    ]
-    if rows:
-        execute_non_select_query(
-            f"INSERT INTO {tbl} (type, category, kind, module, source, node_json, is_active) "
-            f"VALUES {', '.join(rows)}"
-        )
-    logger.info("published %d nodes to %s (source=%s)", len(rows), NODE_CATALOG_TABLE, source)
-    return len(rows)
 
 
 # ─── AI graph generation ─────────────────────────────────────────────────────

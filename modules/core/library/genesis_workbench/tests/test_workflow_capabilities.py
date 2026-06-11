@@ -60,3 +60,15 @@ def test_falls_back_to_legacy_when_no_batch_rows(monkeypatch):
     sentinel = [Capability(id="workflow:legacy", label="L", kind=JOB)]
     monkeypatch.setattr(cap, "_workflow_capabilities_legacy", lambda: sentinel)
     assert cap.workflow_capabilities() == sentinel
+
+
+def test_publish_node_catalog_sql(monkeypatch):
+    # publish_node_catalog writes the built-in CURATED_NODES (no DB — capture SQL).
+    sqls = []
+    monkeypatch.setattr(cap, "execute_non_select_query", lambda q: sqls.append(q))
+    n = cap.publish_node_catalog(catalog="c", schema="s")
+    assert n == 44  # every built-in node published
+    assert any("CREATE TABLE IF NOT EXISTS c.s.node_catalog" in q for q in sqls)
+    assert any(q.startswith("DELETE FROM c.s.node_catalog WHERE source = 'builtin'") for q in sqls)
+    inserts = [q for q in sqls if q.startswith("INSERT INTO c.s.node_catalog")]
+    assert len(inserts) == 1 and inserts[0].count(", true)") == n  # one value tuple/node

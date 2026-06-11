@@ -17,8 +17,14 @@ import os
 from dataclasses import dataclass, field
 
 from .models import ModelCategory, get_deployed_models
-from .node_catalog import NODE_CATALOG_TABLE, NodeCategory, node_from_dict
-from .workbench import execute_select_query
+from .node_catalog import (
+    NODE_CATALOG_TABLE,
+    NodeCategory,
+    node_catalog_ddl,
+    node_from_dict,
+    node_to_dict,
+)
+from .workbench import execute_non_select_query, execute_select_query
 
 # Execution kinds.
 ENDPOINT = "endpoint"
@@ -202,6 +208,40 @@ def endpoint_capabilities() -> list[Capability]:
                 description=f"Deployed model-serving endpoint '{r['model_display_name']}'.",
             ))
     return caps
+
+
+def _sql_lit(v) -> str:
+    """SQL string literal with single-quote escaping; NULL for None."""
+    if v is None:
+        return "NULL"
+    return "'" + str(v).replace("\\", "\\\\").replace("'", "''") + "'"
+
+
+def publish_node_catalog(catalog: str | None = None, schema: str | None = None,
+                         source: str = "builtin") -> int:
+    """Publish the built-in CURATED_NODES to the `node_catalog` table — the single
+    runtime source of truth read by the wheel (MCP/executor) and Vortex.
+
+    Full-overwrite of this `source`'s rows (idempotent); rows from other sources
+    (future "mcp:<server>" external tools) are untouched. Runs from a deploy
+    notebook (the wheel carries both the data and DB access). Returns row count."""
+    from .builtin_nodes import CURATED_NODES  # local import: data module, no cycle
+    cat = catalog or os.environ["CORE_CATALOG_NAME"]
+    sch = schema or os.environ["CORE_SCHEMA_NAME"]
+    tbl = f"{cat}.{sch}.{NODE_CATALOG_TABLE}"
+    execute_non_select_query(node_catalog_ddl(cat, sch))
+    execute_non_select_query(f"DELETE FROM {tbl} WHERE source = {_sql_lit(source)}")
+    rows = [
+        f"({_sql_lit(n.type)}, {_sql_lit(str(n.category))}, {_sql_lit(n.kind or '')}, "
+        f"{_sql_lit(n.module)}, {_sql_lit(source)}, {_sql_lit(json.dumps(node_to_dict(n)))}, true)"
+        for n in CURATED_NODES
+    ]
+    if rows:
+        execute_non_select_query(
+            f"INSERT INTO {tbl} (type, category, kind, module, source, node_json, is_active) "
+            f"VALUES {', '.join(rows)}"
+        )
+    return len(rows)
 
 
 def read_catalog_nodes():

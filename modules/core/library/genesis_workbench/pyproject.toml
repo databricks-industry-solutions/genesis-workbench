@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "genesis_workbench"
-version = "0.1.26"
+version = "0.1.27"
 description = "Genesis workbench for Databricks"
 authors = ["Srijit Nair <srijit.nair@databricks.com>", "Eli Swanson <eli.swanson@databricks.com>"]
 license = "DB License"

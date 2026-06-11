@@ -1,0 +1,31 @@
+resources:
+  jobs:
+    publish_node_catalog_job:
+      name: publish_node_catalog_gwb
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: publish_node_catalog_task
+          disable_auto_optimization: true
+          notebook_task:
+            notebook_path: ../../notebooks/publish_node_catalog.py
+          max_retries: 0
+
+      # Pure metadata publish (writes the node_catalog table) — serverless is enough.
+      environments:
+        - environment_key: default
+          spec:
+            client: '4'
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+
+      tags: ${var.common_resource_tags}
