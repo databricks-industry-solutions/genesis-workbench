@@ -40,6 +40,15 @@ async def lifespan(_: FastAPI):
         logger.info("Genesis Workbench lib initialized")
     except Exception as e:
         logger.warning("Lib initialization failed at startup: %s. Endpoints that need it will fail.", e)
+    # Publish the in-code Vortex node catalog to the node_catalog table so the
+    # MCP server / executor (and, later, Vortex) read one shared source of truth.
+    # Best-effort: a publish hiccup must never block app startup.
+    try:
+        from app.services.ai_canvas import publish_node_catalog
+
+        publish_node_catalog()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("node_catalog publish failed at startup: %s", e)
     yield
 
 

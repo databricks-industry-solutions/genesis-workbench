@@ -129,3 +129,19 @@ def node_from_dict(d: dict) -> NodeType:
         outputs=[_port_from_dict(p) for p in d.get("outputs") or []],
         params=[_param_from_dict(p) for p in d.get("params") or []],
     )
+
+
+# ─── catalog table contract (single runtime source of truth) ─────────────────
+# One row per node. `node_json` is the full node_to_dict payload (round-trips via
+# node_from_dict); the other columns are denormalized for filtering. `source`
+# distinguishes provenance: "builtin" (published from CURATED_NODES) vs a future
+# "mcp:<server>" for ingested external MCP tools.
+NODE_CATALOG_TABLE = "node_catalog"
+
+
+def node_catalog_ddl(catalog: str, schema: str) -> str:
+    return (
+        f"CREATE TABLE IF NOT EXISTS {catalog}.{schema}.{NODE_CATALOG_TABLE} ("
+        "type STRING, category STRING, kind STRING, module STRING, source STRING, "
+        "node_json STRING, is_active BOOLEAN)"
+    )
