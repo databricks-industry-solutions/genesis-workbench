@@ -246,10 +246,17 @@ function OutputsTab({
   const finalOutputs = res.final_outputs ?? {}
   const errors = data.node_error ?? {}
   const status = data.node_status ?? {}
-  const ids = Object.keys(nodeOutputs)
-  const hasErrors = Object.keys(errors).length > 0
 
-  if (ids.length === 0 && Object.keys(finalOutputs).length === 0 && !hasErrors) {
+  // Show EVERY node (in graph order), not just ones with outputs — a failed run
+  // writes no node_outputs, so keying off outputs alone left only the failed node.
+  // Each node renders with its status (passed/failed/skipped) + its output and/or
+  // error, whichever exist.
+  const graphIds = (data.graph?.nodes ?? []).map((n) => n.id)
+  const ids = [
+    ...new Set([...graphIds, ...Object.keys(status), ...Object.keys(nodeOutputs), ...Object.keys(errors)]),
+  ]
+
+  if (ids.length === 0 && Object.keys(finalOutputs).length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
         No outputs captured — the run may have produced no result.
@@ -278,21 +285,23 @@ function OutputsTab({
       </summary>
       <div className="border-t border-border p-2">
         {err && <p className="mb-2 text-xs text-destructive">⚠ {err}</p>}
-        <pre className="max-h-72 overflow-auto rounded bg-muted/30 p-2 text-[11px] leading-snug">
-          {typeof body === 'string' ? body : JSON.stringify(body, null, 2)}
-        </pre>
+        {body !== undefined ? (
+          <pre className="max-h-72 overflow-auto rounded bg-muted/30 p-2 text-[11px] leading-snug">
+            {typeof body === 'string' ? body : JSON.stringify(body, null, 2)}
+          </pre>
+        ) : (
+          !err && <p className="text-xs italic text-muted-foreground">No output captured for this node.</p>
+        )}
       </div>
     </details>
   )
 
   return (
     <div className="max-h-[58vh] space-y-2 overflow-auto">
-      {ids.map((id) => row(id, labels.get(id) ?? id, status[id], nodeOutputs[id], errors[id]))}
+      {ids.map((id) =>
+        row(id, labels.get(id) ?? id, status[id], id in nodeOutputs ? nodeOutputs[id] : undefined, errors[id]),
+      )}
       {Object.entries(finalOutputs).map(([name, val]) => row(`final-${name}`, `Output · ${name}`, 'complete', val))}
-      {/* errors on nodes that produced no output (e.g. failed before returning) */}
-      {Object.entries(errors)
-        .filter(([id]) => !(id in nodeOutputs))
-        .map(([id, err]) => row(`err-${id}`, labels.get(id) ?? id, status[id] ?? 'failed', {}, err))}
     </div>
   )
 }

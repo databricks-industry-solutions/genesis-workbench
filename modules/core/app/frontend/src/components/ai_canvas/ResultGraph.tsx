@@ -87,10 +87,7 @@ function Inner({
   return (
     <div ref={wrapRef} className="relative h-[55vh] w-full overflow-hidden rounded-md border border-border">
       {/* View / copy this run's graph JSON — floating top-right, same as the editor canvas. */}
-      <div className="absolute right-2 top-2 z-10 flex items-center gap-2">
-        <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
-          {nodes.length} nodes
-        </span>
+      <div className="absolute right-2 top-2 z-10">
         <GraphJson graph={graph} />
       </div>
       <ReactFlow
