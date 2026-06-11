@@ -29,6 +29,16 @@ Despite the breakthroughs, the experts who can apply these models — biologists
 
 Genesis Workbench is an open-source, Databricks-native blueprint that packages biological foundation models behind an intuitive UI — so scientists can run them without managing GPU clusters, CUDA, model registries, or serving endpoints.
 
+### AI-Assisted Workflows
+
+Beyond the per-model UI tabs, **Vortex** is a visual, drag-and-drop canvas for composing multi-step pipelines from any deployed model endpoint, prebuilt workflow, and data-input/output node — then running them on Databricks with full MLflow tracking. Describe a goal in plain language and an LLM **drafts the workflow** for you; it then **self-reviews its own draft** — catching dangling nodes, dead-end outputs, type-mismatched wiring, and pipelines that don't actually accomplish the goal — before handing it back, streaming its reasoning as it works. You can wire each input inline or from an upstream node, see a live validation checklist before running, and track every run under **Past Runs** with a read-only result canvas (per-node passed/failed/skipped), a JSON view/copy, and one-click **Re-run**. Workflows **fail loudly on bad data** (e.g. a step that resolves to null) instead of silently producing meaningless results.
+
+### MCP Support
+
+Genesis Workbench ships a companion **Model Context Protocol (MCP) server** — `mcp-genesis-workbench`, a Databricks App that exposes every deployed model endpoint and prebuilt workflow as MCP tools over streamable HTTP at `/mcp`. Any MCP client — the Databricks AI Playground, Claude, Cursor, or your own agents — can discover and call them: `endpoint_<name>` tools run synchronously and return predictions, `workflow_<name>` tools dispatch a Databricks job and return a run id to poll, and `list_capabilities` / `get_workflow_run_status` round out the surface. It reuses the same capability core as Vortex and runs as its own governed service principal, so every call stays attributable. The server is deployed automatically alongside the `core` module.
+
+### Components
+
 - **Pre-packaged biological models** ready to deploy: ESMFold, AlphaFold2, ProteinMPNN, RFDiffusion, scGPT, SCimilarity, Scanpy, rapids-singlecell (part of scverse), ChemProp, DiffDock, Boltz, NVIDIA Parabricks, NVIDIA BioNeMo and more.
 - **Tailored workflows** for protein design, drug discovery, single-cell analysis, and variant analysis — each surfaced as a UI tab with sane defaults.
 - **Built on Databricks primitives**: Asset Bundles, Workflows, Model Serving, MLflow, Unity Catalog, and Databricks Apps — so everything you run is governed, reproducible, and traceable.
