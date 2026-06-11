@@ -17,6 +17,7 @@ import os
 from dataclasses import dataclass, field
 
 from .models import ModelCategory, get_deployed_models
+from .node_catalog import NODE_CATALOG_TABLE, NodeCategory, node_from_dict
 from .workbench import execute_select_query
 
 # Execution kinds.
@@ -203,8 +204,62 @@ def endpoint_capabilities() -> list[Capability]:
     return caps
 
 
+def read_catalog_nodes():
+    """Read the `node_catalog` table → list[NodeType]; [] if the table is absent,
+    empty, or unreadable (callers fall back to legacy sources). This is the single
+    runtime source of truth published from CURATED_NODES (see publish_node_catalog)."""
+    cat = os.environ.get("CORE_CATALOG_NAME")
+    schema = os.environ.get("CORE_SCHEMA_NAME")
+    if not cat or not schema:
+        return []
+    try:
+        df = execute_select_query(
+            f"SELECT node_json FROM {cat}.{schema}.{NODE_CATALOG_TABLE} WHERE is_active = true"
+        )
+    except Exception:  # noqa: BLE001 — missing table / pre-publish → fall back
+        return []
+    nodes = []
+    for _, r in df.iterrows():
+        try:
+            nodes.append(node_from_dict(json.loads(r["node_json"])))
+        except Exception:  # noqa: BLE001 — skip a bad row, keep the rest
+            continue
+    return nodes
+
+
+def _param_from_field(pf) -> Param:
+    """ParamField (rich node-catalog model) → Param (capability model)."""
+    return Param(pf.name, pf.type, pf.default, list(pf.options),
+                 minimum=pf.minimum, maximum=pf.maximum, required=pf.required,
+                 label=pf.label, help=pf.help)
+
+
+def _batch_node_to_capability(n) -> Capability | None:
+    """A BATCH NodeType (databricks_job | endpoint_chain) → a runnable Capability."""
+    ins = [Port(p.name, str(p.dtype)) for p in n.inputs]
+    outs = [Port(p.name, str(p.dtype)) for p in n.outputs]
+    params = [_param_from_field(p) for p in n.params]
+    common = dict(id=f"workflow:{n.type}", label=n.label, module=n.module,
+                  inputs=ins, outputs=outs, params=params, description=n.description)
+    if n.kind == "databricks_job":
+        return Capability(kind=JOB, job_name=n.job_name, **common)
+    if n.kind == "endpoint_chain":
+        return Capability(kind=CHAIN, chain_id=(n.chain or n.type), **common)
+    return None
+
+
 def workflow_capabilities() -> list[Capability]:
-    """Prebuilt workflows from the `prebuilt_workflows` Delta registry."""
+    """Prebuilt workflows. Source of truth is the `node_catalog` table (published
+    from CURATED_NODES); falls back to the legacy `prebuilt_workflows` registry if
+    node_catalog has no BATCH rows (pre-publish / missing table)."""
+    batch = [n for n in read_catalog_nodes() if n.category == NodeCategory.BATCH]
+    if batch:
+        return [c for c in (_batch_node_to_capability(n) for n in batch) if c]
+    return _workflow_capabilities_legacy()
+
+
+def _workflow_capabilities_legacy() -> list[Capability]:
+    """Prebuilt workflows from the `prebuilt_workflows` Delta registry (fallback)."""
     cat = os.environ["CORE_CATALOG_NAME"]
     schema = os.environ["CORE_SCHEMA_NAME"]
     try:
