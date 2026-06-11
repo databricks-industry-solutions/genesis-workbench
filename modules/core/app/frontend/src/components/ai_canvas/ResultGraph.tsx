@@ -1,9 +1,17 @@
 // Vortex (ai_canvas) — read-only canvas for a past run's result: renders the
 // saved graph with each node tinted by its run status (green=complete,
 // red=failed, grey=pending/skipped). Pan/zoom only; not editable.
-import { useMemo } from 'react'
-import { ReactFlow, ReactFlowProvider, Background, Controls } from '@xyflow/react'
-import type { NodeTypes } from '@xyflow/react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Background,
+  Controls,
+  ReactFlow,
+  ReactFlowProvider,
+  useEdgesState,
+  useNodesInitialized,
+  useNodesState,
+} from '@xyflow/react'
+import type { NodeTypes, ReactFlowInstance } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useQuery } from '@tanstack/react-query'
 
@@ -12,7 +20,7 @@ import { useThemeStore } from '@/stores/theme'
 import { CanvasNode } from './CanvasNode'
 import { GraphJson } from './GraphJson'
 import { fromCanvasGraph } from './graph'
-import type { NodeStatus } from './graph'
+import type { NodeStatus, VortexEdge, VortexNode } from './graph'
 import type { CanvasGraph, CanvasNodeType } from '@/types/api'
 
 const nodeTypes: NodeTypes = { vortex: CanvasNode }
@@ -30,7 +38,17 @@ function Inner({
     () => new Map<string, CanvasNodeType>((catalog.data?.nodes ?? []).map((n) => [n.type, n])),
     [catalog.data],
   )
-  const { nodes, edges } = useMemo(() => {
+
+  // useNodesState (with onNodesChange) so React Flow measures the custom nodes —
+  // a static `nodes` prop inside this modal Dialog mis-measures and collapses the
+  // graph to ~one node. Edges are applied after nodes are measured (same fix as
+  // the editor canvas), then we fit the view.
+  const [nodes, setNodes, onNodesChange] = useNodesState<VortexNode>([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState<VortexEdge>([])
+  const [pendingEdges, setPendingEdges] = useState<VortexEdge[] | null>(null)
+  const rfRef = useRef<ReactFlowInstance<VortexNode, VortexEdge> | null>(null)
+
+  useEffect(() => {
     const g = fromCanvasGraph(graph, catalogByType)
     // A node with no status tag never ran (downstream of a failure) → "pending"
     // renders grey via CanvasNode's status ring.
@@ -38,8 +56,19 @@ function Inner({
       ...n,
       data: { ...n.data, status: (nodeStatus[n.id] as NodeStatus | undefined) ?? 'pending' },
     }))
-    return { nodes: ns, edges: g.edges }
-  }, [graph, catalogByType, nodeStatus])
+    setNodes(ns)
+    setEdges([])
+    setPendingEdges(g.edges)
+  }, [graph, catalogByType, nodeStatus, setNodes, setEdges])
+
+  const nodesInitialized = useNodesInitialized()
+  useEffect(() => {
+    if (nodesInitialized && pendingEdges) {
+      setEdges(pendingEdges)
+      setPendingEdges(null)
+      rfRef.current?.fitView({ maxZoom: 1, duration: 200 })
+    }
+  }, [nodesInitialized, pendingEdges, setEdges])
 
   return (
     <div className="relative h-[55vh] w-full overflow-hidden rounded-md border border-border">
@@ -50,6 +79,9 @@ function Inner({
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onInit={(inst) => (rfRef.current = inst)}
         nodeTypes={nodeTypes}
         colorMode={theme}
         fitView
