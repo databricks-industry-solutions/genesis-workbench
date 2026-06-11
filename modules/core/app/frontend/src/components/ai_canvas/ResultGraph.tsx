@@ -70,10 +70,27 @@ function Inner({
     }
   }, [nodesInitialized, pendingEdges, setEdges])
 
+  // The graph renders inside a modal Dialog — React Flow computes its initial
+  // viewport before the container has its final size, so a single fitView can
+  // leave most nodes outside the view. Re-fit whenever the container resizes.
+  const wrapRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => {
+      if (el.clientWidth > 0) rfRef.current?.fitView({ maxZoom: 1 })
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   return (
-    <div className="relative h-[55vh] w-full overflow-hidden rounded-md border border-border">
+    <div ref={wrapRef} className="relative h-[55vh] w-full overflow-hidden rounded-md border border-border">
       {/* View / copy this run's graph JSON — floating top-right, same as the editor canvas. */}
-      <div className="absolute right-2 top-2 z-10">
+      <div className="absolute right-2 top-2 z-10 flex items-center gap-2">
+        <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+          {nodes.length} nodes
+        </span>
         <GraphJson graph={graph} />
       </div>
       <ReactFlow
