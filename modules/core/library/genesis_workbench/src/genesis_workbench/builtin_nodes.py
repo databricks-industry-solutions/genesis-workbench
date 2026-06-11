@@ -99,9 +99,9 @@ _TRANSFORM_NODES: list[NodeType] = [
     NodeType(
         type="extract_field", label="Extract Field", category=NodeCategory.TRANSFORM,
         kind=_KIND_TRANSFORM,
-        description="Pull a single value out of a JSON object by key / dotted path "
+        description="Pull a single value out of a list/object by key / dotted path "
                     "(e.g. predictions.0.smiles).",
-        inputs=[Port("data", PortType.JSON, "JSON")],
+        inputs=[Port("data", PortType.ANY, "Data")],   # any list/dict/sequences — _dig handles it
         outputs=[Port("value", PortType.ANY, "Value")],
         params=[ParamField("path", "Field path", "string", required=True,
                            help="Dotted path, e.g. results.0.pdb")],
@@ -110,8 +110,8 @@ _TRANSFORM_NODES: list[NodeType] = [
         type="field_mapper", label="Field Mapper", category=NodeCategory.TRANSFORM,
         kind=_KIND_TRANSFORM,
         description="Map named output fields to the named input fields the next node "
-                    "expects (declarative {target: source-path} mapping).",
-        inputs=[Port("data", PortType.JSON, "JSON")],
+                    "expects (declarative target→source-path mapping).",
+        inputs=[Port("data", PortType.ANY, "Data")],
         outputs=[Port("mapped", PortType.JSON, "Mapped JSON")],
         params=[ParamField("mappings", "Mappings (JSON)", "text", default="{}",
                            help='e.g. {"sequence": "predictions.0.seq"}')],
@@ -119,8 +119,8 @@ _TRANSFORM_NODES: list[NodeType] = [
     NodeType(
         type="select_top_k", label="Select / Top-K", category=NodeCategory.TRANSFORM,
         kind=_KIND_TRANSFORM,
-        description="Keep the top K items of a JSON list, ranked by a field.",
-        inputs=[Port("items", PortType.JSON, "Items")],
+        description="Keep the top K items of a list, ranked by a field.",
+        inputs=[Port("items", PortType.ANY, "Items")],
         outputs=[Port("top", PortType.JSON, "Top items")],
         params=[
             ParamField("k", "K", "int", default=5),
