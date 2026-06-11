@@ -291,12 +291,15 @@ function VortexCanvas() {
     [loadGraph, showToast],
   )
 
-  // ✨ "Show me how" — drop in a random fun goal and generate it.
+  // ✨ "Show me an example" — fill the goal text only; cycle through the examples
+  // on each click so you can land on the right domain for a demo (genomics, small
+  // molecule, …). Does NOT auto-generate — the user clicks "Generate workflow".
+  const exampleIdx = useRef(0)
   const tryRandom = useCallback(() => {
-    const g = EXAMPLE_GOALS[Math.floor(Math.random() * EXAMPLE_GOALS.length)]
+    const g = EXAMPLE_GOALS[exampleIdx.current % EXAMPLE_GOALS.length]
+    exampleIdx.current += 1
     setGoal(g)
-    runGenerate(g)
-  }, [runGenerate])
+  }, [])
 
   // ── add a node ─────────────────────────────────────────────────────────────
   // Convertible fields: a node's input ports are editable inline (right panel) or
@@ -616,8 +619,8 @@ function VortexCanvas() {
             type="button"
             onClick={tryRandom}
             disabled={generating}
-            title="Show me how"
-            aria-label="Show me how"
+            title="Fill an example goal (click again for another)"
+            aria-label="Fill an example goal"
             className="shrink-0 rounded-md px-1 text-base transition-transform hover:scale-125 disabled:opacity-40"
           >
             ✨
