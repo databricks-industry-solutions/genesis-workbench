@@ -177,6 +177,13 @@ function VortexCanvas() {
   const [generating, setGenerating] = useState(false)
   const [genThoughts, setGenThoughts] = useState<string[]>([])
   const genCtrl = useRef<AbortController | null>(null)
+  // Keep the "Designing…" thought feed scrolled to the latest as messages stream
+  // (the list is height-capped + scrollable so the popup stays a stable size).
+  const thoughtsRef = useRef<HTMLUListElement>(null)
+  useEffect(() => {
+    const el = thoughtsRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [genThoughts])
   const runGenerate = useCallback(
     (goalText: string) => {
       const g = goalText.trim()
@@ -695,7 +702,7 @@ function VortexCanvas() {
               plan streams in as bullets, then the graph renders. */}
           {generating && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center pb-28">
-              <div className="w-80 max-w-[80%] rounded-lg border border-border bg-card px-4 py-3 text-xs shadow-lg">
+              <div className="w-[32rem] max-w-[92%] rounded-lg border border-border bg-card px-4 py-3 text-xs shadow-lg">
                 <div className="mb-2 flex items-center gap-2 font-medium text-foreground">
                   <GenerateSparkle size={22} />
                   Designing workflow…
@@ -703,7 +710,9 @@ function VortexCanvas() {
                 {genThoughts.length === 0 ? (
                   <div className="italic text-muted-foreground">Thinking through the goal…</div>
                 ) : (
-                  <ul className="space-y-1 text-muted-foreground">
+                  // Height-capped + scrollable so the popup stays a stable size as
+                  // more thoughts stream in (auto-scrolls to the latest).
+                  <ul ref={thoughtsRef} className="max-h-44 space-y-1 overflow-y-auto pr-1 text-muted-foreground">
                     {genThoughts.map((t, i) => (
                       <li key={i} className="leading-snug">• {t}</li>
                     ))}
