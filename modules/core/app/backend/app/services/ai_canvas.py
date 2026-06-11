@@ -267,6 +267,7 @@ SEMANTIC COMPOSITION — the pipeline must actually accomplish the goal, not jus
 - Only include a node the goal actually needs. Do NOT add unrelated side-branches (e.g. folding the target) unless the goal asks for that artifact.
 - Prefer a single output_sink at the END of the main pipeline. Use multiple sinks only when the goal explicitly wants several distinct artifacts.
 - EVERY input port of a non-input node must be wired (each is required). A file-backed input — a PDB structure (e.g. enzyme_optimization.motif_pdb), a sequence/FASTA — can be supplied by a volume_input (a UC Volume path); wire that volume_input's `data` output into the port. If you add a volume_input/text_input as a source, you MUST connect it to the node that consumes it — never leave an input node dangling.
+- Pick the RIGHT output port for what's needed. protein_design has two: `designs` (PDB *structures*) and `sequences` (the designed amino-acid *sequences*). To score/validate/fold a designed SEQUENCE (e.g. feed deepstabp/netsolp/ESMFold), use `sequences` — NOT `designs` (a PDB string has no `.sequence` field, so extracting one yields null). Match the downstream input's meaning to the source port's meaning.
 
 WORKED EXAMPLE — goal "optimize a molecule for a target, then ADMET-screen the results":
   text_input "Seed SMILES" ──seed_smiles──▶ molecule_optimization

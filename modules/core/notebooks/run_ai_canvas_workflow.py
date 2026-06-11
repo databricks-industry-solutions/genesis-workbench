@@ -169,6 +169,16 @@ def gather_inputs(node_id):
         src_out = results.get(src_id, {})
         value = src_out.get(src_port) if src_port else (next(iter(src_out.values()), None))
         key = dst_port or (in_ports[0] if in_ports else "input")
+        # A wired input that resolves to None means an upstream node produced no
+        # value for the port it feeds. Fail fast — running a step on null yields a
+        # meaningless ("fake") result while the job misleadingly reports success.
+        if value is None:
+            src_label = nodes.get(src_id, {}).get("label", src_id)
+            raise RuntimeError(
+                f"input '{key}' of '{node.get('label', node_id)}' is empty: upstream "
+                f"'{src_label}' ({src_id}.{src_port or '?'}) produced no value. "
+                f"Refusing to run on null."
+            )
         collected[key] = value
     return collected
 

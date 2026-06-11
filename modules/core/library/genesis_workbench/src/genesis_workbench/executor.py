@@ -892,12 +892,29 @@ def _run_transform(w: WorkspaceClient, op: str, inputs: dict, params: dict):
         col = params.get("column")
         return {"values": df[col].tolist() if col in df.columns else []}
     if op == "extract_field":
-        return {"value": _dig(inputs.get("data"), params.get("path", ""))}
+        path = params.get("path", "")
+        value = _dig(inputs.get("data"), path)
+        # A None result means the path didn't resolve against the upstream output's
+        # shape (e.g. `[0].sequence` on a list of PDB strings). Fail loudly rather
+        # than pass null downstream — null silently yields meaningless results.
+        if value is None:
+            raise RuntimeError(
+                f"extract_field: path {path!r} did not resolve to a value (got None). "
+                f"Check the path matches the upstream output's shape."
+            )
+        return {"value": value}
     if op == "field_mapper":
         mapping = params.get("mappings") or "{}"
         mapping = json.loads(mapping) if isinstance(mapping, str) else mapping
         data = inputs.get("data")
-        return {"mapped": {tgt: _dig(data, src) for tgt, src in mapping.items()}}
+        mapped = {tgt: _dig(data, src) for tgt, src in mapping.items()}
+        # Every target resolving to None means none of the source paths matched.
+        if mapping and all(v is None for v in mapped.values()):
+            raise RuntimeError(
+                f"field_mapper: none of the source paths {list(mapping.values())} resolved "
+                f"against the input — all mapped fields are null."
+            )
+        return {"mapped": mapped}
     if op == "select_top_k":
         items = _as_list(inputs.get("items"))
         by, k = params.get("by"), int(params.get("k", 5) or 5)
