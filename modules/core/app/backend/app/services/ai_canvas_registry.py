@@ -22,81 +22,17 @@ orchestrator notebook — nothing else in the stack changes.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from enum import StrEnum
-
-
-class NodeCategory(StrEnum):
-    ENDPOINT = "endpoint"   # real-time model serving endpoint (seconds)
-    BATCH = "batch"         # "Prebuilt Workflows" — job OR endpoint-chain OR (future) MCP
-    IO = "io"               # data input / output (UC Volume, Delta table)
-    TRANSFORM = "transform" # reshape/parse/map one node's output to the next node's input
-
-
-# Port data types. Edges are valid when the upstream output dtype matches the
-# downstream input dtype, or either side is ANY. Kept deliberately coarse — the
-# orchestrator coerces within a dtype (e.g. a single sequence vs a list).
-class PortType(StrEnum):
-    SEQUENCE = "sequence"       # protein amino-acid sequence
-    SEQUENCES = "sequences"     # list of sequences
-    PDB = "pdb"                 # PDB structure (text)
-    SMILES = "smiles"           # small-molecule SMILES
-    EMBEDDING = "embedding"     # numeric vector(s)
-    SCORE = "score"             # scalar metric / property value
-    TABLE = "table"             # Delta table reference
-    PATH = "path"               # UC Volume path
-    JSON = "json"               # arbitrary structured payload
-    ANY = "any"
-
-
-@dataclass(frozen=True)
-class Port:
-    name: str
-    dtype: PortType
-    label: str = ""
-
-
-@dataclass(frozen=True)
-class ParamField:
-    name: str
-    label: str
-    type: str = "string"        # string | int | float | bool | select | text
-    default: object | None = None
-    options: list[str] = field(default_factory=list)   # enum: valid values
-    minimum: float | None = None    # numeric lower bound (None = unbounded)
-    maximum: float | None = None    # numeric upper bound
-    required: bool = False
-    help: str = ""
-
-
-@dataclass(frozen=True)
-class NodeType:
-    type: str                   # stable key used in the graph JSON + executors
-    label: str                  # palette / canvas display name
-    category: NodeCategory
-    description: str = ""
-    module: str | None = None   # single_cell | large_molecule | small_molecule | genomics
-    # A "Prebuilt Workflow" (category BATCH) is a higher-level capability whose
-    # execution kind is NOT necessarily a Databricks job. `kind` distinguishes:
-    #   "databricks_job"  → dispatched as a Jobs run (job_name)
-    #   "endpoint_chain"  → an app-orchestrated chain of real-time endpoints
-    #                       (e.g. Protein Design, ADMET Screen); chain id in `chain`
-    #   "mcp"             → (future) a tool exposed by the MCP server app
-    # ENDPOINT/IO nodes leave this empty (their category implies execution).
-    kind: str = ""
-    chain: str | None = None                   # endpoint_chain → app chain handler id
-    requires_endpoints: list[str] = field(default_factory=list)  # chain availability gate (DISPLAY_TO_UC keys)
-    # Invocation handle (exactly one is meaningful per category):
-    endpoint_display_name: str | None = None   # ENDPOINT → DISPLAY_TO_UC key
-    job_name: str | None = None                # BATCH → Jobs API name
-    io_kind: str | None = None                 # IO → volume_input | delta_input | text_input | output_sink
-    # How the orchestrator queries an ENDPOINT node:
-    #   "records" → serving_endpoints.query(dataframe_records=[{port: value, **params}])
-    #   "inputs"  → serving_endpoints.query(inputs=[<first input value>])
-    invoke_style: str = "records"
-    inputs: list[Port] = field(default_factory=list)
-    outputs: list[Port] = field(default_factory=list)
-    params: list[ParamField] = field(default_factory=list)
+# The node-catalog MODEL now lives in the shared core (the wheel) so every pathway
+# — app authoring (CURATED_NODES below), the publisher, and the wheel reading the
+# catalog table back — shares one shape. This module owns the node INSTANCES; the
+# model classes are imported from genesis_workbench.node_catalog.
+from genesis_workbench.node_catalog import (  # noqa: F401  (re-exported for app importers)
+    NodeCategory,
+    NodeType,
+    ParamField,
+    Port,
+    PortType,
+)
 
 
 # ─── IO nodes ────────────────────────────────────────────────────────────────
