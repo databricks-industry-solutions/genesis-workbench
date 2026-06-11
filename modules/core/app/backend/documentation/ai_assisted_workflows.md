@@ -1,4 +1,4 @@
-# AI-Assisted Workflows (Vortex)
+# AI-Assisted Workflow Generation (Vortex)
 
 ## Introduction
 
