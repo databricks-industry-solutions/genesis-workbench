@@ -25,6 +25,7 @@ import { CanvasNode } from './CanvasNode'
 import { GenerateSparkle } from './GenerateSparkle'
 import { NodePalette } from './NodePalette'
 import { NodeParamPanel } from './NodeParamPanel'
+import { GraphJson } from './GraphJson'
 import { RunHistory } from './RunHistory'
 import { WorkflowLibrary } from './WorkflowLibrary'
 import {
@@ -565,6 +566,7 @@ function VortexCanvas() {
               }}
             />
             <RunHistory />
+            <GraphJson graph={toCanvasGraph(nodes, edges)} disabled={nodes.length === 0} />
             <button
               onClick={autoArrange}
               disabled={nodes.length === 0}
