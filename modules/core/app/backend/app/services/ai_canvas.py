@@ -466,20 +466,179 @@ def _validate_graph(
     return {"nodes": clean_nodes, "edges": clean_edges}
 
 
+# ─── Self-review: a deterministic linter + an LLM repair pass ────────────────
+# dtype validation keeps every *edge* legal, but a graph can still be legal-yet-
+# broken: a node with no input can't run, a node whose output feeds nothing is a
+# dead branch, and two disconnected sub-flows aren't one pipeline. We catch those
+# deterministically, then hand the draft + the findings back to the model to fix
+# (generate → review → repair, the way Claude Code self-corrects).
+
+_INPUT_TYPES = {"text_input", "volume_input", "delta_input"}
+
+
+def _graph_issues(graph: dict, ports_by_type: dict) -> list[str]:
+    """Semantic problems an LLM draft commonly has, in human-readable form."""
+    nodes = graph.get("nodes", [])
+    edges = graph.get("edges", [])
+    by_id = {n["id"]: n for n in nodes}
+    indeg: dict[str, int] = {n["id"]: 0 for n in nodes}
+    outdeg: dict[str, int] = {n["id"]: 0 for n in nodes}
+    adj: dict[str, set] = {n["id"]: set() for n in nodes}
+    for e in edges:
+        s, t = e.get("source"), e.get("target")
+        if s in by_id and t in by_id and e.get("targetHandle") and e.get("sourceHandle"):
+            outdeg[s] += 1
+            indeg[t] += 1
+            adj[s].add(t)
+            adj[t].add(s)
+
+    def _label(n):
+        return n.get("label") or n.get("type")
+
+    issues: list[str] = []
+    for n in nodes:
+        nid, ntype = n["id"], n["type"]
+        n_in, n_out = ports_by_type.get(ntype, (set(), set()))
+        # has input ports but nothing feeds them → can't run
+        if n_in and ntype not in _INPUT_TYPES and indeg[nid] == 0:
+            issues.append(
+                f'"{_label(n)}" ({ntype}) has no incoming connection — it has inputs '
+                f"but nothing feeds them, so it cannot run."
+            )
+        # produces output but nothing consumes it (and it's not the sink) → dead end
+        if n_out and ntype != "output_sink" and outdeg[nid] == 0:
+            issues.append(
+                f'"{_label(n)}" ({ntype}) output is not consumed — it dead-ends. '
+                f"Wire it onward (e.g. into the next step or an output_sink) or remove it."
+            )
+
+    # fragmentation: more than one weakly-connected component
+    if len(nodes) > 1:
+        unseen = set(by_id)
+        comps = 0
+        while unseen:
+            comps += 1
+            stack = [next(iter(unseen))]
+            while stack:
+                cur = stack.pop()
+                if cur in unseen:
+                    unseen.discard(cur)
+                    stack.extend(adj[cur] & unseen)
+        if comps > 1:
+            issues.append(
+                f"The graph is split into {comps} disconnected sub-flows — they should "
+                f"connect into a single pipeline ending at one output_sink."
+            )
+    return issues
+
+
+_REVIEW_PROMPT_TEMPLATE = """You are reviewing a draft Genesis Workbench workflow graph for the user's goal.
+A linter found the problems listed below. Fix them while preserving the user's intent
+and the overall pipeline shape. You may add/rewire edges, insert transform nodes to bridge
+dtype gaps, or remove a node that is genuinely redundant.
+
+Node types (connect an output port to an input port only when dtypes match; `any` matches anything):
+{catalog}
+
+Hard requirements for the corrected graph:
+- Every node except input nodes (text_input/volume_input/delta_input) MUST have at least one incoming edge feeding a real input port.
+- Every node except output_sink MUST have its output consumed by a downstream node.
+- The whole graph MUST be one connected pipeline that ends at an output_sink.
+- Use node `type` values EXACTLY as listed; keep existing node ids where possible.
+- Set sourceHandle to the source node's output port name and targetHandle to the target node's input port name; only connect dtype-compatible ports.
+
+Respond with ONLY a JSON object, no prose, no markdown fences, in exactly this shape:
+{{"review":["<short note on what you fixed>","<...>"],
+ "nodes":[{{"id":"n1","type":"<type>","label":"<label>","params":{{}}}}],
+ "edges":[{{"source":"n1","target":"n2","sourceHandle":"<out_port>","targetHandle":"<in_port>"}}]}}"""
+
+
+def _llm_repair(goal: str, graph: dict, issues: list[str], llm_endpoint: str) -> dict:
+    """One LLM pass that returns a corrected graph for the listed issues."""
+    catalog = build_catalog()
+    system_prompt = _REVIEW_PROMPT_TEMPLATE.format(catalog=_catalog_prompt_lines(catalog))
+    draft = {
+        "nodes": [{"id": n["id"], "type": n["type"], "label": n.get("label"),
+                   "params": n.get("params", {})} for n in graph.get("nodes", [])],
+        "edges": graph.get("edges", []),
+    }
+    user = (
+        f"GOAL:\n{goal}\n\nDRAFT GRAPH:\n{json.dumps(draft)}\n\n"
+        f"PROBLEMS TO FIX:\n- " + "\n- ".join(issues)
+    )
+    w = WorkspaceClient()
+    response = w.serving_endpoints.query(
+        name=llm_endpoint,
+        messages=[
+            ChatMessage(role=ChatMessageRole.SYSTEM, content=system_prompt),
+            ChatMessage(role=ChatMessageRole.USER, content=user),
+        ],
+        max_tokens=4000,
+        temperature=0.1,
+    )
+    return _extract_json(response.choices[0].message.content)
+
+
+def _review_graph(
+    goal: str, graph: dict, llm_endpoint: str,
+    valid_types: set[str], ports_by_type: dict, port_dtypes: dict,
+    max_rounds: int = 2,
+) -> tuple[dict, list[str]]:
+    """Lint the draft; if broken, repair via the LLM (up to max_rounds), keeping
+    whichever graph has the fewest issues. Returns (graph, review-note bullets).
+    Fail-soft: any error leaves the draft untouched."""
+    issues = _graph_issues(graph, ports_by_type)
+    if not issues:
+        return graph, ["Reviewed the draft — every node is wired and the flow reaches the output."]
+
+    notes = ["Reviewing the draft for dangling nodes and dead-end connections…"]
+    notes.append("Found " + (f"{len(issues)} issue(s): " if len(issues) > 1 else "") + issues[0])
+
+    for _ in range(max_rounds):
+        try:
+            repaired = _validate_graph(
+                _llm_repair(goal, graph, issues, llm_endpoint),
+                valid_types, ports_by_type, port_dtypes,
+            )
+        except Exception as e:  # noqa: BLE001 — never let review break generation
+            logger.info("generate_graph: review repair failed, keeping draft (%s)", e)
+            break
+        new_issues = _graph_issues(repaired, ports_by_type)
+        if len(new_issues) < len(issues):
+            graph, issues = repaired, new_issues
+            notes.append("Rewired the graph to connect the loose ends.")
+        else:
+            break  # repair didn't help — stop and keep the better graph
+        if not issues:
+            notes.append("Re-checked — the workflow is now fully connected.")
+            break
+
+    if issues:
+        notes.append(
+            f"{len(issues)} connection issue(s) may remain — flagged on the canvas for you to confirm."
+        )
+    return graph, notes
+
+
 def generate_graph(goal: str, llm_endpoint: str) -> dict:
-    """Goal → validated canvas graph (only catalog node types; fail-soft)."""
+    """Goal → validated, self-reviewed canvas graph (only catalog node types; fail-soft)."""
     valid_types, ports_by_type, port_dtypes = _catalog_ctx()
-    return _validate_graph(_llm_generate_parsed(goal, llm_endpoint), valid_types, ports_by_type, port_dtypes)
+    graph = _validate_graph(_llm_generate_parsed(goal, llm_endpoint), valid_types, ports_by_type, port_dtypes)
+    graph, _ = _review_graph(goal, graph, llm_endpoint, valid_types, ports_by_type, port_dtypes)
+    return graph
 
 
-def generate_plan_and_graph(goal: str, llm_endpoint: str) -> tuple[list[str], dict, str]:
-    """Goal → (plan bullets, validated graph, short workflow name). Same single
-    LLM call as generate_graph; plan + name surface in the streamed 'thoughts' UX."""
+def generate_plan_and_graph(goal: str, llm_endpoint: str) -> tuple[list[str], dict, str, list[str]]:
+    """Goal → (plan bullets, validated+reviewed graph, short name, review notes).
+    The plan and the review notes both surface in the streamed 'thoughts' UX, so
+    the user watches the model design and then self-correct the draft."""
     valid_types, ports_by_type, port_dtypes = _catalog_ctx()
     parsed = _llm_generate_parsed(goal, llm_endpoint)
     plan = [str(b).strip() for b in (parsed.get("plan") or []) if str(b).strip()][:6]
     name = str(parsed.get("name") or "").strip()[:60]
-    return plan, _validate_graph(parsed, valid_types, ports_by_type, port_dtypes), name
+    graph = _validate_graph(parsed, valid_types, ports_by_type, port_dtypes)
+    graph, review = _review_graph(goal, graph, llm_endpoint, valid_types, ports_by_type, port_dtypes)
+    return plan, graph, name, review
 
 
 # ─── AI transform suggestion (auto-bridge incompatible connections) ──────────

@@ -137,13 +137,18 @@ def generate_stream(payload: GenerateRequest, _: CurrentUserDep) -> StreamingRes
             yield f"event: error\ndata: {json.dumps({'message': 'LLM endpoint not configured'})}\n\n"
             return
         try:
-            plan, graph, name = svc.generate_plan_and_graph(payload.goal, endpoint)
+            plan, graph, name, review = svc.generate_plan_and_graph(payload.goal, endpoint)
         except Exception as e:  # noqa: BLE001 — surface as an SSE error event
             yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
             return
         for bullet in plan:
             yield f"event: thought\ndata: {json.dumps({'text': bullet})}\n\n"
             time.sleep(0.5)  # pace the reveal so thoughts read as a live feed
+        # Then the self-review phase: the model checks its own draft and reports
+        # what it rewired (or confirms it's clean) — same live 'thought' feed.
+        for bullet in review:
+            yield f"event: thought\ndata: {json.dumps({'text': bullet})}\n\n"
+            time.sleep(0.5)
         yield f"event: result\ndata: {json.dumps({'graph': graph, 'name': name})}\n\n"
 
     return StreamingResponse(_events(), media_type="text/event-stream", headers=_SSE_HEADERS)
