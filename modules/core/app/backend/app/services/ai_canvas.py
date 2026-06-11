@@ -1136,13 +1136,24 @@ def search_runs(
     for _, r in window.iterrows():
         job_run_id = str(r.get("tags.job_run_id", "") or "")
         start = r.get("start_time")
+        # Emit ISO-8601 (tz-aware UTC from MLflow) so the browser can render it in
+        # the user's local time; fall back to the raw string if it's not a Timestamp.
+        if start is not None and hasattr(start, "isoformat"):
+            try:
+                start_str = start.isoformat()
+                if start_str == "NaT":
+                    start_str = ""
+            except Exception:  # noqa: BLE001
+                start_str = str(start)
+        else:
+            start_str = str(start) if start is not None else ""
         out.append(
             {
                 "run_id": str(r.get("run_id", "")),
                 "run_name": str(r.get("tags.mlflow.runName", "") or ""),
                 "job_status": str(r.get("tags.job_status", "") or ""),
                 "node_count": _safe_int(r.get("params.node_count")),
-                "start_time": str(start) if start is not None else "",
+                "start_time": start_str,
                 "run_url": job_run_url(job_id, job_run_id) if job_id else "",
             }
         )

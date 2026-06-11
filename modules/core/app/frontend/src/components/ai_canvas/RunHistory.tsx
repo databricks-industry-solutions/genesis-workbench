@@ -16,6 +16,14 @@ const STATUS_BADGE: Record<string, string> = {
   failed: 'bg-destructive/15 text-destructive',
 }
 
+// Backend sends an ISO-8601 (UTC) start time; render it in the viewer's local
+// timezone. Fall back to the raw value if it isn't a parseable date.
+function fmtLocalTime(s: string): string {
+  if (!s) return ''
+  const d = new Date(s)
+  return isNaN(d.getTime()) ? s : d.toLocaleString()
+}
+
 export function RunHistory() {
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
@@ -72,7 +80,7 @@ export function RunHistory() {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">{r.run_name || r.run_id}</div>
                   <div className="text-[10px] text-muted-foreground">
-                    {r.node_count ?? '?'} nodes · {r.start_time}
+                    {r.node_count ?? '?'} nodes · {fmtLocalTime(r.start_time)}
                   </div>
                 </div>
                 <span

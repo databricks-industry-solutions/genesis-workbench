@@ -77,7 +77,7 @@ export function WorkflowLibrary({
         onClick={() => setLibOpen(true)}
         className="rounded-md border border-border px-2.5 py-1 text-xs hover:bg-accent"
       >
-        Library
+        Load
       </button>
 
       {/* Save dialog */}
@@ -128,7 +128,7 @@ export function WorkflowLibrary({
       </Dialog>
 
       {/* Library dialog */}
-      <Dialog open={libOpen} onClose={() => setLibOpen(false)} title="Workflow library" width="max-w-lg">
+      <Dialog open={libOpen} onClose={() => setLibOpen(false)} title="Load workflow" width="max-w-lg">
         {list.isLoading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : !list.data || list.data.workflows.length === 0 ? (
