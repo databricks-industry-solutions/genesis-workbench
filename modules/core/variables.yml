@@ -61,17 +61,6 @@ variables:
     description: Name of the sibling MCP server Databricks app (must start with "mcp-" for AI Playground discovery).
     default: mcp-genesis-workbench
 
-  mcp_app_access_group:
-    description: >-
-      Workspace group granted CAN_USE on the MCP server app (who may call its
-      tools). SECURITY: the MCP server runs every endpoint/workflow under the app
-      service principal with no per-user authorization, so anyone who can open the
-      app can invoke any capability the app SP is entitled to. Scope this to the
-      group entitled to invoke Genesis Workbench workflows/endpoints. Defaults to
-      "admins" (no broadening beyond the bundle default); set it explicitly per
-      workspace. See modules/core/app/backend/documentation/mcp_server.md.
-    default: admins
-
   app_names:
     description: Colon-separated list of databricks app names. Single-app installs (the default) just inherit ${var.app_name}; the multi-app form ("a:b") exists so a sibling app can be added later without touching the grant-permissions notebook. Colon (not comma) because `databricks bundle --var foo=a,bar=b` already uses commas as its own separator.
     default: ${var.app_name}

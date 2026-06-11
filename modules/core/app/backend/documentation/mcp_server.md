@@ -43,10 +43,14 @@ The MCP server invokes every endpoint/workflow under **the app's service princip
 
 **Until that lands, the app's accessor list IS the access control.** It is pinned declaratively in `resources/mcp_app.yml` (so it survives redeploys):
 
-- The **deployer** gets `CAN_MANAGE` and workspace **admins** always retain access.
-- The group in **`var.mcp_app_access_group`** gets `CAN_USE` — set this per workspace to the group entitled to invoke Genesis Workbench workflows/endpoints. It defaults to `admins` (deny-by-default: only admins + the deployer can call the server until you scope it).
+- The **deployer** gets `CAN_MANAGE` and workspace **admins** always retain access (the bundle can't set the admins entry — Databricks manages it). This is **deny-by-default**: only the deployer + admins can call the server out of the box.
+- To entitle a group, add a `CAN_USE` entry to the `permissions:` block in `mcp_app.yml` (the group must exist; do **not** use `admins`), then redeploy:
+  ```yaml
+  - level: CAN_USE
+    group_name: <your-entitled-group>
+  ```
 
-To scope access, deploy with `--var mcp_app_access_group=<your-entitled-group>` (or set it in your module env). Do **not** grant the app to "all users" while the per-caller gate is absent.
+Scope this to the group entitled to invoke Genesis Workbench workflows/endpoints, and do **not** grant the app to "all users" while the per-caller gate is absent.
 
 ## How It's Implemented
 

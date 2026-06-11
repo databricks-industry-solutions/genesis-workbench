@@ -9,14 +9,18 @@ resources:
       # under the app service principal with NO per-user authorization — anyone who
       # can open the app can invoke any capability the app SP is entitled to. Until
       # a per-caller authorization gate lands, the accessor list IS the access
-      # control: pin it here (declarative, survives redeploys) to the deployer plus
-      # the entitled group (var.mcp_app_access_group). Workspace admins always
-      # retain access. See app/backend/documentation/mcp_server.md.
+      # control: it is pinned here (declarative, survives redeploys) to the deployer
+      # only, which is deny-by-default. Workspace admins always retain access (and
+      # the bundle cannot set the admins entry — Databricks manages it).
+      #
+      # To entitle a specific group, add a CAN_USE entry below (the group must
+      # already exist; do NOT use "admins"), then redeploy:
+      #   - level: CAN_USE
+      #     group_name: <your-entitled-group>
+      # See app/backend/documentation/mcp_server.md.
       permissions:
         - level: CAN_MANAGE
           user_name: ${var.current_user}
-        - level: CAN_USE
-          group_name: ${var.mcp_app_access_group}
 
       resources:
         - name: "sql_warehouse"
