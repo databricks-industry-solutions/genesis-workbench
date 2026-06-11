@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { useThemeStore } from '@/stores/theme'
 import { CanvasNode } from './CanvasNode'
+import { GraphJson } from './GraphJson'
 import { fromCanvasGraph } from './graph'
 import type { NodeStatus } from './graph'
 import type { CanvasGraph, CanvasNodeType } from '@/types/api'
@@ -41,7 +42,11 @@ function Inner({
   }, [graph, catalogByType, nodeStatus])
 
   return (
-    <div className="h-[55vh] w-full overflow-hidden rounded-md border border-border">
+    <div className="relative h-[55vh] w-full overflow-hidden rounded-md border border-border">
+      {/* View / copy this run's graph JSON — floating top-right, same as the editor canvas. */}
+      <div className="absolute right-2 top-2 z-10">
+        <GraphJson graph={graph} />
+      </div>
       <ReactFlow
         nodes={nodes}
         edges={edges}

@@ -47,10 +47,10 @@ export function RunHistory() {
         onClick={() => setOpen(true)}
         className="rounded-md border border-border px-2.5 py-1 text-xs hover:bg-accent"
       >
-        Past runs
+        Past Runs
       </button>
 
-      <Dialog open={open} onClose={() => setOpen(false)} title="Past runs" width="max-w-2xl">
+      <Dialog open={open} onClose={() => setOpen(false)} title="Past Runs" width="max-w-2xl">
         <input
           value={text}
           onChange={(e) => {

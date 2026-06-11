@@ -351,6 +351,20 @@ def _chain_ligand_binder_design(w, inputs, params, progress=None) -> dict:
     return {"designs": designs, "ligand_pdb": ligand_pdb}
 
 
+def _resolve_pdb_content(w, value) -> str:
+    """A motif/structure input may arrive as PDB *content* (pasted, or from an
+    upstream node that emits PDB text) OR as a UC Volume *path* to a .pdb file
+    (a volume_input node). Read the file when it's a path; otherwise treat the
+    string as the PDB content itself."""
+    s = str(value or "")
+    if s.startswith("/Volumes/"):
+        try:
+            return w.files.download(s).contents.read().decode("utf-8")
+        except Exception as e:  # noqa: BLE001
+            raise RuntimeError(f"could not read PDB from volume path {s}: {e}") from e
+    return s
+
+
 def _chain_motif_scaffolding(w, inputs, params, progress=None) -> dict:
     """Proteina-Complexa-AME scaffold generation (+ optional ProteinMPNN
     optimisation + ESMFold validation) preserving a functional motif."""
@@ -358,6 +372,7 @@ def _chain_motif_scaffolding(w, inputs, params, progress=None) -> dict:
     motif_pdb = ins.get("motif_pdb")
     if not motif_pdb:
         raise RuntimeError("motif_scaffolding: motif_pdb required")
+    motif_pdb = _resolve_pdb_content(w, motif_pdb)  # path → content, or pass through
     n = int(p.get("num_samples", 2) or 2)
     _emit(progress, 10, f"Generating {n} scaffold(s) (Proteina-Complexa-AME)")
     rows = _df_split(w, "proteina_complexa_ame", _PC_COLS,
@@ -468,6 +483,7 @@ def _job_enzyme_optimization(w, inputs, params, ctx, progress=None) -> dict:
     motif_pdb = ins.get("motif_pdb")
     if not motif_pdb:
         raise RuntimeError("enzyme_optimization: motif_pdb input required")
+    motif_pdb = _resolve_pdb_content(w, motif_pdb)  # path → content, or pass through
     substrate = str(ins.get("substrate_smiles") or p.get("substrate_smiles") or "")
     cat, sch = ctx["catalog"], ctx["schema"]
 

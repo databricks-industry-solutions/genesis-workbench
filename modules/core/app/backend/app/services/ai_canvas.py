@@ -266,6 +266,7 @@ SEMANTIC COMPOSITION — the pipeline must actually accomplish the goal, not jus
 - "the best" / "top" implies a selection step (extract_field or select_top_k) between the producer and the next consumer — wire it, don't drop it.
 - Only include a node the goal actually needs. Do NOT add unrelated side-branches (e.g. folding the target) unless the goal asks for that artifact.
 - Prefer a single output_sink at the END of the main pipeline. Use multiple sinks only when the goal explicitly wants several distinct artifacts.
+- EVERY input port of a non-input node must be wired (each is required). A file-backed input — a PDB structure (e.g. enzyme_optimization.motif_pdb), a sequence/FASTA — can be supplied by a volume_input (a UC Volume path); wire that volume_input's `data` output into the port. If you add a volume_input/text_input as a source, you MUST connect it to the node that consumes it — never leave an input node dangling.
 
 WORKED EXAMPLE — goal "optimize a molecule for a target, then ADMET-screen the results":
   text_input "Seed SMILES" ──seed_smiles──▶ molecule_optimization
@@ -370,10 +371,19 @@ def _offerable(node: dict) -> bool:
     return t not in _GENERATOR_EXCLUDE and not t.startswith("endpoint::")
 
 
+# A UC Volume `path` (volume_input) is a file reference, so it can legitimately
+# supply any file-backed input — a .pdb feeding a PDB port, a .fasta feeding a
+# sequence port, a .json/.csv feeding json/table. Mirrors the frontend.
+_PATH_FEEDS = {"pdb", "sequence", "sequences", "fasta", "json", "table"}
+
+
 def _dtypes_compatible(src: str | None, dst: str | None) -> bool:
     """Mirror the frontend portsCompatible: `any` matches anything, equal dtypes
-    match, and singular/plural normalize (sequence ~ sequences). Unknown → allow."""
+    match, singular/plural normalize (sequence ~ sequences), and a volume `path`
+    feeds any file-backed input. Unknown → allow."""
     if not src or not dst or src == "any" or dst == "any" or src == dst:
+        return True
+    if src == "path" and dst in _PATH_FEEDS:
         return True
     norm = lambda d: d[:-1] if d.endswith("s") else d  # noqa: E731
     return norm(src) == norm(dst)
@@ -498,6 +508,7 @@ def _graph_issues(graph: dict, ports_by_type: dict) -> list[str]:
     outdeg: dict[str, int] = {n["id"]: 0 for n in nodes}
     adj: dict[str, set] = {n["id"]: set() for n in nodes}
     dsucc: dict[str, set] = {n["id"]: set() for n in nodes}  # directed successors
+    wired_in: dict[str, set] = {n["id"]: set() for n in nodes}  # target ports that have an edge
     for e in edges:
         s, t = e.get("source"), e.get("target")
         if s in by_id and t in by_id and e.get("targetHandle") and e.get("sourceHandle"):
@@ -506,6 +517,7 @@ def _graph_issues(graph: dict, ports_by_type: dict) -> list[str]:
             adj[s].add(t)
             adj[t].add(s)
             dsucc[s].add(t)
+            wired_in[t].add(e.get("targetHandle"))
 
     def _label(n):
         return n.get("label") or n.get("type")
@@ -514,12 +526,15 @@ def _graph_issues(graph: dict, ports_by_type: dict) -> list[str]:
     for n in nodes:
         nid, ntype = n["id"], n["type"]
         n_in, n_out = ports_by_type.get(ntype, (set(), set()))
-        # has input ports but nothing feeds them → can't run
-        if n_in and ntype not in _INPUT_TYPES and indeg[nid] == 0:
-            issues.append(
-                f'"{_label(n)}" ({ntype}) has no incoming connection — it has inputs '
-                f"but nothing feeds them, so it cannot run."
-            )
+        # Each input port must be fed (mirrors the frontend Run-gate, which treats
+        # every input as required). Flag the SPECIFIC unwired port so the critique
+        # knows exactly what to connect — not just "node has no incoming".
+        if ntype not in _INPUT_TYPES:
+            for port in sorted(n_in - wired_in[nid]):
+                issues.append(
+                    f'"{_label(n)}" ({ntype}) input "{port}" is not connected — '
+                    f"wire an upstream output into it so the step has its data."
+                )
         # produces output but nothing consumes it (and it's not the sink) → dead end
         if n_out and ntype != "output_sink" and outdeg[nid] == 0:
             issues.append(

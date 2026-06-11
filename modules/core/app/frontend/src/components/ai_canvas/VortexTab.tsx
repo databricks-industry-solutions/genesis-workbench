@@ -184,6 +184,14 @@ function VortexCanvas() {
       genCtrl.current?.abort()
       const ctrl = new AbortController()
       genCtrl.current = ctrl
+      // Start from a blank canvas: drop any existing/loaded graph so the old
+      // nodes don't linger behind the "Designing…" overlay, and so the result
+      // replaces rather than overlaps.
+      setNodes([])
+      setEdges([])
+      setPendingEdges(null)
+      setSelectedId(null)
+      setLoadedId(null)
       setGenerating(true)
       setGenThoughts([])
       setNotice(null)
@@ -571,7 +579,7 @@ function VortexCanvas() {
               disabled={nodes.length === 0}
               className="rounded-md border border-border px-2.5 py-1 text-xs hover:bg-accent disabled:opacity-40"
             >
-              Auto arrange
+              Auto Arrange
             </button>
             <button
               onClick={clearCanvas}

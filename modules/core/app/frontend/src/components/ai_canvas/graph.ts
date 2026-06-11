@@ -101,11 +101,17 @@ export function dtypeColor(dtype: string): string {
   }
 }
 
+// A UC Volume `path` is a file reference and can supply any file-backed input
+// (a .pdb → PDB port, .fasta → sequence, .json/.csv → json/table). Mirrors the
+// backend _PATH_FEEDS.
+const PATH_FEEDS = new Set(['pdb', 'sequence', 'sequences', 'fasta', 'json', 'table'])
+
 // An edge is valid when the source-output dtype matches the target-input dtype,
 // or either side is `any`. Mirrors the backend PortType compatibility note.
 export function portsCompatible(srcDtype: string, dstDtype: string): boolean {
   if (srcDtype === 'any' || dstDtype === 'any') return true
   if (srcDtype === dstDtype) return true
+  if (srcDtype === 'path' && PATH_FEEDS.has(dstDtype)) return true
   // a single value flows into a list-typed port and vice-versa
   const norm = (d: string) => d.replace(/s$/, '')
   return norm(srcDtype) === norm(dstDtype)
