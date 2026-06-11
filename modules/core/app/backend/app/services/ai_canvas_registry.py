@@ -62,7 +62,9 @@ class ParamField:
     label: str
     type: str = "string"        # string | int | float | bool | select | text
     default: object | None = None
-    options: list[str] = field(default_factory=list)
+    options: list[str] = field(default_factory=list)   # enum: valid values
+    minimum: float | None = None    # numeric lower bound (None = unbounded)
+    maximum: float | None = None    # numeric upper bound
     required: bool = False
     help: str = ""
 
@@ -458,28 +460,28 @@ _WORKFLOW_NODES: list[NodeType] = [
             ParamField("motif_residues_csv", "Motif residues", "string",
                        help="Catalytic residues to preserve, e.g. 26,11,20"),
             ParamField("target_chain", "Motif chain", "string", default="B"),
-            ParamField("scaffold_length_min", "Scaffold length min", "int", default=80),
-            ParamField("scaffold_length_max", "Scaffold length max", "int", default=120),
-            ParamField("num_samples", "Samples / iter", "int", default=8),
-            ParamField("num_iterations", "Iterations", "int", default=10),
+            ParamField("scaffold_length_min", "Scaffold length min", "int", default=80, minimum=1, maximum=2000),
+            ParamField("scaffold_length_max", "Scaffold length max", "int", default=120, minimum=1, maximum=2000),
+            ParamField("num_samples", "Samples / iter", "int", default=8, minimum=1, maximum=64),
+            ParamField("num_iterations", "Iterations", "int", default=10, minimum=1, maximum=50),
             # Reward-axis weights — the heart of *guided* optimization. 0 drops an
             # axis. Mirror the UI's AXIS_LABELS + DEFAULT_AXIS_WEIGHTS.
-            ParamField("weight_motif_rmsd", "Weight · Motif RMSD", "float", default=1.0,
+            ParamField("weight_motif_rmsd", "Weight · Motif RMSD", "float", default=1.0, minimum=0.0,
                        help="Lower RMSD is better — catalytic-site drift after redesign."),
-            ParamField("weight_plddt", "Weight · ESMFold pLDDT", "float", default=1.3,
+            ParamField("weight_plddt", "Weight · ESMFold pLDDT", "float", default=1.3, minimum=0.0,
                        help="Higher is better — global fold confidence."),
-            ParamField("weight_boltz", "Weight · Boltz substrate conf.", "float", default=0.5,
+            ParamField("weight_boltz", "Weight · Boltz substrate conf.", "float", default=0.5, minimum=0.0,
                        help="Only contributes if a substrate SMILES is supplied."),
-            ParamField("weight_solubility", "Weight · NetSolP solubility", "float", default=1.0,
+            ParamField("weight_solubility", "Weight · NetSolP solubility", "float", default=1.0, minimum=0.0,
                        help="Higher is better — E. coli solubility probability."),
-            ParamField("weight_half_life", "Weight · PLTNUM half-life", "float", default=2.6,
+            ParamField("weight_half_life", "Weight · PLTNUM half-life", "float", default=2.6, minimum=0.0,
                        help="Higher is better (vs references). Set 0 to drop."),
-            ParamField("weight_thermostab", "Weight · DeepSTABp Tm", "float", default=1.0,
+            ParamField("weight_thermostab", "Weight · DeepSTABp Tm", "float", default=1.0, minimum=0.0,
                        help="Higher is better — predicted melting temperature."),
-            ParamField("weight_immuno", "Weight · MHCflurry immunogenicity", "float", default=1.5,
+            ParamField("weight_immuno", "Weight · MHCflurry immunogenicity", "float", default=1.5, minimum=0.0,
                        help="Lower is better — strong-presenter density."),
-            ParamField("half_life_margin", "Half-life margin", "float", default=0.05),
-            ParamField("resampling_temperature", "Resampling temperature", "float", default=0.1),
+            ParamField("half_life_margin", "Half-life margin", "float", default=0.05, minimum=0.0, maximum=1.0),
+            ParamField("resampling_temperature", "Resampling temperature", "float", default=0.1, minimum=0.0, maximum=2.0),
             ParamField("strategy", "Reseed strategy", "select", default="resample",
                        options=["resample", "noop"]),
             ParamField("run_proteinmpnn", "Run ProteinMPNN", "bool", default=True),
@@ -496,18 +498,18 @@ _WORKFLOW_NODES: list[NodeType] = [
                 Port("target_sequence", PortType.SEQUENCE, "Target (optional)")],
         outputs=[Port("top_k", PortType.JSON, "Top candidates")],
         params=[
-            ParamField("num_iterations", "Iterations", "int", default=5),
-            ParamField("num_samples", "Samples / iter", "int", default=24),
-            ParamField("select_top", "Select top", "int", default=3),
-            ParamField("dock_top_k", "Dock top-K", "int", default=5),
-            ParamField("qed_min", "QED min (hard filter)", "float", default=0.5),
-            ParamField("tox_max", "ClinTox max (hard filter)", "float", default=0.3),
-            ParamField("temperature", "Sampling temperature", "float", default=1.2),
-            ParamField("randomness", "Randomness", "float", default=2.0),
+            ParamField("num_iterations", "Iterations", "int", default=5, minimum=1, maximum=50),
+            ParamField("num_samples", "Samples / iter", "int", default=24, minimum=1, maximum=256),
+            ParamField("select_top", "Select top", "int", default=3, minimum=1, maximum=50),
+            ParamField("dock_top_k", "Dock top-K", "int", default=5, minimum=1, maximum=50),
+            ParamField("qed_min", "QED min (hard filter)", "float", default=0.5, minimum=0.0, maximum=1.0),
+            ParamField("tox_max", "ClinTox max (hard filter)", "float", default=0.3, minimum=0.0, maximum=1.0),
+            ParamField("temperature", "Sampling temperature", "float", default=1.2, minimum=0.0, maximum=2.0),
+            ParamField("randomness", "Randomness", "float", default=2.0, minimum=0.0, maximum=5.0),
             ParamField("target_label", "Target label (gene)", "string", default="",
                        help="Docking target gene symbol, for MLflow logging."),
-            ParamField("dock_per_iter", "Dock per iter", "int", default=8),
-            ParamField("dock_samples", "Dock samples", "int", default=3),
+            ParamField("dock_per_iter", "Dock per iter", "int", default=8, minimum=0, maximum=50),
+            ParamField("dock_samples", "Dock samples", "int", default=3, minimum=1, maximum=50),
         ],
     ),
     # ── Fine-tuning ──

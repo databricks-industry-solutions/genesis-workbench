@@ -40,7 +40,84 @@ class Param:
     name: str
     type: str = "string"  # string | int | float | bool | select | text
     default: object | None = None
-    options: list[str] = field(default_factory=list)
+    options: list[str] = field(default_factory=list)   # enum: the valid values
+    # New fields are appended (keyword-only in practice) so existing positional /
+    # **dict construction keeps working. minimum/maximum bound numeric params the
+    # way `options` bounds enums; None = unbounded.
+    minimum: float | None = None
+    maximum: float | None = None
+    required: bool = False
+    label: str = ""
+    help: str = ""
+
+
+def param_schema(p: Param) -> dict:
+    """Canonical JSON-Schema property for a param — the single descriptor every
+    consumer (UI, generator prompt, MCP inputSchema, validator) derives from."""
+    t = {"int": "integer", "float": "number", "bool": "boolean"}.get(p.type, "string")
+    s: dict = {"type": t}
+    if p.options:
+        s["enum"] = list(p.options)
+    if p.default is not None:
+        s["default"] = p.default
+    if p.minimum is not None:
+        s["minimum"] = p.minimum
+    if p.maximum is not None:
+        s["maximum"] = p.maximum
+    if p.help:
+        s["description"] = p.help
+    return s
+
+
+class ParamValidationError(ValueError):
+    """A supplied param value violates the capability's declared contract."""
+
+
+def validate_params(params: list, values: dict) -> dict:
+    """Validate + coerce supplied `values` against a param contract (a list of
+    Param-like objects with .name/.type/.options/.minimum/.maximum/.required).
+
+    Contract:
+      - enum (`options`) not matched  -> reject (ParamValidationError); no sensible
+        nearest value (e.g. strategy="guided").
+      - numeric out of [minimum, maximum] -> CLAMP to the nearest bound; the caller
+        should log the coercion (never silently surprising).
+      - required + missing/blank        -> reject.
+      - bool/int/float                  -> light type coercion.
+    Unknown keys pass through untouched (forward-compatible). Returns coerced dict.
+    Works on both the wheel `Param` and the app `ParamField` (duck-typed)."""
+    by_name = {p.name: p for p in (params or [])}
+    out = dict(values or {})
+    for name, p in by_name.items():
+        present = name in out and out[name] not in (None, "")
+        if getattr(p, "required", False) and not present:
+            raise ParamValidationError(f"required param '{name}' is missing")
+        if not present:
+            continue
+        v = out[name]
+        opts = getattr(p, "options", None) or []
+        if opts and v not in opts:
+            raise ParamValidationError(
+                f"param '{name}'={v!r} is not one of {opts}"
+            )
+        ptype = getattr(p, "type", "string")
+        try:
+            if ptype == "int":
+                v = int(v)
+            elif ptype == "float":
+                v = float(v)
+            elif ptype == "bool":
+                v = v if isinstance(v, bool) else str(v).strip().lower() in ("true", "1", "yes")
+        except (TypeError, ValueError):
+            raise ParamValidationError(f"param '{name}'={out[name]!r} is not a valid {ptype}")
+        if ptype in ("int", "float"):
+            lo, hi = getattr(p, "minimum", None), getattr(p, "maximum", None)
+            if lo is not None and v < lo:
+                v = type(v)(lo)
+            if hi is not None and v > hi:
+                v = type(v)(hi)
+        out[name] = v
+    return out
 
 
 @dataclass
@@ -154,7 +231,11 @@ def workflow_capabilities() -> list[Capability]:
             inputs=[Port(p.get("name"), p.get("dtype", "any")) for p in _p("inputs_json")],
             outputs=[Port(p.get("name"), p.get("dtype", "any")) for p in _p("outputs_json")],
             params=[Param(p.get("name"), p.get("type", "string"),
-                          p.get("default"), p.get("options", []) or []) for p in _p("params_json")],
+                          p.get("default"), p.get("options", []) or [],
+                          minimum=p.get("minimum"), maximum=p.get("maximum"),
+                          required=bool(p.get("required", False)),
+                          label=p.get("label", "") or "", help=p.get("help", "") or "")
+                    for p in _p("params_json")],
             description=str(r["description"] or ""),
         ))
     return caps

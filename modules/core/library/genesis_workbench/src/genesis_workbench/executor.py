@@ -22,7 +22,7 @@ from databricks.sdk import WorkspaceClient
 from databricks.sdk.core import Config
 from databricks.sdk.service.serving import DataframeSplitInput
 
-from .capabilities import CHAIN, ENDPOINT, JOB, TRANSFORM, Capability
+from .capabilities import CHAIN, ENDPOINT, JOB, TRANSFORM, Capability, validate_params
 from .models import get_endpoint_name_for_uc_model
 
 
@@ -964,6 +964,15 @@ def execute_capability(
     if given, fires at each chain stage — the caller decides what to do with it
     (SSE, per-node status, MLflow), keeping this core presentation-agnostic."""
     w = _w(workspace_client)
+    # Contract-driven param validation: reject bad enums, clamp out-of-range
+    # numerics (logged), enforce required — before any dispatch. One gate for the
+    # MCP path; the Vortex submission path validates with the same function.
+    if cap.params:
+        coerced = validate_params(cap.params, params or {})
+        if coerced != (params or {}):
+            logger.info("execute_capability(%s): params coerced %s -> %s",
+                        getattr(cap, "id", "?"), params, coerced)
+        params = coerced
     if cap.kind == ENDPOINT:
         return _query_endpoint(w, cap, inputs or {}, params or {})
     if cap.kind == JOB:

@@ -15,10 +15,11 @@ import inspect
 import logging
 import os
 import re
-from typing import Optional
+from typing import Annotated, Literal, Optional
 
 import uvicorn
 from mcp.server.fastmcp import FastMCP
+from pydantic import Field
 
 from genesis_workbench.capabilities import CHAIN, ENDPOINT, JOB, list_capabilities
 from genesis_workbench.executor import RUNNABLE_CHAINS, execute_capability, run_status
@@ -62,7 +63,21 @@ def _tool_for(cap):
         sig.append(inspect.Parameter(p.name, inspect.Parameter.KEYWORD_ONLY, annotation=str))
         annotations[p.name] = str
     for p in cap.params:
-        ann = Optional[_PYTYPE.get(p.type, str)]
+        base = _PYTYPE.get(p.type, str)
+        if getattr(p, "options", None):
+            # enum → Literal so the tool inputSchema advertises the valid values
+            ann = Optional[Literal[tuple(p.options)]]
+        elif p.type in ("int", "float") and (
+            getattr(p, "minimum", None) is not None or getattr(p, "maximum", None) is not None
+        ):
+            constraints = {}
+            if p.minimum is not None:
+                constraints["ge"] = p.minimum
+            if p.maximum is not None:
+                constraints["le"] = p.maximum
+            ann = Optional[Annotated[base, Field(**constraints)]]
+        else:
+            ann = Optional[base]
         sig.append(inspect.Parameter(p.name, inspect.Parameter.KEYWORD_ONLY, default=None, annotation=ann))
         annotations[p.name] = ann
     impl.__signature__ = inspect.Signature(sig)

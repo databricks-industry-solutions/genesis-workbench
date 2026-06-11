@@ -28,6 +28,7 @@ from genesis_workbench.models import (
     get_endpoint_name_for_uc_model,
     set_mlflow_experiment,
 )
+from genesis_workbench.capabilities import ParamValidationError, validate_params
 from genesis_workbench.workbench import (
     UserInfo,
     execute_non_select_query,
@@ -82,6 +83,8 @@ def _serialize_node(node: NodeType, available: bool) -> dict:
                 "type": f.type,
                 "default": f.default,
                 "options": list(f.options),
+                "minimum": f.minimum,
+                "maximum": f.maximum,
                 "required": f.required,
                 "help": f.help,
             }
@@ -235,12 +238,32 @@ def _catalog_prompt_lines(catalog: list[dict]) -> str:
             continue  # skip nodes that can't run via the generic orchestrator path
         ins = ", ".join(f"{p['name']}:{p['dtype']}" for p in n["inputs"]) or "—"
         outs = ", ".join(f"{p['name']}:{p['dtype']}" for p in n["outputs"]) or "—"
-        params = ", ".join(p["name"] for p in n["params"]) or "—"
+        params = ", ".join(_param_hint(p) for p in n["params"]) or "—"
         lines.append(
             f'- type="{n["type"]}" ({n["category"]}): {n["label"]}. '
             f"in[{ins}] out[{outs}] params[{params}]"
         )
     return "\n".join(lines)
+
+
+def _param_hint(p: dict) -> str:
+    """Render a param with its CONTRACT so the model uses valid values: enum
+    choices, numeric range, and default — e.g. `strategy(enum: resample|noop =
+    resample)`, `num_iterations(int 1..50 = 10)`, `qed_min(float 0..1 = 0.5)`."""
+    name, typ = p["name"], p.get("type", "string")
+    if p.get("options"):
+        spec = "enum: " + "|".join(str(o) for o in p["options"])
+    elif typ in ("int", "float"):
+        lo, hi = p.get("minimum"), p.get("maximum")
+        rng = ""
+        if lo is not None or hi is not None:
+            rng = f" {('' if lo is None else lo)}..{('' if hi is None else hi)}"
+        spec = f"{typ}{rng}"
+    else:
+        spec = typ
+    dflt = p.get("default")
+    tail = f" = {dflt}" if dflt is not None else ""
+    return f"{name}({spec}{tail})"
 
 
 _SYSTEM_PROMPT_TEMPLATE = """You are a workflow architect for Genesis Workbench, a bioinformatics platform.
@@ -1065,6 +1088,26 @@ def _exec_descriptor(type_key: str, w: WorkspaceClient) -> dict:
     return {"kind": "unknown"}
 
 
+def _validate_graph_params(graph: dict) -> dict:
+    """Validate + coerce every node's params against its registry contract before
+    dispatch (the same `validate_params` the MCP path uses): reject bad enums /
+    missing required, clamp out-of-range numerics. Returns a new graph with coerced
+    params. Raises GraphGenerationError on a hard-invalid value (e.g. strategy not
+    in its options) so the run fails fast at submission, not deep in a job."""
+    nodes = []
+    for n in graph.get("nodes", []):
+        node = dict(n)
+        nt = CURATED_BY_TYPE.get(node.get("type", ""))
+        if nt and nt.params and isinstance(node.get("params"), dict):
+            try:
+                node["params"] = validate_params(nt.params, node["params"])
+            except ParamValidationError as e:
+                label = node.get("label") or node.get("type")
+                raise GraphGenerationError(f'"{label}": {e}') from e
+        nodes.append(node)
+    return {"nodes": nodes, "edges": graph.get("edges", [])}
+
+
 def _enrich_graph(graph: dict, w: WorkspaceClient) -> dict:
     """Embed an `exec` block into every node so the orchestrator is a pure
     interpreter. Returns a new graph dict (does not mutate the input)."""
@@ -1102,6 +1145,7 @@ def start_workflow_run(
 
     w = WorkspaceClient()
     job_id = _resolve_orchestrator_job_id(w)
+    graph = _validate_graph_params(graph)  # contract-check params before dispatch
     enriched = _enrich_graph(graph, w)
     graph_path = _upload_graph(enriched, catalog, schema)
 
