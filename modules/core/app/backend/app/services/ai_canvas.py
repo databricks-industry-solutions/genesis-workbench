@@ -260,6 +260,19 @@ Rules:
 - Protein Design (type="protein_design") redesigns a marked region: its `sequence` input MUST contain that region wrapped in square brackets, e.g. "MKT[AYIAK]QRQ". If you feed it a text_input, put the brackets in the value. If the goal has no region to redesign, do NOT use Protein Design.
 - Fill `params` with sensible values where helpful; otherwise use {{}}.
 
+SEMANTIC COMPOSITION — the pipeline must actually accomplish the goal, not just be wired:
+- Build ONE connected refinement pipeline where each step CONSUMES the output of the logically-preceding step. Do NOT create several parallel branches that each dump to their own output_sink.
+- A screening/scoring step (e.g. admet_screen) must evaluate the molecules PRODUCED by the goal, not a raw seed left over from the start. If the goal generates or optimizes molecules and then screens them, the screen MUST consume the generator/optimizer's output (bridge a JSON output to a SMILES input with an extract_field/map_fields transform). Never screen only the seed while the optimized candidates skip screening and go straight to a sink.
+- "the best" / "top" implies a selection step (extract_field or select_top_k) between the producer and the next consumer — wire it, don't drop it.
+- Only include a node the goal actually needs. Do NOT add unrelated side-branches (e.g. folding the target) unless the goal asks for that artifact.
+- Prefer a single output_sink at the END of the main pipeline. Use multiple sinks only when the goal explicitly wants several distinct artifacts.
+
+WORKED EXAMPLE — goal "optimize a molecule for a target, then ADMET-screen the results":
+  text_input "Seed SMILES" ──seed_smiles──▶ molecule_optimization
+  text_input "Target seq"  ──target_sequence──▶ molecule_optimization
+  molecule_optimization ──top_k──▶ extract_field(path="[0].smiles") ──value──▶ admet_screen ──profile──▶ output_sink
+  (One chain. The screen evaluates the OPTIMIZED molecules — note the extract_field bridging top_k:json → smiles. No folding branch, one sink.)
+
 Also include a `plan`: a list of 3-5 very short present-tense bullet strings narrating your reasoning as you design — which Prebuilt Workflow you center on and why, then each pipeline step (e.g. "Center on Guided Enzyme Optimization for the substrate", "Fold the top design with ESMFold", "Collect the best candidate"). Keep each bullet under ~10 words.
 
 Also include a `name`: a short Title Case workflow name (2-5 words) summarizing what it does, e.g. "Enzyme Optimization + Fold" or "ADMET Screen & Optimize". No punctuation beyond + & -.
@@ -484,6 +497,7 @@ def _graph_issues(graph: dict, ports_by_type: dict) -> list[str]:
     indeg: dict[str, int] = {n["id"]: 0 for n in nodes}
     outdeg: dict[str, int] = {n["id"]: 0 for n in nodes}
     adj: dict[str, set] = {n["id"]: set() for n in nodes}
+    dsucc: dict[str, set] = {n["id"]: set() for n in nodes}  # directed successors
     for e in edges:
         s, t = e.get("source"), e.get("target")
         if s in by_id and t in by_id and e.get("targetHandle") and e.get("sourceHandle"):
@@ -491,6 +505,7 @@ def _graph_issues(graph: dict, ports_by_type: dict) -> list[str]:
             indeg[t] += 1
             adj[s].add(t)
             adj[t].add(s)
+            dsucc[s].add(t)
 
     def _label(n):
         return n.get("label") or n.get("type")
@@ -529,32 +544,66 @@ def _graph_issues(graph: dict, ports_by_type: dict) -> list[str]:
                 f"The graph is split into {comps} disconnected sub-flows — they should "
                 f"connect into a single pipeline ending at one output_sink."
             )
+
+    # Domain-semantic check: when the goal both produces molecules (an optimizer/
+    # generator) and screens them, the screen must evaluate the PRODUCED molecules.
+    # Flag the common mistake where the producer's output skips screening (goes
+    # straight to a sink) while the screen only sees the raw seed.
+    PRODUCERS = {"molecule_optimization", "genmol_generate"}
+    SCREENERS = {"admet_screen"}
+    type_of = {n["id"]: n["type"] for n in nodes}
+    producer_ids = [nid for nid, t in type_of.items() if t in PRODUCERS]
+    screener_ids = {nid for nid, t in type_of.items() if t in SCREENERS}
+    if producer_ids and screener_ids:
+        def _reaches_screener(start: str) -> bool:
+            seen, stack = set(), [start]
+            while stack:
+                cur = stack.pop()
+                for nxt in dsucc.get(cur, ()):
+                    if nxt in screener_ids:
+                        return True
+                    if nxt not in seen:
+                        seen.add(nxt)
+                        stack.append(nxt)
+            return False
+
+        if not any(_reaches_screener(p) for p in producer_ids):
+            issues.append(
+                "The screening step (admet_screen) does not evaluate the optimized/generated "
+                "molecules — connect the optimizer's output to the screen (bridge top_k:json → "
+                "smiles with an extract_field) so the candidates are scored, not just the seed."
+            )
     return issues
 
 
-_REVIEW_PROMPT_TEMPLATE = """You are reviewing a draft Genesis Workbench workflow graph for the user's goal.
-A linter found the problems listed below. Fix them while preserving the user's intent
-and the overall pipeline shape. You may add/rewire edges, insert transform nodes to bridge
-dtype gaps, or remove a node that is genuinely redundant.
+_REVIEW_PROMPT_TEMPLATE = """You are reviewing a draft Genesis Workbench workflow graph against the user's goal — like a senior engineer reviewing a pull request. Decide whether the pipeline actually ACCOMPLISHES the goal, then return a corrected graph (or the SAME graph unchanged if it is already correct). You may add/rewire edges, insert transform nodes to bridge dtype gaps, or remove a node that is irrelevant.
 
 Node types (connect an output port to an input port only when dtypes match; `any` matches anything):
 {catalog}
 
-Hard requirements for the corrected graph:
-- Every node except input nodes (text_input/volume_input/delta_input) MUST have at least one incoming edge feeding a real input port.
-- Every node except output_sink MUST have its output consumed by a downstream node.
-- The whole graph MUST be one connected pipeline that ends at an output_sink.
-- Use node `type` values EXACTLY as listed; keep existing node ids where possible.
-- Set sourceHandle to the source node's output port name and targetHandle to the target node's input port name; only connect dtype-compatible ports.
+Review for SEMANTIC correctness, not just wiring:
+- Does each step CONSUME the output of the logically-preceding step, so data flows from goal-start to goal-end? A node that only reads a raw input while the real work happens elsewhere is a red flag.
+- If the goal generates/optimizes molecules and then screens/scores them, the screening MUST consume the PRODUCED molecules, not a leftover seed. Bridge a JSON output to a SMILES input with extract_field/map_fields (e.g. molecule_optimization.top_k → extract_field → admet_screen.smiles).
+- "the best"/"top" implies a selection step (extract_field or select_top_k) between the producer and its consumer — wire it.
+- Remove nodes or whole branches that are irrelevant to the goal (e.g. folding the target when the goal never asked for a structure).
+- Prefer ONE connected pipeline ending at a single output_sink over parallel branches that each dump to their own sink.
 
-Respond with ONLY a JSON object, no prose, no markdown fences, in exactly this shape:
-{{"review":["<short note on what you fixed>","<...>"],
+Also fix any STRUCTURAL problems explicitly listed by the linter below.
+
+Hard requirements for the returned graph:
+- Every node except input nodes (text_input/volume_input/delta_input) has ≥1 incoming edge feeding a real input port; every node except output_sink has its output consumed; the whole graph is one connected pipeline.
+- Use node `type` values EXACTLY as listed; keep existing node ids where possible.
+- sourceHandle = source node's output port name, targetHandle = target node's input port name; only connect dtype-compatible ports.
+
+Respond with ONLY a JSON object, no prose, no markdown fences, in exactly this shape (return the full graph even if unchanged):
+{{"review":["<short note on what you changed, or why it was already correct>"],
  "nodes":[{{"id":"n1","type":"<type>","label":"<label>","params":{{}}}}],
  "edges":[{{"source":"n1","target":"n2","sourceHandle":"<out_port>","targetHandle":"<in_port>"}}]}}"""
 
 
 def _llm_repair(goal: str, graph: dict, issues: list[str], llm_endpoint: str) -> dict:
-    """One LLM pass that returns a corrected graph for the listed issues."""
+    """One LLM review pass: returns a corrected (or unchanged) graph + review notes,
+    judging the draft against the goal plus any structural findings."""
     catalog = build_catalog()
     system_prompt = _REVIEW_PROMPT_TEMPLATE.format(catalog=_catalog_prompt_lines(catalog))
     draft = {
@@ -562,9 +611,10 @@ def _llm_repair(goal: str, graph: dict, issues: list[str], llm_endpoint: str) ->
                    "params": n.get("params", {})} for n in graph.get("nodes", [])],
         "edges": graph.get("edges", []),
     }
+    findings = "\n- ".join(issues) if issues else "(none flagged — review for semantic correctness against the goal)"
     user = (
         f"GOAL:\n{goal}\n\nDRAFT GRAPH:\n{json.dumps(draft)}\n\n"
-        f"PROBLEMS TO FIX:\n- " + "\n- ".join(issues)
+        f"LINTER FINDINGS:\n- {findings}"
     )
     w = WorkspaceClient()
     response = w.serving_endpoints.query(
@@ -579,44 +629,60 @@ def _llm_repair(goal: str, graph: dict, issues: list[str], llm_endpoint: str) ->
     return _extract_json(response.choices[0].message.content)
 
 
+def _graph_signature(graph: dict) -> tuple:
+    """Structure-only fingerprint (node id/type set + edge tuples) to detect when
+    a review pass converged — i.e. returned the graph unchanged."""
+    nodes = tuple(sorted((str(n.get("id")), str(n.get("type"))) for n in graph.get("nodes", [])))
+    edges = tuple(sorted(
+        (str(e.get("source")), str(e.get("target")),
+         str(e.get("sourceHandle")), str(e.get("targetHandle")))
+        for e in graph.get("edges", [])
+    ))
+    return (nodes, edges)
+
+
 def _review_graph(
     goal: str, graph: dict, llm_endpoint: str,
     valid_types: set[str], ports_by_type: dict, port_dtypes: dict,
     max_rounds: int = 2,
 ) -> tuple[dict, list[str]]:
-    """Lint the draft; if broken, repair via the LLM (up to max_rounds), keeping
-    whichever graph has the fewest issues. Returns (graph, review-note bullets).
-    Fail-soft: any error leaves the draft untouched."""
+    """ALWAYS review the draft against the goal (semantic + structural), not only
+    when the linter fires — this is the 'create then review' loop. Each round the
+    LLM returns a corrected (or unchanged) graph; we accept it only if it is valid
+    and no worse structurally, and stop once it converges (returns it unchanged).
+    Fail-soft: any error leaves the current graph untouched. Returns (graph, notes)."""
     issues = _graph_issues(graph, ports_by_type)
-    if not issues:
-        return graph, ["Reviewed the draft — every node is wired and the flow reaches the output."]
-
-    notes = ["Reviewing the draft for dangling nodes and dead-end connections…"]
-    notes.append("Found " + (f"{len(issues)} issue(s): " if len(issues) > 1 else "") + issues[0])
+    notes = ["Reviewing the draft against the goal — does each step feed the next?"]
+    if issues:
+        notes.append("Found " + (f"{len(issues)} issue(s): " if len(issues) > 1 else "") + issues[0])
 
     for _ in range(max_rounds):
         try:
-            repaired = _validate_graph(
-                _llm_repair(goal, graph, issues, llm_endpoint),
-                valid_types, ports_by_type, port_dtypes,
-            )
+            raw = _llm_repair(goal, graph, issues, llm_endpoint)
+            candidate = _validate_graph(raw, valid_types, ports_by_type, port_dtypes)
         except Exception as e:  # noqa: BLE001 — never let review break generation
-            logger.info("generate_graph: review repair failed, keeping draft (%s)", e)
+            logger.info("generate_graph: review pass failed, keeping current graph (%s)", e)
             break
-        new_issues = _graph_issues(repaired, ports_by_type)
-        if len(new_issues) < len(issues):
-            graph, issues = repaired, new_issues
-            notes.append("Rewired the graph to connect the loose ends.")
-        else:
-            break  # repair didn't help — stop and keep the better graph
-        if not issues:
-            notes.append("Re-checked — the workflow is now fully connected.")
+
+        review_notes = [str(b).strip() for b in (raw.get("review") or []) if str(b).strip()][:3]
+
+        if _graph_signature(candidate) == _graph_signature(graph):
+            # The reviewer left the structure as-is → converged.
+            notes += review_notes
             break
+
+        new_issues = _graph_issues(candidate, ports_by_type)
+        if len(new_issues) > len(issues):
+            break  # the change made it structurally worse — discard, keep current
+        graph, issues = candidate, new_issues
+        notes += review_notes or ["Rewired the pipeline so each step feeds the next."]
 
     if issues:
         notes.append(
-            f"{len(issues)} connection issue(s) may remain — flagged on the canvas for you to confirm."
+            f"{len(issues)} issue(s) may remain — flagged on the canvas for you to confirm."
         )
+    else:
+        notes.append("Pipeline reviewed — connected end-to-end for the goal.")
     return graph, notes
 
 

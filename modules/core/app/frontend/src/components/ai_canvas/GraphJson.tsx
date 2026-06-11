@@ -33,7 +33,7 @@ export function GraphJson({
         disabled={disabled}
         title="View graph JSON"
         aria-label="View graph JSON"
-        className="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent disabled:opacity-40"
+        className="rounded-md border border-border bg-card/95 p-1.5 text-muted-foreground shadow-md hover:bg-accent hover:text-foreground disabled:opacity-40"
       >
         {/* code / braces icon */}
         <svg

@@ -566,7 +566,6 @@ function VortexCanvas() {
               }}
             />
             <RunHistory />
-            <GraphJson graph={toCanvasGraph(nodes, edges)} disabled={nodes.length === 0} />
             <button
               onClick={autoArrange}
               disabled={nodes.length === 0}
@@ -703,6 +702,13 @@ function VortexCanvas() {
                   </ul>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* View / copy the current graph JSON — floating top-right control. */}
+          {nodes.length > 0 && (
+            <div className="absolute right-2 top-2 z-10">
+              <GraphJson graph={toCanvasGraph(nodes, edges)} />
             </div>
           )}
 
