@@ -33,6 +33,7 @@ from genesis_workbench.capabilities import (
     read_catalog_nodes,
     validate_params,
 )
+from genesis_workbench.node_catalog import reshape_path
 from genesis_workbench.workbench import (
     UserInfo,
     execute_non_select_query,
@@ -65,7 +66,31 @@ VOLUME_DIR_NAME = "ai_canvas"             # /Volumes/<cat>/<schema>/ai_canvas/<u
 
 
 def _serialize_port(p: Port) -> dict:
-    return {"name": p.name, "dtype": str(p.dtype), "label": p.label or p.name}
+    d = {"name": p.name, "dtype": str(p.dtype), "label": p.label or p.name}
+    if getattr(p, "shape", "scalar") and p.shape != "scalar":
+        d["shape"] = p.shape
+    if getattr(p, "item", None) is not None:
+        d["item"] = p.item
+    if getattr(p, "fields", None) is not None:
+        d["fields"] = dict(p.fields)
+    return d
+
+
+def _port_shape_hint(p: dict) -> str:
+    """Compact shape annotation for the generator prompt so it picks the right
+    output port: candidates(json: map of pdb), sequences(sequences: list of
+    sequence), top_k(json: list of {smiles,qed,reward})."""
+    shape = p.get("shape")
+    if not shape:
+        return f"{p['name']}:{p['dtype']}"
+    if shape == "list_obj":
+        inner = ",".join((p.get("fields") or {}).keys())
+        return f"{p['name']}:{p['dtype']}(list of {{{inner}}})"
+    if shape == "map":
+        return f"{p['name']}:{p['dtype']}(map of {p.get('item','any')})"
+    if shape == "list":
+        return f"{p['name']}:{p['dtype']}(list of {p.get('item','any')})"
+    return f"{p['name']}:{p['dtype']}"
 
 
 def _serialize_node(node: NodeType, available: bool) -> dict:
@@ -246,7 +271,7 @@ def _catalog_prompt_lines(catalog: list[dict]) -> str:
         if not _offerable(n):
             continue  # skip nodes that can't run via the generic orchestrator path
         ins = ", ".join(f"{p['name']}:{p['dtype']}" for p in n["inputs"]) or "—"
-        outs = ", ".join(f"{p['name']}:{p['dtype']}" for p in n["outputs"]) or "—"
+        outs = ", ".join(_port_shape_hint(p) for p in n["outputs"]) or "—"
         params = ", ".join(_param_hint(p) for p in n["params"]) or "—"
         lines.append(
             f'- type="{n["type"]}" ({n["category"]}): {n["label"]}. '
@@ -1098,6 +1123,53 @@ def _exec_descriptor(type_key: str, w: WorkspaceClient) -> dict:
     return {"kind": "unknown"}
 
 
+def _resolve_extract_paths(graph: dict) -> dict:
+    """DETERMINISTIC reshape: for every extract_field node whose upstream output has
+    a declared SHAPE, compute the correct _dig path from (source shape → downstream
+    consumer dtype) and OVERRIDE the LLM's guessed path — or reject the run if no
+    valid extraction exists (e.g. a sequence from a PDB-structure map). This is what
+    stops the recurring '[0].sequence resolved to None' class at submission instead
+    of at runtime. Sources with no declared shape keep the LLM's path (best-effort)."""
+    nodes = {n["id"]: n for n in graph.get("nodes", [])}
+    edges = graph.get("edges", [])
+    errors: list[str] = []
+    for en in graph.get("nodes", []):
+        if en.get("type") != "extract_field":
+            continue
+        src_e = next((e for e in edges if e.get("target") == en["id"]
+                      and e.get("targetHandle") == "data"), None)
+        if not src_e:
+            continue
+        snode = nodes.get(src_e.get("source"))
+        snt = CURATED_BY_TYPE.get(snode.get("type")) if snode else None
+        if not snt:
+            continue  # generic/unknown source — keep the LLM path
+        sport = next((p for p in snt.outputs if p.name == src_e.get("sourceHandle")), None)
+        if not sport or (sport.shape or "scalar") == "scalar":
+            continue  # unshaped output — can't resolve deterministically; keep LLM path
+        # Target dtype = the first consumer of this extract's output port.
+        out_e = next((e for e in edges if e.get("source") == en["id"]), None)
+        dst_dtype = "any"
+        if out_e:
+            tnode = nodes.get(out_e.get("target"))
+            tnt = CURATED_BY_TYPE.get(tnode.get("type")) if tnode else None
+            if tnt:
+                tport = next((p for p in tnt.inputs if p.name == out_e.get("targetHandle")), None)
+                if tport:
+                    dst_dtype = str(tport.dtype)
+        path, reason = reshape_path(sport, dst_dtype)
+        if path is None:
+            errors.append(f'"{en.get("label") or en["id"]}": {reason}')
+        else:
+            en.setdefault("params", {})["path"] = path
+    if errors:
+        raise GraphGenerationError(
+            "This workflow can't run as wired: " + "; ".join(errors)
+            + ". (Fix the upstream source or the consumer.)"
+        )
+    return graph
+
+
 def _validate_graph_params(graph: dict) -> dict:
     """Validate + coerce every node's params against its registry contract before
     dispatch (the same `validate_params` the MCP path uses): reject bad enums /
@@ -1155,6 +1227,7 @@ def start_workflow_run(
 
     w = WorkspaceClient()
     job_id = _resolve_orchestrator_job_id(w)
+    graph = _resolve_extract_paths(graph)  # deterministic reshape from declared shapes
     graph = _validate_graph_params(graph)  # contract-check params before dispatch
     enriched = _enrich_graph(graph, w)
     graph_path = _upload_graph(enriched, catalog, schema)

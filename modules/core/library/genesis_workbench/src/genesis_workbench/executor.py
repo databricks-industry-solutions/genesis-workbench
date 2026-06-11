@@ -858,6 +858,18 @@ def _dig(obj, dotted: str):
     raising — so e.g. `int('sequence')` on a list never crashes the workflow."""
     cur = obj
     for part in (p for p in (dotted or "").split(".") if p != ""):
+        # Normalize bracket index notation `[0]` -> `0` (LLMs emit either).
+        if part.startswith("[") and part.endswith("]"):
+            part = part[1:-1]
+        # `*` = first value of a map/list (the reshape resolver's map-first path).
+        if part == "*":
+            if isinstance(cur, dict):
+                cur = next(iter(cur.values()), None)
+            elif isinstance(cur, list):
+                cur = cur[0] if cur else None
+            else:
+                return None
+            continue
         numeric = part.lstrip("-").isdigit()
         # A field (non-numeric) path against a 1-element list → descend into it.
         if isinstance(cur, list) and not numeric and len(cur) == 1:
