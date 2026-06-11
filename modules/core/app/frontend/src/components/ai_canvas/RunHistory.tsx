@@ -1,6 +1,6 @@
 // Vortex (ai_canvas) — browse past runs and inspect their results.
 import { useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/api/client'
 import { Dialog } from '@/components/Dialog'
@@ -40,6 +40,22 @@ export function RunHistory() {
 
   const result = useMutation({
     mutationFn: (runId: string) => api.aiCanvasRunResult(runId),
+  })
+
+  // Re-run: re-dispatch this past run's graph as a fresh run, then refresh the
+  // list so the new run shows up. Lands in the base gwb_ai_canvas experiment.
+  const qc = useQueryClient()
+  const rerun = useMutation({
+    mutationFn: (graph: CanvasGraph) =>
+      api.aiCanvasRun({
+        graph,
+        experiment_name: 'gwb_ai_canvas',
+        run_name: `${resultName || 'ai_canvas'} (re-run)`,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ai_canvas', 'runs'] })
+      setResultRunId(null)
+    },
   })
 
   return (
@@ -167,10 +183,20 @@ export function RunHistory() {
                   {t}
                 </button>
               ))}
-              <div className="ml-auto flex items-center gap-3 pb-1 text-[10px] text-muted-foreground">
-                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> passed</span>
-                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" /> failed</span>
-                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-400" /> skipped</span>
+              <div className="ml-auto flex items-center gap-3 pb-1">
+                <button
+                  onClick={() => result.data?.graph && rerun.mutate(result.data.graph as CanvasGraph)}
+                  disabled={!result.data?.graph || rerun.isPending}
+                  title="Re-dispatch this workflow as a new run"
+                  className="rounded-md border border-border px-2.5 py-1 text-xs hover:bg-accent disabled:opacity-40"
+                >
+                  {rerun.isPending ? 'Starting…' : '↻ Re-run'}
+                </button>
+                <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> passed</span>
+                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" /> failed</span>
+                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-400" /> skipped</span>
+                </div>
               </div>
             </div>
 
