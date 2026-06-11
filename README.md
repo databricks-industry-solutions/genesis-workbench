@@ -33,7 +33,7 @@ Genesis Workbench is an open-source, Databricks-native blueprint that packages b
 **Vortex** is a visual drag-and-drop canvas for composing and running multi-step pipelines on Databricks — or describe a goal in plain language and let AI build it.
 
 - **Compose visually** — wire deployed endpoints, prebuilt workflows, transforms, and data IO into one pipeline; each input is editable inline or fed from an upstream node.
-- **Generate from a goal** — an LLM drafts the workflow and streams its reasoning, then **self-reviews and repairs** its own draft (dangling nodes, dead-end outputs, type-mismatched wiring, pipelines that miss the goal).
+- **Generate from a goal** — an Agent drafts the workflow and streams its reasoning, then **self-reviews and repairs** its own draft (dangling nodes, dead-end outputs, type-mismatched wiring, pipelines that miss the goal).
 - **Validate before running** — a live checklist flags every unconnected input or bad value; Run stays gated until the graph is runnable.
 - **Track every run** — Past Runs with a per-node passed/failed/skipped result canvas, JSON view/copy, and one-click Re-run.
 - **Fail loudly on bad data** — a step that resolves to null fails the run instead of producing a meaningless result.
