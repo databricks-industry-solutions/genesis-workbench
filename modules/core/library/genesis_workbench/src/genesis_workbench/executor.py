@@ -725,6 +725,15 @@ def _job_molecule_optimization(w, inputs, params, ctx, progress=None) -> dict:
         top = data.get("top_k", data) if isinstance(data, dict) else data
     except Exception as e:  # noqa: BLE001
         logger.info("molecule_optimization top_k.json unavailable: %s", e)
+    # No feasible candidates means the hard QED/tox constraints rejected everything
+    # the optimizer generated. Fail with a clear, actionable message here rather
+    # than letting a downstream extract surface a confusing "path resolved to None".
+    if not top:
+        raise RuntimeError(
+            "molecule_optimization produced no feasible candidates — nothing passed the "
+            "hard QED/ClinTox constraints (qed_min / tox_max). Loosen the constraints, "
+            "increase num_samples/num_iterations, or check the seed SMILES."
+        )
     _emit(progress, 100, "Molecule optimization complete")
     return {"top_k": top, "child_run_id": child, "job_run_id": jr}
 

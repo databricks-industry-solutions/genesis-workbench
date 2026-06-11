@@ -209,7 +209,9 @@ strategy_name = dbutils.widgets.get("strategy")
 run_proteinmpnn_flag = dbutils.widgets.get("run_proteinmpnn").lower() in ("true", "1", "yes")
 dev_user_prefix = dbutils.widgets.get("dev_user_prefix")
 
-motif_residues = [int(r.strip()) for r in motif_residues_csv.split(",") if r.strip()]
+# Residues are plain integers; tolerate a "chain:residue" prefix (e.g. "A:50") by
+# taking the part after the colon — the chain is supplied separately via target_chain.
+motif_residues = [int(r.strip().split(":")[-1]) for r in motif_residues_csv.split(",") if r.strip()]
 weights = json.loads(weights_json) if weights_json else {}
 references = json.loads(references_json) if references_json else []
 
