@@ -231,6 +231,8 @@ def _catalog_prompt_lines(catalog: list[dict]) -> str:
     for n in catalog:
         if not n["available"]:
             continue  # only offer nodes the user can actually run
+        if not _offerable(n):
+            continue  # skip nodes that can't run via the generic orchestrator path
         ins = ", ".join(f"{p['name']}:{p['dtype']}" for p in n["inputs"]) or "—"
         outs = ", ".join(f"{p['name']}:{p['dtype']}" for p in n["outputs"]) or "—"
         params = ", ".join(p["name"] for p in n["params"]) or "—"
@@ -321,14 +323,47 @@ def _auto_layout(nodes: list[dict], edges: list[dict]) -> None:
 
 
 def _catalog_ctx() -> tuple[set[str], dict]:
-    """(valid node types, ports_by_type) for validating an LLM-produced graph."""
+    """(valid node types, ports_by_type, port_dtypes) for validating an
+    LLM-produced graph. port_dtypes maps type -> ({in_name: dtype}, {out_name: dtype})."""
     catalog = build_catalog()
     valid_types = {n["type"] for n in catalog}
     ports_by_type = {
         n["type"]: ({p["name"] for p in n["inputs"]}, {p["name"] for p in n["outputs"]})
         for n in catalog
     }
-    return valid_types, ports_by_type
+    port_dtypes = {
+        n["type"]: (
+            {p["name"]: p["dtype"] for p in n["inputs"]},
+            {p["name"]: p["dtype"] for p in n["outputs"]},
+        )
+        for n in catalog
+    }
+    return valid_types, ports_by_type, port_dtypes
+
+
+# Node types NOT offered to the generator: they can't run via the orchestrator's
+# generic endpoint call (need a multi-stage / special payload), so a graph using
+# them would fail at runtime. DiffDock (2-stage + ESM embeddings), RFDiffusion /
+# Boltz (dict payloads), the single-cell AnnData endpoints, and every generic
+# (schema-less) "endpoint::*" node. They remain usable via their UI tabs / chains.
+_GENERATOR_EXCLUDE = {
+    "diffdock", "rfdiffusion", "boltz", "teddy", "scgpt_perturbation",
+    "scgpt_embeddings", "scimilarity_get_embedding", "scimilarity_gene_order",
+}
+
+
+def _offerable(node: dict) -> bool:
+    t = node.get("type", "")
+    return t not in _GENERATOR_EXCLUDE and not t.startswith("endpoint::")
+
+
+def _dtypes_compatible(src: str | None, dst: str | None) -> bool:
+    """Mirror the frontend portsCompatible: `any` matches anything, equal dtypes
+    match, and singular/plural normalize (sequence ~ sequences). Unknown → allow."""
+    if not src or not dst or src == "any" or dst == "any" or src == dst:
+        return True
+    norm = lambda d: d[:-1] if d.endswith("s") else d  # noqa: E731
+    return norm(src) == norm(dst)
 
 
 def _llm_generate_parsed(goal: str, llm_endpoint: str) -> dict:
@@ -360,18 +395,27 @@ def _llm_generate_parsed(goal: str, llm_endpoint: str) -> dict:
         )
 
 
-def _validate_graph(parsed: dict, valid_types: set[str], ports_by_type: dict) -> dict:
-    """Validate + normalize an LLM-produced graph; drop invalid nodes/edges."""
-    # Validate + normalize.
+def _validate_graph(
+    parsed: dict, valid_types: set[str], ports_by_type: dict, port_dtypes: dict | None = None
+) -> dict:
+    """Validate + normalize an LLM-produced graph; drop invalid nodes, nodes we
+    don't offer the generator, and edges with bad/hallucinated ports or
+    dtype-incompatible endpoints — so the graph aligns with the real node contracts."""
+    port_dtypes = port_dtypes or {}
     clean_nodes: list[dict] = []
     seen_ids: set[str] = set()
+    type_by_id: dict[str, str] = {}
     for n in parsed.get("nodes", []):
         ntype = n.get("type")
         nid = n.get("id")
         if ntype not in valid_types or not nid or nid in seen_ids:
             logger.info("generate_graph: dropping invalid node %s (%s)", nid, ntype)
             continue
+        if not _offerable({"type": ntype}):
+            logger.info("generate_graph: dropping non-offerable node %s (%s)", nid, ntype)
+            continue
         seen_ids.add(nid)
+        type_by_id[str(nid)] = ntype
         clean_nodes.append(
             {
                 "id": str(nid),
@@ -384,20 +428,32 @@ def _validate_graph(parsed: dict, valid_types: set[str], ports_by_type: dict) ->
 
     clean_edges: list[dict] = []
     for e in parsed.get("edges", []):
-        s, t = e.get("source"), e.get("target")
+        s, t = str(e.get("source")), str(e.get("target"))
         if s not in seen_ids or t not in seen_ids:
             continue
         sh, th = e.get("sourceHandle"), e.get("targetHandle")
+        s_type, t_type = type_by_id[s], type_by_id[t]
         # Drop handles the node type doesn't actually have (LLM occasionally
         # hallucinates port names); the canvas then leaves them unconnected.
-        s_outs = ports_by_type.get(next(n["type"] for n in clean_nodes if n["id"] == s), (set(), set()))[1]
-        t_ins = ports_by_type.get(next(n["type"] for n in clean_nodes if n["id"] == t), (set(), set()))[0]
+        s_outs = ports_by_type.get(s_type, (set(), set()))[1]
+        t_ins = ports_by_type.get(t_type, (set(), set()))[0]
+        sh = sh if sh in s_outs else None
+        th = th if th in t_ins else None
+        # Drop the edge entirely if the two connected ports' dtypes don't line up
+        # (e.g. pdb -> smiles) — keeps the wiring aligned with real contracts.
+        if sh and th:
+            s_dt = port_dtypes.get(s_type, ({}, {}))[1].get(sh)
+            t_dt = port_dtypes.get(t_type, ({}, {}))[0].get(th)
+            if not _dtypes_compatible(s_dt, t_dt):
+                logger.info("generate_graph: dropping dtype-incompatible edge %s.%s(%s) -> %s.%s(%s)",
+                            s, sh, s_dt, t, th, t_dt)
+                continue
         clean_edges.append(
             {
                 "source": str(s),
                 "target": str(t),
-                "sourceHandle": sh if sh in s_outs else None,
-                "targetHandle": th if th in t_ins else None,
+                "sourceHandle": sh,
+                "targetHandle": th,
             }
         )
 
@@ -412,18 +468,18 @@ def _validate_graph(parsed: dict, valid_types: set[str], ports_by_type: dict) ->
 
 def generate_graph(goal: str, llm_endpoint: str) -> dict:
     """Goal → validated canvas graph (only catalog node types; fail-soft)."""
-    valid_types, ports_by_type = _catalog_ctx()
-    return _validate_graph(_llm_generate_parsed(goal, llm_endpoint), valid_types, ports_by_type)
+    valid_types, ports_by_type, port_dtypes = _catalog_ctx()
+    return _validate_graph(_llm_generate_parsed(goal, llm_endpoint), valid_types, ports_by_type, port_dtypes)
 
 
 def generate_plan_and_graph(goal: str, llm_endpoint: str) -> tuple[list[str], dict, str]:
     """Goal → (plan bullets, validated graph, short workflow name). Same single
     LLM call as generate_graph; plan + name surface in the streamed 'thoughts' UX."""
-    valid_types, ports_by_type = _catalog_ctx()
+    valid_types, ports_by_type, port_dtypes = _catalog_ctx()
     parsed = _llm_generate_parsed(goal, llm_endpoint)
     plan = [str(b).strip() for b in (parsed.get("plan") or []) if str(b).strip()][:6]
     name = str(parsed.get("name") or "").strip()[:60]
-    return plan, _validate_graph(parsed, valid_types, ports_by_type), name
+    return plan, _validate_graph(parsed, valid_types, ports_by_type, port_dtypes), name
 
 
 # ─── AI transform suggestion (auto-bridge incompatible connections) ──────────
