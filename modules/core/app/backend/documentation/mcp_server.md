@@ -37,6 +37,17 @@ Typical flow: call **`list_capabilities`** to see what's available and the tool 
 - Endpoints/chains return their prediction/result payload directly.
 - Jobs return `{run_id, run_url, …}`; `get_workflow_run_status(run_id)` returns the run's status, result, and link.
 
+## Security & access control
+
+The MCP server invokes every endpoint/workflow under **the app's service principal**, which is granted `CAN_QUERY` on the endpoints and `CAN_MANAGE_RUN` on the jobs at deploy. There is currently **no per-caller authorization** on the MCP path: anyone who can open the app can call any tool the app SP is entitled to (the same model the UI app uses today). Per-user authorization — gating each call against the caller's `AppPermissionsManager` module access — is a tracked follow-up.
+
+**Until that lands, the app's accessor list IS the access control.** It is pinned declaratively in `resources/mcp_app.yml` (so it survives redeploys):
+
+- The **deployer** gets `CAN_MANAGE` and workspace **admins** always retain access.
+- The group in **`var.mcp_app_access_group`** gets `CAN_USE` — set this per workspace to the group entitled to invoke Genesis Workbench workflows/endpoints. It defaults to `admins` (deny-by-default: only admins + the deployer can call the server until you scope it).
+
+To scope access, deploy with `--var mcp_app_access_group=<your-entitled-group>` (or set it in your module env). Do **not** grant the app to "all users" while the per-caller gate is absent.
+
 ## How It's Implemented
 
 ### Architecture

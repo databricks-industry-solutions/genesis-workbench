@@ -4,6 +4,20 @@ resources:
       name: ${var.mcp_app_name}
       description: 'MCP server for Genesis Workbench (deployed endpoints; workflows in P1)'
       source_code_path: ../mcp_app
+
+      # SECURITY (interim control). The MCP server runs every endpoint/workflow
+      # under the app service principal with NO per-user authorization — anyone who
+      # can open the app can invoke any capability the app SP is entitled to. Until
+      # a per-caller authorization gate lands, the accessor list IS the access
+      # control: pin it here (declarative, survives redeploys) to the deployer plus
+      # the entitled group (var.mcp_app_access_group). Workspace admins always
+      # retain access. See app/backend/documentation/mcp_server.md.
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.current_user}
+        - level: CAN_USE
+          group_name: ${var.mcp_app_access_group}
+
       resources:
         - name: "sql_warehouse"
           sql_warehouse:
