@@ -10,7 +10,9 @@ and result endpoints are added in subsequent increments.
 from __future__ import annotations
 
 import json
+import logging
 import time
+import traceback
 
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -20,6 +22,8 @@ from pydantic import BaseModel, Field
 from app.auth import CurrentUser, CurrentUserDep
 from app.config import get_settings
 from app.services import ai_canvas as svc
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/ai_canvas", tags=["ai_canvas"])
 _SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
@@ -147,7 +151,14 @@ def generate_stream(payload: GenerateRequest, _: CurrentUserDep) -> StreamingRes
                 elif kind == "result":
                     yield f"event: result\ndata: {json.dumps(payload_evt)}\n\n"
         except Exception as e:  # noqa: BLE001 — surface as an SSE error event
-            yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
+            # Log the full traceback (the SSE path otherwise swallows it, so the
+            # app log stayed empty) and surface the exception TYPE + where it came
+            # from so a bare "'name'" isn't the only signal.
+            logger.exception("generate_stream failed for goal=%r", payload.goal)
+            tb = traceback.extract_tb(e.__traceback__)
+            where = f"{tb[-1].filename.split('/')[-1]}:{tb[-1].lineno}" if tb else "?"
+            msg = f"{type(e).__name__}: {e} (at {where})"
+            yield f"event: error\ndata: {json.dumps({'message': msg})}\n\n"
             return
 
     return StreamingResponse(_events(), media_type="text/event-stream", headers=_SSE_HEADERS)
