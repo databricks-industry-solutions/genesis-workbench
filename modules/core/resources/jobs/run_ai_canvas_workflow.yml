@@ -1,0 +1,51 @@
+resources:
+  jobs:
+    run_ai_canvas_workflow_job:
+      name: run_ai_canvas_workflow_gwb
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: run_ai_canvas_workflow_task
+          disable_auto_optimization: true
+          notebook_task:
+            notebook_path: ../../notebooks/run_ai_canvas_workflow.py
+          max_retries: 0
+
+      # The orchestrator only calls serving endpoints / sub-jobs and reads-writes
+      # data — no GPU of its own — so serverless is sufficient.
+      environments:
+        - environment_key: default
+          spec:
+            client: '4'
+
+      max_concurrent_runs: 10
+
+      # The Vortex tab dispatches this job via jobs.run_now. Grant the app
+      # service principal run permission declaratively so it survives redeploys.
+      permissions:
+        - level: CAN_MANAGE
+          service_principal_name: ${resources.apps.genesis_workbench_app.service_principal_client_id}
+
+      # Defaults; the dispatcher overrides these per run via job_parameters.
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: user_email
+          default: ''
+        - name: mlflow_experiment
+          default: gwb_ai_canvas
+        - name: mlflow_run_name
+          default: ai_canvas_run
+        - name: mlflow_run_id
+          default: ''
+        - name: graph_path
+          default: ''
+
+      tags: ${var.common_resource_tags}

@@ -2,6 +2,20 @@ import type {
   AdminDashboardResponse,
   AssistantQueryResponse,
   AvailableModelsResponse,
+  CanvasCatalogResponse,
+  CanvasGenerateRequest,
+  CanvasGenerateResponse,
+  CanvasRunRequest,
+  CanvasRunResponse,
+  CanvasRunResultResponse,
+  CanvasRunStatusResponse,
+  CanvasRunsResponse,
+  CanvasSaveWorkflowRequest,
+  CanvasSaveWorkflowResponse,
+  CanvasWorkflowDetail,
+  CanvasWorkflowListResponse,
+  TransformSuggestRequest,
+  TransformSuggestResponse,
   BatchModelsResponse,
   BionemoDefaultsResponse,
   BionemoDispatchResponse,
@@ -526,4 +540,42 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  // Vortex (ai_canvas)
+  aiCanvasCatalog: () =>
+    request<CanvasCatalogResponse>('/api/ai_canvas/catalog'),
+  aiCanvasGenerate: (body: CanvasGenerateRequest) =>
+    request<CanvasGenerateResponse>('/api/ai_canvas/generate', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  aiCanvasSaveWorkflow: (body: CanvasSaveWorkflowRequest) =>
+    request<CanvasSaveWorkflowResponse>('/api/ai_canvas/workflows', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  aiCanvasListWorkflows: () =>
+    request<CanvasWorkflowListResponse>('/api/ai_canvas/workflows'),
+  aiCanvasSuggestTransform: (body: TransformSuggestRequest) =>
+    request<TransformSuggestResponse>('/api/ai_canvas/transform-suggest', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  aiCanvasGetWorkflow: (id: string) =>
+    request<CanvasWorkflowDetail>(`/api/ai_canvas/workflows/${id}`),
+  aiCanvasDeleteWorkflow: (id: string) =>
+    request<{ ok: boolean }>(`/api/ai_canvas/workflows/${id}`, { method: 'DELETE' }),
+  aiCanvasRun: (body: CanvasRunRequest) =>
+    request<CanvasRunResponse>('/api/ai_canvas/run', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  aiCanvasRunStatus: (runId: string) =>
+    request<CanvasRunStatusResponse>(`/api/ai_canvas/run/${encodeURIComponent(runId)}/status`),
+  aiCanvasRunResult: (runId: string) =>
+    request<CanvasRunResultResponse>(`/api/ai_canvas/run/${encodeURIComponent(runId)}/result`),
+  aiCanvasRuns: (text = '', page = 1) =>
+    request<CanvasRunsResponse>(
+      `/api/ai_canvas/runs?page=${page}${text ? `&text=${encodeURIComponent(text)}` : ''}`,
+    ),
 }

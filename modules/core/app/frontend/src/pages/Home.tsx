@@ -7,6 +7,7 @@ import type { Components } from 'react-markdown'
 import { api } from '@/api/client'
 import { DnaLoader } from '@/components/DnaLoader'
 import { Tabs } from '@/components/Tabs'
+import { VortexTab } from '@/components/ai_canvas/VortexTab'
 import { useUserStore, selectIsSetupDone } from '@/stores/user'
 import { cn } from '@/lib/utils'
 
@@ -211,6 +212,9 @@ function AssistantTab() {
   )
 }
 
+// ─── Search Documentation tab — soft-removed for now ────────────────────────
+// Restore by uncommenting this function and its <Tabs> entry in HomePage below.
+/*
 function SearchTab() {
   const [q, setQ] = useState('')
   const docs = useQuery({ queryKey: ['docs'], queryFn: api.docs })
@@ -259,6 +263,7 @@ function SearchTab() {
     </div>
   )
 }
+*/
 
 export function HomePage() {
   const bootstrap = useUserStore((s) => s.bootstrap)
@@ -281,8 +286,10 @@ export function HomePage() {
 
       <Tabs
         tabs={[
+          { id: 'vortex', label: 'Vortex', content: <VortexTab /> },
           { id: 'assistant', label: 'AI Assistant', content: <AssistantTab /> },
-          { id: 'search', label: 'Search Documentation', content: <SearchTab /> },
+          // Soft-removed for now — uncomment (and the SearchTab function above) to restore.
+          // { id: 'search', label: 'Search Documentation', content: <SearchTab /> },
         ]}
       />
     </div>

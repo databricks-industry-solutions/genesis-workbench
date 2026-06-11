@@ -9,6 +9,8 @@ resources:
 
       tasks:
         - task_key: pretrained_bbbp_inference
+          max_retries: 0
+          disable_auto_optimization: true
           environment_key: chemprop_env
           compute:
             hardware_accelerator: "GPU_1xA10"
@@ -19,6 +21,8 @@ resources:
               cache_dir: chemprop_bbbp_cache
 
         - task_key: toxicity_classifier
+          max_retries: 0
+          disable_auto_optimization: true
           environment_key: chemprop_env
           compute:
             hardware_accelerator: "GPU_1xA10"
@@ -29,6 +33,8 @@ resources:
               cache_dir: chemprop_clintox_cache
 
         - task_key: multitask_admet_regressor
+          max_retries: 0
+          disable_auto_optimization: true
           environment_key: chemprop_admet_env
           compute:
             hardware_accelerator: "GPU_1xA10"

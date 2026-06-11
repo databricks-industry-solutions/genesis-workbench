@@ -10,12 +10,15 @@ resources:
       tasks:
         # 1) Register the TEDDY model + tokenizer + HF snapshot into UC.
         - task_key: register_teddy_task
+          max_retries: 0
           job_cluster_key: job_cluster_teddy
           notebook_task:
             notebook_path: ../notebooks/01_register_teddy.py
 
         # 2) Import the UC model into GWB + deploy serving endpoint.
         - task_key: import_teddy_model_task
+          max_retries: 0
+          disable_auto_optimization: true
           depends_on:
             - task_key: "register_teddy_task"
           notebook_task:
@@ -24,6 +27,8 @@ resources:
         # 3) Extract HGNC→ENSG gene mapping from CELLxGENE Census. Runs in
         # parallel with steps 1/2 — only depends on the cache volume existing.
         - task_key: extract_gene_mapping_task
+          max_retries: 0
+          disable_auto_optimization: true
           depends_on:
             - task_key: "register_teddy_task"
           notebook_task:
@@ -35,6 +40,7 @@ resources:
         # for sequential Census reads). The notebook is idempotent — skips
         # if the table is already populated at the target size + dim.
         - task_key: reembed_reference_task
+          max_retries: 0
           depends_on:
             - task_key: "register_teddy_task"
           job_cluster_key: job_cluster_teddy_a10_multinode
@@ -47,6 +53,8 @@ resources:
         # ALL preserved across `databricks bundle destroy` (not bundle
         # resources). See README.
         - task_key: create_vs_index_task
+          max_retries: 0
+          disable_auto_optimization: true
           depends_on:
             - task_key: "reembed_reference_task"
           notebook_task:

@@ -10,6 +10,7 @@ resources:
       tasks:
         #this task need serverless runtime with python 3.11
         - task_key: register_boltz_task
+          max_retries: 0
           job_cluster_key: job_cluster
           timeout_seconds: 7200
           notebook_task:

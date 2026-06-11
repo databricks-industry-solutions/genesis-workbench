@@ -54,3 +54,21 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* Vortex: AI "thinking" sparkle — each star scales big↔small, staggered so they
+   twinkle alternately. Used only in the generation dialog (not the toolbar star). */
+@keyframes gwb-twinkle {
+  0%, 100% {
+    transform: scale(0.5);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+}
+.gwb-twinkle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: gwb-twinkle 1.3s ease-in-out infinite;
+}

@@ -9,6 +9,7 @@ resources:
 
       tasks:
         - task_key: download_clinvar
+          max_retries: 0
           job_cluster_key: variant_annotation_setup_cluster
           libraries:
             - jar: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/libraries/glow-spark3-assembly-2.0.4-SNAPSHOT.jar
@@ -17,6 +18,7 @@ resources:
             source: WORKSPACE
 
         - task_key: initialize
+          disable_auto_optimization: true
           depends_on:
             - task_key: download_clinvar
           notebook_task:

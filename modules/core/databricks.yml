@@ -6,6 +6,7 @@ include:
   - variables.yml
   - resources/jobs/*.yml
   - resources/app.yml
+  - resources/mcp_app.yml
   - resources/volumes/*.yml
   - resources/experiments/*.yml
   - resources/dashboards/*.yml
@@ -23,6 +24,9 @@ sync:
     # the app's requirements.txt references it by filename. core/deploy.sh
     # copies the freshly-built wheel here before bundle deploy.
     - app/backend/lib/*.whl
+    # Same for the sibling MCP app — its requirements.txt references the wheel
+    # under mcp_app/backend/lib/ (gitignored), so force it into the sync.
+    - mcp_app/backend/lib/*.whl
 
 targets:
   prod_aws:

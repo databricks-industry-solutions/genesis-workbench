@@ -25,6 +25,7 @@ resources:
 
       tasks:
         - task_key: register_pltnum_halflife
+          max_retries: 0
           job_cluster_key: pltnum_gpu_cluster
           notebook_task:
             notebook_path: ../notebooks/01_register_pltnum.py

@@ -9,6 +9,7 @@ resources:
 
       tasks:
         - task_key: grant_permissions_task
+          disable_auto_optimization: true
           notebook_task:
             notebook_path: ../../notebooks/grant_app_permissions.py
           max_retries: 0
