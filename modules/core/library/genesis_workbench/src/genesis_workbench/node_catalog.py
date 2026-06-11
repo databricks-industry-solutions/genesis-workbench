@@ -41,6 +41,15 @@ class Port:
     name: str
     dtype: PortType
     label: str = ""
+    # OUTPUT-VALUE SHAPE — how the port's value is structured, so a downstream
+    # extraction can be derived DETERMINISTICALLY (no guessing an extract path):
+    #   "scalar"   → the value IS the dtype (e.g. esmfold.pdb is one PDB string)
+    #   "list"     → a list of `item` dtype (e.g. sequences = list of "sequence")
+    #   "list_obj" → a list of objects; `fields` maps field name → dtype
+    #   "map"      → a name→value map of `item` dtype (e.g. candidates = map of "pdb")
+    shape: str = "scalar"
+    item: str | None = None        # element dtype for list/map (a PortType value, e.g. "pdb")
+    fields: dict | None = None     # list_obj: {field_name: dtype}
 
 
 @dataclass(frozen=True)
@@ -81,11 +90,20 @@ class NodeType:
 # ─── (de)serialization: NodeType <-> plain dict (the catalog-table row payload) ──
 
 def _port_to_dict(p: Port) -> dict:
-    return {"name": p.name, "dtype": str(p.dtype), "label": p.label}
+    d = {"name": p.name, "dtype": str(p.dtype), "label": p.label}
+    if p.shape and p.shape != "scalar":
+        d["shape"] = p.shape
+    if p.item is not None:
+        d["item"] = p.item
+    if p.fields is not None:
+        d["fields"] = dict(p.fields)
+    return d
 
 
 def _port_from_dict(d: dict) -> Port:
-    return Port(d["name"], PortType(d.get("dtype", "any")), d.get("label", "") or "")
+    return Port(d["name"], PortType(d.get("dtype", "any")), d.get("label", "") or "",
+                shape=d.get("shape", "scalar") or "scalar",
+                item=d.get("item"), fields=d.get("fields"))
 
 
 def _param_to_dict(p: ParamField) -> dict:
@@ -145,3 +163,57 @@ def node_catalog_ddl(catalog: str, schema: str) -> str:
         "type STRING, category STRING, kind STRING, module STRING, source STRING, "
         "node_json STRING, is_active BOOLEAN)"
     )
+
+
+# ─── dtype compatibility + deterministic reshape (the single source of truth) ────
+# A UC Volume `path` is a file reference, so it feeds any file-backed input.
+_PATH_FEEDS = {"pdb", "sequence", "sequences", "fasta", "json", "table"}
+
+
+def dtypes_compatible(src: str | None, dst: str | None) -> bool:
+    """`any` matches anything; equal dtypes match; singular/plural normalize
+    (sequence ~ sequences); a volume `path` feeds file-backed inputs. Mirrors the
+    frontend portsCompatible + the app _dtypes_compatible (one rule, one place)."""
+    if not src or not dst or src == "any" or dst == "any" or src == dst:
+        return True
+    if src == "path" and dst in _PATH_FEEDS:
+        return True
+    norm = lambda d: d[:-1] if d.endswith("s") else d  # noqa: E731
+    return norm(src) == norm(dst)
+
+
+def reshape_path(src: Port, dst_dtype: str) -> tuple[str | None, str]:
+    """DETERMINISTIC extraction from an output port's value to a `dst_dtype`-
+    compatible value, derived from the port's declared SHAPE — no guessing.
+
+    Returns (dig_path, "") on success or (None, reason) if impossible. The path is
+    a `_dig` dotted path:
+        ""        → use the value as-is (scalar, or whole list into a list target)
+        "0"       → first element of a list
+        "0.<f>"   → field <f> of the first list element
+        "*"       → first value of a map
+    e.g. enzyme candidates (map<pdb>) → "sequence" target → (None, ...) because a
+    PDB structure can't yield a sequence; top_k (list_obj{smiles}) → "smiles" →
+    ("0.smiles", "")."""
+    sd, dst = str(src.dtype), str(dst_dtype)
+    shape = src.shape or "scalar"
+    if shape == "scalar":
+        return ("", "") if dtypes_compatible(sd, dst) else (None, f"'{src.name}' is {sd}, not {dst}")
+    if shape == "list":
+        it = src.item or "any"
+        if dtypes_compatible(it, dst):
+            return "0", ""                       # first element
+        if dtypes_compatible(sd, dst):
+            return "", ""                        # whole list into a list/plural target
+        return None, f"'{src.name}' is a list of {it}; can't yield {dst}"
+    if shape == "list_obj":
+        for fname, fdt in (src.fields or {}).items():
+            if dtypes_compatible(str(fdt), dst):
+                return f"0.{fname}", ""
+        return None, f"'{src.name}' items have no field of type {dst}"
+    if shape == "map":
+        it = src.item or "any"
+        if dtypes_compatible(it, dst):
+            return "*", ""                       # first value of the map
+        return None, f"'{src.name}' is a map of {it}; can't yield {dst}"
+    return None, f"'{src.name}' has unsupported shape '{shape}'"

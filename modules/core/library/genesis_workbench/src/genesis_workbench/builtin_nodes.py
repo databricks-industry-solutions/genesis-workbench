@@ -369,7 +369,7 @@ _WORKFLOW_NODES: list[NodeType] = [
         description="Reward-weighted enzyme design loop (GenMol → score → reseed).",
         inputs=[Port("motif_pdb", PortType.PDB, "Motif PDB"),
                 Port("substrate_smiles", PortType.SMILES, "Substrate")],
-        outputs=[Port("candidates", PortType.JSON)],
+        outputs=[Port("candidates", PortType.JSON, "Candidates", shape="map", item="pdb")],
         params=[
             ParamField("motif_residues_csv", "Motif residues", "string",
                        help="Catalytic residues to preserve, e.g. 26,11,20"),
@@ -410,7 +410,8 @@ _WORKFLOW_NODES: list[NodeType] = [
         description="Reward-weighted small-molecule design loop (GenMol → score → reseed).",
         inputs=[Port("seed_smiles", PortType.SMILES, "Seed SMILES"),
                 Port("target_sequence", PortType.SEQUENCE, "Target (optional)")],
-        outputs=[Port("top_k", PortType.JSON, "Top candidates")],
+        outputs=[Port("top_k", PortType.JSON, "Top candidates", shape="list_obj",
+                      fields={"smiles": "smiles", "qed": "score", "reward": "score"})],
         params=[
             ParamField("num_iterations", "Iterations", "int", default=5, minimum=1, maximum=50),
             ParamField("num_samples", "Samples / iter", "int", default=24, minimum=1, maximum=256),
@@ -498,8 +499,8 @@ _CHAIN_NODES: list[NodeType] = [
         description="Chain: RFDiffusion → ProteinMPNN → ESMFold to design + validate "
                     "binders around a marked region.",
         inputs=[Port("sequence", PortType.SEQUENCE, "Sequence ([region] marked)")],
-        outputs=[Port("designs", PortType.JSON, "Designs (structures)"),
-                 Port("sequences", PortType.SEQUENCES, "Designed sequences")],
+        outputs=[Port("designs", PortType.JSON, "Designs (structures)", shape="list", item="pdb"),
+                 Port("sequences", PortType.SEQUENCES, "Designed sequences", shape="list", item="sequence")],
         params=[ParamField("n_rfdiffusion_hits", "RFDiffusion designs", "int", default=4)],
     ),
     NodeType(
@@ -565,7 +566,9 @@ _CHAIN_NODES: list[NodeType] = [
         description="Chain: Proteina-Complexa-AME scaffolds preserving a functional "
                     "motif (optional ProteinMPNN optimisation + ESMFold validation).",
         inputs=[Port("motif_pdb", PortType.PDB, "Motif PDB")],
-        outputs=[Port("scaffolds", PortType.JSON, "Scaffolds")],
+        outputs=[Port("scaffolds", PortType.JSON, "Scaffolds", shape="list_obj",
+                      fields={"sequence": "sequence", "mpnn_sequence": "sequence",
+                              "pdb_output": "pdb", "esmfold_pdb": "pdb"})],
         params=[
             ParamField("target_chain", "Motif chain", "string", default="B"),
             ParamField("scaffold_length_min", "Scaffold length min", "int", default=50),
