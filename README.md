@@ -13,7 +13,6 @@ Generative AI is reshaping the life sciences. Foundation models trained on genom
 - **Knowledge synthesis at scale** — LLMs specialized in biomedical literature surface insights buried in millions of papers, accelerating hypothesis generation and reducing duplicated work.
 
 ## $${\color{orange}Challenges}$$
-<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/challenges.png" alt="Scientists overwhelmed by AI/infrastructure challenges" width="800"/>
 
 Despite the breakthroughs, the experts who can apply these models — biologists, geneticists, biochemists — spend most of their time on tasks far outside their training:
 
@@ -43,6 +42,8 @@ Genesis Workbench ships a companion **Model Context Protocol (MCP) server** — 
 - **Tailored workflows** for protein design, drug discovery, single-cell analysis, and variant analysis — each surfaced as a UI tab with sane defaults.
 - **Built on Databricks primitives**: Asset Bundles, Workflows, Model Serving, MLflow, Unity Catalog, and Databricks Apps — so everything you run is governed, reproducible, and traceable.
 - **Modular and extensible**: each capability is an independent module that can be deployed and destroyed independently.
+
+<img src="https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/docs/images/happy_scientists.png" alt="Scientists free to focus on the science with Genesis Workbench" width="800"/>
 
 ## $${\color{orange}Modules}$$
 
