@@ -28,7 +28,7 @@ Despite the breakthroughs, the experts who can apply these models — biologists
 
 Genesis Workbench is an open-source, Databricks-native blueprint that packages biological foundation models behind an intuitive UI — so scientists can run them without managing GPU clusters, CUDA, model registries, or serving endpoints.
 
-### AI-Assisted Workflows
+### AI-Assisted Workflow Generation
 
 **Vortex** is a visual drag-and-drop canvas for composing and running multi-step pipelines on Databricks — or describe a goal in plain language and let AI build it.
 
