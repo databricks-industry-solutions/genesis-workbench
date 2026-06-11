@@ -582,7 +582,8 @@ _CHAIN_NODES: list[NodeType] = [
         description="Chain: RFDiffusion → ProteinMPNN → ESMFold to design + validate "
                     "binders around a marked region.",
         inputs=[Port("sequence", PortType.SEQUENCE, "Sequence ([region] marked)")],
-        outputs=[Port("designs", PortType.JSON, "Designs")],
+        outputs=[Port("designs", PortType.JSON, "Designs (structures)"),
+                 Port("sequences", PortType.SEQUENCES, "Designed sequences")],
         params=[ParamField("n_rfdiffusion_hits", "RFDiffusion designs", "int", default=4)],
     ),
     NodeType(

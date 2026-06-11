@@ -114,7 +114,8 @@ WORKFLOWS = [
     # Endpoint-chains (kind=endpoint_chain): no job_name; executor lands with the
     # shared-executor work. Listed so the registry is complete.
     ("protein_design", "Protein Design", "endpoint_chain", "large_molecule", None,
-     [{"name": "sequence", "dtype": "sequence"}], [{"name": "designs", "dtype": "json"}],
+     [{"name": "sequence", "dtype": "sequence"}],
+     [{"name": "designs", "dtype": "json"}, {"name": "sequences", "dtype": "sequences"}],
      [{"name": "n_rfdiffusion_hits", "type": "int"}],
      "Chain: RFDiffusion -> ProteinMPNN -> ESMFold to design + validate binders."),
     ("admet_screen", "ADMET Screen", "endpoint_chain", "small_molecule", None,

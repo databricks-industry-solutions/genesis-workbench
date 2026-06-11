@@ -237,7 +237,13 @@ def run_node(node_id):
     if kind == "chain":
         # Endpoint-chain (Protein Design / ADMET Screen) via the shared executor.
         from genesis_workbench.executor import run_chain
-        return {first_out: run_chain(ex.get("chain"), inputs, params, w)}
+        res = run_chain(ex.get("chain"), inputs, params, w)
+        # Map the chain's result dict onto the node's declared output ports so a
+        # downstream node consuming e.g. "designs" gets the designs list — not the
+        # whole {initial, sequences, designs} result wrapped under one port.
+        if isinstance(res, dict) and any(p in res for p in out_ports):
+            return {p: res.get(p) for p in out_ports}
+        return {first_out: res}
 
     if kind == "transform":
         # Deterministic reshape via the shared executor; returns {out_port: value}.

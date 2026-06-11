@@ -827,10 +827,21 @@ def _read_volume_text(w: WorkspaceClient, path: str) -> str:
 
 
 def _dig(obj, dotted: str):
+    """Pull a value out of nested JSON by dotted path. Lenient: a field path on a
+    single-element list auto-unwraps (top-K with k=1), a numeric part indexes a
+    list (bounds-checked), and anything unresolvable returns None instead of
+    raising — so e.g. `int('sequence')` on a list never crashes the workflow."""
     cur = obj
     for part in (p for p in (dotted or "").split(".") if p != ""):
+        numeric = part.lstrip("-").isdigit()
+        # A field (non-numeric) path against a 1-element list → descend into it.
+        if isinstance(cur, list) and not numeric and len(cur) == 1:
+            cur = cur[0]
         if isinstance(cur, list):
-            cur = cur[int(part)]
+            if not numeric:
+                return None
+            idx = int(part)
+            cur = cur[idx] if -len(cur) <= idx < len(cur) else None
         elif isinstance(cur, dict):
             cur = cur.get(part)
         else:
