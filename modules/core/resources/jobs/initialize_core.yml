@@ -9,11 +9,14 @@ resources:
 
       tasks:
         - task_key: initialize_core_task
+          disable_auto_optimization: true
           notebook_task:
             notebook_path: ../../notebooks/initialize_core.py
           max_retries: 0
 
         - task_key: "setup_permissions"
+          max_retries: 0
+          disable_auto_optimization: true
           description: "Set up app permissions for Genesis Workbench"
           notebook_task:
             notebook_path: "../../library/genesis_workbench/src/genesis_workbench/privilege_management/setup_permissions_notebook.py"

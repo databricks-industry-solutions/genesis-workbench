@@ -9,6 +9,7 @@ resources:
 
       tasks:
         - task_key: run_ai_canvas_workflow_task
+          disable_auto_optimization: true
           notebook_task:
             notebook_path: ../../notebooks/run_ai_canvas_workflow.py
           max_retries: 0

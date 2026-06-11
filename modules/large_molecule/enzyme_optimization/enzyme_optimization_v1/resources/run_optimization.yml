@@ -25,6 +25,7 @@ resources:
 
       tasks:
         - task_key: run_loop
+          max_retries: 0
           job_cluster_key: enzyme_optimization_cpu_cluster
           notebook_task:
             notebook_path: ../notebooks/01_run_optimization.py
@@ -139,6 +140,7 @@ resources:
 
       tasks:
         - task_key: run_loop
+          max_retries: 0
           job_cluster_key: enzyme_optimization_a10_gpu_cluster
           notebook_task:
             notebook_path: ../notebooks/01_run_optimization.py

@@ -9,6 +9,8 @@ resources:
 
       tasks:
         - task_key: register_genmol_generator
+          max_retries: 0
+          disable_auto_optimization: true
           # Classic single-node cluster pinned to DBR 15.4 LTS = Python 3.11.
           #
           # GenMol hard-pins pandas==2.1.0 and transformers==4.52.4. On serverless

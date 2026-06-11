@@ -14,6 +14,7 @@ resources:
       tasks:
 
         - task_key: register_run_job
+          max_retries: 0
           notebook_task:
             notebook_path: ../notebooks/register_alphafold_job.py
             source: WORKSPACE
@@ -25,6 +26,7 @@ resources:
                 value: 300
 
         - task_key: common_files
+          max_retries: 0
           depends_on:
             - task_key: register_run_job
           notebook_task:
@@ -38,6 +40,7 @@ resources:
                 value: 43200
 
         - task_key: download_mgnifyPLUS
+          max_retries: 0
           notebook_task:
             notebook_path: ../notebooks/download_mgnify_smallbfd_pdb70_pdbseqres.py
             source: WORKSPACE
@@ -49,6 +52,7 @@ resources:
                 value: 14400
           
         - task_key: download_params
+          max_retries: 0
           notebook_task:
             notebook_path: ../notebooks/download_params.py
             source: WORKSPACE
@@ -61,6 +65,7 @@ resources:
                 value: 3600
           
         - task_key: download_uniprot
+          max_retries: 0
           notebook_task:
             notebook_path: ../notebooks/download_uniprot.py
             source: WORKSPACE
@@ -73,6 +78,7 @@ resources:
                 value: 14400
           
         - task_key: download_unirefs
+          max_retries: 0
           notebook_task:
             notebook_path: ../notebooks/download_uniref90_uniref30.py
             source: WORKSPACE
@@ -85,6 +91,7 @@ resources:
                 value: 12600
           
         - task_key: pdb_mmcif
+          max_retries: 0
           notebook_task:
             notebook_path: ../notebooks/download_pdb_mmcif.py
             source: WORKSPACE

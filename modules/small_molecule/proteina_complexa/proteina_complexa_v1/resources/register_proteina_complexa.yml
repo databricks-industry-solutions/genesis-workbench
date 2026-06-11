@@ -25,6 +25,7 @@ resources:
 
       tasks:
         - task_key: register_proteina_complexa_binder_design
+          max_retries: 0
           job_cluster_key: proteina_complexa_gpu_cluster
           notebook_task:
             notebook_path: ../notebooks/01_register_proteina_complexa.py

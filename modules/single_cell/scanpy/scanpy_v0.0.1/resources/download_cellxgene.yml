@@ -16,6 +16,7 @@ resources:
 
       tasks:
         - task_key: download_cellxgene
+          max_retries: 0
           job_cluster_key: cellxgene_cluster
           notebook_task:
             notebook_path: ../notebooks/download_cellxgene.py

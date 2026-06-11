@@ -14,6 +14,8 @@ resources:
 
       tasks:
         - task_key: download_genesets
+          max_retries: 0
+          disable_auto_optimization: true
           notebook_task:
             notebook_path: ../notebooks/download_genesets.py
             source: WORKSPACE

@@ -9,6 +9,7 @@ resources:
 
       tasks:
         - task_key: run_rapidssinglecell
+          max_retries: 0
           job_cluster_key: gpu_ml_cluster
           notebook_task:
             notebook_path: ../notebooks/analyze_single_h5ad.py
@@ -23,6 +24,8 @@ resources:
         # app's Search Past Runs view flips 'started' → 'failed'. Runs
         # serverless — cheap, ~5 s.
         - task_key: tag_failed
+          max_retries: 0
+          disable_auto_optimization: true
           depends_on:
             - task_key: run_rapidssinglecell
           run_if: AT_LEAST_ONE_FAILED

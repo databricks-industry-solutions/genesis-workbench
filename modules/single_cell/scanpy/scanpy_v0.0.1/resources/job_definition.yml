@@ -14,6 +14,8 @@ resources:
         # real cluster (scanpy peak memory is ~10-15× the on-disk h5ad size
         # after densification + intermediates).
         - task_key: check_file_size
+          max_retries: 0
+          disable_auto_optimization: true
           environment_key: default
           notebook_task:
             notebook_path: ../notebooks/check_file_size.py
@@ -22,6 +24,8 @@ resources:
             source: WORKSPACE
 
         - task_key: check_small
+          max_retries: 0
+          disable_auto_optimization: true
           depends_on:
             - task_key: check_file_size
           condition_task:
@@ -30,6 +34,8 @@ resources:
             right: "4"
 
         - task_key: check_medium
+          max_retries: 0
+          disable_auto_optimization: true
           depends_on:
             - task_key: check_small
               outcome: "true"
@@ -39,6 +45,8 @@ resources:
             right: "7"
 
         - task_key: check_large
+          max_retries: 0
+          disable_auto_optimization: true
           depends_on:
             - task_key: check_medium
               outcome: "true"
@@ -57,6 +65,7 @@ resources:
         # All clusters auto-terminate (single-node + new_cluster, no
         # autoscale → terminate-on-finish per Databricks default).
         - task_key: run_lt_small
+          max_retries: 0
           depends_on:
             - task_key: check_small
               outcome: "false"
@@ -70,6 +79,7 @@ resources:
             source: WORKSPACE
 
         - task_key: run_lt_medium
+          max_retries: 0
           depends_on:
             - task_key: check_medium
               outcome: "false"
@@ -83,6 +93,7 @@ resources:
             source: WORKSPACE
 
         - task_key: run_lt_large
+          max_retries: 0
           depends_on:
             - task_key: check_large
               outcome: "false"
@@ -96,6 +107,7 @@ resources:
             source: WORKSPACE
 
         - task_key: run_gt_large
+          max_retries: 0
           depends_on:
             - task_key: check_large
               outcome: "true"
@@ -113,6 +125,8 @@ resources:
         # Search Past Runs view in the app flips the row from 'started'
         # (🟩⬜⬜) to 'failed' (🟥). Runs serverless — cheap, ~5 s.
         - task_key: tag_failed
+          max_retries: 0
+          disable_auto_optimization: true
           depends_on:
             - task_key: run_lt_small
             - task_key: run_lt_medium

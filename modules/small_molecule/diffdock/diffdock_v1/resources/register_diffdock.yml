@@ -17,6 +17,7 @@ resources:
 
         #this task needs serverless runtime with python 3.11
         - task_key: import_diffdock_task
+          disable_auto_optimization: true
           depends_on:
             - task_key: register_diffdock_task
           notebook_task:

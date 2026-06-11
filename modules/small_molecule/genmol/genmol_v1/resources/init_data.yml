@@ -9,6 +9,8 @@ resources:
 
       tasks:
         - task_key: init_repurposing_data
+          max_retries: 0
+          disable_auto_optimization: true
           # Serverless — this is just a download + RDKit + Delta write (no GenMol
           # deps / pandas-2.1 pin), so it doesn't need the classic py3.11 cluster.
           # Serverless starts fast and is UC-native; the classic cluster was slow

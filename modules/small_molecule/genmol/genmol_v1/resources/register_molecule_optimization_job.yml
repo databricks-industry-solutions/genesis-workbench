@@ -25,6 +25,7 @@ resources:
 
       tasks:
         - task_key: register_orchestrator_job
+          max_retries: 0
           job_cluster_key: molecule_optimization_register_cluster
           notebook_task:
             notebook_path: ../notebooks/register_molecule_optimization_job.py

@@ -11,6 +11,7 @@ resources:
 
       tasks:
         - task_key: register_esm2_embeddings_task
+          disable_auto_optimization: true
           environment_key: gpu_env
           notebook_task:
             notebook_path: ../notebooks/01_register_esm2_embeddings.py
