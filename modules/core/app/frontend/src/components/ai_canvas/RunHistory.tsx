@@ -29,6 +29,7 @@ export function RunHistory() {
   const [text, setText] = useState('')
   const [page, setPage] = useState(1)
   const [resultRunId, setResultRunId] = useState<string | null>(null)
+  const [resultName, setResultName] = useState<string>('')
   const [resultTab, setResultTab] = useState<'workflow' | 'outputs'>('workflow')
 
   const runs = useQuery({
@@ -104,6 +105,7 @@ export function RunHistory() {
                 <button
                   onClick={() => {
                     setResultRunId(r.run_id)
+                    setResultName(r.run_name || r.run_id)
                     setResultTab('workflow')
                     result.mutate(r.run_id)
                   }}
@@ -142,7 +144,7 @@ export function RunHistory() {
       <Dialog
         open={resultRunId !== null}
         onClose={() => setResultRunId(null)}
-        title="Workflow result"
+        title={resultName ? `Result · ${resultName}` : 'Workflow result'}
         width="max-w-4xl"
       >
         {result.isPending ? (
