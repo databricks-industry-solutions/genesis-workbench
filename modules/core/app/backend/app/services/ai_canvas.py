@@ -28,7 +28,11 @@ from genesis_workbench.models import (
     get_endpoint_name_for_uc_model,
     set_mlflow_experiment,
 )
-from genesis_workbench.capabilities import ParamValidationError, validate_params
+from genesis_workbench.capabilities import (
+    ParamValidationError,
+    read_catalog_nodes,
+    validate_params,
+)
 from genesis_workbench.workbench import (
     UserInfo,
     execute_non_select_query,
@@ -189,9 +193,14 @@ def build_catalog() -> list[dict]:
     deployed_shorts, short_to_display = _deployed_endpoints()
     batch_jobs = _batch_job_names() | _all_job_names()
 
+    # Source of truth is the node_catalog table (published from CURATED_NODES at
+    # deploy, and where future external-MCP tools land). Fall back to the in-code
+    # CURATED_NODES if the table is empty/unavailable (pre-publish safety).
+    nodes = read_catalog_nodes() or list(CURATED_NODES)
+
     catalog: list[dict] = []
     curated_shorts: set[str] = set()
-    for node in CURATED_NODES:
+    for node in nodes:
         if node.category == NodeCategory.ENDPOINT:
             short = DISPLAY_TO_UC.get(node.endpoint_display_name or "")
             if short:
