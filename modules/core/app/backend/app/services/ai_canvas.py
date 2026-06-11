@@ -657,22 +657,23 @@ def _graph_signature(graph: dict) -> tuple:
     return (nodes, edges)
 
 
-def _review_graph(
+def _review_graph_events(
     goal: str, graph: dict, llm_endpoint: str,
     valid_types: set[str], ports_by_type: dict, port_dtypes: dict,
     max_rounds: int = 2,
-) -> tuple[dict, list[str]]:
-    """ALWAYS review the draft against the goal (semantic + structural), not only
-    when the linter fires — this is the 'create then review' loop. Each round the
-    LLM returns a corrected (or unchanged) graph; we accept it only if it is valid
-    and no worse structurally, and stop once it converges (returns it unchanged).
-    Fail-soft: any error leaves the current graph untouched. Returns (graph, notes)."""
+):
+    """Generator form of the review: yields ("thought", str) as it works (so the
+    UI gets live feedback through each review LLM call) and a final ("graph", dict)
+    with the reviewed graph. ALWAYS reviews against the goal (semantic + structural),
+    accepting a correction only if valid and no worse, stopping once it converges.
+    Fail-soft: any error keeps the current graph."""
     issues = _graph_issues(graph, ports_by_type)
-    notes = ["Reviewing the draft against the goal — does each step feed the next?"]
+    yield ("thought", "Reviewing the draft against the goal — does each step feed the next?")
     if issues:
-        notes.append("Found " + (f"{len(issues)} issue(s): " if len(issues) > 1 else "") + issues[0])
+        yield ("thought", "Found " + (f"{len(issues)} issue(s): " if len(issues) > 1 else "") + issues[0])
 
-    for _ in range(max_rounds):
+    for n in range(max_rounds):
+        yield ("thought", "Re-checking the wiring…" if n else "Checking each connection against the catalog…")
         try:
             raw = _llm_repair(goal, graph, issues, llm_endpoint)
             candidate = _validate_graph(raw, valid_types, ports_by_type, port_dtypes)
@@ -683,23 +684,42 @@ def _review_graph(
         review_notes = [str(b).strip() for b in (raw.get("review") or []) if str(b).strip()][:3]
 
         if _graph_signature(candidate) == _graph_signature(graph):
-            # The reviewer left the structure as-is → converged.
-            notes += review_notes
+            for note in review_notes:  # reviewer left the structure as-is → converged
+                yield ("thought", note)
+            issues = _graph_issues(candidate, ports_by_type)
             break
 
         new_issues = _graph_issues(candidate, ports_by_type)
         if len(new_issues) > len(issues):
             break  # the change made it structurally worse — discard, keep current
         graph, issues = candidate, new_issues
-        notes += review_notes or ["Rewired the pipeline so each step feeds the next."]
+        for note in (review_notes or ["Rewired the pipeline so each step feeds the next."]):
+            yield ("thought", note)
 
     if issues:
-        notes.append(
-            f"{len(issues)} issue(s) may remain — flagged on the canvas for you to confirm."
-        )
+        yield ("thought", f"{len(issues)} issue(s) may remain — flagged on the canvas for you to confirm.")
     else:
-        notes.append("Pipeline reviewed — connected end-to-end for the goal.")
-    return graph, notes
+        yield ("thought", "Pipeline reviewed — connected end-to-end for the goal.")
+    yield ("graph", graph)
+
+
+def _review_graph(
+    goal: str, graph: dict, llm_endpoint: str,
+    valid_types: set[str], ports_by_type: dict, port_dtypes: dict,
+    max_rounds: int = 2,
+) -> tuple[dict, list[str]]:
+    """Collector wrapper over _review_graph_events for non-streaming callers.
+    Returns (reviewed graph, list of review-note bullets)."""
+    notes: list[str] = []
+    final = graph
+    for kind, val in _review_graph_events(
+        goal, graph, llm_endpoint, valid_types, ports_by_type, port_dtypes, max_rounds
+    ):
+        if kind == "thought":
+            notes.append(val)
+        else:
+            final = val
+    return final, notes
 
 
 def generate_graph(goal: str, llm_endpoint: str) -> dict:
@@ -710,17 +730,36 @@ def generate_graph(goal: str, llm_endpoint: str) -> dict:
     return graph
 
 
-def generate_plan_and_graph(goal: str, llm_endpoint: str) -> tuple[list[str], dict, str, list[str]]:
-    """Goal → (plan bullets, validated+reviewed graph, short name, review notes).
-    The plan and the review notes both surface in the streamed 'thoughts' UX, so
-    the user watches the model design and then self-correct the draft."""
+def generate_events(goal: str, llm_endpoint: str):
+    """Streaming generator for the 'designing…' UX. Yields ("thought", str) as it
+    moves through each real phase — so the feed keeps updating instead of sitting
+    on one message — and a final ("result", {"graph", "name"}). Phase markers wrap
+    the two blocking LLM calls (draft, review) so the user always sees what stage
+    it's in; the plan bullets and review notes stream as they become available."""
+    yield ("thought", "Reading your goal and the available nodes…")
     valid_types, ports_by_type, port_dtypes = _catalog_ctx()
-    parsed = _llm_generate_parsed(goal, llm_endpoint)
+
+    yield ("thought", "Drafting a workflow from your goal…")
+    parsed = _llm_generate_parsed(goal, llm_endpoint)  # blocking draft call
     plan = [str(b).strip() for b in (parsed.get("plan") or []) if str(b).strip()][:6]
     name = str(parsed.get("name") or "").strip()[:60]
+    for bullet in plan:
+        yield ("thought", bullet)
+
     graph = _validate_graph(parsed, valid_types, ports_by_type, port_dtypes)
-    graph, review = _review_graph(goal, graph, llm_endpoint, valid_types, ports_by_type, port_dtypes)
-    return plan, graph, name, review
+    n = len(graph.get("nodes", []))
+    yield ("thought", f"Drafted a {n}-node pipeline — reviewing the connections…")
+
+    final = graph
+    for kind, val in _review_graph_events(
+        goal, graph, llm_endpoint, valid_types, ports_by_type, port_dtypes
+    ):
+        if kind == "thought":
+            yield ("thought", val)
+        else:
+            final = val
+
+    yield ("result", {"graph": final, "name": name})
 
 
 # ─── AI transform suggestion (auto-bridge incompatible connections) ──────────

@@ -136,20 +136,19 @@ def generate_stream(payload: GenerateRequest, _: CurrentUserDep) -> StreamingRes
         if not endpoint:
             yield f"event: error\ndata: {json.dumps({'message': 'LLM endpoint not configured'})}\n\n"
             return
+        # The service yields phase milestones as it works (draft → plan bullets →
+        # review), so the feed keeps moving instead of sitting on one message
+        # through the blocking LLM calls. A final 'result' event carries the graph.
         try:
-            plan, graph, name, review = svc.generate_plan_and_graph(payload.goal, endpoint)
+            for kind, payload_evt in svc.generate_events(payload.goal, endpoint):
+                if kind == "thought":
+                    yield f"event: thought\ndata: {json.dumps({'text': payload_evt})}\n\n"
+                    time.sleep(0.3)  # brief pace so bursts read as a live feed
+                elif kind == "result":
+                    yield f"event: result\ndata: {json.dumps(payload_evt)}\n\n"
         except Exception as e:  # noqa: BLE001 — surface as an SSE error event
             yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
             return
-        for bullet in plan:
-            yield f"event: thought\ndata: {json.dumps({'text': bullet})}\n\n"
-            time.sleep(0.5)  # pace the reveal so thoughts read as a live feed
-        # Then the self-review phase: the model checks its own draft and reports
-        # what it rewired (or confirms it's clean) — same live 'thought' feed.
-        for bullet in review:
-            yield f"event: thought\ndata: {json.dumps({'text': bullet})}\n\n"
-            time.sleep(0.5)
-        yield f"event: result\ndata: {json.dumps({'graph': graph, 'name': name})}\n\n"
 
     return StreamingResponse(_events(), media_type="text/event-stream", headers=_SSE_HEADERS)
 
