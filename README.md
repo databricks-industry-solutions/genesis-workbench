@@ -30,7 +30,7 @@ Genesis Workbench is an open-source, Databricks-native blueprint that packages b
 
 ### AI-Assisted Workflow Generation
 
-**Vortex** is a visual drag-and-drop canvas for composing and running multi-step pipelines on Databricks — or describe a goal in plain language and let AI build it.
+**Use the workbench declaratively — describe the science you want and get a runnable pipeline, no wiring or boilerplate.** This lowers the barrier from "I know how to build this" to "I know what I want", so more scientists can turn ideas into experiments and innovate faster. **Vortex** is the visual canvas that makes it happen.
 
 - **Compose visually** — wire deployed endpoints, prebuilt workflows, transforms, and data IO into one pipeline; each input is editable inline or fed from an upstream node.
 - **Generate from a goal** — an Agent drafts the workflow and streams its reasoning, then **self-reviews and repairs** its own draft (dangling nodes, dead-end outputs, type-mismatched wiring, pipelines that miss the goal).
@@ -40,7 +40,7 @@ Genesis Workbench is an open-source, Databricks-native blueprint that packages b
 
 ### MCP Support
 
-A companion **Model Context Protocol (MCP) server** (`mcp-genesis-workbench`) exposes the platform to any MCP client — the Databricks AI Playground, Claude, Cursor, or your own agents. Deployed automatically with `core`.
+**Genesis Workbench becomes a work horse for the broader AI ecosystem** — its models and workflows become tools any agent or MCP client can call, so the platform powers your assistants and pipelines instead of living in a silo. A companion **Model Context Protocol (MCP) server** (`mcp-genesis-workbench`) exposes it to the Databricks AI Playground, Claude, Cursor, or your own agents; deployed automatically with `core`.
 
 - **Endpoints & workflows as tools** — `endpoint_<name>` runs synchronously and returns predictions; `workflow_<name>` dispatches a job and returns a run id to poll.
 - **Discoverable** — `list_capabilities` and `get_workflow_run_status` round out the surface; streamable HTTP at `/mcp`.
@@ -48,6 +48,8 @@ A companion **Model Context Protocol (MCP) server** (`mcp-genesis-workbench`) ex
 - **Governed** — runs as its own service principal, so every call stays attributable.
 
 ### Components
+
+**Get started fast with prepackaged models and workflows — and clear patterns to customize and extend them with your own.**
 
 - **Pre-packaged biological models** ready to deploy: ESMFold, AlphaFold2, ProteinMPNN, RFDiffusion, scGPT, SCimilarity, Scanpy, rapids-singlecell (part of scverse), ChemProp, DiffDock, Boltz, NVIDIA Parabricks, NVIDIA BioNeMo and more.
 - **Tailored workflows** for protein design, drug discovery, single-cell analysis, and variant analysis — each surfaced as a UI tab with sane defaults.
