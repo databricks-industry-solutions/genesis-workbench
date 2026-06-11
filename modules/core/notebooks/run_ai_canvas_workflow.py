@@ -287,6 +287,19 @@ try:
         for nid in order:
             mlflow.set_tag(f"node:{nid}:status", "pending")
 
+        def _persist_results():
+            """Write node_outputs + final_outputs as an artifact. Called on success
+            AND on failure (before re-raising) so the Past-Runs viewer shows the
+            outputs of the nodes that completed before a failing node."""
+            with tempfile.TemporaryDirectory() as tmp:
+                local = os.path.join(tmp, "workflow_results.json")
+                with open(local, "w") as f:
+                    json.dump(
+                        {"node_outputs": results, "final_outputs": final_outputs},
+                        f, default=str, indent=2,
+                    )
+                mlflow.log_artifact(local, artifact_path="results")
+
         mlflow.set_tag("job_status", "running")
         for nid in order:
             label = nodes[nid].get("label", nid)
@@ -298,18 +311,15 @@ try:
             except Exception as node_exc:  # noqa: BLE001
                 mlflow.set_tag(f"node:{nid}:status", "failed")
                 mlflow.set_tag(f"node:{nid}:error", str(node_exc)[:500])
+                # Persist whatever completed so far so the viewer can show the
+                # upstream nodes' outputs (e.g. what the failing extract saw).
+                try:
+                    _persist_results()
+                except Exception as persist_exc:  # noqa: BLE001
+                    print(f"could not persist partial results: {persist_exc}")
                 raise
 
-        # Persist the full result set as an artifact.
-        with tempfile.TemporaryDirectory() as tmp:
-            local = os.path.join(tmp, "workflow_results.json")
-            with open(local, "w") as f:
-                json.dump(
-                    {"node_outputs": results, "final_outputs": final_outputs},
-                    f, default=str, indent=2,
-                )
-            mlflow.log_artifact(local, artifact_path="results")
-
+        _persist_results()  # full result set on success
         mlflow.set_tag("job_status", "complete")
         print("✅ Workflow complete")
 except Exception as exc:  # noqa: BLE001
