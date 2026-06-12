@@ -234,7 +234,19 @@ def run_node(node_id):
                 "node_id": node_id, "run_name": nodes[node_id].get("label", node_id),
                 "dev_user_prefix": os.environ.get("DEV_USER_PREFIX", "") or "",
             }
-            return {first_out: run_workflow_job(job_name, inputs, params, w, ctx=ctx)}
+            # run_workflow_job returns an ENVELOPE keyed by the node's output-port
+            # names PLUS metadata (child_run_id, job_run_id): e.g. enzyme ->
+            # {"candidates": <map>, "child_run_id":.., "job_run_id":..}. Map each
+            # declared output port to its value so a downstream port reference (and
+            # the deterministic reshape path) sees the PORT VALUE — not the whole
+            # envelope. Nesting the envelope under first_out is what made extract
+            # paths resolve against {candidates, child_run_id, job_run_id} and fail.
+            res = run_workflow_job(job_name, inputs, params, w, ctx=ctx)
+            if isinstance(res, dict):
+                mapped = {p: res[p] for p in out_ports if p in res}
+                if mapped:
+                    return mapped
+            return {first_out: res}
         # Fallback: plain trigger-and-wait; downstream nodes only get the run id.
         job_id = ex.get("job_id")
         if not job_id:
