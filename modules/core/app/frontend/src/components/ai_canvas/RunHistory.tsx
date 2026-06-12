@@ -463,7 +463,7 @@ function JobErrorDigger({ runId, nodeId }: { runId: string; nodeId: string }) {
         onClick={() => setOpen((v) => !v)}
         className="text-[11px] font-medium text-primary hover:underline"
       >
-        {open ? '▾' : '▸'} Dig into the job that ran this step
+        {open ? '▾' : '▸'} Examine the child job
       </button>
       {open && (
         <div className="mt-1 rounded border border-border bg-background/60 p-2 text-[11px]">

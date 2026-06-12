@@ -300,6 +300,36 @@ try:
         for nid in order:
             mlflow.set_tag(f"node:{nid}:status", "pending")
 
+        _ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+        def _persist_child_job_error(nid, job_run_id):
+            """Capture the originating child job's real error + stack trace NOW (the
+            orchestrator's identity can read the inner workflow job; the app SP often
+            can't) and persist it as an MLflow artifact so the Result popup can show
+            it without needing Jobs-API view permission."""
+            run = w.jobs.get_run(run_id=int(job_run_id))
+            tasks = []
+            for t in getattr(run, "tasks", None) or []:
+                state = getattr(t, "state", None)
+                result = str(getattr(state, "result_state", "") or "")
+                entry = {"task_key": getattr(t, "task_key", "") or "", "result_state": result,
+                         "state_message": str(getattr(state, "state_message", "") or ""),
+                         "error": "", "error_trace": ""}
+                trun = getattr(t, "run_id", None)
+                if trun and result in ("FAILED", "TIMEDOUT", "MAXIMUM_CONCURRENT_RUNS_REACHED"):
+                    out = w.jobs.get_run_output(run_id=trun)
+                    entry["error"] = _ANSI.sub("", (getattr(out, "error", None) or ""))[:4000]
+                    entry["error_trace"] = _ANSI.sub("", (getattr(out, "error_trace", None) or ""))[:8000]
+                tasks.append(entry)
+            payload = {"found": True, "job_run_id": str(job_run_id),
+                       "run_page_url": getattr(run, "run_page_url", "") or "", "tasks": tasks}
+            with tempfile.TemporaryDirectory() as tmp:
+                local = os.path.join(tmp, f"node_{nid}_job_error.json")
+                with open(local, "w") as f:
+                    json.dump(payload, f, default=str)
+                mlflow.log_artifact(local, artifact_path="results")
+            print(f"  ↳ captured child job error for {nid} (job run {job_run_id})", flush=True)
+
         def _persist_results():
             """Write node_outputs + final_outputs as an artifact. Called on success
             AND on failure (before re-raising) so the Past-Runs viewer shows the
@@ -332,6 +362,10 @@ try:
                 if _jm:
                     mlflow.set_tag(f"node:{nid}:job_run_id", _jm.group(1))
                     print(f"  ↳ node {nid} failed in child job run {_jm.group(1)}", flush=True)
+                    try:
+                        _persist_child_job_error(nid, _jm.group(1))
+                    except Exception as _ce:  # noqa: BLE001
+                        print(f"  (could not capture child job error: {_ce})", flush=True)
                 # Persist whatever completed so far so the viewer can show the
                 # upstream nodes' outputs (e.g. what the failing extract saw).
                 try:

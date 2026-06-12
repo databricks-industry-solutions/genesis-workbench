@@ -1425,6 +1425,13 @@ def get_node_job_error(run_id: str, node_id: str) -> dict:
     reads each failed task's output (error/error_trace), so the UI can surface the
     actual cause (e.g. a ValueError deep in the job) and link to the job run page."""
     client = MlflowClient()
+    # Prefer the orchestrator-captured artifact: the inner workflow jobs are often
+    # NOT viewable by the app SP via the Jobs API (it can dispatch but not read), so
+    # the orchestrator (a privileged identity) captures the child job's error/trace
+    # at failure time and logs it here. The app SP can always read MLflow artifacts.
+    captured = _download_run_json(client, run_id, f"results/node_{node_id}_job_error.json")
+    if captured:
+        return captured
     try:
         tags = client.get_run(run_id).data.tags
     except Exception as e:  # noqa: BLE001
@@ -1443,8 +1450,16 @@ def get_node_job_error(run_id: str, node_id: str) -> dict:
     try:
         run = w.jobs.get_run(run_id=int(job_run_id))
     except Exception as e:  # noqa: BLE001
-        return {"found": False, "job_run_id": str(job_run_id), "node_error": node_err,
-                "message": f"Job run {job_run_id} is not reachable: {e}"}
+        # The app SP usually can't view the inner workflow jobs directly; newer runs
+        # carry the orchestrator-captured artifact (read above), older ones don't.
+        denied = "permission" in str(e).lower() or "does not have" in str(e).lower()
+        msg = (
+            f"The detailed error wasn't captured for this run, and the app can't view "
+            f"child job run {job_run_id} directly. Re-run the workflow to capture the "
+            f"full trace here, or open the job run page in Databricks."
+            if denied else f"Job run {job_run_id} is not reachable: {e}"
+        )
+        return {"found": False, "job_run_id": str(job_run_id), "node_error": node_err, "message": msg}
     tasks_out = []
     for t in getattr(run, "tasks", None) or []:
         state = getattr(t, "state", None)
