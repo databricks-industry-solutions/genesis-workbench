@@ -291,11 +291,12 @@ export function HomePage() {
           { id: 'assistant', label: 'AI Assistant', content: <AssistantTab /> },
           // Soft-removed for now — uncomment (and the SearchTab function above) to restore.
           // { id: 'search', label: 'Search Documentation', content: <SearchTab /> },
-          // Right-aligned: browse/inspect/re-run past Vortex runs.
+          // Right-aligned button: browse/inspect/re-run past Vortex runs.
           {
             id: 'runs',
             label: 'Past Vortex Runs',
             align: 'right',
+            icon: 'history',
             content: <PastRunsTab />,
           },
         ]}
