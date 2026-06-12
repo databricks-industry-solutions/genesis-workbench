@@ -1,6 +1,6 @@
 # Genesis Workbench — Changelog
 
-## vortex_deterministic (2026-06-12) — Vortex: deterministic wiring + Past Vortex Runs (inspect · re-run · failure triage)
+## v2.1.0 (2026-06-12) — Vortex: deterministic wiring + Past Vortex Runs (inspect · re-run · failure triage)
 
 A large batch making **Vortex** (AI-assisted workflow canvas) reliable end-to-end: workflows now wire
 **deterministically** from a published contract instead of LLM guesswork, and a new **Past Vortex Runs**
