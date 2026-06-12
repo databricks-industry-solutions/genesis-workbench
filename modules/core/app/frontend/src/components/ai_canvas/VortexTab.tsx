@@ -713,11 +713,11 @@ function VortexCanvas() {
                 {genThoughts.length === 0 ? (
                   <div className="italic text-muted-foreground">Thinking through the goal…</div>
                 ) : (
-                  // Height-capped + scrollable so the popup stays a stable size as
-                  // more thoughts stream in (auto-scrolls to the latest).
-                  <ul ref={thoughtsRef} className="max-h-44 space-y-1 overflow-y-auto pr-1 text-muted-foreground">
-                    {genThoughts.map((t, i) => (
-                      <li key={i} className="leading-snug">• {t}</li>
+                  // Only the last two thoughts — keeps the popup a fixed, compact size
+                  // as the feed streams (older thoughts scroll out of view, not stack).
+                  <ul ref={thoughtsRef} className="space-y-1 pr-1 text-muted-foreground">
+                    {genThoughts.slice(-2).map((t, i) => (
+                      <li key={genThoughts.length - 2 + i} className="leading-snug">• {t}</li>
                     ))}
                   </ul>
                 )}
