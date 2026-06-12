@@ -1399,12 +1399,19 @@ def get_run_result(run_id: str) -> dict:
     client = MlflowClient()
     node_status: dict = {}
     node_error: dict = {}
+    start_time = 0
+    end_time = 0
+    job_status = ""
     try:
-        tags = client.get_run(run_id).data.tags
+        run = client.get_run(run_id)
+        tags = run.data.tags
         node_status = {k.split(":", 2)[1]: v for k, v in tags.items()
                        if k.startswith("node:") and k.endswith(":status")}
         node_error = {k.split(":", 2)[1]: v for k, v in tags.items()
                       if k.startswith("node:") and k.endswith(":error")}
+        start_time = run.info.start_time or 0
+        end_time = run.info.end_time or 0  # 0 while still running
+        job_status = tags.get("job_status", "")
     except Exception as e:  # noqa: BLE001
         logger.info("tags not available for run %s: %s", run_id, e)
     return {
@@ -1412,6 +1419,9 @@ def get_run_result(run_id: str) -> dict:
         "graph": _download_run_json(client, run_id, "graph.json"),
         "node_status": node_status,
         "node_error": node_error,
+        "start_time": start_time,
+        "end_time": end_time,
+        "job_status": job_status,
     }
 
 

@@ -317,6 +317,9 @@ class RunResultResponse(BaseModel):
     graph: dict | None = None
     node_status: dict = {}
     node_error: dict = {}
+    start_time: int = 0  # epoch ms
+    end_time: int = 0  # epoch ms; 0 while still running
+    job_status: str = ""
 
 
 @router.post("/run", response_model=RunResponse)
@@ -399,6 +402,8 @@ def run_result(run_id: str, _: CurrentUserDep) -> RunResultResponse:
     return RunResultResponse(
         result=d.get("result", {}), graph=d.get("graph"),
         node_status=d.get("node_status", {}), node_error=d.get("node_error", {}),
+        start_time=d.get("start_time", 0), end_time=d.get("end_time", 0),
+        job_status=d.get("job_status", ""),
     )
 
 

@@ -1097,6 +1097,9 @@ export type CanvasRunResultResponse = {
   graph: CanvasGraph | null
   node_status: Record<string, string>
   node_error: Record<string, string>
+  start_time: number // epoch ms
+  end_time: number // epoch ms; 0 while running
+  job_status: string
 }
 export type CanvasNodeJobTask = {
   task_key: string

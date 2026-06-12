@@ -27,6 +27,18 @@ function fmtLocalTime(s: string): string {
   return isNaN(d.getTime()) ? s : d.toLocaleString()
 }
 
+// Compact elapsed time from a span of milliseconds (e.g. "2h 42m", "1m 03s", "8s").
+function fmtDuration(ms: number): string {
+  if (!ms || ms <= 0) return ''
+  const s = Math.floor(ms / 1000)
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  if (h) return `${h}h ${m}m`
+  if (m) return `${m}m ${String(sec).padStart(2, '0')}s`
+  return `${sec}s`
+}
+
 // Ports of a node that are fed by an upstream edge (so their inline value is
 // overridden at run time and shouldn't be edited here).
 function wiredInputsOf(graph: CanvasGraph | null | undefined, nodeId: string): Set<string> {
@@ -200,6 +212,22 @@ export function PastRunsTab() {
                 </button>
               ))}
               <div className="ml-auto flex items-center gap-3 pb-1">
+                {(() => {
+                  const d = result.data
+                  if (!d?.start_time) return null
+                  const terminal = d.job_status === 'complete' || d.job_status === 'failed'
+                  const ms =
+                    terminal && d.end_time ? d.end_time - d.start_time : Date.now() - d.start_time
+                  const dur = fmtDuration(ms)
+                  if (!dur) return null
+                  const label =
+                    d.job_status === 'complete'
+                      ? `Took ${dur}`
+                      : d.job_status === 'failed'
+                        ? `Failed after ${dur}`
+                        : `Running for ${dur}`
+                  return <span className="text-[11px] text-muted-foreground">{label}</span>
+                })()}
                 <button
                   onClick={() => setRerunOpen(true)}
                   disabled={!result.data?.graph}
