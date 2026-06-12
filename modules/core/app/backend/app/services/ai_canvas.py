@@ -1415,6 +1415,65 @@ def get_run_result(run_id: str) -> dict:
     }
 
 
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def get_node_job_error(run_id: str, node_id: str) -> dict:
+    """Dig into the ORIGINATING Databricks job behind a failed node and return its
+    real error + stack trace. The orchestrator only records a generic 'Job run N
+    failed with RunResultState.FAILED' on the node; this resolves that job run and
+    reads each failed task's output (error/error_trace), so the UI can surface the
+    actual cause (e.g. a ValueError deep in the job) and link to the job run page."""
+    client = MlflowClient()
+    try:
+        tags = client.get_run(run_id).data.tags
+    except Exception as e:  # noqa: BLE001
+        return {"found": False, "message": f"Run not found: {e}"}
+    node_err = tags.get(f"node:{node_id}:error", "")
+    # Prefer an explicit per-node job-run tag (set by the orchestrator); fall back
+    # to parsing the id out of the generic error message.
+    job_run_id = tags.get(f"node:{node_id}:job_run_id") or ""
+    if not job_run_id:
+        m = re.search(r"[Jj]ob run (\d+)", node_err)
+        job_run_id = m.group(1) if m else ""
+    if not job_run_id:
+        return {"found": False, "node_error": node_err,
+                "message": "This step has no originating Databricks job to dig into."}
+    w = WorkspaceClient()
+    try:
+        run = w.jobs.get_run(run_id=int(job_run_id))
+    except Exception as e:  # noqa: BLE001
+        return {"found": False, "job_run_id": str(job_run_id), "node_error": node_err,
+                "message": f"Job run {job_run_id} is not reachable: {e}"}
+    tasks_out = []
+    for t in getattr(run, "tasks", None) or []:
+        state = getattr(t, "state", None)
+        result = str(getattr(state, "result_state", "") or "")
+        entry = {
+            "task_key": getattr(t, "task_key", "") or "",
+            "result_state": result,
+            "state_message": str(getattr(state, "state_message", "") or ""),
+            "error": "",
+            "error_trace": "",
+        }
+        trun = getattr(t, "run_id", None)
+        if trun and result in ("FAILED", "TIMEDOUT", "MAXIMUM_CONCURRENT_RUNS_REACHED"):
+            try:
+                out = w.jobs.get_run_output(run_id=trun)
+                entry["error"] = _ANSI.sub("", (getattr(out, "error", None) or ""))[:4000]
+                entry["error_trace"] = _ANSI.sub("", (getattr(out, "error_trace", None) or ""))[:8000]
+            except Exception as e:  # noqa: BLE001
+                entry["error"] = f"(could not fetch task output: {e})"
+        tasks_out.append(entry)
+    return {
+        "found": True,
+        "job_run_id": str(job_run_id),
+        "run_page_url": getattr(run, "run_page_url", "") or "",
+        "node_error": node_err,
+        "tasks": tasks_out,
+    }
+
+
 def _experiment_ids() -> list[str]:
     mlflow.set_registry_uri("databricks-uc")
     mlflow.set_tracking_uri("databricks")

@@ -98,6 +98,7 @@ except Exception as _setup_exc:
 import json
 import tempfile
 import os
+import re
 
 import mlflow
 from databricks.sdk import WorkspaceClient
@@ -321,8 +322,16 @@ try:
                 results[nid] = run_node(nid)
                 mlflow.set_tag(f"node:{nid}:status", "complete")
             except Exception as node_exc:  # noqa: BLE001
+                err = str(node_exc)
                 mlflow.set_tag(f"node:{nid}:status", "failed")
-                mlflow.set_tag(f"node:{nid}:error", str(node_exc)[:500])
+                mlflow.set_tag(f"node:{nid}:error", err[:500])
+                # Record the originating child job run id (the executor's dispatch
+                # log + the error carry "job run <N>") so the Result viewer can dig
+                # straight into the child process that actually failed.
+                _jm = re.search(r"[Jj]ob run (\d+)", err)
+                if _jm:
+                    mlflow.set_tag(f"node:{nid}:job_run_id", _jm.group(1))
+                    print(f"  ↳ node {nid} failed in child job run {_jm.group(1)}", flush=True)
                 # Persist whatever completed so far so the viewer can show the
                 # upstream nodes' outputs (e.g. what the failing extract saw).
                 try:

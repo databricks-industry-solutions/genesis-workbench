@@ -562,16 +562,33 @@ def _dispatch_wait(w, job_name, job_params, child_run_id=None,
         jp[run_id_key] = child_run_id
     jp = {k: ("" if v is None else str(v)) for k, v in jp.items()}
     run = w.jobs.run_now(job_id=_job_id_by_name(w, job_name), job_parameters=jp)
+    run_id = int(run.run_id)
+    # Resolve the child job run's page URL so the parent (Vortex orchestrator)
+    # notebook log links straight to the child process — easy to navigate when a
+    # step is slow or fails.
+    page_url = ""
+    try:
+        page_url = w.jobs.get_run(run_id=run_id).run_page_url or ""
+    except Exception as e:  # noqa: BLE001
+        logger.info("could not resolve run_page_url for job run %s: %s", run_id, e)
+    print(f"  ↳ dispatched '{job_name}' as job run {run_id}" + (f" — {page_url}" if page_url else ""), flush=True)
+    logger.info("dispatched '%s' as job run %s %s", job_name, run_id, page_url)
     if child_run_id:
         from mlflow.tracking import MlflowClient
         try:
-            MlflowClient().set_tag(child_run_id, "job_run_id", str(run.run_id))
+            MlflowClient().set_tag(child_run_id, "job_run_id", str(run_id))
         except Exception as e:  # noqa: BLE001
             logger.info("could not tag job_run_id on %s: %s", child_run_id, e)
     _emit(progress, 35, "Job running — this can take a while")
     from .workbench import wait_for_job_run_completion
-    wait_for_job_run_completion(int(run.run_id), timeout=21600, poll_interval=30)
-    return str(run.run_id)
+    try:
+        wait_for_job_run_completion(run_id, timeout=21600, poll_interval=30)
+    except Exception as e:  # noqa: BLE001 — keep "Job run N" (parsed downstream) + add the page URL
+        msg = str(e)
+        if page_url and page_url not in msg:
+            msg = f"{msg} — job run page: {page_url}"
+        raise RuntimeError(msg) from e
+    return str(run_id)
 
 
 def _run_tag(run_id, key, default=""):

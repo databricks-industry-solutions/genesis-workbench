@@ -1098,6 +1098,21 @@ export type CanvasRunResultResponse = {
   node_status: Record<string, string>
   node_error: Record<string, string>
 }
+export type CanvasNodeJobTask = {
+  task_key: string
+  result_state: string
+  state_message: string
+  error?: string
+  error_trace?: string
+}
+export type CanvasNodeJobErrorResponse = {
+  found: boolean
+  job_run_id: string
+  run_page_url: string
+  node_error: string
+  message: string
+  tasks: CanvasNodeJobTask[]
+}
 
 export type TransformSuggestRequest = {
   source_dtype: string

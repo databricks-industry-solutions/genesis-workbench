@@ -8,6 +8,7 @@ import type {
   CanvasRunRequest,
   CanvasRunResponse,
   CanvasRunResultResponse,
+  CanvasNodeJobErrorResponse,
   CanvasRunStatusResponse,
   CanvasRunsResponse,
   CanvasSaveWorkflowRequest,
@@ -574,6 +575,10 @@ export const api = {
     request<CanvasRunStatusResponse>(`/api/ai_canvas/run/${encodeURIComponent(runId)}/status`),
   aiCanvasRunResult: (runId: string) =>
     request<CanvasRunResultResponse>(`/api/ai_canvas/run/${encodeURIComponent(runId)}/result`),
+  aiCanvasNodeJobError: (runId: string, nodeId: string) =>
+    request<CanvasNodeJobErrorResponse>(
+      `/api/ai_canvas/run/${encodeURIComponent(runId)}/node/${encodeURIComponent(nodeId)}/job-error`,
+    ),
   aiCanvasRuns: (text = '', page = 1) =>
     request<CanvasRunsResponse>(
       `/api/ai_canvas/runs?page=${page}${text ? `&text=${encodeURIComponent(text)}` : ''}`,

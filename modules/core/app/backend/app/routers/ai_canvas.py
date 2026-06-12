@@ -347,6 +347,22 @@ def run_status(run_id: str, _: CurrentUserDep) -> RunStatusResponse:
     return RunStatusResponse(**svc.get_run_status(run_id))
 
 
+class NodeJobErrorResponse(BaseModel):
+    found: bool
+    job_run_id: str = ""
+    run_page_url: str = ""
+    node_error: str = ""
+    message: str = ""
+    tasks: list[dict] = []
+
+
+@router.get("/run/{run_id}/node/{node_id}/job-error", response_model=NodeJobErrorResponse)
+def node_job_error(run_id: str, node_id: str, _: CurrentUserDep) -> NodeJobErrorResponse:
+    """Dig into the originating Databricks job behind a failed node — its real
+    error/stack trace + a link to the job run page."""
+    return NodeJobErrorResponse(**svc.get_node_job_error(run_id, node_id))
+
+
 @router.get("/run/{run_id}/result", response_model=RunResultResponse)
 def run_result(run_id: str, _: CurrentUserDep) -> RunResultResponse:
     d = svc.get_run_result(run_id)

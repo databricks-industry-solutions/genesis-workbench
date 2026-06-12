@@ -179,6 +179,7 @@ export function PastRunsTab() {
             {/* Failure write-up — shown above the tabs whenever a step failed, so
                 the "why" is the first thing you see regardless of the active tab. */}
             <FailureSummary
+              runId={resultRunId}
               graph={result.data?.graph ?? null}
               nodeStatus={result.data?.node_status ?? {}}
               nodeError={result.data?.node_error ?? {}}
@@ -447,13 +448,78 @@ function interpretError(err: string): string | null {
   return null
 }
 
+// Lazily fetches the ORIGINATING Databricks job behind a failed node and shows its
+// real task error/stack trace + a link to the job run page — "dig deeper".
+function JobErrorDigger({ runId, nodeId }: { runId: string; nodeId: string }) {
+  const [open, setOpen] = useState(false)
+  const q = useQuery({
+    queryKey: ['ai_canvas', 'node-job-error', runId, nodeId],
+    queryFn: () => api.aiCanvasNodeJobError(runId, nodeId),
+    enabled: open,
+  })
+  return (
+    <div className="mt-1.5">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="text-[11px] font-medium text-primary hover:underline"
+      >
+        {open ? '▾' : '▸'} Dig into the job that ran this step
+      </button>
+      {open && (
+        <div className="mt-1 rounded border border-border bg-background/60 p-2 text-[11px]">
+          {q.isFetching ? (
+            <span className="text-muted-foreground">Fetching the originating job’s error…</span>
+          ) : q.isError ? (
+            <span className="text-destructive">Couldn’t load the job error.</span>
+          ) : !q.data?.found ? (
+            <span className="text-muted-foreground">
+              {q.data?.message || 'No originating job to dig into.'}
+            </span>
+          ) : (
+            <div className="space-y-2">
+              {q.data.run_page_url && (
+                <a
+                  href={q.data.run_page_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  Open job run {q.data.job_run_id} ↗
+                </a>
+              )}
+              {q.data.tasks.length === 0 && (
+                <p className="text-muted-foreground">No task-level error captured on this job run.</p>
+              )}
+              {q.data.tasks.map((t, i) => (
+                <div key={i}>
+                  <div className="font-medium text-foreground">
+                    {t.task_key} · {t.result_state}
+                  </div>
+                  {t.state_message && <div className="text-muted-foreground">{t.state_message}</div>}
+                  {(t.error_trace || t.error) && (
+                    <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/40 p-2 leading-snug text-destructive">
+                      {t.error_trace || t.error}
+                    </pre>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // A prominent write-up of why a run failed: which step, the error, a likely cause,
 // and how far the pipeline got. Renders nothing when no step failed.
 function FailureSummary({
+  runId,
   graph,
   nodeStatus,
   nodeError,
 }: {
+  runId: string | null
   graph: CanvasGraph | null
   nodeStatus: Record<string, string>
   nodeError: Record<string, string>
@@ -502,6 +568,7 @@ function FailureSummary({
                   <span className="font-medium text-foreground">Likely cause:</span> {hint}
                 </p>
               )}
+              {runId && <JobErrorDigger runId={runId} nodeId={id} />}
             </div>
           )
         })}
