@@ -210,8 +210,9 @@ export function PastRunsTab() {
                 </button>
                 <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
                   <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> passed</span>
+                  <span className="flex items-center gap-1"><span className="h-2 w-2 animate-pulse rounded-full bg-amber-500" /> running</span>
                   <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" /> failed</span>
-                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-400" /> skipped</span>
+                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-400" /> pending</span>
                 </div>
               </div>
             </div>
@@ -696,10 +697,18 @@ function OutputsTab({
                 ? 'bg-emerald-500/15 text-emerald-600'
                 : badge === 'failed'
                   ? 'bg-destructive/15 text-destructive'
-                  : 'bg-muted text-muted-foreground',
+                  : badge === 'running'
+                    ? 'bg-amber-500/15 text-amber-600'
+                    : 'bg-muted text-muted-foreground',
             )}
           >
-            {badge === 'complete' ? 'passed' : badge === 'failed' ? 'failed' : 'skipped'}
+            {badge === 'complete'
+              ? 'passed'
+              : badge === 'failed'
+                ? 'failed'
+                : badge === 'running'
+                  ? 'running'
+                  : 'pending'}
           </span>
         )}
       </summary>
