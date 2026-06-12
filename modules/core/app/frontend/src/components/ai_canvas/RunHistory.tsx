@@ -668,9 +668,15 @@ function OutputsTab({
   // Show EVERY node (in graph order), not just ones with outputs — a failed run
   // writes no node_outputs, so keying off outputs alone left only the failed node.
   const graphIds = (data.graph?.nodes ?? []).map((n) => n.id)
+  // output_sink nodes just COLLECT — their node output is {} and the real value is
+  // rendered below as an "Output · <label>" row. Drop the empty duplicate row for a
+  // successful sink (keep it if it errored/failed, so the failure is still visible).
+  const sinkIds = new Set(
+    (data.graph?.nodes ?? []).filter((n) => n.type === 'output_sink').map((n) => n.id),
+  )
   const ids = [
     ...new Set([...graphIds, ...Object.keys(status), ...Object.keys(nodeOutputs), ...Object.keys(errors)]),
-  ]
+  ].filter((id) => !(sinkIds.has(id) && status[id] !== 'failed' && !(id in errors)))
 
   if (ids.length === 0 && Object.keys(finalOutputs).length === 0) {
     return (
