@@ -210,7 +210,17 @@ export function PastRunsTab() {
                 </button>
                 <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
                   <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> passed</span>
-                  <span className="flex items-center gap-1"><span className="h-2 w-2 animate-pulse rounded-full bg-amber-500" /> running</span>
+                  <span className="flex items-center gap-1">
+                    <span
+                      className={cn(
+                        'h-2 w-2 rounded-full bg-amber-500',
+                        // only pulse when the viewed run is actually in progress
+                        Object.values(result.data?.node_status ?? {}).includes('running') &&
+                          'animate-pulse',
+                      )}
+                    />{' '}
+                    running
+                  </span>
                   <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" /> failed</span>
                   <span className="flex items-center gap-1">
                     <span className="h-2 w-2 rounded-full bg-slate-400" />{' '}
