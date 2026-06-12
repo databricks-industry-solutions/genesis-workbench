@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import { Layout } from '@/components/Layout'
 import { HomePage } from '@/pages/Home'
-import { VortexRunsPage } from '@/pages/VortexRuns'
 import { ProfilePage } from '@/pages/Profile'
 import { SettingsPage } from '@/pages/Settings'
 import { MonitoringPage } from '@/pages/Monitoring'
@@ -46,7 +45,6 @@ export default function App() {
             <Routes>
               <Route element={<Layout />}>
                 <Route index element={<HomePage />} />
-                <Route path="vortex-runs" element={<VortexRunsPage />} />
                 <Route
                   path="single-cell"
                   element={
