@@ -1,0 +1,70 @@
+resources:
+  jobs:
+    kermt_finetune:
+      name: kermt_finetune_job
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: kermt_finetune_task
+          job_cluster_key: gpu_cluster
+          notebook_task:
+            notebook_path: ../notebooks/02_kermt_finetune.py
+          max_retries: 0
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: cache_dir
+          default: ${var.cache_dir}
+        - name: kermt_src_path
+          default: ${workspace.file_path}/kermt_src
+        - name: user_email
+          default: ${var.current_user}
+        - name: train_data_location
+          default: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/${var.cache_dir}/ft_data/clintox_train.csv
+        - name: validation_data_location
+          default: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/${var.cache_dir}/ft_data/clintox_val.csv
+        - name: test_data_location
+          default: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/${var.cache_dir}/ft_data/clintox_test.csv
+        - name: target_names
+          default: toxicity
+        - name: dataset_type
+          default: classification
+        - name: finetune_label
+          default: kermt_clintox_ft
+        - name: epochs
+          default: "20"
+        - name: batch_size
+          default: "16"
+        - name: ffn_hidden_size
+          default: "700"
+        - name: experiment_name
+          default: gwb_kermt_finetune
+        - name: mlflow_run_name
+          default: ""
+        - name: mlflow_run_id
+          default: ""
+
+      job_clusters:
+        - job_cluster_key: gpu_cluster
+          new_cluster:
+            num_workers: 0
+            node_type_id: ${var.a10_node_type}
+            driver_node_type_id: ${var.a10_node_type}
+            spark_version: 15.4.x-gpu-ml-scala2.12
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.databricks.unityCatalog.volumes.enabled: true
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+
+      tags: ${var.common_resource_tags}
