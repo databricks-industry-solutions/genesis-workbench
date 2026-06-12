@@ -311,12 +311,14 @@ try:
             tasks = []
             for t in getattr(run, "tasks", None) or []:
                 state = getattr(t, "state", None)
-                result = str(getattr(state, "result_state", "") or "")
+                rs = getattr(state, "result_state", None)
+                # enum -> value ("FAILED"), not "RunResultState.FAILED"
+                result = str(getattr(rs, "value", rs) or "")
                 entry = {"task_key": getattr(t, "task_key", "") or "", "result_state": result,
                          "state_message": str(getattr(state, "state_message", "") or ""),
                          "error": "", "error_trace": ""}
                 trun = getattr(t, "run_id", None)
-                if trun and result in ("FAILED", "TIMEDOUT", "MAXIMUM_CONCURRENT_RUNS_REACHED"):
+                if trun and result and result != "SUCCESS":
                     out = w.jobs.get_run_output(run_id=trun)
                     entry["error"] = _ANSI.sub("", (getattr(out, "error", None) or ""))[:4000]
                     entry["error_trace"] = _ANSI.sub("", (getattr(out, "error_trace", None) or ""))[:8000]

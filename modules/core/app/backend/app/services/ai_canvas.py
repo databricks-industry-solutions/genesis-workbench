@@ -1463,7 +1463,10 @@ def get_node_job_error(run_id: str, node_id: str) -> dict:
     tasks_out = []
     for t in getattr(run, "tasks", None) or []:
         state = getattr(t, "state", None)
-        result = str(getattr(state, "result_state", "") or "")
+        rs = getattr(state, "result_state", None)
+        # result_state is an enum; str(enum) is "RunResultState.FAILED" — take the
+        # value ("FAILED") so the non-success check (and the UI) read cleanly.
+        result = str(getattr(rs, "value", rs) or "")
         entry = {
             "task_key": getattr(t, "task_key", "") or "",
             "result_state": result,
@@ -1472,7 +1475,9 @@ def get_node_job_error(run_id: str, node_id: str) -> dict:
             "error_trace": "",
         }
         trun = getattr(t, "run_id", None)
-        if trun and result in ("FAILED", "TIMEDOUT", "MAXIMUM_CONCURRENT_RUNS_REACHED"):
+        # Fetch the task output for any non-success task (FAILED / TIMEDOUT / …) —
+        # that's where the real error + stack trace live.
+        if trun and result and result != "SUCCESS":
             try:
                 out = w.jobs.get_run_output(run_id=trun)
                 entry["error"] = _ANSI.sub("", (getattr(out, "error", None) or ""))[:4000]
