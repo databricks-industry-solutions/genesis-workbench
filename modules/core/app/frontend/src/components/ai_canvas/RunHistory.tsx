@@ -212,7 +212,13 @@ export function PastRunsTab() {
                   <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> passed</span>
                   <span className="flex items-center gap-1"><span className="h-2 w-2 animate-pulse rounded-full bg-amber-500" /> running</span>
                   <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" /> failed</span>
-                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-400" /> pending</span>
+                  <span className="flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-slate-400" />{' '}
+                    {Object.values(result.data?.node_status ?? {}).includes('failed') ||
+                    Object.keys(result.data?.node_error ?? {}).length > 0
+                      ? 'skipped'
+                      : 'pending'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -655,6 +661,9 @@ function OutputsTab({
   const finalOutputs = res.final_outputs ?? {}
   const errors = data.node_error ?? {}
   const status = data.node_status ?? {}
+  // A not-run node means "pending" only while the run is still going; once the run
+  // has FAILED (terminal) those nodes were "skipped" — they'll never run.
+  const runFailed = Object.values(status).includes('failed') || Object.keys(errors).length > 0
 
   // Show EVERY node (in graph order), not just ones with outputs — a failed run
   // writes no node_outputs, so keying off outputs alone left only the failed node.
@@ -694,7 +703,9 @@ function OutputsTab({
                 ? 'failed'
                 : badge === 'running'
                   ? 'running'
-                  : 'pending'}
+                  : runFailed
+                    ? 'skipped'
+                    : 'pending'}
           </span>
         )}
       </summary>
