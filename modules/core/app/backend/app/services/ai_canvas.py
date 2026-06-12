@@ -33,7 +33,7 @@ from genesis_workbench.capabilities import (
     read_catalog_nodes,
     validate_params,
 )
-from genesis_workbench.node_catalog import dtypes_compatible, reshape_path
+from genesis_workbench.node_catalog import Port, dtypes_compatible, reshape_path
 from genesis_workbench.workbench import (
     UserInfo,
     execute_non_select_query,
@@ -1188,6 +1188,43 @@ def _insert_bridge(graph: dict, en: dict, sport, bridge) -> None:
     edges.append({"source": bid, "target": e2id, "sourceHandle": out_port, "targetHandle": "data"})
 
 
+# Transforms that return the top-K of their input collection unchanged — i.e. the
+# element TYPE is preserved (a structured map/list of pdb stays pdb). The resolver
+# carries the upstream element shape THROUGH these so an impossible downstream extract
+# (e.g. a sequence from pdb structures) is still caught, instead of the transform
+# hiding it behind its unshaped `json` output.
+_SHAPE_PRESERVING_TRANSFORMS = {"select_top_k"}
+
+
+def _effective_source_port(nodes: dict, edges: list, src_id: str, src_handle, _depth: int = 0):
+    """The effective shaped output Port feeding an extract, seeing THROUGH
+    shape-preserving transforms. Returns (Port | None, through_transform: bool).
+    A direct shaped catalog output returns (its Port, False); a select_top_k over a
+    shaped collection returns a synthetic list[/list_obj] of the same element type
+    with through_transform=True."""
+    if _depth > 6:
+        return None, False
+    snode = nodes.get(src_id)
+    snt = CURATED_BY_TYPE.get(snode.get("type")) if snode else None
+    if not snt:
+        return None, False
+    sport = next((p for p in snt.outputs if p.name == src_handle), None)
+    if sport and (sport.shape or "scalar") != "scalar":
+        return sport, _depth > 0
+    if snode.get("type") in _SHAPE_PRESERVING_TRANSFORMS:
+        in_e = next((e for e in edges if e.get("target") == src_id), None)
+        if not in_e:
+            return None, False
+        up, _tt = _effective_source_port(nodes, edges, in_e.get("source"),
+                                         in_e.get("sourceHandle"), _depth + 1)
+        if up is None:
+            return None, False
+        if (up.shape or "scalar") == "list_obj":
+            return Port(str(src_handle), up.dtype, shape="list_obj", fields=up.fields), True
+        return Port(str(src_handle), up.dtype, shape="list", item=(up.item or str(up.dtype))), True
+    return None, False
+
+
 def _resolve_extract_paths(graph: dict) -> dict:
     """DETERMINISTIC reshape: for every extract_field node whose upstream output has
     a declared SHAPE, compute the correct _dig path from (source shape → downstream
@@ -1206,11 +1243,11 @@ def _resolve_extract_paths(graph: dict) -> dict:
                       and e.get("targetHandle") == "data"), None)
         if not src_e:
             continue
-        snode = nodes.get(src_e.get("source"))
-        snt = CURATED_BY_TYPE.get(snode.get("type")) if snode else None
-        if not snt:
-            continue  # generic/unknown source — keep the LLM path
-        sport = next((p for p in snt.outputs if p.name == src_e.get("sourceHandle")), None)
+        # Effective shaped source — seeing THROUGH shape-preserving transforms
+        # (select_top_k) so a transform between the shaped node and the extract can't
+        # hide an impossible extraction.
+        sport, through_transform = _effective_source_port(
+            nodes, edges, src_e.get("source"), src_e.get("sourceHandle"))
         if not sport or (sport.shape or "scalar") == "scalar":
             continue  # unshaped output — can't resolve deterministically; keep LLM path
         # Target dtype = the first consumer of this extract's output port.
@@ -1224,6 +1261,13 @@ def _resolve_extract_paths(graph: dict) -> dict:
                 if tport:
                     dst_dtype = str(tport.dtype)
         path, reason = reshape_path(sport, dst_dtype)
+        if through_transform:
+            # Conservative: we can PROVE impossibility through the transform → reject;
+            # but don't rewrite a resolvable path or auto-bridge (the transform owns its
+            # exact runtime container) — leave the LLM's path for the runnable case.
+            if path is None:
+                errors.append(f'"{en.get("label") or en["id"]}": {reason}')
+            continue
         if path is not None:
             en.setdefault("params", {})["path"] = path
             continue
