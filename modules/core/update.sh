@@ -199,6 +199,14 @@ for file in library/glow/*; do
 done
 
 echo ""
+echo "▶️ Publishing the node catalog (Vortex/MCP single source of truth)"
+echo "    (writes the node_catalog table from the wheel's built-in nodes)"
+echo ""
+
+# Must run after the wheel is on the UC Volume above — the notebook %pip-installs it.
+databricks bundle run --target $TARGET publish_node_catalog_job --var="$EXTRA_PARAMS"
+
+echo ""
 echo "▶️ Deploying UI Application (genesis-workbench)"
 echo ""
 

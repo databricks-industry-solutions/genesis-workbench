@@ -17,7 +17,14 @@ import os
 from dataclasses import dataclass, field
 
 from .models import ModelCategory, get_deployed_models
-from .workbench import execute_select_query
+from .node_catalog import (
+    NODE_CATALOG_TABLE,
+    NodeCategory,
+    node_catalog_ddl,
+    node_from_dict,
+    node_to_dict,
+)
+from .workbench import execute_non_select_query, execute_select_query
 
 # Execution kinds.
 ENDPOINT = "endpoint"
@@ -40,7 +47,84 @@ class Param:
     name: str
     type: str = "string"  # string | int | float | bool | select | text
     default: object | None = None
-    options: list[str] = field(default_factory=list)
+    options: list[str] = field(default_factory=list)   # enum: the valid values
+    # New fields are appended (keyword-only in practice) so existing positional /
+    # **dict construction keeps working. minimum/maximum bound numeric params the
+    # way `options` bounds enums; None = unbounded.
+    minimum: float | None = None
+    maximum: float | None = None
+    required: bool = False
+    label: str = ""
+    help: str = ""
+
+
+def param_schema(p: Param) -> dict:
+    """Canonical JSON-Schema property for a param — the single descriptor every
+    consumer (UI, generator prompt, MCP inputSchema, validator) derives from."""
+    t = {"int": "integer", "float": "number", "bool": "boolean"}.get(p.type, "string")
+    s: dict = {"type": t}
+    if p.options:
+        s["enum"] = list(p.options)
+    if p.default is not None:
+        s["default"] = p.default
+    if p.minimum is not None:
+        s["minimum"] = p.minimum
+    if p.maximum is not None:
+        s["maximum"] = p.maximum
+    if p.help:
+        s["description"] = p.help
+    return s
+
+
+class ParamValidationError(ValueError):
+    """A supplied param value violates the capability's declared contract."""
+
+
+def validate_params(params: list, values: dict) -> dict:
+    """Validate + coerce supplied `values` against a param contract (a list of
+    Param-like objects with .name/.type/.options/.minimum/.maximum/.required).
+
+    Contract:
+      - enum (`options`) not matched  -> reject (ParamValidationError); no sensible
+        nearest value (e.g. strategy="guided").
+      - numeric out of [minimum, maximum] -> CLAMP to the nearest bound; the caller
+        should log the coercion (never silently surprising).
+      - required + missing/blank        -> reject.
+      - bool/int/float                  -> light type coercion.
+    Unknown keys pass through untouched (forward-compatible). Returns coerced dict.
+    Works on both the wheel `Param` and the app `ParamField` (duck-typed)."""
+    by_name = {p.name: p for p in (params or [])}
+    out = dict(values or {})
+    for name, p in by_name.items():
+        present = name in out and out[name] not in (None, "")
+        if getattr(p, "required", False) and not present:
+            raise ParamValidationError(f"required param '{name}' is missing")
+        if not present:
+            continue
+        v = out[name]
+        opts = getattr(p, "options", None) or []
+        if opts and v not in opts:
+            raise ParamValidationError(
+                f"param '{name}'={v!r} is not one of {opts}"
+            )
+        ptype = getattr(p, "type", "string")
+        try:
+            if ptype == "int":
+                v = int(v)
+            elif ptype == "float":
+                v = float(v)
+            elif ptype == "bool":
+                v = v if isinstance(v, bool) else str(v).strip().lower() in ("true", "1", "yes")
+        except (TypeError, ValueError):
+            raise ParamValidationError(f"param '{name}'={out[name]!r} is not a valid {ptype}")
+        if ptype in ("int", "float"):
+            lo, hi = getattr(p, "minimum", None), getattr(p, "maximum", None)
+            if lo is not None and v < lo:
+                v = type(v)(lo)
+            if hi is not None and v > hi:
+                v = type(v)(hi)
+        out[name] = v
+    return out
 
 
 @dataclass
@@ -126,8 +210,96 @@ def endpoint_capabilities() -> list[Capability]:
     return caps
 
 
+def _sql_lit(v) -> str:
+    """SQL string literal with single-quote escaping; NULL for None."""
+    if v is None:
+        return "NULL"
+    return "'" + str(v).replace("\\", "\\\\").replace("'", "''") + "'"
+
+
+def publish_node_catalog(catalog: str | None = None, schema: str | None = None,
+                         source: str = "builtin") -> int:
+    """Publish the built-in CURATED_NODES to the `node_catalog` table — the single
+    runtime source of truth read by the wheel (MCP/executor) and Vortex.
+
+    Full-overwrite of this `source`'s rows (idempotent); rows from other sources
+    (future "mcp:<server>" external tools) are untouched. Runs from a deploy
+    notebook (the wheel carries both the data and DB access). Returns row count."""
+    from .builtin_nodes import CURATED_NODES  # local import: data module, no cycle
+    cat = catalog or os.environ["CORE_CATALOG_NAME"]
+    sch = schema or os.environ["CORE_SCHEMA_NAME"]
+    tbl = f"{cat}.{sch}.{NODE_CATALOG_TABLE}"
+    execute_non_select_query(node_catalog_ddl(cat, sch))
+    execute_non_select_query(f"DELETE FROM {tbl} WHERE source = {_sql_lit(source)}")
+    rows = [
+        f"({_sql_lit(n.type)}, {_sql_lit(str(n.category))}, {_sql_lit(n.kind or '')}, "
+        f"{_sql_lit(n.module)}, {_sql_lit(source)}, {_sql_lit(json.dumps(node_to_dict(n)))}, true)"
+        for n in CURATED_NODES
+    ]
+    if rows:
+        execute_non_select_query(
+            f"INSERT INTO {tbl} (type, category, kind, module, source, node_json, is_active) "
+            f"VALUES {', '.join(rows)}"
+        )
+    return len(rows)
+
+
+def read_catalog_nodes():
+    """Read the `node_catalog` table → list[NodeType]; [] if the table is absent,
+    empty, or unreadable (callers fall back to legacy sources). This is the single
+    runtime source of truth published from CURATED_NODES (see publish_node_catalog)."""
+    cat = os.environ.get("CORE_CATALOG_NAME")
+    schema = os.environ.get("CORE_SCHEMA_NAME")
+    if not cat or not schema:
+        return []
+    try:
+        df = execute_select_query(
+            f"SELECT node_json FROM {cat}.{schema}.{NODE_CATALOG_TABLE} WHERE is_active = true"
+        )
+    except Exception:  # noqa: BLE001 — missing table / pre-publish → fall back
+        return []
+    nodes = []
+    for _, r in df.iterrows():
+        try:
+            nodes.append(node_from_dict(json.loads(r["node_json"])))
+        except Exception:  # noqa: BLE001 — skip a bad row, keep the rest
+            continue
+    return nodes
+
+
+def _param_from_field(pf) -> Param:
+    """ParamField (rich node-catalog model) → Param (capability model)."""
+    return Param(pf.name, pf.type, pf.default, list(pf.options),
+                 minimum=pf.minimum, maximum=pf.maximum, required=pf.required,
+                 label=pf.label, help=pf.help)
+
+
+def _batch_node_to_capability(n) -> Capability | None:
+    """A BATCH NodeType (databricks_job | endpoint_chain) → a runnable Capability."""
+    ins = [Port(p.name, str(p.dtype)) for p in n.inputs]
+    outs = [Port(p.name, str(p.dtype)) for p in n.outputs]
+    params = [_param_from_field(p) for p in n.params]
+    common = dict(id=f"workflow:{n.type}", label=n.label, module=n.module,
+                  inputs=ins, outputs=outs, params=params, description=n.description)
+    if n.kind == "databricks_job":
+        return Capability(kind=JOB, job_name=n.job_name, **common)
+    if n.kind == "endpoint_chain":
+        return Capability(kind=CHAIN, chain_id=(n.chain or n.type), **common)
+    return None
+
+
 def workflow_capabilities() -> list[Capability]:
-    """Prebuilt workflows from the `prebuilt_workflows` Delta registry."""
+    """Prebuilt workflows. Source of truth is the `node_catalog` table (published
+    from CURATED_NODES); falls back to the legacy `prebuilt_workflows` registry if
+    node_catalog has no BATCH rows (pre-publish / missing table)."""
+    batch = [n for n in read_catalog_nodes() if n.category == NodeCategory.BATCH]
+    if batch:
+        return [c for c in (_batch_node_to_capability(n) for n in batch) if c]
+    return _workflow_capabilities_legacy()
+
+
+def _workflow_capabilities_legacy() -> list[Capability]:
+    """Prebuilt workflows from the `prebuilt_workflows` Delta registry (fallback)."""
     cat = os.environ["CORE_CATALOG_NAME"]
     schema = os.environ["CORE_SCHEMA_NAME"]
     try:
@@ -154,7 +326,11 @@ def workflow_capabilities() -> list[Capability]:
             inputs=[Port(p.get("name"), p.get("dtype", "any")) for p in _p("inputs_json")],
             outputs=[Port(p.get("name"), p.get("dtype", "any")) for p in _p("outputs_json")],
             params=[Param(p.get("name"), p.get("type", "string"),
-                          p.get("default"), p.get("options", []) or []) for p in _p("params_json")],
+                          p.get("default"), p.get("options", []) or [],
+                          minimum=p.get("minimum"), maximum=p.get("maximum"),
+                          required=bool(p.get("required", False)),
+                          label=p.get("label", "") or "", help=p.get("help", "") or "")
+                    for p in _p("params_json")],
             description=str(r["description"] or ""),
         ))
     return caps

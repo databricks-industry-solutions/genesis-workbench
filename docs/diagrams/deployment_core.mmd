@@ -16,6 +16,7 @@ flowchart LR
     direction TB
     SM_CORE("Core Infrastructure")
     SM_APP("Genesis Workbench App")
+    SM_MCP("MCP Server App")
     SM_UC("Unity Catalog")
   end
 
@@ -29,8 +30,16 @@ flowchart LR
 
   subgraph COL3["  App & Catalog Resources  "]
     direction TB
-    APP["Genesis Workbench App\n(React + FastAPI)"]
+    APP["Genesis Workbench App\n(React UI + FastAPI · Vortex)"]
+    MCP["MCP Server App\n(FastMCP · streamable HTTP /mcp)"]
     UC["Unity Catalog Schema\n+ Tables + Volumes"]
+  end
+
+  subgraph COL4["  Common Service Layer  "]
+    direction TB
+    CORE["Capability Core\ncapabilities + executor\n(genesis_workbench wheel)"]
+    EP(["Model Serving\nEndpoints"])
+    JOBS(["Workflow Jobs\n(orchestrator + batch)"])
   end
 
   SM_CORE --> WF1
@@ -38,18 +47,31 @@ flowchart LR
   SM_CORE --> WF3
   SM_CORE --> WF4
   SM_APP  --> APP
+  SM_MCP  --> MCP
   SM_UC   --> UC
 
   WF1 --> UC
   WF2 --> APP
   WF3 --> APP
   WF4 --> APP
+  WF4 --> MCP
 
-  classDef submod fill:#dbeafe,stroke:#1e40af,color:#1e3a5f,font-weight:bold,rx:6
-  classDef wflow  fill:#bfdbfe,stroke:#1e40af,color:#1e3a5f,rx:6
-  classDef res    fill:#eff6ff,stroke:#1e40af,color:#1e3a5f,font-weight:bold,rx:6
-  classDef colBox fill:#f0f7ff,stroke:#93c5fd
+  %% Common service layer: both apps are thin adapters over one capability core,
+  %% which invokes the deployed endpoints and dispatches the workflow jobs.
+  APP  --> CORE
+  MCP  --> CORE
+  CORE --> EP
+  CORE --> JOBS
 
-  class SM_CORE,SM_APP,SM_UC submod
+  classDef submod  fill:#dbeafe,stroke:#1e40af,color:#1e3a5f,font-weight:bold,rx:6
+  classDef wflow   fill:#bfdbfe,stroke:#1e40af,color:#1e3a5f,rx:6
+  classDef res     fill:#eff6ff,stroke:#1e40af,color:#1e3a5f,font-weight:bold,rx:6
+  classDef svc     fill:#dcfce7,stroke:#15803d,color:#14532d,font-weight:bold,rx:6
+  classDef runtime fill:#ecfdf5,stroke:#15803d,color:#14532d,rx:6
+  classDef colBox  fill:#f0f7ff,stroke:#93c5fd
+
+  class SM_CORE,SM_APP,SM_MCP,SM_UC submod
   class WF1,WF2,WF3,WF4 wflow
-  class APP,UC res
+  class APP,MCP,UC res
+  class CORE svc
+  class EP,JOBS runtime

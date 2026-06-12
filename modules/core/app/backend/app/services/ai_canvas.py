@@ -28,6 +28,12 @@ from genesis_workbench.models import (
     get_endpoint_name_for_uc_model,
     set_mlflow_experiment,
 )
+from genesis_workbench.capabilities import (
+    ParamValidationError,
+    read_catalog_nodes,
+    validate_params,
+)
+from genesis_workbench.node_catalog import dtypes_compatible, reshape_path
 from genesis_workbench.workbench import (
     UserInfo,
     execute_non_select_query,
@@ -60,7 +66,31 @@ VOLUME_DIR_NAME = "ai_canvas"             # /Volumes/<cat>/<schema>/ai_canvas/<u
 
 
 def _serialize_port(p: Port) -> dict:
-    return {"name": p.name, "dtype": str(p.dtype), "label": p.label or p.name}
+    d = {"name": p.name, "dtype": str(p.dtype), "label": p.label or p.name}
+    if getattr(p, "shape", "scalar") and p.shape != "scalar":
+        d["shape"] = p.shape
+    if getattr(p, "item", None) is not None:
+        d["item"] = p.item
+    if getattr(p, "fields", None) is not None:
+        d["fields"] = dict(p.fields)
+    return d
+
+
+def _port_shape_hint(p: dict) -> str:
+    """Compact shape annotation for the generator prompt so it picks the right
+    output port: candidates(json: map of pdb), sequences(sequences: list of
+    sequence), top_k(json: list of {smiles,qed,reward})."""
+    shape = p.get("shape")
+    if not shape:
+        return f"{p['name']}:{p['dtype']}"
+    if shape == "list_obj":
+        inner = ",".join((p.get("fields") or {}).keys())
+        return f"{p['name']}:{p['dtype']}(list of {{{inner}}})"
+    if shape == "map":
+        return f"{p['name']}:{p['dtype']}(map of {p.get('item','any')})"
+    if shape == "list":
+        return f"{p['name']}:{p['dtype']}(list of {p.get('item','any')})"
+    return f"{p['name']}:{p['dtype']}"
 
 
 def _serialize_node(node: NodeType, available: bool) -> dict:
@@ -82,6 +112,8 @@ def _serialize_node(node: NodeType, available: bool) -> dict:
                 "type": f.type,
                 "default": f.default,
                 "options": list(f.options),
+                "minimum": f.minimum,
+                "maximum": f.maximum,
                 "required": f.required,
                 "help": f.help,
             }
@@ -186,9 +218,14 @@ def build_catalog() -> list[dict]:
     deployed_shorts, short_to_display = _deployed_endpoints()
     batch_jobs = _batch_job_names() | _all_job_names()
 
+    # Source of truth is the node_catalog table (published from CURATED_NODES at
+    # deploy, and where future external-MCP tools land). Fall back to the in-code
+    # CURATED_NODES if the table is empty/unavailable (pre-publish safety).
+    nodes = read_catalog_nodes() or list(CURATED_NODES)
+
     catalog: list[dict] = []
     curated_shorts: set[str] = set()
-    for node in CURATED_NODES:
+    for node in nodes:
         if node.category == NodeCategory.ENDPOINT:
             short = DISPLAY_TO_UC.get(node.endpoint_display_name or "")
             if short:
@@ -234,13 +271,33 @@ def _catalog_prompt_lines(catalog: list[dict]) -> str:
         if not _offerable(n):
             continue  # skip nodes that can't run via the generic orchestrator path
         ins = ", ".join(f"{p['name']}:{p['dtype']}" for p in n["inputs"]) or "—"
-        outs = ", ".join(f"{p['name']}:{p['dtype']}" for p in n["outputs"]) or "—"
-        params = ", ".join(p["name"] for p in n["params"]) or "—"
+        outs = ", ".join(_port_shape_hint(p) for p in n["outputs"]) or "—"
+        params = ", ".join(_param_hint(p) for p in n["params"]) or "—"
         lines.append(
             f'- type="{n["type"]}" ({n["category"]}): {n["label"]}. '
             f"in[{ins}] out[{outs}] params[{params}]"
         )
     return "\n".join(lines)
+
+
+def _param_hint(p: dict) -> str:
+    """Render a param with its CONTRACT so the model uses valid values: enum
+    choices, numeric range, and default — e.g. `strategy(enum: resample|noop =
+    resample)`, `num_iterations(int 1..50 = 10)`, `qed_min(float 0..1 = 0.5)`."""
+    name, typ = p["name"], p.get("type", "string")
+    if p.get("options"):
+        spec = "enum: " + "|".join(str(o) for o in p["options"])
+    elif typ in ("int", "float"):
+        lo, hi = p.get("minimum"), p.get("maximum")
+        rng = ""
+        if lo is not None or hi is not None:
+            rng = f" {('' if lo is None else lo)}..{('' if hi is None else hi)}"
+        spec = f"{typ}{rng}"
+    else:
+        spec = typ
+    dflt = p.get("default")
+    tail = f" = {dflt}" if dflt is not None else ""
+    return f"{name}({spec}{tail})"
 
 
 _SYSTEM_PROMPT_TEMPLATE = """You are a workflow architect for Genesis Workbench, a bioinformatics platform.
@@ -269,6 +326,7 @@ SEMANTIC COMPOSITION — the pipeline must actually accomplish the goal, not jus
 - EVERY input port of a non-input node must be wired (each is required). A file-backed input — a PDB structure (e.g. enzyme_optimization.motif_pdb), a sequence/FASTA — can be supplied by a volume_input (a UC Volume path); wire that volume_input's `data` output into the port. If you add a volume_input/text_input as a source, you MUST connect it to the node that consumes it — never leave an input node dangling.
 - Pick the RIGHT output port for what's needed. protein_design has two: `designs` (PDB *structures*) and `sequences` (the designed amino-acid *sequences*). To score/validate/fold a designed SEQUENCE (e.g. feed deepstabp/netsolp/ESMFold), use `sequences` — NOT `designs` (a PDB string has no `.sequence` field, so extracting one yields null). Match the downstream input's meaning to the source port's meaning.
 - LIST outputs must be INDEXED in an extract_field path. molecule_optimization.`top_k`, protein_design.`designs`/`sequences`, and any `candidates`/top-K output are LISTS of items. To pull a field from the best item, the path MUST index an element first: use `[0].smiles` (or `0.smiles`), NEVER bare `smiles` — a bare field name on a list resolves to null and fails the run. If the list elements are plain strings (e.g. `sequences` = ["MKT...", ...]), use `[0]` alone.
+- These outputs are ALREADY-FOLDED PDB STRUCTURES, not sequences: enzyme_optimization.`candidates` (a map of name to PDB structure) and protein_design.`designs`. Do NOT extract a `.sequence` from them and do NOT re-fold them with ESMFold/AlphaFold — they are structures already. If the goal says "validate/fold the top design", the design IS the validated structure, so send it straight to an output_sink (or a structure consumer). Only feed ESMFold/AlphaFold a real amino-acid SEQUENCE (a text_input sequence, or protein_design.`sequences`).
 
 WORKED EXAMPLE — goal "optimize a molecule for a target, then ADMET-screen the results":
   text_input "Seed SMILES" ──seed_smiles──▶ molecule_optimization
@@ -1065,6 +1123,146 @@ def _exec_descriptor(type_key: str, w: WorkspaceClient) -> dict:
     return {"kind": "unknown"}
 
 
+def _find_bridge(src_item_dtype: str, dst_dtype: str):
+    """A UNIQUE catalog node that converts `src_item_dtype` → `dst_dtype` — used to
+    auto-repair an otherwise-impossible extract (e.g. enzyme candidates are PDB
+    *structures*, so a sequence consumer needs a ProteinMPNN bridge: pdb→sequences).
+    Only real model/batch nodes qualify (not transforms/IO), and the dtype match must
+    be SPECIFIC (no `any` passthroughs), so we never silently pick a no-op. Returns
+    (NodeType, in_port, out_port, out_path) or None when there is no unique bridge."""
+    hits = []
+    for nt in CURATED_BY_TYPE.values():
+        if str(nt.category) in ("transform", "io"):
+            continue
+        in_p = next((p for p in nt.inputs
+                     if str(p.dtype) != "any"
+                     and dtypes_compatible(src_item_dtype, str(p.dtype))), None)
+        if not in_p:
+            continue
+        for op in nt.outputs:
+            if str(op.dtype) == "any":
+                continue
+            op_path, _ = reshape_path(op, dst_dtype)
+            if op_path is not None:
+                hits.append((nt, in_p.name, op.name, op_path))
+                break
+    uniq = {h[0].type: h for h in hits}
+    if len(uniq) == 1:
+        return next(iter(uniq.values()))
+    # Tie-break: an atomic ENDPOINT conversion (e.g. ProteinMPNN) beats a whole
+    # batch design CHAIN (e.g. motif_scaffolding) that merely exposes the dtype.
+    endpoint_hits = {t: h for t, h in uniq.items() if str(h[0].category) == "endpoint"}
+    return next(iter(endpoint_hits.values())) if len(endpoint_hits) == 1 else None
+
+
+def _insert_bridge(graph: dict, en: dict, sport, bridge) -> None:
+    """Rewire `src → [extract] → consumers` into
+    `src → [extract '*'] → BRIDGE → [extract '0'] → consumers`, fully deterministic.
+    `en` is repurposed as the structure extractor (yields the bridge's input dtype);
+    a new bridge node + a second extract (yields the consumer dtype) are inserted."""
+    nt, in_port, out_port, out_path = bridge
+    bport = next(p for p in nt.inputs if p.name == in_port)
+    edges = graph["edges"]
+    eid = en["id"]
+    pos = en.get("position", {"x": 0, "y": 0})
+    bid, e2id = f"{eid}__bridge", f"{eid}__seq"
+    # 1. en now extracts the bridge's INPUT dtype from the structure source.
+    en.setdefault("params", {})["path"], _ = reshape_path(sport, str(bport.dtype))
+    # 2. consumers of en's output now read from the SECOND extract instead.
+    for e in edges:
+        if e.get("source") == eid and e.get("sourceHandle") in (None, "value"):
+            e["source"] = e2id
+    # 3. bridge node + second extract node.
+    out_dt = next(p for p in nt.outputs if p.name == out_port).dtype
+    graph["nodes"].append({
+        "id": bid, "type": nt.type, "label": nt.label, "params": {}, "inputs": {},
+        "position": {"x": pos.get("x", 0) + 220, "y": pos.get("y", 0)},
+    })
+    graph["nodes"].append({
+        "id": e2id, "type": "extract_field", "label": f"Extract {out_dt}",
+        "params": {"path": out_path}, "inputs": {},
+        "position": {"x": pos.get("x", 0) + 440, "y": pos.get("y", 0)},
+    })
+    # 4. en.value → bridge.in ; bridge.out → e2.data
+    edges.append({"source": eid, "target": bid, "sourceHandle": "value", "targetHandle": in_port})
+    edges.append({"source": bid, "target": e2id, "sourceHandle": out_port, "targetHandle": "data"})
+
+
+def _resolve_extract_paths(graph: dict) -> dict:
+    """DETERMINISTIC reshape: for every extract_field node whose upstream output has
+    a declared SHAPE, compute the correct _dig path from (source shape → downstream
+    consumer dtype) and OVERRIDE the LLM's guessed path. When no direct extraction is
+    possible (e.g. a sequence from a PDB-structure map), AUTO-INSERT a unique catalog
+    bridge (ProteinMPNN: pdb→sequences) so the workflow is runnable regardless of the
+    LLM's wiring; only reject if no bridge exists. This stops the recurring
+    '[0].sequence resolved to None' class at submission. Sources with no declared
+    shape keep the LLM's path (best-effort)."""
+    nodes = {n["id"]: n for n in graph.get("nodes", [])}
+    edges = graph.get("edges", [])
+    errors: list[str] = []
+    # Snapshot the extract nodes up front — we may append more during bridging.
+    for en in [n for n in graph.get("nodes", []) if n.get("type") == "extract_field"]:
+        src_e = next((e for e in edges if e.get("target") == en["id"]
+                      and e.get("targetHandle") == "data"), None)
+        if not src_e:
+            continue
+        snode = nodes.get(src_e.get("source"))
+        snt = CURATED_BY_TYPE.get(snode.get("type")) if snode else None
+        if not snt:
+            continue  # generic/unknown source — keep the LLM path
+        sport = next((p for p in snt.outputs if p.name == src_e.get("sourceHandle")), None)
+        if not sport or (sport.shape or "scalar") == "scalar":
+            continue  # unshaped output — can't resolve deterministically; keep LLM path
+        # Target dtype = the first consumer of this extract's output port.
+        out_e = next((e for e in edges if e.get("source") == en["id"]), None)
+        dst_dtype = "any"
+        if out_e:
+            tnode = nodes.get(out_e.get("target"))
+            tnt = CURATED_BY_TYPE.get(tnode.get("type")) if tnode else None
+            if tnt:
+                tport = next((p for p in tnt.inputs if p.name == out_e.get("targetHandle")), None)
+                if tport:
+                    dst_dtype = str(tport.dtype)
+        path, reason = reshape_path(sport, dst_dtype)
+        if path is not None:
+            en.setdefault("params", {})["path"] = path
+            continue
+        # No direct path — try to auto-insert a unique structure→dst bridge.
+        bridge = _find_bridge(sport.item or str(sport.dtype), dst_dtype)
+        if bridge:
+            logger.info("ai_canvas: auto-inserting %s bridge for %r (%s→%s)",
+                        bridge[0].type, en["id"], sport.item or sport.dtype, dst_dtype)
+            _insert_bridge(graph, en, sport, bridge)
+        else:
+            errors.append(f'"{en.get("label") or en["id"]}": {reason}')
+    if errors:
+        raise GraphGenerationError(
+            "This workflow can't run as wired: " + "; ".join(errors)
+            + ". (Fix the upstream source or the consumer.)"
+        )
+    return graph
+
+
+def _validate_graph_params(graph: dict) -> dict:
+    """Validate + coerce every node's params against its registry contract before
+    dispatch (the same `validate_params` the MCP path uses): reject bad enums /
+    missing required, clamp out-of-range numerics. Returns a new graph with coerced
+    params. Raises GraphGenerationError on a hard-invalid value (e.g. strategy not
+    in its options) so the run fails fast at submission, not deep in a job."""
+    nodes = []
+    for n in graph.get("nodes", []):
+        node = dict(n)
+        nt = CURATED_BY_TYPE.get(node.get("type", ""))
+        if nt and nt.params and isinstance(node.get("params"), dict):
+            try:
+                node["params"] = validate_params(nt.params, node["params"])
+            except ParamValidationError as e:
+                label = node.get("label") or node.get("type")
+                raise GraphGenerationError(f'"{label}": {e}') from e
+        nodes.append(node)
+    return {"nodes": nodes, "edges": graph.get("edges", [])}
+
+
 def _enrich_graph(graph: dict, w: WorkspaceClient) -> dict:
     """Embed an `exec` block into every node so the orchestrator is a pure
     interpreter. Returns a new graph dict (does not mutate the input)."""
@@ -1102,6 +1300,8 @@ def start_workflow_run(
 
     w = WorkspaceClient()
     job_id = _resolve_orchestrator_job_id(w)
+    graph = _resolve_extract_paths(graph)  # deterministic reshape from declared shapes
+    graph = _validate_graph_params(graph)  # contract-check params before dispatch
     enriched = _enrich_graph(graph, w)
     graph_path = _upload_graph(enriched, catalog, schema)
 
@@ -1199,12 +1399,19 @@ def get_run_result(run_id: str) -> dict:
     client = MlflowClient()
     node_status: dict = {}
     node_error: dict = {}
+    start_time = 0
+    end_time = 0
+    job_status = ""
     try:
-        tags = client.get_run(run_id).data.tags
+        run = client.get_run(run_id)
+        tags = run.data.tags
         node_status = {k.split(":", 2)[1]: v for k, v in tags.items()
                        if k.startswith("node:") and k.endswith(":status")}
         node_error = {k.split(":", 2)[1]: v for k, v in tags.items()
                       if k.startswith("node:") and k.endswith(":error")}
+        start_time = run.info.start_time or 0
+        end_time = run.info.end_time or 0  # 0 while still running
+        job_status = tags.get("job_status", "")
     except Exception as e:  # noqa: BLE001
         logger.info("tags not available for run %s: %s", run_id, e)
     return {
@@ -1212,6 +1419,132 @@ def get_run_result(run_id: str) -> dict:
         "graph": _download_run_json(client, run_id, "graph.json"),
         "node_status": node_status,
         "node_error": node_error,
+        "start_time": start_time,
+        "end_time": end_time,
+        "job_status": job_status,
+    }
+
+
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def get_node_job_error(run_id: str, node_id: str) -> dict:
+    """Dig into the ORIGINATING Databricks job behind a failed node and return its
+    real error + stack trace. The orchestrator only records a generic 'Job run N
+    failed with RunResultState.FAILED' on the node; this resolves that job run and
+    reads each failed task's output (error/error_trace), so the UI can surface the
+    actual cause (e.g. a ValueError deep in the job) and link to the job run page."""
+    client = MlflowClient()
+    # Prefer the orchestrator-captured artifact: the inner workflow jobs are often
+    # NOT viewable by the app SP via the Jobs API (it can dispatch but not read), so
+    # the orchestrator (a privileged identity) captures the child job's error/trace
+    # at failure time and logs it here. The app SP can always read MLflow artifacts.
+    captured = _download_run_json(client, run_id, f"results/node_{node_id}_job_error.json")
+    if captured:
+        return captured
+    try:
+        tags = client.get_run(run_id).data.tags
+    except Exception as e:  # noqa: BLE001
+        return {"found": False, "message": f"Run not found: {e}"}
+    node_err = tags.get(f"node:{node_id}:error", "")
+    # Prefer an explicit per-node job-run tag (set by the orchestrator); fall back
+    # to parsing the id out of the generic error message.
+    job_run_id = tags.get(f"node:{node_id}:job_run_id") or ""
+    if not job_run_id:
+        m = re.search(r"[Jj]ob run (\d+)", node_err)
+        job_run_id = m.group(1) if m else ""
+    if not job_run_id:
+        return {"found": False, "node_error": node_err,
+                "message": "This step has no originating Databricks job to dig into."}
+    w = WorkspaceClient()
+    try:
+        run = w.jobs.get_run(run_id=int(job_run_id))
+    except Exception as e:  # noqa: BLE001
+        # The app SP usually can't view the inner workflow jobs directly; newer runs
+        # carry the orchestrator-captured artifact (read above), older ones don't.
+        denied = "permission" in str(e).lower() or "does not have" in str(e).lower()
+        msg = (
+            f"The detailed error wasn't captured for this run, and the app can't view "
+            f"child job run {job_run_id} directly. Re-run the workflow to capture the "
+            f"full trace here, or open the job run page in Databricks."
+            if denied else f"Job run {job_run_id} is not reachable: {e}"
+        )
+        return {"found": False, "job_run_id": str(job_run_id), "node_error": node_err, "message": msg}
+    tasks_out = []
+    for t in getattr(run, "tasks", None) or []:
+        state = getattr(t, "state", None)
+        rs = getattr(state, "result_state", None)
+        # result_state is an enum; str(enum) is "RunResultState.FAILED" — take the
+        # value ("FAILED") so the non-success check (and the UI) read cleanly.
+        result = str(getattr(rs, "value", rs) or "")
+        entry = {
+            "task_key": getattr(t, "task_key", "") or "",
+            "result_state": result,
+            "state_message": str(getattr(state, "state_message", "") or ""),
+            "error": "",
+            "error_trace": "",
+        }
+        trun = getattr(t, "run_id", None)
+        # Fetch the task output for any non-success task (FAILED / TIMEDOUT / …) —
+        # that's where the real error + stack trace live.
+        if trun and result and result != "SUCCESS":
+            try:
+                out = w.jobs.get_run_output(run_id=trun)
+                entry["error"] = _ANSI.sub("", (getattr(out, "error", None) or ""))[:4000]
+                entry["error_trace"] = _ANSI.sub("", (getattr(out, "error_trace", None) or ""))[:8000]
+            except Exception as e:  # noqa: BLE001
+                entry["error"] = f"(could not fetch task output: {e})"
+        tasks_out.append(entry)
+    return {
+        "found": True,
+        "job_run_id": str(job_run_id),
+        "run_page_url": getattr(run, "run_page_url", "") or "",
+        "node_error": node_err,
+        "tasks": tasks_out,
+    }
+
+
+_ERROR_INTERPRET_PROMPT = (
+    "You are a senior MLOps + bioinformatics engineer triaging a FAILED step in a "
+    "Genesis Workbench (Databricks) workflow. Given the step context and its error / "
+    "stack trace, determine the most likely ROOT CAUSE and a concrete, actionable FIX, "
+    "and CLASSIFY the failure as exactly one of:\n"
+    "- 'data': a bad/invalid/inconsistent INPUT or parameter the user controls "
+    "(malformed value, wrong format, out-of-range, empty/None from upstream, mismatched "
+    "ids). The user can fix it by changing inputs and re-running.\n"
+    "- 'system': an infrastructure / code / dependency / permission / resource failure "
+    "(OOM, missing or undeployed endpoint, import error, timeout, driver crash, quota). "
+    "Needs an operator/engineer, not an input change.\n"
+    "Quote the single most telling line or value from the trace. Be specific and brief.\n"
+    'Respond ONLY as compact JSON: {"classification":"data|system|unknown",'
+    '"root_cause":"<=300 chars","fix":"<=300 chars"}.'
+)
+
+
+def interpret_error(error_text: str, llm_endpoint: str, context: str = "") -> dict:
+    """LLM triage of a failed step's error/trace → {classification, root_cause, fix}.
+    classification is 'data' (user-fixable input) vs 'system' (operator) vs 'unknown'."""
+    if not (error_text or "").strip():
+        return {"classification": "unknown", "root_cause": "No error text to analyze.", "fix": ""}
+    user = (f"STEP: {context}\n\n" if context else "") + f"ERROR / STACK TRACE:\n{error_text[:6000]}"
+    w = WorkspaceClient()
+    response = w.serving_endpoints.query(
+        name=llm_endpoint,
+        messages=[
+            ChatMessage(role=ChatMessageRole.SYSTEM, content=_ERROR_INTERPRET_PROMPT),
+            ChatMessage(role=ChatMessageRole.USER, content=user),
+        ],
+        max_tokens=700,
+        temperature=0.1,
+    )
+    parsed = _extract_json(response.choices[0].message.content)
+    cls = str(parsed.get("classification", "unknown")).strip().lower()
+    if cls not in ("data", "system", "unknown"):
+        cls = "unknown"
+    return {
+        "classification": cls,
+        "root_cause": str(parsed.get("root_cause", "") or "")[:600],
+        "fix": str(parsed.get("fix", "") or "")[:600],
     }
 
 

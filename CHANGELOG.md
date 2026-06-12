@@ -1,5 +1,50 @@
 # Genesis Workbench — Changelog
 
+## v2.1.0 (2026-06-12) — Vortex: deterministic wiring + Past Vortex Runs (inspect · re-run · failure triage)
+
+A large batch making **Vortex** (AI-assisted workflow canvas) reliable end-to-end: workflows now wire
+**deterministically** from a published contract instead of LLM guesswork, and a new **Past Vortex Runs**
+surface lets you inspect, re-run, and triage any run.
+
+### Deterministic wiring (the headline)
+
+Vortex runs kept failing because the published contract had port *dtypes* but not output *value shapes*,
+so the LLM guessed extraction paths (`[0].sequence`) that resolved to `null` at runtime.
+
+- **Output-value shapes in the contract.** Each output `Port` now declares a `shape` (`scalar` / `list` /
+  `list_obj` / `map`) + element/field dtypes, published to the `node_catalog` Delta table. `reshape_path()`
+  (in the wheel) turns *(source shape → target dtype)* into a deterministic `_dig` path — no guessing.
+- **Resolve-or-bridge-or-reject at submit.** Every `extract_field` is rewritten to the derived path; when a
+  value can't be produced directly, the resolver **auto-inserts the unique catalog node that bridges it**
+  (e.g. `enzyme.candidates` map<pdb> → **ProteinMPNN** → sequence, tie-broken to an atomic endpoint over a
+  batch design chain), or **rejects the run with a plain-English reason** if none exists. No node-specific
+  hardcoding — it walks the catalog by dtype/shape.
+- **Envelope→port mapping.** Batch-job adapters return `{<port>: value, child_run_id, job_run_id}`; the
+  orchestrator now maps that onto the node's declared output ports (was nesting the whole envelope under one
+  port, which broke every downstream extract — enzyme `candidates` and molecule `top_k` alike).
+- Fixed `proteinmpnn.sequences` shape (it returns a *list*), and the enzyme `motif_residues_csv` parser now
+  tolerates `1` / `A:50` / `B1` (trailing integer) instead of crashing on `int('B1')`.
+
+### Past Vortex Runs — inspect, re-run, triage
+
+- New **Past Vortex Runs** tab (right side of the Home tab bar, history icon): browse/filter + refresh.
+- **Result viewer** with **Workflow · Inputs · Outputs** tabs: a read-only canvas colored by per-node
+  status (green=passed, **amber+pulse=running**, red=failed, grey=**pending** while running / **skipped**
+  once failed), the exact inputs/params that fed the run, and per-node + final outputs (the empty
+  `output_sink` duplicate row is suppressed). Each run shows its elapsed time ("Took …" / "Running for …").
+- **Re-run with edited inputs** — a side drawer seeded from the run lets you change any input/param and
+  dispatch a fresh run (original untouched), reusing the canvas's field editors.
+- **Failure triage** — a write-up names the failed step + error; an **AI analysis** panel gives the root
+  cause, a fix, and a **data-vs-system verdict** beside the trace. For job-backed steps, "**Examine the
+  child job**" pulls the job's real stack trace (the orchestrator captures it at failure since the app SP
+  can't always read the inner job; ANSI-stripped); in-process failures show the error + AI inline.
+
+### Notes
+
+- Frontend + app-service + orchestrator + wheel (`genesis_workbench` 0.1.27→0.1.32); no new model/module.
+- Verified on ci-demo: protein-design→thermostability completed (Tm 54.4 °C); enzyme→fold→solubility now
+  generates a runnable ProteinMPNN-bridged graph; failure triage shows the real `ValueError` + AI verdict.
+
 ## kermt_admet (2026-06-08) — KERMT: fine-tunable GNN ADMET model, served side-by-side with ChemProp
 
 Added **KERMT** (NVIDIA-BioNeMo *Kinetic GROVER Multi-Task*, Apache-2.0) as a fine-tunable small-molecule

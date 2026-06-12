@@ -10,7 +10,9 @@ and result endpoints are added in subsequent increments.
 from __future__ import annotations
 
 import json
+import logging
 import time
+import traceback
 
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -20,6 +22,8 @@ from pydantic import BaseModel, Field
 from app.auth import CurrentUser, CurrentUserDep
 from app.config import get_settings
 from app.services import ai_canvas as svc
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/ai_canvas", tags=["ai_canvas"])
 _SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
@@ -147,7 +151,14 @@ def generate_stream(payload: GenerateRequest, _: CurrentUserDep) -> StreamingRes
                 elif kind == "result":
                     yield f"event: result\ndata: {json.dumps(payload_evt)}\n\n"
         except Exception as e:  # noqa: BLE001 — surface as an SSE error event
-            yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
+            # Log the full traceback (the SSE path otherwise swallows it, so the
+            # app log stayed empty) and surface the exception TYPE + where it came
+            # from so a bare "'name'" isn't the only signal.
+            logger.exception("generate_stream failed for goal=%r", payload.goal)
+            tb = traceback.extract_tb(e.__traceback__)
+            where = f"{tb[-1].filename.split('/')[-1]}:{tb[-1].lineno}" if tb else "?"
+            msg = f"{type(e).__name__}: {e} (at {where})"
+            yield f"event: error\ndata: {json.dumps({'message': msg})}\n\n"
             return
 
     return StreamingResponse(_events(), media_type="text/event-stream", headers=_SSE_HEADERS)
@@ -306,6 +317,9 @@ class RunResultResponse(BaseModel):
     graph: dict | None = None
     node_status: dict = {}
     node_error: dict = {}
+    start_time: int = 0  # epoch ms
+    end_time: int = 0  # epoch ms; 0 while still running
+    job_status: str = ""
 
 
 @router.post("/run", response_model=RunResponse)
@@ -336,12 +350,60 @@ def run_status(run_id: str, _: CurrentUserDep) -> RunStatusResponse:
     return RunStatusResponse(**svc.get_run_status(run_id))
 
 
+class NodeJobErrorResponse(BaseModel):
+    found: bool
+    job_run_id: str = ""
+    run_page_url: str = ""
+    node_error: str = ""
+    message: str = ""
+    tasks: list[dict] = []
+
+
+@router.get("/run/{run_id}/node/{node_id}/job-error", response_model=NodeJobErrorResponse)
+def node_job_error(run_id: str, node_id: str, _: CurrentUserDep) -> NodeJobErrorResponse:
+    """Dig into the originating Databricks job behind a failed node — its real
+    error/stack trace + a link to the job run page."""
+    return NodeJobErrorResponse(**svc.get_node_job_error(run_id, node_id))
+
+
+class InterpretErrorRequest(BaseModel):
+    error_trace: str
+    context: str = ""
+
+
+class InterpretErrorResponse(BaseModel):
+    classification: str  # data | system | unknown
+    root_cause: str = ""
+    fix: str = ""
+
+
+@router.post("/interpret-error", response_model=InterpretErrorResponse)
+def interpret_error(payload: InterpretErrorRequest, _: CurrentUserDep) -> InterpretErrorResponse:
+    """AI triage of a failed step's error/trace: root cause + fix + a data-vs-system
+    verdict, for the right-hand panel of the error viewer."""
+    endpoint = get_settings().llm_endpoint_name
+    if not endpoint:
+        return InterpretErrorResponse(
+            classification="unknown", root_cause="LLM endpoint not configured.", fix=""
+        )
+    try:
+        return InterpretErrorResponse(
+            **svc.interpret_error(payload.error_trace, endpoint, payload.context)
+        )
+    except Exception as e:  # noqa: BLE001
+        return InterpretErrorResponse(
+            classification="unknown", root_cause=f"Interpretation failed: {e}", fix=""
+        )
+
+
 @router.get("/run/{run_id}/result", response_model=RunResultResponse)
 def run_result(run_id: str, _: CurrentUserDep) -> RunResultResponse:
     d = svc.get_run_result(run_id)
     return RunResultResponse(
         result=d.get("result", {}), graph=d.get("graph"),
         node_status=d.get("node_status", {}), node_error=d.get("node_error", {}),
+        start_time=d.get("start_time", 0), end_time=d.get("end_time", 0),
+        job_status=d.get("job_status", ""),
     )
 
 

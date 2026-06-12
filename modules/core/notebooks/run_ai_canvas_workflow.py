@@ -98,6 +98,7 @@ except Exception as _setup_exc:
 import json
 import tempfile
 import os
+import re
 
 import mlflow
 from databricks.sdk import WorkspaceClient
@@ -234,7 +235,19 @@ def run_node(node_id):
                 "node_id": node_id, "run_name": nodes[node_id].get("label", node_id),
                 "dev_user_prefix": os.environ.get("DEV_USER_PREFIX", "") or "",
             }
-            return {first_out: run_workflow_job(job_name, inputs, params, w, ctx=ctx)}
+            # run_workflow_job returns an ENVELOPE keyed by the node's output-port
+            # names PLUS metadata (child_run_id, job_run_id): e.g. enzyme ->
+            # {"candidates": <map>, "child_run_id":.., "job_run_id":..}. Map each
+            # declared output port to its value so a downstream port reference (and
+            # the deterministic reshape path) sees the PORT VALUE — not the whole
+            # envelope. Nesting the envelope under first_out is what made extract
+            # paths resolve against {candidates, child_run_id, job_run_id} and fail.
+            res = run_workflow_job(job_name, inputs, params, w, ctx=ctx)
+            if isinstance(res, dict):
+                mapped = {p: res[p] for p in out_ports if p in res}
+                if mapped:
+                    return mapped
+            return {first_out: res}
         # Fallback: plain trigger-and-wait; downstream nodes only get the run id.
         job_id = ex.get("job_id")
         if not job_id:
@@ -287,6 +300,51 @@ try:
         for nid in order:
             mlflow.set_tag(f"node:{nid}:status", "pending")
 
+        _ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+        def _persist_child_job_error(nid, job_run_id):
+            """Capture the originating child job's real error + stack trace NOW (the
+            orchestrator's identity can read the inner workflow job; the app SP often
+            can't) and persist it as an MLflow artifact so the Result popup can show
+            it without needing Jobs-API view permission."""
+            run = w.jobs.get_run(run_id=int(job_run_id))
+            tasks = []
+            for t in getattr(run, "tasks", None) or []:
+                state = getattr(t, "state", None)
+                rs = getattr(state, "result_state", None)
+                # enum -> value ("FAILED"), not "RunResultState.FAILED"
+                result = str(getattr(rs, "value", rs) or "")
+                entry = {"task_key": getattr(t, "task_key", "") or "", "result_state": result,
+                         "state_message": str(getattr(state, "state_message", "") or ""),
+                         "error": "", "error_trace": ""}
+                trun = getattr(t, "run_id", None)
+                if trun and result and result != "SUCCESS":
+                    out = w.jobs.get_run_output(run_id=trun)
+                    entry["error"] = _ANSI.sub("", (getattr(out, "error", None) or ""))[:4000]
+                    entry["error_trace"] = _ANSI.sub("", (getattr(out, "error_trace", None) or ""))[:8000]
+                tasks.append(entry)
+            payload = {"found": True, "job_run_id": str(job_run_id),
+                       "run_page_url": getattr(run, "run_page_url", "") or "", "tasks": tasks}
+            with tempfile.TemporaryDirectory() as tmp:
+                local = os.path.join(tmp, f"node_{nid}_job_error.json")
+                with open(local, "w") as f:
+                    json.dump(payload, f, default=str)
+                mlflow.log_artifact(local, artifact_path="results")
+            print(f"  ↳ captured child job error for {nid} (job run {job_run_id})", flush=True)
+
+        def _persist_results():
+            """Write node_outputs + final_outputs as an artifact. Called on success
+            AND on failure (before re-raising) so the Past-Runs viewer shows the
+            outputs of the nodes that completed before a failing node."""
+            with tempfile.TemporaryDirectory() as tmp:
+                local = os.path.join(tmp, "workflow_results.json")
+                with open(local, "w") as f:
+                    json.dump(
+                        {"node_outputs": results, "final_outputs": final_outputs},
+                        f, default=str, indent=2,
+                    )
+                mlflow.log_artifact(local, artifact_path="results")
+
         mlflow.set_tag("job_status", "running")
         for nid in order:
             label = nodes[nid].get("label", nid)
@@ -296,20 +354,29 @@ try:
                 results[nid] = run_node(nid)
                 mlflow.set_tag(f"node:{nid}:status", "complete")
             except Exception as node_exc:  # noqa: BLE001
+                err = str(node_exc)
                 mlflow.set_tag(f"node:{nid}:status", "failed")
-                mlflow.set_tag(f"node:{nid}:error", str(node_exc)[:500])
+                mlflow.set_tag(f"node:{nid}:error", err[:500])
+                # Record the originating child job run id (the executor's dispatch
+                # log + the error carry "job run <N>") so the Result viewer can dig
+                # straight into the child process that actually failed.
+                _jm = re.search(r"[Jj]ob run (\d+)", err)
+                if _jm:
+                    mlflow.set_tag(f"node:{nid}:job_run_id", _jm.group(1))
+                    print(f"  ↳ node {nid} failed in child job run {_jm.group(1)}", flush=True)
+                    try:
+                        _persist_child_job_error(nid, _jm.group(1))
+                    except Exception as _ce:  # noqa: BLE001
+                        print(f"  (could not capture child job error: {_ce})", flush=True)
+                # Persist whatever completed so far so the viewer can show the
+                # upstream nodes' outputs (e.g. what the failing extract saw).
+                try:
+                    _persist_results()
+                except Exception as persist_exc:  # noqa: BLE001
+                    print(f"could not persist partial results: {persist_exc}")
                 raise
 
-        # Persist the full result set as an artifact.
-        with tempfile.TemporaryDirectory() as tmp:
-            local = os.path.join(tmp, "workflow_results.json")
-            with open(local, "w") as f:
-                json.dump(
-                    {"node_outputs": results, "final_outputs": final_outputs},
-                    f, default=str, indent=2,
-                )
-            mlflow.log_artifact(local, artifact_path="results")
-
+        _persist_results()  # full result set on success
         mlflow.set_tag("job_status", "complete")
         print("✅ Workflow complete")
 except Exception as exc:  # noqa: BLE001

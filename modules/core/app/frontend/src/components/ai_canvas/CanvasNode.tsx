@@ -59,9 +59,11 @@ export function CanvasNode({ data, selected }: NodeProps) {
       ? 'ring-2 ring-emerald-500'
       : d.status === 'failed'
         ? 'ring-2 ring-red-500'
-        : d.status
-          ? 'ring-2 ring-slate-400/70' // pending/skipped/running
-          : null
+        : d.status === 'running'
+          ? 'ring-2 ring-amber-500 animate-pulse' // currently executing — stand out
+          : d.status
+            ? 'ring-2 ring-slate-400/70' // pending (not yet run)
+            : null
 
   return (
     <div

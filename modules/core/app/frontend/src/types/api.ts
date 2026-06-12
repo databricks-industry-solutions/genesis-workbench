@@ -1097,6 +1097,29 @@ export type CanvasRunResultResponse = {
   graph: CanvasGraph | null
   node_status: Record<string, string>
   node_error: Record<string, string>
+  start_time: number // epoch ms
+  end_time: number // epoch ms; 0 while running
+  job_status: string
+}
+export type CanvasNodeJobTask = {
+  task_key: string
+  result_state: string
+  state_message: string
+  error?: string
+  error_trace?: string
+}
+export type CanvasNodeJobErrorResponse = {
+  found: boolean
+  job_run_id: string
+  run_page_url: string
+  node_error: string
+  message: string
+  tasks: CanvasNodeJobTask[]
+}
+export type CanvasInterpretErrorResponse = {
+  classification: 'data' | 'system' | 'unknown'
+  root_cause: string
+  fix: string
 }
 
 export type TransformSuggestRequest = {

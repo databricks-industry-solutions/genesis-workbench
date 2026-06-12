@@ -4,6 +4,24 @@ resources:
       name: ${var.mcp_app_name}
       description: 'MCP server for Genesis Workbench (deployed endpoints; workflows in P1)'
       source_code_path: ../mcp_app
+
+      # SECURITY (interim control). The MCP server runs every endpoint/workflow
+      # under the app service principal with NO per-user authorization — anyone who
+      # can open the app can invoke any capability the app SP is entitled to. Until
+      # a per-caller authorization gate lands, the accessor list IS the access
+      # control: it is pinned here (declarative, survives redeploys) to the deployer
+      # only, which is deny-by-default. Workspace admins always retain access (and
+      # the bundle cannot set the admins entry — Databricks manages it).
+      #
+      # To entitle a specific group, add a CAN_USE entry below (the group must
+      # already exist; do NOT use "admins"), then redeploy:
+      #   - level: CAN_USE
+      #     group_name: <your-entitled-group>
+      # See app/backend/documentation/mcp_server.md.
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.current_user}
+
       resources:
         - name: "sql_warehouse"
           sql_warehouse:

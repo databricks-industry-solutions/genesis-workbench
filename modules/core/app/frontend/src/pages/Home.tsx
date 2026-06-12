@@ -8,6 +8,7 @@ import { api } from '@/api/client'
 import { DnaLoader } from '@/components/DnaLoader'
 import { Tabs } from '@/components/Tabs'
 import { VortexTab } from '@/components/ai_canvas/VortexTab'
+import { PastRunsTab } from '@/components/ai_canvas/RunHistory'
 import { useUserStore, selectIsSetupDone } from '@/stores/user'
 import { cn } from '@/lib/utils'
 
@@ -290,6 +291,14 @@ export function HomePage() {
           { id: 'assistant', label: 'AI Assistant', content: <AssistantTab /> },
           // Soft-removed for now — uncomment (and the SearchTab function above) to restore.
           // { id: 'search', label: 'Search Documentation', content: <SearchTab /> },
+          // Right-aligned button: browse/inspect/re-run past Vortex runs.
+          {
+            id: 'runs',
+            label: 'Past Vortex Runs',
+            align: 'right',
+            icon: 'history',
+            content: <PastRunsTab />,
+          },
         ]}
       />
     </div>

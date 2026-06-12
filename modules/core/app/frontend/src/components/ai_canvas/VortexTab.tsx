@@ -26,7 +26,6 @@ import { GenerateSparkle } from './GenerateSparkle'
 import { NodePalette } from './NodePalette'
 import { NodeParamPanel } from './NodeParamPanel'
 import { GraphJson } from './GraphJson'
-import { RunHistory } from './RunHistory'
 import { WorkflowLibrary } from './WorkflowLibrary'
 import {
   autoLayout,
@@ -291,12 +290,15 @@ function VortexCanvas() {
     [loadGraph, showToast],
   )
 
-  // ✨ "Show me how" — drop in a random fun goal and generate it.
+  // ✨ "Show me an example" — fill the goal text only; cycle through the examples
+  // on each click so you can land on the right domain for a demo (genomics, small
+  // molecule, …). Does NOT auto-generate — the user clicks "Generate workflow".
+  const exampleIdx = useRef(0)
   const tryRandom = useCallback(() => {
-    const g = EXAMPLE_GOALS[Math.floor(Math.random() * EXAMPLE_GOALS.length)]
+    const g = EXAMPLE_GOALS[exampleIdx.current % EXAMPLE_GOALS.length]
+    exampleIdx.current += 1
     setGoal(g)
-    runGenerate(g)
-  }, [runGenerate])
+  }, [])
 
   // ── add a node ─────────────────────────────────────────────────────────────
   // Convertible fields: a node's input ports are editable inline (right panel) or
@@ -580,7 +582,6 @@ function VortexCanvas() {
                 showToast(`Saved "${name}".`)
               }}
             />
-            <RunHistory />
             <button
               onClick={autoArrange}
               disabled={nodes.length === 0}
@@ -616,8 +617,8 @@ function VortexCanvas() {
             type="button"
             onClick={tryRandom}
             disabled={generating}
-            title="Show me how"
-            aria-label="Show me how"
+            title="Fill an example goal (click again for another)"
+            aria-label="Fill an example goal"
             className="shrink-0 rounded-md px-1 text-base transition-transform hover:scale-125 disabled:opacity-40"
           >
             ✨
@@ -710,11 +711,11 @@ function VortexCanvas() {
                 {genThoughts.length === 0 ? (
                   <div className="italic text-muted-foreground">Thinking through the goal…</div>
                 ) : (
-                  // Height-capped + scrollable so the popup stays a stable size as
-                  // more thoughts stream in (auto-scrolls to the latest).
-                  <ul ref={thoughtsRef} className="max-h-44 space-y-1 overflow-y-auto pr-1 text-muted-foreground">
-                    {genThoughts.map((t, i) => (
-                      <li key={i} className="leading-snug">• {t}</li>
+                  // Only the last two thoughts — keeps the popup a fixed, compact size
+                  // as the feed streams (older thoughts scroll out of view, not stack).
+                  <ul ref={thoughtsRef} className="space-y-1 pr-1 text-muted-foreground">
+                    {genThoughts.slice(-2).map((t, i) => (
+                      <li key={genThoughts.length - 2 + i} className="leading-snug">• {t}</li>
                     ))}
                   </ul>
                 )}

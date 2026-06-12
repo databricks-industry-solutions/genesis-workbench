@@ -34,8 +34,9 @@ Genesis Workbench is an open-source, Databricks-native blueprint that packages b
 
 - **Compose visually** — wire deployed endpoints, prebuilt workflows, transforms, and data IO into one pipeline; each input is editable inline or fed from an upstream node.
 - **Generate from a goal** — an Agent drafts the workflow and streams its reasoning, then **self-reviews and repairs** its own draft (dangling nodes, dead-end outputs, type-mismatched wiring, pipelines that miss the goal).
+- **Wire deterministically** — every port publishes its value *shape*, so extraction paths are derived (not guessed); when a value can't be produced directly, the one bridging node is auto-inserted or the run is rejected at submit with a clear reason.
 - **Validate before running** — a live checklist flags every unconnected input or bad value; Run stays gated until the graph is runnable.
-- **Track every run** — Past Runs with a per-node passed/failed/skipped result canvas, JSON view/copy, and one-click Re-run.
+- **Track, inspect & re-run** — **Past Vortex Runs** shows each run's workflow·inputs·outputs and elapsed time; re-run with edited inputs from a side drawer; failed runs get an AI root-cause/fix + data-vs-system verdict beside the real stack trace.
 - **Fail loudly on bad data** — a step that resolves to null fails the run instead of producing a meaningless result.
 
 ### MCP Support
