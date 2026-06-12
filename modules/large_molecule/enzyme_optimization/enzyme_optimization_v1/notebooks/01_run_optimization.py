@@ -209,9 +209,22 @@ strategy_name = dbutils.widgets.get("strategy")
 run_proteinmpnn_flag = dbutils.widgets.get("run_proteinmpnn").lower() in ("true", "1", "yes")
 dev_user_prefix = dbutils.widgets.get("dev_user_prefix")
 
-# Residues are plain integers; tolerate a "chain:residue" prefix (e.g. "A:50") by
-# taking the part after the colon — the chain is supplied separately via target_chain.
-motif_residues = [int(r.strip().split(":")[-1]) for r in motif_residues_csv.split(",") if r.strip()]
+# Residues are plain integers, but tolerate the common chain-prefixed forms a
+# caller (or an LLM) might emit: "50", "A:50" (colon), or "A50" (glued). We take
+# the trailing integer from each token; the chain is supplied via target_chain.
+import re
+
+def _residue_num(tok: str) -> int:
+    m = re.search(r"(\d+)\s*$", tok.strip())
+    if not m:
+        raise ValueError(
+            f"motif residue {tok!r} has no residue number — use plain integers like "
+            f"'1,2,3' (chain comes from target_chain)."
+        )
+    return int(m.group(1))
+
+
+motif_residues = [_residue_num(r) for r in motif_residues_csv.split(",") if r.strip()]
 weights = json.loads(weights_json) if weights_json else {}
 references = json.loads(references_json) if references_json else []
 
