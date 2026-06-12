@@ -1494,6 +1494,50 @@ def get_node_job_error(run_id: str, node_id: str) -> dict:
     }
 
 
+_ERROR_INTERPRET_PROMPT = (
+    "You are a senior MLOps + bioinformatics engineer triaging a FAILED step in a "
+    "Genesis Workbench (Databricks) workflow. Given the step context and its error / "
+    "stack trace, determine the most likely ROOT CAUSE and a concrete, actionable FIX, "
+    "and CLASSIFY the failure as exactly one of:\n"
+    "- 'data': a bad/invalid/inconsistent INPUT or parameter the user controls "
+    "(malformed value, wrong format, out-of-range, empty/None from upstream, mismatched "
+    "ids). The user can fix it by changing inputs and re-running.\n"
+    "- 'system': an infrastructure / code / dependency / permission / resource failure "
+    "(OOM, missing or undeployed endpoint, import error, timeout, driver crash, quota). "
+    "Needs an operator/engineer, not an input change.\n"
+    "Quote the single most telling line or value from the trace. Be specific and brief.\n"
+    'Respond ONLY as compact JSON: {"classification":"data|system|unknown",'
+    '"root_cause":"<=300 chars","fix":"<=300 chars"}.'
+)
+
+
+def interpret_error(error_text: str, llm_endpoint: str, context: str = "") -> dict:
+    """LLM triage of a failed step's error/trace → {classification, root_cause, fix}.
+    classification is 'data' (user-fixable input) vs 'system' (operator) vs 'unknown'."""
+    if not (error_text or "").strip():
+        return {"classification": "unknown", "root_cause": "No error text to analyze.", "fix": ""}
+    user = (f"STEP: {context}\n\n" if context else "") + f"ERROR / STACK TRACE:\n{error_text[:6000]}"
+    w = WorkspaceClient()
+    response = w.serving_endpoints.query(
+        name=llm_endpoint,
+        messages=[
+            ChatMessage(role=ChatMessageRole.SYSTEM, content=_ERROR_INTERPRET_PROMPT),
+            ChatMessage(role=ChatMessageRole.USER, content=user),
+        ],
+        max_tokens=700,
+        temperature=0.1,
+    )
+    parsed = _extract_json(response.choices[0].message.content)
+    cls = str(parsed.get("classification", "unknown")).strip().lower()
+    if cls not in ("data", "system", "unknown"):
+        cls = "unknown"
+    return {
+        "classification": cls,
+        "root_cause": str(parsed.get("root_cause", "") or "")[:600],
+        "fix": str(parsed.get("fix", "") or "")[:600],
+    }
+
+
 def _experiment_ids() -> list[str]:
     mlflow.set_registry_uri("databricks-uc")
     mlflow.set_tracking_uri("databricks")

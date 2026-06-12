@@ -363,6 +363,36 @@ def node_job_error(run_id: str, node_id: str, _: CurrentUserDep) -> NodeJobError
     return NodeJobErrorResponse(**svc.get_node_job_error(run_id, node_id))
 
 
+class InterpretErrorRequest(BaseModel):
+    error_trace: str
+    context: str = ""
+
+
+class InterpretErrorResponse(BaseModel):
+    classification: str  # data | system | unknown
+    root_cause: str = ""
+    fix: str = ""
+
+
+@router.post("/interpret-error", response_model=InterpretErrorResponse)
+def interpret_error(payload: InterpretErrorRequest, _: CurrentUserDep) -> InterpretErrorResponse:
+    """AI triage of a failed step's error/trace: root cause + fix + a data-vs-system
+    verdict, for the right-hand panel of the error viewer."""
+    endpoint = get_settings().llm_endpoint_name
+    if not endpoint:
+        return InterpretErrorResponse(
+            classification="unknown", root_cause="LLM endpoint not configured.", fix=""
+        )
+    try:
+        return InterpretErrorResponse(
+            **svc.interpret_error(payload.error_trace, endpoint, payload.context)
+        )
+    except Exception as e:  # noqa: BLE001
+        return InterpretErrorResponse(
+            classification="unknown", root_cause=f"Interpretation failed: {e}", fix=""
+        )
+
+
 @router.get("/run/{run_id}/result", response_model=RunResultResponse)
 def run_result(run_id: str, _: CurrentUserDep) -> RunResultResponse:
     d = svc.get_run_result(run_id)

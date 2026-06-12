@@ -448,6 +448,60 @@ function interpretError(err: string): string | null {
   return null
 }
 
+// Right column: AI triage of a failed step — a data-vs-system verdict + root cause
+// + suggested fix, fetched once and revealed when it settles.
+function ErrorInterpretation({ errorText, context }: { errorText: string; context: string }) {
+  const q = useQuery({
+    queryKey: ['ai_canvas', 'interpret-error', context, errorText.slice(0, 300)],
+    queryFn: () => api.aiCanvasInterpretError({ error_trace: errorText, context }),
+    enabled: !!errorText.trim(),
+    staleTime: Infinity,
+    retry: false,
+  })
+  const cls = q.data?.classification
+  const badge =
+    cls === 'data'
+      ? { label: 'Data error', cn: 'bg-amber-500/15 text-amber-600 dark:text-amber-400' }
+      : cls === 'system'
+        ? { label: 'System error', cn: 'bg-purple-500/15 text-purple-600 dark:text-purple-400' }
+        : { label: 'Needs review', cn: 'bg-muted text-muted-foreground' }
+  return (
+    <div className="rounded border border-border bg-card/60 p-2">
+      <div className="mb-1.5 flex items-center gap-1.5 font-medium text-foreground">
+        <span aria-hidden className="material-symbols-outlined text-[16px] leading-none">
+          bolt
+        </span>
+        AI analysis
+      </div>
+      {q.isFetching ? (
+        <span className="text-muted-foreground">Analyzing the failure…</span>
+      ) : q.isError ? (
+        <span className="text-destructive">Couldn’t analyze this error.</span>
+      ) : (
+        <div className="space-y-2">
+          <span
+            className={cn('inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold', badge.cn)}
+          >
+            {badge.label}
+          </span>
+          {q.data?.root_cause && (
+            <div>
+              <div className="font-medium text-foreground">Root cause</div>
+              <p className="leading-snug text-muted-foreground">{q.data.root_cause}</p>
+            </div>
+          )}
+          {q.data?.fix && (
+            <div>
+              <div className="font-medium text-foreground">Suggested fix</div>
+              <p className="leading-snug text-muted-foreground">{q.data.fix}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Lazily fetches the ORIGINATING Databricks job behind a failed node and shows its
 // real task error/stack trace + a link to the job run page — "dig deeper".
 function JobErrorDigger({ runId, nodeId }: { runId: string; nodeId: string }) {
@@ -490,19 +544,26 @@ function JobErrorDigger({ runId, nodeId }: { runId: string; nodeId: string }) {
               {q.data.tasks.length === 0 && (
                 <p className="text-muted-foreground">No task-level error captured on this job run.</p>
               )}
-              {q.data.tasks.map((t, i) => (
-                <div key={i}>
-                  <div className="font-medium text-foreground">
-                    {t.task_key} · {t.result_state}
+              {q.data.tasks.map((t, i) => {
+                const trace = t.error_trace || t.error || ''
+                return (
+                  <div key={i}>
+                    <div className="font-medium text-foreground">
+                      {t.task_key} · {t.result_state}
+                    </div>
+                    {t.state_message && <div className="text-muted-foreground">{t.state_message}</div>}
+                    {trace && (
+                      // Two columns: raw error (left) + AI root-cause/fix (right).
+                      <div className="mt-1 grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/40 p-2 leading-snug text-destructive">
+                          {trace}
+                        </pre>
+                        <ErrorInterpretation errorText={trace} context={`${nodeId} · ${t.task_key}`} />
+                      </div>
+                    )}
                   </div>
-                  {t.state_message && <div className="text-muted-foreground">{t.state_message}</div>}
-                  {(t.error_trace || t.error) && (
-                    <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/40 p-2 leading-snug text-destructive">
-                      {t.error_trace || t.error}
-                    </pre>
-                  )}
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

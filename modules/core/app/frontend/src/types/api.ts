@@ -1113,6 +1113,11 @@ export type CanvasNodeJobErrorResponse = {
   message: string
   tasks: CanvasNodeJobTask[]
 }
+export type CanvasInterpretErrorResponse = {
+  classification: 'data' | 'system' | 'unknown'
+  root_cause: string
+  fix: string
+}
 
 export type TransformSuggestRequest = {
   source_dtype: string
