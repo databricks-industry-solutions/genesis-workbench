@@ -573,9 +573,18 @@ class MolCollator(object):
             features_batch = [d.features for d in batch]
         elif "rdkit_2d_normalized_onthefly" in batch[0].features_generator:
             generator = rdNormalizedDescriptors.RDKit2DNormalized()
+            n_desc = len(generator.columns)
             features_batch = []
             for smiles in smiles_batch:
-                features = generator.process(smiles)[1:]
+                processed = generator.process(smiles)
+                features = list(processed[1:]) if processed is not None else []
+                # GWB patch: some molecules (salts/mixtures, e.g. in ClinTox) yield NaN/inf
+                # or empty RDKit-2D descriptors; with --no_features_scaling these propagate
+                # to NaN model outputs (roc_auc then raises "Input contains NaN"). Sanitize.
+                if len(features) != n_desc:
+                    features = [0.0] * n_desc
+                features = np.nan_to_num(np.asarray(features, dtype=float),
+                                         nan=0.0, posinf=0.0, neginf=0.0)
                 features_batch.append(features)
         elif "rdkit_2d_normalized_cuik_molmaker" in batch[0].features_generator:
             features_batch = self.rdkit2d_featurizer.featurize(smiles_batch)
