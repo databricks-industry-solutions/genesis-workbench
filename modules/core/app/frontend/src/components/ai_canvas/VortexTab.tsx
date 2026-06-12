@@ -25,6 +25,7 @@ import { CanvasNode } from './CanvasNode'
 import { GenerateSparkle } from './GenerateSparkle'
 import { NodePalette } from './NodePalette'
 import { NodeParamPanel } from './NodeParamPanel'
+import { VortexEmptyState } from './VortexEmptyState'
 import { GraphJson } from './GraphJson'
 import { WorkflowLibrary } from './WorkflowLibrary'
 import {
@@ -692,11 +693,7 @@ function VortexCanvas() {
           </ReactFlow>
 
           {nodes.length === 0 && !catalogQuery.isLoading && !popupMessage && !generating && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="rounded-md border border-dashed border-border bg-card/70 px-4 py-3 text-center text-xs text-muted-foreground">
-                Drag a node from the left palette onto the canvas, or double-click one to add it.
-              </div>
-            </div>
+            <VortexEmptyState />
           )}
 
           {/* Live "thinking" feed while the AI designs the workflow — the model's
