@@ -20,6 +20,7 @@ type NavItem = {
 // Material Symbols ligature names — keep these stable; they map to the icons loaded in frontend/index.html.
 const ALL_NAV: NavItem[] = [
   { to: '/', label: 'Home', icon: 'home' },
+  { to: '/vortex-runs', label: 'Vortex Runs', icon: 'history' },
   // Ordered to follow the discovery flow: Genomics (find the variant) →
   // Single Cell (validate the target) → Large/Small Molecule (design) → BioNeMo.
   { to: '/genomics', label: 'Genomics', icon: 'coronavirus', module: 'genomics' },
@@ -34,6 +35,7 @@ const ALL_NAV: NavItem[] = [
 // Title shown on the right side of the slim top strip per route.
 const ROUTE_TITLES: Record<string, string> = {
   '/': 'Home',
+  '/vortex-runs': 'Vortex Runs',
   '/single-cell': 'Single Cell Studies',
   '/large-molecule': 'Large Molecule',
   '/small-molecule': 'Small Molecule',

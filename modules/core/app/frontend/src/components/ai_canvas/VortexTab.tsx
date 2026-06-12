@@ -20,14 +20,12 @@ import '@xyflow/react/dist/style.css'
 import { useMutation, useQuery } from '@tanstack/react-query'
 
 import { api } from '@/api/client'
-import { cn } from '@/lib/utils'
 import { useThemeStore } from '@/stores/theme'
 import { CanvasNode } from './CanvasNode'
 import { GenerateSparkle } from './GenerateSparkle'
 import { NodePalette } from './NodePalette'
 import { NodeParamPanel } from './NodeParamPanel'
 import { GraphJson } from './GraphJson'
-import { PastRunsTab } from './RunHistory'
 import { WorkflowLibrary } from './WorkflowLibrary'
 import {
   autoLayout,
@@ -798,40 +796,10 @@ function VortexCanvas() {
 }
 
 export function VortexTab() {
-  const [tab, setTab] = useState<'canvas' | 'runs'>('canvas')
+  // ReactFlowProvider gives child components access to the flow instance.
   return (
-    <div>
-      {/* Sub-tabs: Canvas (compose/generate/run) and Past Runs (browse/inspect/re-run). */}
-      <div className="mb-3 flex gap-1 border-b border-border">
-        {(
-          [
-            ['canvas', 'Canvas'],
-            ['runs', 'Past Runs'],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className={cn(
-              'rounded-t-md px-4 py-2 text-sm transition-colors',
-              tab === id
-                ? 'border-b-2 border-red-600 font-bold text-red-600 dark:border-red-500 dark:text-red-500'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      {/* Canvas stays MOUNTED (CSS-hidden) so an in-progress / generated graph
-          survives a peek at Past Runs. ReactFlowProvider gives children the flow
-          instance. Past Runs mounts on demand so it refetches the latest. */}
-      <div className={tab === 'canvas' ? '' : 'hidden'}>
-        <ReactFlowProvider>
-          <VortexCanvas />
-        </ReactFlowProvider>
-      </div>
-      {tab === 'runs' && <PastRunsTab />}
-    </div>
+    <ReactFlowProvider>
+      <VortexCanvas />
+    </ReactFlowProvider>
   )
 }
