@@ -158,7 +158,7 @@ export function NodeParamPanel({
 
 // An input port: editable inline by default, or shown as "fed by a connection"
 // (disabled) when an upstream edge is wired to it.
-function InputField({
+export function InputField({
   port,
   value,
   wired,
@@ -220,7 +220,7 @@ function InputField({
   )
 }
 
-function ParamInput({
+export function ParamInput({
   param,
   value,
   onChange,
