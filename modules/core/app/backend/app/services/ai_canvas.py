@@ -33,7 +33,7 @@ from genesis_workbench.capabilities import (
     read_catalog_nodes,
     validate_params,
 )
-from genesis_workbench.node_catalog import reshape_path
+from genesis_workbench.node_catalog import dtypes_compatible, reshape_path
 from genesis_workbench.workbench import (
     UserInfo,
     execute_non_select_query,
@@ -1123,19 +1123,85 @@ def _exec_descriptor(type_key: str, w: WorkspaceClient) -> dict:
     return {"kind": "unknown"}
 
 
+def _find_bridge(src_item_dtype: str, dst_dtype: str):
+    """A UNIQUE catalog node that converts `src_item_dtype` → `dst_dtype` — used to
+    auto-repair an otherwise-impossible extract (e.g. enzyme candidates are PDB
+    *structures*, so a sequence consumer needs a ProteinMPNN bridge: pdb→sequences).
+    Only real model/batch nodes qualify (not transforms/IO), and the dtype match must
+    be SPECIFIC (no `any` passthroughs), so we never silently pick a no-op. Returns
+    (NodeType, in_port, out_port, out_path) or None when there is no unique bridge."""
+    hits = []
+    for nt in CURATED_BY_TYPE.values():
+        if str(nt.category) in ("transform", "io"):
+            continue
+        in_p = next((p for p in nt.inputs
+                     if str(p.dtype) != "any"
+                     and dtypes_compatible(src_item_dtype, str(p.dtype))), None)
+        if not in_p:
+            continue
+        for op in nt.outputs:
+            if str(op.dtype) == "any":
+                continue
+            op_path, _ = reshape_path(op, dst_dtype)
+            if op_path is not None:
+                hits.append((nt, in_p.name, op.name, op_path))
+                break
+    uniq = {h[0].type: h for h in hits}
+    if len(uniq) == 1:
+        return next(iter(uniq.values()))
+    # Tie-break: an atomic ENDPOINT conversion (e.g. ProteinMPNN) beats a whole
+    # batch design CHAIN (e.g. motif_scaffolding) that merely exposes the dtype.
+    endpoint_hits = {t: h for t, h in uniq.items() if str(h[0].category) == "endpoint"}
+    return next(iter(endpoint_hits.values())) if len(endpoint_hits) == 1 else None
+
+
+def _insert_bridge(graph: dict, en: dict, sport, bridge) -> None:
+    """Rewire `src → [extract] → consumers` into
+    `src → [extract '*'] → BRIDGE → [extract '0'] → consumers`, fully deterministic.
+    `en` is repurposed as the structure extractor (yields the bridge's input dtype);
+    a new bridge node + a second extract (yields the consumer dtype) are inserted."""
+    nt, in_port, out_port, out_path = bridge
+    bport = next(p for p in nt.inputs if p.name == in_port)
+    edges = graph["edges"]
+    eid = en["id"]
+    pos = en.get("position", {"x": 0, "y": 0})
+    bid, e2id = f"{eid}__bridge", f"{eid}__seq"
+    # 1. en now extracts the bridge's INPUT dtype from the structure source.
+    en.setdefault("params", {})["path"], _ = reshape_path(sport, str(bport.dtype))
+    # 2. consumers of en's output now read from the SECOND extract instead.
+    for e in edges:
+        if e.get("source") == eid and e.get("sourceHandle") in (None, "value"):
+            e["source"] = e2id
+    # 3. bridge node + second extract node.
+    out_dt = next(p for p in nt.outputs if p.name == out_port).dtype
+    graph["nodes"].append({
+        "id": bid, "type": nt.type, "label": nt.label, "params": {}, "inputs": {},
+        "position": {"x": pos.get("x", 0) + 220, "y": pos.get("y", 0)},
+    })
+    graph["nodes"].append({
+        "id": e2id, "type": "extract_field", "label": f"Extract {out_dt}",
+        "params": {"path": out_path}, "inputs": {},
+        "position": {"x": pos.get("x", 0) + 440, "y": pos.get("y", 0)},
+    })
+    # 4. en.value → bridge.in ; bridge.out → e2.data
+    edges.append({"source": eid, "target": bid, "sourceHandle": "value", "targetHandle": in_port})
+    edges.append({"source": bid, "target": e2id, "sourceHandle": out_port, "targetHandle": "data"})
+
+
 def _resolve_extract_paths(graph: dict) -> dict:
     """DETERMINISTIC reshape: for every extract_field node whose upstream output has
     a declared SHAPE, compute the correct _dig path from (source shape → downstream
-    consumer dtype) and OVERRIDE the LLM's guessed path — or reject the run if no
-    valid extraction exists (e.g. a sequence from a PDB-structure map). This is what
-    stops the recurring '[0].sequence resolved to None' class at submission instead
-    of at runtime. Sources with no declared shape keep the LLM's path (best-effort)."""
+    consumer dtype) and OVERRIDE the LLM's guessed path. When no direct extraction is
+    possible (e.g. a sequence from a PDB-structure map), AUTO-INSERT a unique catalog
+    bridge (ProteinMPNN: pdb→sequences) so the workflow is runnable regardless of the
+    LLM's wiring; only reject if no bridge exists. This stops the recurring
+    '[0].sequence resolved to None' class at submission. Sources with no declared
+    shape keep the LLM's path (best-effort)."""
     nodes = {n["id"]: n for n in graph.get("nodes", [])}
     edges = graph.get("edges", [])
     errors: list[str] = []
-    for en in graph.get("nodes", []):
-        if en.get("type") != "extract_field":
-            continue
+    # Snapshot the extract nodes up front — we may append more during bridging.
+    for en in [n for n in graph.get("nodes", []) if n.get("type") == "extract_field"]:
         src_e = next((e for e in edges if e.get("target") == en["id"]
                       and e.get("targetHandle") == "data"), None)
         if not src_e:
@@ -1158,10 +1224,17 @@ def _resolve_extract_paths(graph: dict) -> dict:
                 if tport:
                     dst_dtype = str(tport.dtype)
         path, reason = reshape_path(sport, dst_dtype)
-        if path is None:
-            errors.append(f'"{en.get("label") or en["id"]}": {reason}')
-        else:
+        if path is not None:
             en.setdefault("params", {})["path"] = path
+            continue
+        # No direct path — try to auto-insert a unique structure→dst bridge.
+        bridge = _find_bridge(sport.item or str(sport.dtype), dst_dtype)
+        if bridge:
+            logger.info("ai_canvas: auto-inserting %s bridge for %r (%s→%s)",
+                        bridge[0].type, en["id"], sport.item or sport.dtype, dst_dtype)
+            _insert_bridge(graph, en, sport, bridge)
+        else:
+            errors.append(f'"{en.get("label") or en["id"]}": {reason}')
     if errors:
         raise GraphGenerationError(
             "This workflow can't run as wired: " + "; ".join(errors)

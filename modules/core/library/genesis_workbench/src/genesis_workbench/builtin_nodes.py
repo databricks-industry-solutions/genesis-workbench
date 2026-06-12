@@ -164,7 +164,10 @@ _ENDPOINT_NODES: list[NodeType] = [
         module="large_molecule", endpoint_display_name="ProteinMPNN",
         description="Design sequences for a given backbone (inverse folding).",
         inputs=[Port("pdb", PortType.PDB)],
-        outputs=[Port("sequences", PortType.SEQUENCES)],
+        # ProteinMPNN returns a LIST of designed sequences (the endpoint emits
+        # several per backbone); declare the shape so a downstream extract resolves
+        # to the first element ("0") deterministically.
+        outputs=[Port("sequences", PortType.SEQUENCES, shape="list", item="sequence")],
         params=[ParamField("fixed_positions", "Fixed positions", "string", default="")],
     ),
     NodeType(
