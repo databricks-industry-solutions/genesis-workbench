@@ -430,25 +430,6 @@ function RerunDrawer({
   )
 }
 
-// Generic, signature-based hint for *why* a step failed — runtime patterns only
-// (no node-specific hardcoding), phrased as a "likely cause" the user can act on.
-function interpretError(err: string): string | null {
-  const e = err.toLowerCase()
-  if (/need at least one array to concatenate|empty|no atoms|0 residues/.test(e))
-    return 'A step received empty or malformed input (nothing to process) — usually a bad or empty value from an upstream node.'
-  if (/produced no value|refusing to run on null|resolved to none/.test(e))
-    return 'An upstream step produced no value for a required input, so this step had nothing to run on.'
-  if (/not deployed|not resolved|endpoint .*resolved|no endpoint/.test(e))
-    return "A required model endpoint isn't deployed in this workspace — deploy it (or pick a different node)."
-  if (/no feasible candidates|nothing passed|no candidates/.test(e))
-    return 'The optimizer found no candidates meeting the constraints — try loosening the thresholds.'
-  if (/timeout|timed out|deadline/.test(e))
-    return 'The step exceeded its time budget. Reduce the workload (e.g. fewer samples/iterations) or retry.'
-  if (/runresultstate\.failed|job run .*failed|result: ?failed/.test(e))
-    return 'The underlying Databricks job failed — open it via the "Job ↗" link for the full stack trace. Most often this is bad or inconsistent inputs.'
-  return null
-}
-
 // Right column: AI triage of a failed step — a data-vs-system verdict + root cause
 // + suggested fix, fetched once and revealed when it settles.
 function ErrorInterpretation({ errorText, context }: { errorText: string; context: string }) {
@@ -615,22 +596,27 @@ function FailureSummary({
         {failedIds.map((id) => {
           const meta = labels.get(id)
           const err = nodeError[id] || 'No error message was captured for this step.'
-          const hint = interpretError(err)
+          const ctx = meta?.type ? `${meta.label} (${meta.type})` : id
+          // A step backed by a Databricks job ("Job run N …") has a deeper trace to
+          // fetch → offer "Examine the child job". An in-process failure (validation,
+          // a chain) IS the whole error → show it + AI interpretation inline.
+          const hasChildJob = runId != null && /job run \d+/i.test(err)
           return (
             <div key={id} className="text-xs">
               <div className="font-medium text-foreground">
                 Failed at: {meta?.label ?? id}
                 {meta?.type && <span className="text-muted-foreground"> ({meta.type})</span>}
               </div>
-              <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 text-[11px] leading-snug text-destructive">
-                {err}
-              </pre>
-              {hint && (
-                <p className="mt-1 leading-snug text-muted-foreground">
-                  <span className="font-medium text-foreground">Likely cause:</span> {hint}
-                </p>
+              {hasChildJob ? (
+                <JobErrorDigger runId={runId as string} nodeId={id} />
+              ) : (
+                <div className="mt-1 grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 text-[11px] leading-snug text-destructive">
+                    {err}
+                  </pre>
+                  <ErrorInterpretation errorText={err} context={ctx} />
+                </div>
               )}
-              {runId && <JobErrorDigger runId={runId} nodeId={id} />}
             </div>
           )
         })}
