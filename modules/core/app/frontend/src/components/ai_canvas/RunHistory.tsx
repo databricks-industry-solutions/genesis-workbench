@@ -68,15 +68,28 @@ export function RunHistory() {
       </button>
 
       <Dialog open={open} onClose={() => setOpen(false)} title="Past Runs" width="max-w-2xl">
-        <input
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value)
-            setPage(1) // a new filter restarts from the first page
-          }}
-          placeholder="Filter by run name…"
-          className="mb-3 w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
-        />
+        <div className="mb-3 flex items-center gap-2">
+          <input
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value)
+              setPage(1) // a new filter restarts from the first page
+            }}
+            placeholder="Filter by run name…"
+            className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
+          />
+          {/* Status is read fresh from MLflow on each fetch; live runs change after
+              the dialog opened, so a manual refresh re-pulls without reopening. */}
+          <button
+            onClick={() => runs.refetch()}
+            disabled={runs.isFetching}
+            title="Refresh run status"
+            className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs hover:bg-accent disabled:opacity-40"
+          >
+            <span className={cn('inline-block', runs.isFetching && 'animate-spin')}>↻</span>
+            Refresh
+          </button>
+        </div>
 
         {/* Status is read fresh from MLflow on each fetch — show a spinner while
             that's in flight (initial load, paging, or refetch). */}
