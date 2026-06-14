@@ -283,5 +283,12 @@ else:
 
     for g in ("PARP1", "BRCA1", "BRCA2"):
         print(f"  {g} present: {g in out.var_names}")
-    out.write(DEMO_OUT)
+    # h5py/anndata can't write directly to a UC Volume FUSE mount (OSError errno 95,
+    # "Operation not supported" — partial-write/seek ops are unsupported). Write to
+    # local disk first, then copy to the Volume (same pattern the AlphaFold download
+    # notebooks use).
+    _local_out = "/local_disk0/hgsoc_demo_15k.h5ad"
+    out.write(_local_out)
+    dbutils.fs.cp(f"file:{_local_out}", DEMO_OUT)
+    os.remove(_local_out)
     print(f"Staged demo dataset: {out.shape[0]} cells × {out.shape[1]} genes -> {DEMO_OUT}")

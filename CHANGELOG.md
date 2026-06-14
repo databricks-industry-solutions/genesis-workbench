@@ -13,6 +13,31 @@
   **Workaround (per-workspace):** set genmol's `variables.yml` defaults to your workspace's app SP client-id and app name (the deployed UI app SP — find via `databricks apps get <app_name>` → `service_principal_client_id`).
   **Proper fix (upstream, TODO):** wire `app_service_principal_id` + `app_name` into the deploy flow — e.g. resolve the app SP at deploy time the way `grant_app_permissions_job` already does — so genmol doesn't depend on a hardcoded ci-demo default.
 
+- **`scimilarity` redeploy wants to DELETE the model-weights Volume** — re-deploying scimilarity onto a workspace that already has the `scimilarity` Volume (cached `model_v1.1` weights + Adams 2020 IPF data) prompts:
+  ```
+  This action will result in the deletion or recreation of the following volumes … delete resources.volumes.scimilarity
+  ```
+  Answering `y` purges the cached weights/data (managed volume) → forces a full re-download.
+  **Root cause:** the e2fe-era bundle declared the volume (`resources/volumes.yml`), but **main removed that declaration** and nothing else creates it (`01_wget_scimilarity.py` only reads the Volume; no `CREATE VOLUME`). On a redeploy whose terraform state still records `databricks_volume.scimilarity`, config-has-no-volume + state-has-volume → terraform plans to delete it.
+  **Workaround:** restore `modules/single_cell/scimilarity/scimilarity_v0.4.0_weights_v1.1/resources/volumes.yml` (managed volume `${var.cache_dir}` in the core catalog/schema). Config then matches state → terraform adopts the existing volume in place, no delete. **Always answer `n` if this prompt appears.**
+  **Proper fix (upstream, TODO):** either keep the volume bundle-managed, or have `01_wget_scimilarity.py` do `CREATE VOLUME IF NOT EXISTS` so fresh deploys provision it and redeploys don't churn it.
+
+- **Sequence Search `embed_gene_sequences` fails — `gene_sequences` table never built.** The `sequence_search_workflow` job's `embed_gene_sequences` task aborts with:
+  ```
+  RuntimeError: <catalog>.<schema>.gene_sequences not found — run core's ingest_uniprot_genes.py first
+  ```
+  The protein-sequence path (`batch_embed_sequences` → `create_vector_index`) succeeds; only the human-gene companion index fails (and gene-name → sequence resolution used by `target_resolver.py` / `GeneResolveInput.tsx` depends on the same table).
+  **Root cause:** `modules/core/notebooks/ingest_uniprot_genes.py` builds `gene_sequences`, but it is **only referenced in a comment** in `sequence_search_workflow.job.yml` — no task runs it, and core's deploy doesn't either. The prerequisite is unwired.
+  **Workaround:** run `ingest_uniprot_genes.py` once (widgets `catalog`, `schema`, `organism_id=9606`), then re-run `embed_gene_sequences` + `create_gene_vector_index`.
+  **Proper fix (upstream, TODO):** add `ingest_uniprot_genes` as an upstream task in the sequence_search workflow (or a core-init step) so `gene_sequences` exists before embedding.
+
+- **`download_cellxgene` HGSOC demo dataset fails writing to a UC Volume** — the curated end-to-end demo stage (`download_cellxgene.py`, ~line 286) aborts with:
+  ```
+  OSError: [Errno 95] Driver write request failed … '/Volumes/<cat>/<schema>/raw_h5ad/hgsoc_demo_15k.h5ad' … 'Operation not supported'
+  ```
+  `out.write(DEMO_OUT)` has anndata/h5py write the `.h5ad` **directly to the Volume FUSE mount**, which doesn't support h5py's partial-write/seek ops. (Dataset: MSK SPECTRUM HGSOC, ~15k cells subset with PARP1/BRCA1/BRCA2 present — relevant to a BRCA/ovarian journey.)
+  **Fix:** write to local disk first, then copy to the Volume — `out.write("/local_disk0/hgsoc_demo_15k.h5ad")` (or `/tmp/…`) then `dbutils.fs.cp("file:/local_disk0/hgsoc_demo_15k.h5ad", DEMO_OUT)`. Same pattern the AlphaFold download notebooks already use (download to `/local_disk0`, `cp` to Volume).
+
 ## v2.1.0 (2026-06-12) — Vortex: deterministic wiring + Past Vortex Runs (inspect · re-run · failure triage)
 
 A large batch making **Vortex** (AI-assisted workflow canvas) reliable end-to-end: workflows now wire
