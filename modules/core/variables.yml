@@ -62,8 +62,8 @@ variables:
     default: mcp-genesis-workbench
 
   app_names:
-    description: Colon-separated list of databricks app names. Single-app installs (the default) just inherit ${var.app_name}; the multi-app form ("a:b") exists so a sibling app can be added later without touching the grant-permissions notebook. Colon (not comma) because `databricks bundle --var foo=a,bar=b` already uses commas as its own separator.
-    default: ${var.app_name}
+    description: Colon-separated list of databricks app names that should receive endpoint/job/volume grants. Defaults to BOTH the UI app and the sibling MCP app so every per-deploy grant (deploy_model → set_app_permissions_for_endpoint, reading this via DATABRICKS_APP_NAMES) covers both SPs. Single-app installs that never deploy the MCP app are safe — the grant helpers try/except-skip an app that doesn't exist. Colon (not comma) because `databricks bundle --var foo=a,bar=b` already uses commas as its own separator.
+    default: ${var.app_name}:${var.mcp_app_name}
 
   llm_endpoint_name:
     description: Name of the LLM serving endpoint (Claude Sonnet) used by the home page assistant
