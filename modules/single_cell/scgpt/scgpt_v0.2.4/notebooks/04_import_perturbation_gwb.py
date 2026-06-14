@@ -91,4 +91,4 @@ run_id = deploy_model(
 
 # COMMAND ----------
 
-result = wait_for_job_run_completion(run_id, timeout=3600)
+result = wait_for_job_run_completion(run_id, timeout=21600)

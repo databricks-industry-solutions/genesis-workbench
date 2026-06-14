@@ -302,5 +302,5 @@ run_id = deploy_model(
     workload_type=workload_type,
     workload_size="Small",
 )
-result = wait_for_job_run_completion(run_id, timeout=3600)
+result = wait_for_job_run_completion(run_id, timeout=21600)
 print("deploy result:", result)

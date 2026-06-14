@@ -1055,5 +1055,5 @@ for variant_key, model_info in MODELS.items():
 
 for mlflow_name, run_id in deploy_run_ids:
     print(f"\nWaiting for deployment: {mlflow_name} (run_id={run_id})")
-    result = wait_for_job_run_completion(run_id, timeout=3600)
+    result = wait_for_job_run_completion(run_id, timeout=21600)
     print(f"  Result: {result}")

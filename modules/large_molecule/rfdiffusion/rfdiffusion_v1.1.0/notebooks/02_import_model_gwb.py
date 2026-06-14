@@ -112,8 +112,8 @@ run_id_inpainting = deploy_model(user_email=user_email,
 
 # COMMAND ----------
 
-result1 = wait_for_job_run_completion(run_id_unconditional, timeout = 3600)
+result1 = wait_for_job_run_completion(run_id_unconditional, timeout=21600)
 
 # COMMAND ----------
 
-result2 = wait_for_job_run_completion(run_id_inpainting, timeout = 3600)
+result2 = wait_for_job_run_completion(run_id_inpainting, timeout=21600)

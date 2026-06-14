@@ -314,5 +314,5 @@ print(f"Deploy run ID: {deploy_run_id}")
 
 # COMMAND ----------
 
-result = wait_for_job_run_completion(deploy_run_id, timeout=3600)
+result = wait_for_job_run_completion(deploy_run_id, timeout=21600)
 print(f"Deployment finished: {result}")

@@ -142,8 +142,8 @@ run_id_get_embedding = deploy_model(user_email=user_email,
 
 # COMMAND ----------
 
-result1 = wait_for_job_run_completion(run_id_gene_order, timeout = 3600)
+result1 = wait_for_job_run_completion(run_id_gene_order, timeout=21600)
 
 # COMMAND ----------
 
-result2 = wait_for_job_run_completion(run_id_get_embedding, timeout = 3600)
+result2 = wait_for_job_run_completion(run_id_get_embedding, timeout=21600)
