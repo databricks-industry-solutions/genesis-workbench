@@ -16,5 +16,8 @@ env:
     valueFrom: "narrative_llm_endpoint"
   - name: DEV_USER_PREFIX
     valueFrom: "dev_user_prefix"
-  - name: DATABRICKS_APP_NAME
-    value: "genesis-workbench"
+  # DATABRICKS_APP_NAME is auto-injected by the Databricks Apps runtime with the
+  # real app name (docs: dev-tools/databricks-apps/system-env). Do NOT hardcode it:
+  # a static value (e.g. "genesis-workbench") overrides the real name (gwb-app) and
+  # breaks apps.get(name=...) in bootstrap.py, surfacing "(app service principal id
+  # not available)" on the Profile > MLflow Setup page.
