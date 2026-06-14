@@ -997,9 +997,15 @@ def execute_capability(
     # numerics (logged), enforce required — before any dispatch. One gate for the
     # MCP path; the Vortex submission path validates with the same function.
     if cap.params:
-        coerced = validate_params(cap.params, params or {})
+        # Fill declared param DEFAULTS for any the caller omitted, so a "records"
+        # endpoint always sends every column its model signature requires (an
+        # optional tool arg left unset must still reach the model as its default,
+        # e.g. boltz.use_msa_server, diffdock.samples_per_complex, deepstabp.mt_mode).
+        with_defaults = {p.name: p.default for p in cap.params if p.default is not None}
+        with_defaults.update(params or {})
+        coerced = validate_params(cap.params, with_defaults)
         if coerced != (params or {}):
-            logger.info("execute_capability(%s): params coerced %s -> %s",
+            logger.info("execute_capability(%s): params %s -> %s",
                         getattr(cap, "id", "?"), params, coerced)
         params = coerced
     if cap.kind == ENDPOINT:
