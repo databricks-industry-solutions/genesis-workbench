@@ -133,6 +133,24 @@ cd modules/core
 ./update.sh <cloud> --ui-only   # rebuilds frontend, redeploys app, skips secret refresh / grants / UC volume copy
 ```
 
+### Deployment sequence & prerequisites
+
+Deploy **one module at a time**, waiting for each module's first job to reach `RUNNING` before the next (serializes GPU cluster-create + surfaces quota issues):
+
+1. **`core`** — first; stands up the UI app, MCP app, catalog/schema, secret scope, and job shells.
+2. **Independent model modules** (no Docker — deploy straight away): `large_molecule`, `single_cell`, `small_molecule`.
+3. **Set up Docker for cluster use — *before* the Docker modules.** `genomics` (`gwas` + `parabricks`) and `bionemo` launch **custom-Docker clusters**, so configure this first or their runs fail late:
+   1. **Enable Container Services (DCS)** on the workspace (admin setting). Without it the custom-Docker cluster runs fail *at launch* — bundle deploy/validation still pass, so it surfaces late.
+   2. **Build + push the images** the workspace will pull — BioNeMo (`modules/bionemo/docker/`) and Parabricks (`modules/genomics/parabricks/parabricks_v1/docker/`).
+   3. **Create the `module.env` registry creds** as **secret-scope refs** (`{{secrets/<scope>/<key>}}`, never plaintext PATs): `modules/genomics/module.env` (`parabricks_docker_userid/token/image`) + `modules/bionemo/module.env` (`bionemo_docker_userid/token/image`). **All four `genomics` submodules declare `parabricks_docker_*` as required**, so without `modules/genomics/module.env` the first submodule (`gwas`) fails validation and `set -e` halts the whole module.
+4. **`genomics`** — deploy after step 3 (`variant_annotation` / `vcf_ingestion` run without Docker; `gwas` / `parabricks` use the Docker clusters set up above).
+5. **`bionemo`** *(optional)* — deploy after its Docker setup (step 3).
+
+**Other prerequisites:**
+
+- **`sequence_search` gene index** depends on the `gene_sequences` table built by `modules/core/notebooks/ingest_uniprot_genes.py` — run it once (`catalog`, `schema`, `organism_id=9606`); it is not wired into the deploy.
+- **Verify — don't trust the `✅ SUCCESS` banner.** Register/deploy/data-prep jobs run asynchronously and can fail or hit the 3600-second internal wait *after* `deploy.sh` returns. After each module, scan all job runs for non-`SUCCESS` results and confirm serving endpoints are `READY`. A slow GPU `deploy_model_job` (~95 min, e.g. scGPT) can trip the wait with `TimeoutError` yet still succeed — confirm via endpoint state, not the task result. See [CLAUDE.md](CLAUDE.md) and the deploy-wizard skill for the post-deploy verification commands + failure catalog.
+
 ## $${\color{orange}What's}$$ $${\color{orange}Included}$$
 
 Genesis Workbench ships open models and open datasets across all modules. Models are registered as Databricks Model Serving endpoints (or run as batch jobs); datasets are downloaded/ingested once into Unity Catalog so the app has **no runtime external-API dependency**.

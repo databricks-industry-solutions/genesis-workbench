@@ -26,3 +26,10 @@ lightning_logs
 _dev
 local/*
 !local/README.md
+
+# Backup files + per-workspace deploy artifacts (suffixed variants the exact-name
+# rules above miss) — must never be committed (some hold plaintext creds).
+*.bak
+.deployed*
+module.env.*
+application.env.*

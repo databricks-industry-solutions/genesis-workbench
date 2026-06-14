@@ -213,6 +213,11 @@ The `small_molecule` module is the most fragmented (now 8 submodules). Use `--on
 | Python < 3.11 detected | Warn once; recommend a 3.11 venv; continue unless < 3.10. |
 | `app_name` collision | Databricks Apps names are workspace-unique. If the deploy fails with a name conflict, ask for a new `app_name`, rewrite `modules/core/module.env`, and retry. |
 | LLM endpoint not found | Default `databricks-claude-sonnet-4-6` may not exist in every workspace. Offer to pick an existing serving endpoint from `databricks serving-endpoints list`. |
+| `ServicePrincipalName(…) does not exist` at `genmol` (`databricks_permissions.job_run_molecule_optimization`) | `genmol/genmol_v1/variables.yml` hardcodes the ci-demo app SP (`app_service_principal_id`) + `app_name` (`genesis-workbench`), unwired into the deploy. Set both defaults to this workspace's app SP client-id (`databricks apps get <app_name>` → `service_principal_client_id`) + app name. |
+| `delete resources.volumes.scimilarity` prompt | Answer **`n`** (deleting purges cached weights/data). Main dropped `scimilarity/.../resources/volumes.yml`; restore it (managed volume `${var.cache_dir}`) so terraform adopts the existing volume in place, then re-deploy `--only-submodule scimilarity/...`. |
+| `gene_sequences not found — run core's ingest_uniprot_genes.py first` (sequence_search `embed_gene_sequences`) | Unwired prereq. Run `ingest_uniprot_genes` (widgets catalog/schema/`organism_id=9606`), then repair-run the failed tasks. |
+| `OSError [Errno 95] … Operation not supported` writing `.h5ad` to `/Volumes/…` (download_cellxgene) | anndata/h5py can't write to a Volume FUSE mount. Write to `/local_disk0` then `dbutils.fs.cp` to the Volume. |
+| `TimeoutError: Job run … did not complete within 3600 seconds` | **Usually a false positive** — a slow GPU `deploy_model_job` (scGPT ~95 min) exceeds the internal 3600s wait, but the deploy itself succeeds. Confirm the serving endpoint is **READY** before treating it as a failure; if the catalog-update/register task failed only on the wait, repair-run it once the deploy job is `TERMINATED SUCCESS`. |
 
 ## Post-deploy
 
@@ -222,6 +227,30 @@ When `modules/core/.deployed` exists, print:
 - Reminder: model-registration jobs for some modules (AlphaFold, Parabricks, BioNeMo) can run for many hours.
 
 Offer the user the next module to deploy, or stop.
+
+## Post-deploy verification — monitor ALL jobs for failures (REQUIRED after every module)
+
+**`deploy.sh`'s `✅ SUCCESS! Deployment complete` is NOT proof the module works.** It only means the bundle deployed + the script's poll returned. Register / deploy_model / data-prep jobs run **asynchronously** (often `--no-wait`) and can FAIL or hit the 3600s wait timeout *after* `deploy.sh` exits. After **every** module deploy, actively monitor the jobs and verify endpoints — don't wait for the user to spot failures.
+
+```bash
+# 1. Any non-SUCCESS job run (recent) — the failure scan
+databricks jobs list-runs --limit 50 --output json | jq -r \
+  '.runs[] | select(.state.result_state and .state.result_state!="SUCCESS") | "FAILED  \(.run_name)  run=\(.run_id)  (\(.state.result_state))"'
+
+# 2. Still-running (let them settle / quota-gate the next module)
+databricks jobs list-runs --active-only --limit 50 --output json | jq -r \
+  '.runs[]? | "\(.state.life_cycle_state)  \(.run_name)  run=\(.run_id)"'
+
+# 3. Endpoint readiness (the real signal for serving models)
+databricks serving-endpoints list --output json | jq -r \
+  '.endpoints[] | select(.name|test("gwb")) | "\(.name)\t\(.state.ready)\t\(.state.config_update)"'
+
+# 4. For any FAILED run: get the real error from the failed task
+databricks jobs get-run <run_id> --output json | jq -r '.tasks[] | select(.state.result_state=="FAILED") | "\(.task_key)  run=\(.run_id)"'
+databricks jobs get-run-output <task_run_id> --output json | jq -r '.error // .error_trace'
+```
+
+**Triage rule:** distinguish a *real* failure from the **3600s-wait false positive** (see error table). If the underlying `deploy_model_job` is `TERMINATED SUCCESS` and the endpoint is `READY`, the module is fine — only a downstream `update_model_catalog_*` / `deploy.sh` wait reported the timeout; `repair-run --rerun-all-failed-tasks <run_id>` to reconcile the catalog row. For genuine failures, consult the error table above + `SKILL_GENESIS_WORKBENCH_TROUBLESHOOTING.md`, fix, then `repair-run` (re-runs only failed tasks, reusing succeeded ones) rather than re-running the whole module.
 
 ## When to use this skill
 

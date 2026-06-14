@@ -38,6 +38,19 @@
   `out.write(DEMO_OUT)` has anndata/h5py write the `.h5ad` **directly to the Volume FUSE mount**, which doesn't support h5py's partial-write/seek ops. (Dataset: MSK SPECTRUM HGSOC, ~15k cells subset with PARP1/BRCA1/BRCA2 present — relevant to a BRCA/ovarian journey.)
   **Fix:** write to local disk first, then copy to the Volume — `out.write("/local_disk0/hgsoc_demo_15k.h5ad")` (or `/tmp/…`) then `dbutils.fs.cp("file:/local_disk0/hgsoc_demo_15k.h5ad", DEMO_OUT)`. Same pattern the AlphaFold download notebooks already use (download to `/local_disk0`, `cp` to Volume).
 
+- **Register/import notebooks time out on slow GPU model deploys (`TimeoutError … did not complete within 3600 seconds`).** The model register/import notebooks call `wait_for_job_run_completion(run_id, timeout=3600)` (1 h) while waiting on `deploy_model_job`, but a large GPU model deploy (e.g. scGPT ≈ 95 min — observed three times) exceeds 1 h → the `import_*` / `update_model_catalog_*` task **FAILS with `TimeoutError` even though the deploy succeeds and the endpoint reaches `READY`** (a false positive — the catalog row is often already written, and the underlying `deploy_model_job` is `TERMINATED SUCCESS`).
+  **Fix:** bumped the wait to `timeout=21600` (6 h, matching the value `executor.py` already uses) across **all 18 register/import notebooks** — `single_cell` (scgpt ×2, teddy, scimilarity), `large_molecule` (protein_mpnn, rfdiffusion, esm2_embeddings), `small_molecule` (chemprop ×3, diffdock ×2, deepstabp, genmol, kermt, mhcflurry, netsolp, pltnum, proteina_complexa).
+  **Recovery for an already-failed run:** confirm the `deploy_model_job` is `TERMINATED SUCCESS` and the endpoint is `READY`, then `databricks jobs repair-run <run_id> --rerun-all-failed-tasks` (re-runs only the failed import/catalog tasks, which now reconcile fast since the deploy is done).
+
+### Security / hardening
+
+- **Docker registry auth uses a personal PAT — move to a dedicated service principal.** The BioNeMo + Parabricks custom-Docker clusters pull from Docker Hub via an individual's personal PAT (`srijitnair254`). Rotation or revocation by that person silently breaks every workspace's docker-backed clusters (bionemo finetune/inference, parabricks alignment). **Recommendation:** create a dedicated service principal / registry robot account that owns the image-pull credential, store its token in each workspace's secret scope, and reference it from `module.env` via `{{secrets/<scope>/<key>}}` — decoupling the deploy from any one person's account.
+- **No plaintext PATs in env files.** `module.env` docker creds must use `{{secrets/<scope>/<key>}}` references (the bundles support this in `docker_image.basic_auth`), never literal tokens. The usw2 working config uses secret-scope refs (`gwb_*_docker_*` in scope `mmt`).
+
+### Docs / process
+
+- **Documented the canonical deployment sequence + prerequisites** in `README.md` (mirrored in `CLAUDE.md` + the deploy-wizard skill): module order (`core` → `large_molecule` / `single_cell` / `small_molecule` → `genomics` → `bionemo`, one at a time); the per-Docker-module `module.env` requirement — **all four `genomics` submodules declare `parabricks_docker_*` as required**, so without `modules/genomics/module.env` the first submodule (`gwas`) fails validation and `set -e` halts the whole module; the Container-Services (DCS) requirement for `bionemo`/`parabricks`/`gwas` Docker-cluster runs; the unwired `gene_sequences` prerequisite; and the post-deploy "monitor ALL jobs for failures — don't trust the SUCCESS banner" practice.
+
 ## v2.1.0 (2026-06-12) — Vortex: deterministic wiring + Past Vortex Runs (inspect · re-run · failure triage)
 
 A large batch making **Vortex** (AI-assisted workflow canvas) reliable end-to-end: workflows now wire
