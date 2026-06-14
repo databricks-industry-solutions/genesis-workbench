@@ -50,7 +50,7 @@ variables:
 
   app_name:
     description: Name of the Databricks App service principal that should be granted CAN_MANAGE_RUN on the orchestrator job.
-    default: genesis-workbench
+    default: gwb-app
 
   app_service_principal_id:
     description: >-
@@ -58,7 +58,7 @@ variables:
       CAN_MANAGE_RUN on the molecule-optimization orchestrator job so the app
       can dispatch it (the genmol bundle can't reference the core app resource).
       Override per-workspace via --var; default is the ci-demo workspace app SP.
-    default: "bea46a71-98dd-484d-a368-b7516de8c4b0"
+    default: "d1f5a1dd-5247-4461-b99b-ca6b71101049"
 
   cache_dir:
     description: The cache directory for GenMol model artifacts

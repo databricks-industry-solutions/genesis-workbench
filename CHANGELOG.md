@@ -1,5 +1,18 @@
 # Genesis Workbench — Changelog
 
+## Unreleased
+
+### Fixes
+
+- **`genmol` fails to deploy on any non-ci-demo workspace** — `./deploy.sh small_molecule <cloud>` aborts at the GenMol submodule with:
+  ```
+  Error: cannot create permissions: Principal: ServicePrincipalName(bea46a71-98dd-484d-a368-b7516de8c4b0) does not exist
+    with databricks_permissions.job_run_molecule_optimization
+  ```
+  **Root cause:** `modules/small_molecule/genmol/genmol_v1/variables.yml` declares `app_service_principal_id` (default `bea46a71-…`, the upstream ci-demo app SP) and `app_name` (default `genesis-workbench`), but neither is wired into the deploy flow. `deploy.sh` builds `--var` from `application.env` + `<cloud>.env` + a *shared* `module.env`, and these two vars can't live in the shared `module.env` because the other small_molecule submodules don't declare them (bundle would error "variable not defined"). So both fall back to the hardcoded upstream defaults: the bundle permission in `run_molecule_optimization.yml` (`service_principal_name: ${var.app_service_principal_id}`) references a non-existent SP, and `register_molecule_optimization_job.py` resolves the app SP by `app_name` — both wrong off the ci-demo workspace.
+  **Workaround (per-workspace):** set genmol's `variables.yml` defaults to your workspace's app SP client-id and app name (the deployed UI app SP — find via `databricks apps get <app_name>` → `service_principal_client_id`).
+  **Proper fix (upstream, TODO):** wire `app_service_principal_id` + `app_name` into the deploy flow — e.g. resolve the app SP at deploy time the way `grant_app_permissions_job` already does — so genmol doesn't depend on a hardcoded ci-demo default.
+
 ## v2.1.0 (2026-06-12) — Vortex: deterministic wiring + Past Vortex Runs (inspect · re-run · failure triage)
 
 A large batch making **Vortex** (AI-assisted workflow canvas) reliable end-to-end: workflows now wire
