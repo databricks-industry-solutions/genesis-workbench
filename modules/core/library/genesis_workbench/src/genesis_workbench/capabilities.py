@@ -159,23 +159,62 @@ def _ports(spec: str) -> list[Port]:
 # Curated endpoint I/O contract, keyed by UC short name. inputs / outputs /
 # invoke_style / params — the single home for the typed endpoint contract. An
 # endpoint deployed without an entry here falls back to a generic single port.
+# Each entry is keyed by UC short name; ports/invoke_style/params mirror the deployed
+# model's MLflow signature (verified per endpoint). For "records" models, columns the
+# model requires beyond the primary input are encoded as params (with a sensible
+# default) so a generic call always sends a complete record.
+_PROTEINA = {  # proteina_complexa family share one signature
+    "in": "target_pdb:pdb", "out": "binders:json", "style": "records",
+    "params": [{"name": "binder_length_min", "type": "int", "default": 50},
+               {"name": "binder_length_max", "type": "int", "default": 80},
+               {"name": "num_samples", "type": "int", "default": 2},
+               {"name": "hotspot_residues", "type": "string", "default": ""},
+               {"name": "target_chain", "type": "string", "default": "A"}],
+}
+_SCGPT_EMB = {  # scgpt / teddy: anndata-style sparse matrix + obs/var (real genes needed)
+    "in": "adata_sparsematrix:json, adata_obs:json, adata_var:json",
+    "out": "embeddings:json", "style": "records",
+}
 _ENDPOINT_CONTRACTS: dict[str, dict] = {
+    # single-input "inputs"-style (verified working)
     "esmfold": {"in": "sequence:sequence", "out": "pdb:pdb", "style": "inputs"},
-    "boltz": {"in": "sequence:sequence", "out": "pdb:pdb", "style": "inputs"},
-    "proteinmpnn": {"in": "pdb:pdb", "out": "sequences:sequences", "style": "records"},
-    "rfdiffusion_inpainting": {"in": "pdb:pdb", "out": "pdb:pdb", "style": "inputs"},
     "esm2_embeddings": {"in": "sequence:sequence", "out": "embedding:embedding", "style": "inputs"},
     "netsolp_v1": {"in": "sequence:sequence", "out": "solubility:score", "style": "inputs"},
     "pltnum_v1": {"in": "sequence:sequence", "out": "half_life:score", "style": "inputs"},
-    "deepstabp_v1": {"in": "sequence:sequence", "out": "tm:score", "style": "inputs"},
-    "mhcflurry_v2": {"in": "sequence:sequence", "out": "immuno:score", "style": "inputs"},
     "chemprop_admet": {"in": "smiles:smiles", "out": "admet:json", "style": "inputs"},
     "chemprop_bbbp": {"in": "smiles:smiles", "out": "bbbp:score", "style": "inputs"},
     "chemprop_clintox": {"in": "smiles:smiles", "out": "clintox:score", "style": "inputs"},
     "kermt_admet": {"in": "smiles:smiles", "out": "admet:json", "style": "inputs"},
-    "diffdock": {"in": "pdb:pdb, smiles:smiles", "out": "poses:json", "style": "records"},
-    "teddy": {"in": "data:table", "out": "annotations:table", "style": "inputs"},
-    "scgpt_perturbation": {"in": "data:table", "out": "predictions:table", "style": "inputs"},
+    "proteinmpnn": {"in": "pdb:pdb", "out": "sequences:sequences", "style": "records"},
+    # records-style, corrected to the deployed models' signatures
+    "boltz": {"in": "input:sequence", "out": "pdb:pdb", "style": "records",
+              "params": [{"name": "msa", "type": "string", "default": ""},
+                         {"name": "use_msa_server", "type": "string", "default": "true"}]},
+    "rfdiffusion_inpainting": {"in": "pdb:pdb", "out": "pdb:pdb", "style": "records",
+                               "params": [{"name": "start_idx", "type": "int", "default": 1},
+                                          {"name": "end_idx", "type": "int", "default": 10}]},
+    "rfdiffusion_unconditional": {"in": "contig:any", "out": "pdb:pdb", "style": "inputs"},
+    "deepstabp_v1": {"in": "sequence:sequence", "out": "tm:score", "style": "records",
+                     "params": [{"name": "growth_temp", "type": "float", "default": 37.0},
+                                {"name": "mt_mode", "type": "string", "default": "Cell"}]},
+    "mhcflurry_v2": {"in": "sequence:sequence", "out": "immuno:score", "style": "records",
+                     "params": [{"name": "alleles", "type": "string", "default": "HLA-A*02:01"}]},
+    "genmol": {"in": "fragment:smiles", "out": "molecules:json", "style": "records"},
+    "diffdock": {"in": "protein_pdb:pdb, ligand_smiles:smiles", "out": "poses:json", "style": "records",
+                 "params": [{"name": "samples_per_complex", "type": "int", "default": 10},
+                            {"name": "esm_embeddings_b64", "type": "string", "default": "{}"}]},
+    "diffdock_esm_embeddings": {"in": "protein_pdb:pdb", "out": "embedding:embedding", "style": "records"},
+    "proteina_complexa": _PROTEINA,
+    "proteina_complexa_ame": _PROTEINA,
+    "proteina_complexa_ligand": _PROTEINA,
+    "scgpt": _SCGPT_EMB,
+    "teddy": _SCGPT_EMB,
+    "scgpt_perturbation": {"in": "expression:json, gene_names:json, genes_to_perturb:any",
+                           "out": "predictions:json", "style": "records",
+                           "params": [{"name": "perturbation_type", "type": "string", "default": "knockout"}]},
+    "scimilarity_get_embedding": {"in": "celltype_sample:json", "out": "embedding:embedding",
+                                  "style": "records",
+                                  "params": [{"name": "celltype_sample_obs", "type": "string", "default": ""}]},
 }
 
 
