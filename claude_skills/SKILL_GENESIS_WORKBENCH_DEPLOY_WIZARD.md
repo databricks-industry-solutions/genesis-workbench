@@ -1,243 +1,253 @@
 ---
 name: genesis-workbench-deploy-wizard
-description: Interactive guided deployment of Genesis Workbench to a Databricks workspace. Walks the user through cloud/catalog/schema/warehouse selection, writes the required env files, runs ./deploy.sh module-by-module, and auto-fixes common failures (expired Terraform PGP key, missing catalog, wrong DEFAULT profile, Python version mismatch).
+description: Interactive, guided deployment of Genesis Workbench to a Databricks workspace. A consistent wizard that (1) confirms the TARGET WORKSPACE, (2) verifies the databricks CLI is installed and pointed at that workspace, (3) asks which modules to install, (4) validates/creates only the env files those modules need, then (5) runs ./deploy.sh module-by-module and auto-fixes common failures.
 ---
 
 # Genesis Workbench Deploy Wizard
 
-Drive a first-time (or repeat) deployment of [Genesis Workbench](https://github.com/databricks-industry-solutions/genesis-workbench) to a Databricks workspace through an interactive, validated conversational flow. This skill asks the user one short question at a time, checks each answer against the live workspace with the `databricks` CLI, writes the `.env` files, and invokes `./deploy.sh` in the correct order.
+Drive a deployment of [Genesis Workbench](https://github.com/databricks-industry-solutions/genesis-workbench) (GWB) to a Databricks workspace through an interactive, validated conversational flow that feels the same for every user. Ask **one short question at a time**, check each answer against the live workspace with the `databricks` CLI, write only the `.env` files the chosen modules need, then invoke `./deploy.sh` in the correct order.
 
-Use this skill whenever the user says things like "deploy Genesis Workbench", "install GWB on a new workspace", "set up genesis workbench", or is sitting in a cloned `genesis-workbench` repo and asks about deployment.
+**Trigger this skill** whenever the user says "deploy", "I want to deploy", "deploy Genesis Workbench", "install GWB", "set up genesis workbench on a workspace", or runs/asks about `./deploy.sh`.
 
-## Pre-flight checks (run first, in parallel)
+> **The wizard runs in a fixed phase order. Do not skip ahead, do not reorder.** The order below is the contract — it confirms the *where* before the *what*, and only collects configuration for modules the user actually wants. Each phase gates the next.
 
-```bash
-python3 --version                        # warn if < 3.11
-poetry --version
-jq --version
-databricks --version
-which terraform && terraform version     # used to bypass expired HashiCorp PGP key
-databricks auth profiles                 # confirm DEFAULT exists and is valid
-databricks current-user me               # confirms auth works
-```
+## Wizard banner (print this first, verbatim, before Phase 0)
 
-If any required tool is missing:
-- **databricks CLI**: https://docs.databricks.com/aws/en/dev-tools/cli/install
-- **terraform**: `brew install terraform` (macOS) — required to work around the expired-PGP-key issue below.
-- **poetry**: `deploy.sh` installs it via `pip install poetry`; no action needed.
-- **jq**: `brew install jq`.
-
-If Python 3.10 is detected, warn but don't block — `Installation.md` recommends 3.11 but most deploys still work. If Python < 3.10, stop and require an upgrade.
-
-## Conversational flow
-
-Ask these in order, using `AskUserQuestion` for anything with a finite choice set (cloud, catalog from list, warehouse from list, yes/no). For free-text values (workspace URL, custom catalog name, schema, app name), ask in plain text.
-
-### 1. Target cloud
-`aws` or `azure`. Drives which of `aws.env` / `azure.env` is consumed by `deploy.sh`. GCP is not supported by current deploy scripts.
-
-### 2. Workspace URL
-Read the current `DEFAULT` profile from `databricks auth profiles`. Ask the user whether that's the intended target.
-- If yes, continue.
-- If no, instruct the user: run `databricks auth login --host <url>` in their own terminal (interactive; do **not** auto-run). Wait for them to confirm, then re-check `databricks current-user me`.
-
-### 3. Catalog
-Run `databricks catalogs list` and show the user the `MANAGED_CATALOG` rows. Ask: use an existing one (pick from list) or create a new one (type name).
-- If create: confirm first, then `databricks catalogs create <name>`. Catalog creation is cheap but visible in the metastore — always confirm before creating.
-- Validate the chosen catalog exists with `databricks catalogs get <name>` before writing it to `application.env`.
-
-### 4. Schema
-Default: `genesis_workbench`. Remind the user it must be *dedicated* to GWB (the deploy process writes many tables there). Don't validate its existence — `deploy.sh` creates it.
-
-### 5. SQL warehouse
-Run `databricks warehouses list` and show `HEALTHY` warehouses. Ask: pick one, or the user will create a new 2X-Small.
-- If they need to create one, link them to https://docs.databricks.com/aws/en/compute/sql-warehouse/create and wait.
-- Capture the warehouse ID, validate with `databricks warehouses get <id>`.
-
-### 6. Core module settings
-Read current `modules/core/module.env` (if present) and offer each field with the current value as a default the user can accept or override:
-- `dev_user_prefix` — e.g. `demo`. Namespaces dev resources.
-- `app_name` — Databricks App name, must be unique per workspace (e.g. `genesis-workbench`).
-- `secret_scope_name` — e.g. `genesis_workbench_secret_scope`. Created by the deploy if missing.
-- `llm_endpoint_name` — default `databricks-claude-sonnet-4-6`. Validate it exists: `databricks serving-endpoints get <name>`.
-
-### 7. BioNeMo module (optional)
-Ask: deploy the `bionemo` module? If yes, collect:
-- `bionemo_docker_userid`
-- `bionemo_docker_token` (secret — handle with care, don't echo back)
-- `bionemo_docker_image` (tag)
-
-Remind the user: the BioNeMo container must be pre-built and pushed (see `modules/bionemo/docker/build_docker.sh`).
-
-### 8. Which additional modules to deploy
-After `core`, ask the user to pick from: `large_molecule`, `single_cell`, `small_molecule`, `genomics`, `parabricks`, `bionemo`. Deploy one at a time; each triggers long-running background jobs.
-
-**Treat the approved module order as a contract.** Once the user confirms the list in step 8, deploy in exactly that order. If a module is blocked (e.g., waiting on docker creds from step 7) do NOT jump over it to a later unblocked module without first asking the user to explicitly re-approve the swap. Past user feedback: silent reordering has been rejected.
-
-## Writing the env files
-
-Use the `Write` tool — **no comments, no blank lines** (the `paste -sd,` used in `deploy.sh:44-45` flattens comments into the bundle variable string and breaks).
-
-**`application.env`** (repo root):
-```
-workspace_url=<url>
-core_catalog_name=<catalog>
-core_schema_name=<schema>
-sql_warehouse_id=<warehouse_id>
-```
-
-**`modules/core/module.env`**:
-```
-dev_user_prefix=<prefix>
-app_name=<app_name>
-secret_scope_name=<secret_scope_name>
-llm_endpoint_name=<llm_endpoint_name>
-```
-
-**`modules/bionemo/module.env`** (only if deploying BioNeMo):
-```
-bionemo_docker_userid=<userid>
-bionemo_docker_token=<token>
-bionemo_docker_image=<image>
-```
-
-**`modules/parabricks/module.env`** (only if deploying Parabricks — **also required**, not just BioNeMo):
-```
-parabricks_docker_userid=<userid>
-parabricks_docker_token=<token>
-parabricks_docker_image=<image>
-```
-
-`aws.env` / `azure.env` have sensible defaults; only overwrite if the user asks for non-default node types.
-
-## Auto-patch for expired Terraform PGP key
-
-Databricks CLI tries to download Terraform and verify HashiCorp's PGP signature, which has expired. Symptom:
+Open every deploy session by printing the Genesis Workbench banner ("Genesis Workbench" + a DNA helix accent), then the "Deploy Wizard" subtitle:
 
 ```
-Error: error downloading Terraform: unable to verify checksums signature: openpgp: key expired
+   ╔═╗╔═╗╔╗╔╔═╗╔═╗╦╔═╗   ╦ ╦╔═╗╦═╗╦╔═╔═╗╔═╗╔╗╔╔═╗╦ ╦    ╲ ╱
+   ║ ╦║╣ ║║║║╣ ╚═╗║╚═╗   ║║║║ ║╠╦╝╠╩╗╠╩╗║╣ ║║║║  ╠═╣      ╳
+   ╚═╝╚═╝╝╚╝╚═╝╚═╝╩╚═╝   ╚╩╝╚═╝╩╚═╩ ╩╚═╝╚═╝╝╚╝╚═╝╩ ╩    ╱ ╲
+                   Genesis Workbench — Deploy Wizard
 ```
 
-Before running any deploy, check whether `deploy.sh` already exports `DATABRICKS_TF_EXEC_PATH` and `DATABRICKS_TF_VERSION`. If not, inject these two lines immediately after `set -e`:
+---
 
-```bash
-export DATABRICKS_TF_EXEC_PATH=$(which terraform)
-export DATABRICKS_TF_VERSION=$(terraform version -json | jq -r .terraform_version)
-```
+## Phase 0 — Confirm the TARGET WORKSPACE (always first)
 
-(Use the user's actual locally-installed Terraform binary + version, not hardcoded paths.) This tells the Databricks CLI to use the local Terraform and skip the signed download.
+Never assume the workspace. Before anything else, establish and **explicitly confirm** which Databricks workspace this deploy targets.
 
-**If the exports already exist but with hardcoded paths** (e.g., `DATABRICKS_TF_EXEC_PATH=/opt/homebrew/bin/terraform`), verify the hardcoded path actually exists on the current machine: `[ -x /opt/homebrew/bin/terraform ]`. If not, rewrite the lines to use `$(which terraform)` / `$(terraform version -json | jq -r .terraform_version)`.
+1. Discover the current target:
+   ```bash
+   databricks auth profiles                 # lists profiles + hosts + validity
+   databricks current-user me 2>&1          # resolves the ACTIVE default identity + host
+   ```
+2. Show the user the resolved host (workspace URL) and the user/email it authenticated as, then confirm with `AskUserQuestion`:
+   > "Deploy Genesis Workbench to **`<host>`** (authenticated as `<email>`)? "
+   Options: **Yes, this workspace** · **No, a different workspace**.
+3. If the user picks a different workspace, ask for the target workspace URL (free text), then have them authenticate **in their own terminal** (interactive — never auto-run a login):
+   - Suggest they type: `! databricks auth login --host <url>` (the `!` runs it in this session so output lands here), **or** select an existing profile.
+   - Re-run `databricks current-user me` and re-confirm the host before continuing.
 
-## ⚠️ Hard rule: never run `./deploy.sh core` on a workspace with a live install
+Do not leave Phase 0 until the user has affirmatively confirmed the exact workspace host.
 
-`./deploy.sh core <cloud>` re-runs `initialize_module_job` after the bundle deploy.
-That job **re-creates the GWB schema's tables** — including the `settings` and
-`user_profiles` state-bearing tables — wiping anything the user has configured
-in the running app. Confirmed user-reported regression.
+---
 
-For app/library refreshes on an existing install, use:
+## Phase 1 — CLI installed + configured to target that workspace as the default
 
+The deploy scripts shell out to `databricks` using the **default profile** unless `DATABRICKS_CONFIG_PROFILE` is set. Make the target workspace the one those commands will actually hit.
+
+1. **Installed?** `databricks --version`. If missing → stop and link https://docs.databricks.com/aws/en/dev-tools/cli/install.
+2. **Default points at the confirmed workspace?** The host from `databricks current-user me` (Phase 0) is what the *default* profile resolves to. Confirm it equals the workspace the user approved.
+   - If the user authenticated via a **named profile** (not `DEFAULT`), you have two consistent options — pick one and use it for **every** `databricks` and `./deploy.sh` command for the rest of the session:
+     - **(a)** Have the user make it the default, or
+     - **(b)** Prefix every command with `DATABRICKS_CONFIG_PROFILE=<profile>` (e.g. `DATABRICKS_CONFIG_PROFILE=ci-demo ./deploy.sh core aws`).
+   - State plainly which one you're using so it's reproducible. Do not silently switch profiles mid-flow.
+3. **Auth valid?** `databricks current-user me` must return a user (not a 401). If it 401s, send the user back to `databricks auth login`.
+4. **Other pre-flight tools** (run in parallel; warn, don't all block):
+   ```bash
+   python3 --version          # < 3.10 → stop and require upgrade; 3.10 → warn only
+   jq --version               # brew install jq
+   which terraform && terraform version   # needed for the PGP-key workaround (see Auto-patch)
+   poetry --version           # deploy.sh installs it via pip if absent — no action needed
+   ```
+
+---
+
+## Phase 2 — Cloud
+
+Determine the cloud (drives which `*.env` `deploy.sh` consumes and the bundle target). **Auto-detect from the workspace host, then confirm:**
+- `*.cloud.databricks.com` → **aws**
+- `*.azuredatabricks.net` → **azure**
+- `*.gcp.databricks.com` → **gcp**
+
+Confirm with `AskUserQuestion` (`aws` / `azure` / `gcp`). All three are supported by `deploy.sh` (`prod_aws` / `prod_azure` / `prod_gcp`). The matching `aws.env` / `azure.env` / `gcp.env` already ship with sensible node-type defaults — only touch them if the user explicitly wants non-default compute.
+
+---
+
+## Phase 3 — Which modules to install (multi-select, EARLY)
+
+This selection **drives the rest of the wizard** — you only validate/create env files for the modules chosen here.
+
+1. **`core` is mandatory and always first.** Check if it's already installed:
+   ```bash
+   ls modules/core/.deployed 2>/dev/null
+   ```
+   - **`.deployed` exists** → this is an existing install. ⚠️ See the hard rule below: refresh core with `update.sh`, never `./deploy.sh core`.
+   - **absent** → fresh install; `./deploy.sh core <cloud>` is the first step.
+2. Ask, with `AskUserQuestion` (`multiSelect: true`), which **additional** modules to deploy beyond core:
+   - `large_molecule` — AlphaFold, Boltz, ESMFold, ProteinMPNN, RFdiffusion, enzyme optimization, …
+   - `small_molecule` — ChemProp, DiffDock, GenMol, KERMT, NetSolP, …
+   - `single_cell` — scGPT, SCimilarity, scanpy, rapids-singlecell, …
+   - `genomics` — GWAS, variant annotation, VCF ingestion, **parabricks** (GPU, needs docker creds)
+   - `bionemo` — NVIDIA BioNeMo ESM-2 finetune/inference (container-only, needs docker creds)
+3. **Treat the approved list + order as a contract.** Deploy in exactly the order confirmed. If a module is blocked (e.g. waiting on docker creds) do NOT silently jump to a later one — ask the user to re-approve any reordering. (Past user feedback: silent reordering was rejected.)
+
+---
+
+## Phase 4 — `application.env` (core-level config; always required)
+
+This file lives at the **repo root** and is consumed by every module deploy. Read the existing file if present, show current values, validate each against the live workspace, and let the user accept or override.
+
+| Key | How to validate / source |
+|---|---|
+| `workspace_url` | The confirmed host from Phase 0 (no trailing path). |
+| `core_catalog_name` | `databricks catalogs list` → show `MANAGED_CATALOG` rows. Existing → `databricks catalogs get <name>`. New → **confirm**, then `databricks catalogs create <name>`. |
+| `core_schema_name` | Default `genesis_workbench`. Must be **dedicated** to GWB (deploy writes many tables). `deploy.sh` creates it — don't pre-validate. |
+| `sql_warehouse_id` | `databricks warehouses list` → show `HEALTHY` ones. Validate the pick with `databricks warehouses get <id>`. If none, link https://docs.databricks.com/aws/en/compute/sql-warehouse/create and wait. |
+
+---
+
+## Phase 5 — `modules/core/module.env` (always, since core always deploys)
+
+Read the current file if present; offer each field with its current value as the default.
+
+| Key | Notes |
+|---|---|
+| `dev_user_prefix` | Namespaces dev resources, e.g. `demo`. May be blank for a clean prod-style install. |
+| `app_name` | Databricks App name — **workspace-unique**. Default `genesis-workbench`. |
+| `secret_scope_name` | e.g. `genesis_workbench_secret_scope`. Created by the deploy if missing. |
+| `llm_endpoint_name` | Default `databricks-claude-sonnet-4-6`. Validate: `databricks serving-endpoints get <name>`; if absent, offer to pick from `databricks serving-endpoints list`. |
+
+---
+
+## Phase 6 — Module-specific `module.env` — ONLY for selected modules
+
+Only `core` (Phase 5), `bionemo`, and `genomics` need a `module.env`. **`large_molecule`, `single_cell`, and `small_molecule` need NO `module.env`** — they run off `application.env` + the cloud env file. So:
+
+- **If `bionemo` was selected** → `modules/bionemo/module.env`:
+  ```
+  bionemo_docker_userid=<userid>
+  bionemo_docker_token=<token>
+  bionemo_docker_image=<image>
+  ```
+  Remind the user the BioNeMo container must be pre-built + pushed (`modules/bionemo/docker/build_docker.sh`). Treat the token as a secret — don't echo it back.
+
+- **If `genomics` was selected AND the parabricks submodule is wanted** → `modules/genomics/module.env`:
+  ```
+  parabricks_docker_userid=<userid>
+  parabricks_docker_token=<token>
+  parabricks_docker_image=<image>
+  ```
+  (parabricks is a genomics submodule; the GWAS / variant-annotation / VCF-ingestion submodules don't need docker creds.)
+
+- **If only `large_molecule` / `single_cell` / `small_molecule` were selected** → skip Phase 6 entirely; do **not** prompt for or create any extra `module.env`.
+
+### Env-file writing rule (critical)
+Write env files with the `Write` tool — **no comments, no blank lines, `key=value` only**. `deploy.sh` flattens each file with `paste -sd,` into the bundle's `--var` string; a comment or blank line corrupts the variable list and breaks the deploy.
+
+---
+
+## Phase 7 — Confirm the plan, then automate
+
+Echo back a concise plan and get a final go-ahead:
+> Workspace `<host>` · cloud `<cloud>` · profile `<default|name>` · catalog `<cat>` · schema `<schema>` · modules: **core → <approved order>**.
+
+### ⚠️ Hard rule: never run `./deploy.sh core` on a workspace with a live install
+`./deploy.sh core <cloud>` re-runs `initialize_module_job`, which **re-creates the GWB schema tables** — including `settings` / `model_deployments` / `user_profiles` — wiping live app state (confirmed user-reported regression). For an app/library refresh on an existing install:
 ```bash
 cd modules/core
-./update.sh <cloud>          # aws | azure | gcp
+./update.sh <cloud>          # bundle deploy + wheel + app SP grants + publishes node_catalog; no destructive init
 ```
+`./deploy.sh core <cloud>` is correct **only on a brand-new workspace** (no `.deployed`, no state to lose).
 
-`update.sh` does the same bundle deploy + library wheel + app SP grants without
-running `initialize_module_job`. The `.deployed` lock is still re-touched.
+### Run order
+1. **core first** (fresh workspace only):
+   ```bash
+   ./deploy.sh core <cloud>
+   ls modules/core/.deployed     # verify the lock was written
+   ```
+2. Then each selected module, **in the approved order, one at a time**:
+   ```bash
+   ./deploy.sh <module> <cloud>
+   ```
+   (Prefix with `DATABRICKS_CONFIG_PROFILE=<name>` if you chose option (b) in Phase 1.)
 
-`./deploy.sh core <cloud>` is appropriate **only on a brand-new workspace** where
-there's no existing GWB state to lose.
+`deploy.sh` returns in minutes (it runs `databricks bundle deploy` + `initialize_module_job`). What runs *after* is module-specific and can be long:
+- `small_molecule` / `large_molecule` / `single_cell` / `genomics` → spawn `register_*` jobs on GPU clusters (these hit quota at cluster-create).
+- `bionemo` → `dbx_bionemo_initial_setup`, then on-demand finetune/inference jobs.
 
-## Running the deploy
-
-Always run `core` first **on a fresh workspace**:
-```bash
-./deploy.sh core <cloud>     # FIRST-TIME ONLY — see warning above
-```
-
-After it completes, verify the lock file:
-```bash
-ls modules/core/.deployed
-```
-
-Then loop through the modules the user chose in step 8, **in the exact order the user approved**:
-```bash
-./deploy.sh <module> <cloud>
-```
-
-Wait for each `deploy.sh` to return (it drives `databricks bundle deploy` + an `initialize_module_job` run). That's fast (minutes). What runs *after* is module-specific:
-
-- `small_molecule`, `large_molecule`, `single_cell`, `genomics` — spawn multiple `register_*` jobs against GPU clusters. These are the ones that can hit quota at cluster-create time.
-- `bionemo` — spawns `dbx_bionemo_initial_setup`, then registers on-demand finetune/inference jobs (no `register_*` jobs).
-- `parabricks` — primarily builds a docker-backed cluster template; actual compute runs on-demand from the app.
-
-**Between modules, poll until the first post-deploy job run spawned by the module reaches `RUNNING` or a terminal state** (not just `PENDING`). This is the quota gate. Use:
+**Between modules, poll until the predecessor's first post-deploy job reaches `RUNNING` (or terminal), not just `PENDING`:**
 ```bash
 databricks jobs list --limit 50 | grep -iE "<module-keyword>"
 databricks jobs list-runs --job-id <id> --limit 1
 databricks jobs get-run <run-id> | jq '.state'
 ```
-Only advance to the next module once the predecessor's first job is past `PENDING`. This serializes GPU cluster-create and surfaces quota issues one module at a time.
+This serializes GPU cluster-create and surfaces quota issues one module at a time. Watch `<workspace_url>/jobs` throughout.
 
-Watch the Jobs UI at `<workspace_url>/jobs` throughout.
-
-### `small_molecule` per-submodule deploy order
-
-The `small_molecule` module is the most fragmented (now 8 submodules). Use `--only-submodule <path>` to deploy them one at a time, in this order, when iterating on the Guided Enzyme Optimization workflow on a fresh workspace:
-
+### Per-submodule deploys
+Large modules support `--only-submodule <path>` to deploy one piece at a time (mirrors how submodules are listed in each module's `deploy.sh ALL_SUBMODULES`), e.g.:
 ```bash
-./deploy.sh small_molecule aws --only-submodule open_babel/open_babel_v3
-./deploy.sh small_molecule aws --only-submodule diffdock/diffdock_v1
-./deploy.sh small_molecule aws --only-submodule chemprop/chemprop_v2
-./deploy.sh small_molecule aws --only-submodule proteina_complexa/proteina_complexa_v1
-./deploy.sh small_molecule aws --only-submodule netsolp/netsolp_v1            # CPU, BSD-3-Clause; weights bundled in weights/
-./deploy.sh small_molecule aws --only-submodule pltnum/pltnum_v1              # GPU_SMALL, MIT; weights from HuggingFace
-./deploy.sh small_molecule aws --only-submodule deepstabp/deepstabp_v1        # GPU_SMALL, MIT; ProtT5 from HF + 80 MB head from upstream raw URL
-./deploy.sh small_molecule aws --only-submodule mhcflurry/mhcflurry_v2        # CPU, Apache-2.0; weights via mhcflurry-downloads fetch
-./deploy.sh small_molecule aws --only-submodule enzyme_optimization/enzyme_optimization_v1  # CPU + A10 GPU; orchestrator jobs, no auto-run
+./deploy.sh small_molecule <cloud> --only-submodule kermt/kermt_v2
 ```
+Use this when iterating on a single model rather than the whole module.
 
-**NetSolP one-time setup:** before the first deploy of `netsolp/netsolp_v1`, the upstream weight tarball must be extracted into `modules/small_molecule/netsolp/netsolp_v1/weights/` and committed (BSD-3-Clause, see the `weights/README.md` for the helper script). Subsequent clones of the repo deploy without any manual step.
+---
 
-**Orchestrator deploy** does NOT auto-run a registration job — it just installs the bundle. It creates **two** jobs: `run_enzyme_optimization_gwb` (Fast path, CPU cluster) and `run_enzyme_optimization_gwb_inprocess_ame` (Accurate path, A10 GPU cluster). Both are dispatched on demand by the UI based on the **Generation mode** toggle. The Accurate path also requires `proteina_complexa/proteina_complexa_v1` to be deployed first — its registered UC model is the source of truth for the AME checkpoints (no NGC fallback). If you skip proteina_complexa, the Accurate path fails fast at job start with a clear "deploy proteina_complexa first" message.
+## Auto-patch for the expired Terraform PGP key
+
+The Databricks CLI downloads Terraform and verifies HashiCorp's (expired) PGP signature:
+```
+Error: error downloading Terraform: unable to verify checksums signature: openpgp: key expired
+```
+`deploy.sh` already exports `DATABRICKS_TF_EXEC_PATH` + `DATABRICKS_TF_VERSION` near the top to use a local Terraform and skip the signed download. **Verify the path it points at actually exists on this machine:**
+```bash
+grep -n "DATABRICKS_TF_EXEC_PATH" deploy.sh
+[ -x "<that path>" ] && echo ok
+```
+If the hardcoded path is wrong for this machine, rewrite those two lines to derive from the local install:
+```bash
+export DATABRICKS_TF_EXEC_PATH=$(which terraform)
+export DATABRICKS_TF_VERSION=$(terraform version -json | jq -r .terraform_version)
+```
+If `terraform` isn't installed: `brew install terraform` (macOS) and retry.
+
+---
 
 ## Error auto-handlers
 
 | Failure signal | Action |
 |---|---|
-| `openpgp: key expired` | Apply the Terraform env-var patch above. If `terraform` isn't installed locally, tell the user to `brew install terraform` and retry. |
-| `Catalog '<name>' does not exist` | Offer to create it via `databricks catalogs create`. Confirm first. |
-| `databricks current-user me` fails / 401 | Tell the user to re-auth: `databricks auth login --host <workspace_url>` in their own terminal. |
-| `./deploy.sh` exits non-zero before `.deployed` is written | Surface the last ~30 lines of output, check for known patterns (catalog, warehouse, secret scope), and point at `SKILL_GENESIS_WORKBENCH_TROUBLESHOOTING.md` for anything uncovered. |
-| Python < 3.11 detected | Warn once; recommend a 3.11 venv; continue unless < 3.10. |
-| `app_name` collision | Databricks Apps names are workspace-unique. If the deploy fails with a name conflict, ask for a new `app_name`, rewrite `modules/core/module.env`, and retry. |
-| LLM endpoint not found | Default `databricks-claude-sonnet-4-6` may not exist in every workspace. Offer to pick an existing serving endpoint from `databricks serving-endpoints list`. |
+| `openpgp: key expired` | Apply the Terraform env-var patch above; `brew install terraform` if missing. |
+| `Catalog '<name>' does not exist` | Offer to `databricks catalogs create <name>` — confirm first. |
+| `databricks current-user me` 401 | Re-auth: `databricks auth login --host <workspace_url>` in the user's terminal; re-confirm host. |
+| App name collision | Apps names are workspace-unique. Ask for a new `app_name`, rewrite `modules/core/module.env`, retry. |
+| LLM endpoint not found | Offer to pick an existing one from `databricks serving-endpoints list`. |
+| `./deploy.sh` exits non-zero before `.deployed` | Surface the last ~30 lines; match against catalog/warehouse/secret-scope patterns; hand off to `SKILL_GENESIS_WORKBENCH_TROUBLESHOOTING.md` for anything else. |
+| Python < 3.11 | Warn once, recommend a 3.11 venv; continue unless < 3.10 (then stop). |
+
+---
 
 ## Post-deploy
 
 When `modules/core/.deployed` exists, print:
 - Databricks App URL: `<workspace_url>/apps/<app_name>`
-- Jobs UI (to track background registration): `<workspace_url>/jobs`
-- Reminder: model-registration jobs for some modules (AlphaFold, Parabricks, BioNeMo) can run for many hours.
+- Jobs UI (track background registration): `<workspace_url>/jobs`
+- Reminder: registration jobs for some models (AlphaFold, Parabricks, BioNeMo) can run for hours.
 
-Offer the user the next module to deploy, or stop.
+Then offer the next module in the approved list, or stop.
 
-## When to use this skill
+---
 
-- User says "deploy Genesis Workbench", "install GWB", "set up Genesis Workbench on a new workspace", "run deploy.sh".
-- User is in a cloned `genesis-workbench` repo and asks about deployment steps.
-- User hits a deploy failure and asks for guided recovery — resume at the appropriate step.
+## When to use / not use
 
-## When NOT to use this skill
+**Use** when the user wants to deploy/install GWB, is in a cloned `genesis-workbench` repo asking about deployment, or is recovering from a deploy failure (resume at the relevant phase).
 
-- User is destroying / tearing down (see `destroy.sh`; a separate skill would be appropriate).
-- User is developing a new module — use `genesis-workbench-development` instead.
-- User is troubleshooting a UI workflow — use `genesis-workbench-workflows` or `_troubleshooting`.
+**Don't use** for: tearing down (→ `genesis-workbench-destroy-wizard`), developing a new module (→ `genesis-workbench-development`), or UI workflow questions (→ `genesis-workbench-workflows` / `_troubleshooting`).
 
 ## Related skills
-
-- `genesis-workbench` — overview of modules and workflows.
-- `genesis-workbench-installation` — reference documentation for the deployment process.
-- `genesis-workbench-troubleshooting` — recipes for common post-deploy failures.
-- `databricks-authentication` — use this if the `DEFAULT` profile needs to be reset.
+- `genesis-workbench-destroy-wizard` — the mirror-image teardown wizard (shares Phases 0–3).
+- `genesis-workbench-installation` — reference docs for deployment mechanics.
+- `genesis-workbench-troubleshooting` — recipes for post-deploy failures.
+- `genesis-workbench` — module/architecture overview.
