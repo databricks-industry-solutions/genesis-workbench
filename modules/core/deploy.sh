@@ -168,6 +168,18 @@ if [[ ! -e ".deployed" ]]; then
 fi
 
 echo ""
+echo "▶️ Publishing the node catalog (Vortex/MCP single source of truth)"
+echo "    (writes the node_catalog table from the wheel's built-in nodes)"
+echo ""
+
+# Must run after the wheel is on the UC Volume (copied right after `bundle deploy`)
+# — this serverless notebook %pip-installs it. Mirrors update.sh so a FRESH
+# install also populates the table: the Vortex UI falls back to the in-wheel
+# CURATED_NODES, but the executor and MCP server read the node_catalog table
+# directly and would otherwise see an empty catalog until the first update.sh.
+databricks bundle run --target $TARGET publish_node_catalog_job --var="$EXTRA_PARAMS"
+
+echo ""
 echo "▶️ Deploying UI Application (genesis-workbench)"
 echo ""
 
