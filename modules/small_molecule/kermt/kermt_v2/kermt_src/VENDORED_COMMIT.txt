@@ -1,0 +1,2 @@
+e402473376ace30fa0092dad0578a88bf7f67287
+Vendored from https://github.com/NVIDIA-BioNeMo/KERMT @ e402473376ace30fa0092dad0578a88bf7f67287 (v2.0.0 — Contrastive KERMT / NV-KERMT-70M-v2)
