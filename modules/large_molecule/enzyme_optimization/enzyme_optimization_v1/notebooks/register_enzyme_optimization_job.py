@@ -18,6 +18,7 @@ dbutils.widgets.text("run_enzyme_optimization_inprocess_ame_job_id", "", "Accura
 dbutils.widgets.text("user_email", "a@b.com", "User email")
 dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
 dbutils.widgets.text("databricks_app_name", "genesis-workbench", "Databricks App Name")
+dbutils.widgets.text("databricks_app_names", "genesis-workbench:mcp-genesis-workbench", "Databricks App Names (colon/comma-separated, UI + MCP)")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
@@ -50,9 +51,11 @@ run_enzyme_optimization_inprocess_ame_job_id = dbutils.widgets.get("run_enzyme_o
 user_email = dbutils.widgets.get("user_email")
 sql_warehouse_id = dbutils.widgets.get("sql_warehouse_id")
 databricks_app_name = dbutils.widgets.get("databricks_app_name")
+databricks_app_names = dbutils.widgets.get("databricks_app_names") or databricks_app_name
 
 import os
-os.environ["DATABRICKS_APP_NAME"] = databricks_app_name
+os.environ["DATABRICKS_APP_NAMES"] = ",".join([n.strip() for n in databricks_app_names.replace(":", ",").split(",") if n.strip()])  # UI + MCP
+os.environ["DATABRICKS_APP_NAME"] = databricks_app_name  # legacy single-app fallback
 
 # COMMAND ----------
 

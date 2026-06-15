@@ -49,6 +49,8 @@ resources:
           default: ${resources.dashboards.variant_annotation_dashboard.id}
         - name: user_email
           default: ${var.current_user}
+        - name: databricks_app_names
+          default: genesis-workbench:mcp-genesis-workbench
 
       job_clusters:
         - job_cluster_key: variant_annotation_setup_cluster
