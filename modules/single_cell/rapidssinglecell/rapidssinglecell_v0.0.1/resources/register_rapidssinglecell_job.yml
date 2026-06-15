@@ -30,7 +30,9 @@ resources:
           default: ${var.current_user}
         - name: sql_warehouse_id
           default: ${var.sql_warehouse_id}
-      
+        - name: databricks_app_names
+          default: genesis-workbench:mcp-genesis-workbench
+
       tags: ${var.common_resource_tags}
 
 

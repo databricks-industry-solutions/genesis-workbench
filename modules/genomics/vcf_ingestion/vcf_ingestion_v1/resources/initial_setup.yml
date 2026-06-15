@@ -31,5 +31,7 @@ resources:
           default: ${resources.jobs.vcf_ingestion.id}
         - name: user_email
           default: ${var.current_user}
+        - name: databricks_app_names
+          default: genesis-workbench:mcp-genesis-workbench
 
       tags: ${var.common_resource_tags}
