@@ -117,6 +117,8 @@ resources:
           default: ${var.sql_warehouse_id}
         - name: run_alphafold_job_id
           default: ${resources.jobs.alphafold.id}
+        - name: databricks_app_names
+          default: genesis-workbench:mcp-genesis-workbench
 
               
       job_clusters:

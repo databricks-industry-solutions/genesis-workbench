@@ -292,8 +292,12 @@ def set_app_permissions_for_job(job_id:str, user_email:str):
             )
         )
 
-    # Set permissions on the job, replacing any previous ACL
-    w.jobs.set_permissions(
+    # ADDITIVE grant (PATCH semantics) — preserves any existing ACL rather than
+    # replacing it. Critical for multi-app installs: a module re-registration
+    # must NOT wipe a previously-granted sibling app (e.g. the MCP server SP,
+    # granted by grant_app_permissions_job). update_permissions only adds the
+    # owner + app grants listed here; set_permissions would clobber the rest.
+    w.jobs.update_permissions(
         job_id=job_id,
         access_control_list=acl
     )

@@ -42,6 +42,8 @@ resources:
           default: ${resources.jobs.gwas_analysis.id}
         - name: user_email
           default: ${var.current_user}
+        - name: databricks_app_names
+          default: genesis-workbench:mcp-genesis-workbench
 
       job_clusters:
         - job_cluster_key: gwas_setup_cluster

@@ -16,6 +16,7 @@ dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Id/Email"
 dbutils.widgets.text("kermt_finetune_job_id", "", "KERMT finetune orchestrator job id")
 dbutils.widgets.text("kermt_deploy_job_id", "", "KERMT deploy orchestrator job id")
 dbutils.widgets.text("databricks_app_name", "genesis-workbench", "Databricks App Name")
+dbutils.widgets.text("databricks_app_names", "genesis-workbench:mcp-genesis-workbench", "Databricks App Names (colon/comma-separated, UI + MCP)")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
@@ -43,8 +44,11 @@ sql_warehouse_id, user_email = g("sql_warehouse_id"), g("user_email")
 kermt_finetune_job_id = g("kermt_finetune_job_id")
 kermt_deploy_job_id = g("kermt_deploy_job_id")
 databricks_app_name = g("databricks_app_name")
+databricks_app_names = dbutils.widgets.get("databricks_app_names") or databricks_app_name
 
-os.environ["DATABRICKS_APP_NAME"] = databricks_app_name  # set BEFORE importing helpers
+# set BEFORE importing helpers
+os.environ["DATABRICKS_APP_NAMES"] = ",".join([n.strip() for n in databricks_app_names.replace(":", ",").split(",") if n.strip()])  # UI + MCP
+os.environ["DATABRICKS_APP_NAME"] = databricks_app_name  # legacy single-app fallback
 
 from genesis_workbench.workbench import initialize, set_app_permissions_for_job
 from genesis_workbench.models import register_batch_model, ModelCategory

@@ -47,6 +47,8 @@ resources:
           default: ${resources.jobs.kermt_deploy.id}
         - name: databricks_app_name
           default: genesis-workbench
+        - name: databricks_app_names
+          default: genesis-workbench:mcp-genesis-workbench
 
       job_clusters:
         - job_cluster_key: stage_cluster
