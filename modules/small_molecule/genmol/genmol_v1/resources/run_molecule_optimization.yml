@@ -17,9 +17,8 @@ resources:
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             single_user_name: ${var.current_user}
-            aws_attributes:
-              availability: ON_DEMAND
-              first_on_demand: 1
+            # Cloud-specific availability is set per-target (aws/azure/gcp_attributes)
+            # in databricks.yml.
             spark_conf:
               spark.databricks.cluster.profile: singleNode
               spark.master: "local[*]"
