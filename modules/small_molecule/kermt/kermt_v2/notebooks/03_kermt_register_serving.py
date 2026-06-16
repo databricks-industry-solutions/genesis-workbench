@@ -51,11 +51,23 @@ g = dbutils.widgets.get
 catalog, schema, cache_dir = g("catalog"), g("schema"), g("cache_dir")
 kermt_src_path, user_email = g("kermt_src_path"), g("user_email")
 sql_warehouse_id = g("sql_warehouse_id")
-ft_id = g("ft_id")
+ft_id = g("ft_id").strip()
 model_name = g("model_name")
 workload_type = g("workload_type")
 calibration_data_location = g("calibration_data_location")
 vol_root = f"/Volumes/{catalog}/{schema}/{cache_dir}"
+
+# When no ft_id is passed (e.g. the deploy step of the initial submodule deployment,
+# which runs right after a finetune), fall back to the most recent active checkpoint.
+# ft_id is a monotonic time_ns() value, so ORDER BY ft_id DESC = newest first.
+if not ft_id:
+    latest = spark.sql(f"""
+        SELECT ft_id FROM {catalog}.{schema}.kermt_weights
+        WHERE is_active = true ORDER BY ft_id DESC LIMIT 1
+    """).collect()
+    assert latest, "no active fine-tuned model found in kermt_weights — run a finetune first"
+    ft_id = str(latest[0]["ft_id"])
+    print(f"ft_id not provided — using latest active ft_id = {ft_id}")
 
 # Resolve the fine-tuned checkpoint location from kermt_weights.
 row = spark.sql(f"""
