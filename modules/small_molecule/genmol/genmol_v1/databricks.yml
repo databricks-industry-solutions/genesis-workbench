@@ -17,6 +17,26 @@ targets:
         level: CAN_MANAGE
     run_as:
       user_name: ${var.current_user}
+    resources:
+      jobs:
+        register_genmol:
+          job_clusters:
+            - job_cluster_key: genmol_register_cluster
+              new_cluster:
+                aws_attributes:
+                  availability: ON_DEMAND
+        run_molecule_optimization:
+          job_clusters:
+            - job_cluster_key: molecule_optimization_cpu_cluster
+              new_cluster:
+                aws_attributes:
+                  availability: ON_DEMAND
+        register_molecule_optimization_job:
+          job_clusters:
+            - job_cluster_key: molecule_optimization_register_cluster
+              new_cluster:
+                aws_attributes:
+                  availability: ON_DEMAND
 
   prod_azure:
     mode: production
@@ -27,6 +47,26 @@ targets:
         level: CAN_MANAGE
     run_as:
       user_name: ${var.current_user}
+    resources:
+      jobs:
+        register_genmol:
+          job_clusters:
+            - job_cluster_key: genmol_register_cluster
+              new_cluster:
+                azure_attributes:
+                  availability: ON_DEMAND_AZURE
+        run_molecule_optimization:
+          job_clusters:
+            - job_cluster_key: molecule_optimization_cpu_cluster
+              new_cluster:
+                azure_attributes:
+                  availability: ON_DEMAND_AZURE
+        register_molecule_optimization_job:
+          job_clusters:
+            - job_cluster_key: molecule_optimization_register_cluster
+              new_cluster:
+                azure_attributes:
+                  availability: ON_DEMAND_AZURE
 
   prod_gcp:
     mode: production
@@ -37,3 +77,23 @@ targets:
         level: CAN_MANAGE
     run_as:
       user_name: ${var.current_user}
+    resources:
+      jobs:
+        register_genmol:
+          job_clusters:
+            - job_cluster_key: genmol_register_cluster
+              new_cluster:
+                gcp_attributes:
+                  availability: ON_DEMAND_GCP
+        run_molecule_optimization:
+          job_clusters:
+            - job_cluster_key: molecule_optimization_cpu_cluster
+              new_cluster:
+                gcp_attributes:
+                  availability: ON_DEMAND_GCP
+        register_molecule_optimization_job:
+          job_clusters:
+            - job_cluster_key: molecule_optimization_register_cluster
+              new_cluster:
+                gcp_attributes:
+                  availability: ON_DEMAND_GCP
