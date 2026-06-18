@@ -2,6 +2,18 @@
 
 Workspace-local deploy log for `fevm-mmt-aws-usw2`. Mirrors the reusable items in root `CHANGELOG.md`, plus workspace-specific IDs/context.
 
+## 2026-06-18 — Deployment-completeness audit + KERMT (WIP) direct-deploy attempt
+
+**Trigger:** app showed "not deployed" cards (KERMT ADMET, DiffDock).
+
+- **Audit — everything registered is deployed.** `models` table: **0** active rows with `is_model_deployed=false` (all categories); **25/25** `gwb_mmt_*` serving endpoints `READY`. No half-deployed registrations.
+- **DiffDock "not deployed" = stale cached view.** Endpoint `gwb_mmt_diffdock_endpoint` is `READY` and both DiffDock rows are `is_model_deployed=true` → reload the app and the card flips. Not a gap.
+- **KERMT ADMET = the only genuine gap, and it's WIP/unwired.** No `models`-table row, no endpoint; `modules/small_molecule/kermt/kermt_v1` exists but is **not in `small_molecule/deploy.sh` `ALL_SUBMODULES`** (commit `3688117` "… (WIP)"). See root `CHANGELOG.md` → Unreleased.
+  - **Direct-deploy attempt (eyes-open, user-approved) — FAILED at stage.** Ran `cd modules/small_molecule/kermt/kermt_v1 && ./deploy.sh aws --var="<application.env+aws.env>"`. Bundle validated + deployed (`.bundle/genesis_workbench_kermt/prod_aws` exists), but `register_kermt` (run `571136257444215`, job `629268658641581`) **FAILED** (INTERNAL_ERROR): `stage_kermt_task` → **`HTTPError: 401 Unauthorized` for `https://api.onedrive.com/...` (a `1drv.ms` share)** — the GROVERbase checkpoint is hosted on a personal OneDrive link that's no longer authorized. So the WIP can't even stage → no finetune/serve, card stays "not deployed". Stopped per plan (didn't force downstream).
+  - **kermt bundle left on the workspace** (jobs registered, no model deployed) — retry-able once the GROVERbase weights source is fixed (host it in a UC Volume / accessible store instead of a personal OneDrive share). Or `databricks bundle destroy` the kermt bundle to remove it.
+  - **DiffDock "not deployed" card = stale client cache, model IS deployed.** Verified: both endpoints READY, `is_model_deployed=true`, active `model_deployments` rows; live catalog API returns `diffdock available=true`. A hard refresh clears it (catalogQuery `staleTime` 5min, memory-only cache, no SW).
+- **Fixed Vortex "not deployed" for genomics + Fine-Tune ESM2** (Variant Calling, VCF Ingestion, Variant Annotation, GWAS, esm2_finetune). Root cause: app SP lacked `CAN_MANAGE_RUN` on those jobs → `jobs.list()` (run as SP) omitted them → palette marked them not-deployed (see root `CHANGELOG.md` → Unreleased). Fix applied: (1) corrected stale bionemo `*_job_id` in `settings` (`311891731048924`→`59899400130378`, `1069859938111382`→`983769939153440` — same April-orphan staleness as batch_models); (2) re-ran `grant_app_permissions` (run `153328863417225`, SUCCESS) → SP now `CAN_MANAGE_RUN` on all genomics + bionemo jobs (verified); (3) restarted `gwb-app` (stop/start) to clear the process-global `_all_job_names` cache. **Verified:** live catalog now returns `available=true` for variant_calling/vcf_ingestion/variant_annotation/gwas/esm2_finetune/diffdock/alphafold2. KERMT correctly still not-deployed.
+
 ## 2026-06-14 — Finish genomics, fix app SP, enable workspace gates, clean residual
 
 **Goal:** complete the genomics module (was ⬜ partial on 06-13), fix the app "(service principal id not available)" bug, and clear residual from a killed deploy session.
