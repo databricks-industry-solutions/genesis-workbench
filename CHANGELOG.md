@@ -1,5 +1,70 @@
 # Genesis Workbench — Changelog
 
+## v2.2.0 (2026-06-22) — KERMT 2.0 live out-of-the-box · MCP server hardened (UI + MCP grants) · fresh-install & cloud-portability fixes
+
+A consolidation release that makes the **MCP server** dependable as a first-class surface, ships **KERMT 2.0**
+serving the moment it deploys, and closes a set of fresh-install / multi-cloud correctness gaps across the
+small-molecule and genomics modules. Wheel `genesis_workbench` 0.1.32 → 0.1.35; no breaking changes.
+
+### KERMT 2.0 — new submodule, live out of the box
+
+- **New `kermt/kermt_v2` submodule** (NVIDIA-BioNeMo **NV-KERMT-70M-v2 / Contrastive KERMT**), added to the
+  `small_molecule` submodule list so it's deployable on its own (`--only-submodule kermt/kermt_v2`). The
+  NaN-sanitize collator patch (ClinTox salts/mixtures → NaN RDKit descriptors) is re-applied to the v2 source.
+- **Fine-tune + deploy at init.** The submodule deploy now runs **register → fine-tune → deploy** in sequence,
+  so a fresh install automatically fine-tunes on the bundled **TDC ClinTox** sample and stands up the
+  `kermt_admet` serving endpoint with no manual UI step. The deploy step falls back to the **latest active
+  `ft_id`** from `kermt_weights` when none is passed (also makes the deploy job runnable standalone). The UI
+  fine-tune/deploy flow remains for bringing your own assay. (This adds a GPU fine-tune to the deploy, so it
+  runs longer.) `kermt_admet.md` updated to document the automatic path.
+
+### MCP server hardened
+
+The companion `mcp-genesis-workbench` server is now reliable end-to-end and correctly governed:
+
+- **MCP app SP granted everywhere the UI SP is.** Endpoint grants already read `DATABRICKS_APP_NAMES`
+  (UI + MCP); job grants did not. Every module's job-registration notebook now sets `DATABRICKS_APP_NAMES`
+  before `set_app_permissions_for_job`, fed by a new `databricks_app_names` register-job parameter
+  (default `genesis-workbench:mcp-genesis-workbench`) — covering kermt v1/v2, genmol, enzyme, alphafold,
+  rapidssinglecell, scanpy, and genomics (gwas/vcf/variant_annotation), plus bionemo. `set_app_permissions_for_job`
+  switched from `set_permissions` (REPLACE) to additive `update_permissions`, so re-registering one module can
+  no longer clobber a sibling app's grant. Net: deploy any module on any workspace and **both** the UI and MCP
+  SPs get `CAN_MANAGE_RUN` durably.
+- **Correct capability contracts.** Endpoint capability contracts are aligned to the deployed models' actual
+  signatures, and `execute_capability` now applies parameter defaults so `dataframe_records` payloads are
+  complete.
+- **Test harness.** A new MCP test harness (`mcp_app/scripts/test_mcp_server.py`) exercises the server's tools
+  end-to-end.
+
+### Vortex
+
+- **Animated "accretion vortex" empty-canvas backdrop** for first-run Vortex (`VortexEmptyState`).
+- **Wiring sees through shape-preserving transforms** when resolving extract paths — a transform that doesn't
+  change a value's shape no longer hides the upstream source from the path resolver.
+
+### Fresh-install & cloud-portability fixes
+
+- **`node_catalog` published on fresh install.** `core/deploy.sh` now runs `publish_node_catalog_job` on a
+  fresh install (previously only `update.sh` did), so the Vortex executor and MCP server — which read the
+  `node_catalog` table directly — see a populated catalog from the first deploy.
+- **DiffDock — concurrent endpoint deploys + 2h wait.** `02_import_model_gwb.py` launches both the ESM
+  embeddings and DiffDock scoring deployments before waiting, then waits for both together (bounded by the
+  slower deploy); each wait timeout raised 1h → 2h.
+- **GenMol — cloud-portable cluster availability.** GenMol hardcoded `aws_attributes: ON_DEMAND` in its base
+  resources with no Azure/GCP overlay. Moved to per-target `aws/azure/gcp_attributes` overrides in
+  `databricks.yml` (the kermt/diffdock pattern) for all three jobs; validated for prod_aws/azure/gcp. Also
+  dropped the hardcoded, workspace-specific GenMol app SP id — `CAN_MANAGE_RUN` is granted by app name at
+  registration time.
+
+### Docs
+
+- Refreshed the README **architecture diagram**.
+
+### Notes
+
+- Verified on ci-demo. No new external model beyond KERMT v2; no schema/breaking changes. Wheel 0.1.32 → 0.1.35
+  (with `app/requirements.txt` + `mcp_app/requirements.txt` refs bumped in step).
+
 ## v2.1.0 (2026-06-12) — Vortex: deterministic wiring + Past Vortex Runs (inspect · re-run · failure triage)
 
 A large batch making **Vortex** (AI-assisted workflow canvas) reliable end-to-end: workflows now wire
