@@ -265,10 +265,13 @@ def _list_app_names() -> List[str]:
     """Returns the apps that should receive CAN_MANAGE_RUN/CAN_QUERY grants
     when models/jobs are registered.
 
-    Prefers DATABRICKS_APP_NAMES (comma-separated) for multi-app installs;
-    falls back to DATABRICKS_APP_NAME for single-app installs (the default)."""
+    Prefers DATABRICKS_APP_NAMES for multi-app installs; falls back to
+    DATABRICKS_APP_NAME for single-app installs (the default). Accepts either ':'
+    or ',' as the separator — core seeds DATABRICKS_APP_NAMES from the settings
+    table via a colon-list (':' avoids clashing with `bundle --var a,b`), while
+    callers may pass comma-separated; tolerate both so neither becomes one bogus name."""
     raw = os.environ.get("DATABRICKS_APP_NAMES") or os.environ.get("DATABRICKS_APP_NAME", "")
-    return [n.strip() for n in raw.split(",") if n.strip()]
+    return [n.strip() for n in raw.replace(":", ",").split(",") if n.strip()]
 
 
 def set_app_permissions_for_job(job_id:str, user_email:str):
