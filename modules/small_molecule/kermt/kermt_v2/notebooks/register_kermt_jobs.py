@@ -94,4 +94,18 @@ register_batch_model(
     cluster_type="GPU",
     added_by=user_email,
 )
+# Also register the deploy job so the "Deploy KERMT" canvas node shows deployed
+# unconditionally (batch_models are always in the palette's available set), rather
+# than depending on the app SP seeing the job via a cached jobs.list().
+register_batch_model(
+    model_name="kermt_deploy",
+    model_display_name="Deploy KERMT",
+    model_description="Deploy a fine-tuned KERMT checkpoint as an ADMET serving endpoint.",
+    model_category=str(ModelCategory.SMALL_MOLECULE),
+    module="kermt",
+    job_id=kermt_deploy_job_id,
+    job_name="kermt_deploy_job",
+    cluster_type="GPU",
+    added_by=user_email,
+)
 print("registered KERMT in batch_models")
