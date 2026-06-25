@@ -4,15 +4,6 @@
 
 ### Fixes
 
-- **`genmol` fails to deploy on any non-ci-demo workspace** — `./deploy.sh small_molecule <cloud>` aborts at the GenMol submodule with:
-  ```
-  Error: cannot create permissions: Principal: ServicePrincipalName(bea46a71-98dd-484d-a368-b7516de8c4b0) does not exist
-    with databricks_permissions.job_run_molecule_optimization
-  ```
-  **Root cause:** `modules/small_molecule/genmol/genmol_v1/variables.yml` declares `app_service_principal_id` (default `bea46a71-…`, the upstream ci-demo app SP) and `app_name` (default `genesis-workbench`), but neither is wired into the deploy flow. `deploy.sh` builds `--var` from `application.env` + `<cloud>.env` + a *shared* `module.env`, and these two vars can't live in the shared `module.env` because the other small_molecule submodules don't declare them (bundle would error "variable not defined"). So both fall back to the hardcoded upstream defaults: the bundle permission in `run_molecule_optimization.yml` (`service_principal_name: ${var.app_service_principal_id}`) references a non-existent SP, and `register_molecule_optimization_job.py` resolves the app SP by `app_name` — both wrong off the ci-demo workspace.
-  **Workaround (per-workspace):** set genmol's `variables.yml` defaults to your workspace's app SP client-id and app name (the deployed UI app SP — find via `databricks apps get <app_name>` → `service_principal_client_id`).
-  **Proper fix (upstream, TODO):** wire `app_service_principal_id` + `app_name` into the deploy flow — e.g. resolve the app SP at deploy time the way `grant_app_permissions_job` already does — so genmol doesn't depend on a hardcoded ci-demo default.
-
 - **`scimilarity` redeploy wants to DELETE the model-weights Volume** — re-deploying scimilarity onto a workspace that already has the `scimilarity` Volume (cached `model_v1.1` weights + Adams 2020 IPF data) prompts:
   ```
   This action will result in the deletion or recreation of the following volumes … delete resources.volumes.scimilarity
@@ -51,11 +42,6 @@
   **Workaround:** soft-delete the stale rows — `UPDATE <catalog>.<schema>.batch_models SET is_active=false WHERE module IN ('disease_biology','protein_studies')` — and repoint any `job_id` left dangling by a deleted job to the live job.
   **Proper fix (upstream, TODO):** have `register_batch_model` upsert / deactivate prior `is_active` rows for the same `model_name` (regardless of module), and/or add a reconcile step that deactivates `batch_models` rows whose `job_id` no longer exists.
 
-- **KERMT ADMET shows "not deployed" and can't be deployed via the orchestrator — submodule is WIP + unwired.** The app renders a `KERMT ADMET` model card (the UI/types are scaffolded — `AdmetSafetyTab` has a `runKermt` toggle), but `./deploy.sh small_molecule <cloud> --only-submodule kermt/kermt_v1` is **rejected**: `Error: --only-submodule must be one of: chemprop… diffdock… (no kermt)`.
-  **Root cause:** `modules/small_molecule/kermt/kermt_v1` exists (full structure: `register → finetune → serve` notebooks + bundle), committed as *"scaffold KERMT ADMET submodule … (WIP)"* (`3688117`), but it was **never added to `ALL_SUBMODULES` in `modules/small_molecule/deploy.sh`** — so the orchestrator never deploys it, leaving the card permanently "not deployed".
-  **Workaround (deploy it directly, bypassing the orchestrator gate):** `cd modules/small_molecule/kermt/kermt_v1 && ./deploy.sh <cloud> --var="<application.env + cloud.env, comma-joined>"` — validates + deploys the bundle + runs `register_kermt`. **⚠️ This currently FAILS at `stage_kermt_task` with `HTTPError: 401 Unauthorized` downloading the GROVERbase checkpoint** — `01_register_kermt.py` pulls the weights from a **personal OneDrive share (`1drv.ms` / `api.onedrive.com`) that's no longer authorized**. Until the weights source is fixed, KERMT cannot stage (so no finetune/serve, card stays "not deployed").
-  **Proper fix (upstream, TODO):** (1) host the GROVERbase checkpoint somewhere durable+authorized (a UC Volume or public/store URL) instead of a personal OneDrive link; (2) finish the WIP and either add `kermt/kermt_v1` to `ALL_SUBMODULES`, or — if KERMT is intentionally opt-in (fine-tune-first, GPU) — hide its catalog card until a serving endpoint exists so it doesn't read as a broken deploy.
-
 - **Vortex (AI Canvas) palette shows module batch workflows as "not deployed" even though their jobs are deployed** (e.g. GWAS, VCF Ingestion, Variant Annotation, Variant Calling, Fine-Tune ESM2 all read "not deployed" while their Databricks Jobs exist and run fine).
   **Root cause (two compounding):** (1) a batch node is "available" iff `node.job_name ∈ batch_jobs`, where `batch_jobs = batch_models job_names ∪ _all_job_names()`, and `_all_job_names()` calls `WorkspaceClient().jobs.list()` **as the app service principal**. The app SP only sees jobs it has permission on — and `grant_app_permissions` (which grants the SP `CAN_MANAGE_RUN` on every `*_job_id` in the `settings` table) runs during the **core** deploy, *before* per-module deploys register their job ids → module jobs never get the grant → invisible to `jobs.list()` → "not deployed". (2) `_all_job_names()` caches its result in a **process-global** (`_all_job_names_cache`), never invalidated — so even after granting, the running app keeps the stale set until it **restarts**.
   **Workaround:** after deploying a module, re-run `grant_app_permissions` (grants the SP on the newly-registered jobs), **then restart the app** (`databricks apps stop/start`) to rebuild the `_all_job_names` cache.
@@ -70,6 +56,71 @@
 ### Docs / process
 
 - **Documented the canonical deployment sequence + prerequisites** in `README.md` (mirrored in `CLAUDE.md` + the deploy-wizard skill): module order (`core` → `large_molecule` / `single_cell` / `small_molecule` → `genomics` → `bionemo`, one at a time); the per-Docker-module `module.env` requirement — **all four `genomics` submodules declare `parabricks_docker_*` as required**, so without `modules/genomics/module.env` the first submodule (`gwas`) fails validation and `set -e` halts the whole module; the Container-Services (DCS) requirement for `bionemo`/`parabricks`/`gwas` Docker-cluster runs; the AI/BI dashboard-embedding requirement (the Monitoring page embeds the admin usage dashboard, so the workspace must approve the app's domain for embedding); the unwired `gene_sequences` prerequisite; and the post-deploy "monitor ALL jobs for failures — don't trust the SUCCESS banner" practice.
+
+## v2.2.0 (2026-06-22) — KERMT 2.0 live out-of-the-box · MCP server hardened (UI + MCP grants) · fresh-install & cloud-portability fixes
+
+A consolidation release that makes the **MCP server** dependable as a first-class surface, ships **KERMT 2.0**
+serving the moment it deploys, and closes a set of fresh-install / multi-cloud correctness gaps across the
+small-molecule and genomics modules. Wheel `genesis_workbench` 0.1.32 → 0.1.35; no breaking changes.
+
+### KERMT 2.0 — new submodule, live out of the box
+
+- **New `kermt/kermt_v2` submodule** (NVIDIA-BioNeMo **NV-KERMT-70M-v2 / Contrastive KERMT**), added to the
+  `small_molecule` submodule list so it's deployable on its own (`--only-submodule kermt/kermt_v2`). The
+  NaN-sanitize collator patch (ClinTox salts/mixtures → NaN RDKit descriptors) is re-applied to the v2 source.
+- **Fine-tune + deploy at init.** The submodule deploy now runs **register → fine-tune → deploy** in sequence,
+  so a fresh install automatically fine-tunes on the bundled **TDC ClinTox** sample and stands up the
+  `kermt_admet` serving endpoint with no manual UI step. The deploy step falls back to the **latest active
+  `ft_id`** from `kermt_weights` when none is passed (also makes the deploy job runnable standalone). The UI
+  fine-tune/deploy flow remains for bringing your own assay. (This adds a GPU fine-tune to the deploy, so it
+  runs longer.) `kermt_admet.md` updated to document the automatic path.
+
+### MCP server hardened
+
+The companion `mcp-genesis-workbench` server is now reliable end-to-end and correctly governed:
+
+- **MCP app SP granted everywhere the UI SP is.** Endpoint grants already read `DATABRICKS_APP_NAMES`
+  (UI + MCP); job grants did not. Every module's job-registration notebook now sets `DATABRICKS_APP_NAMES`
+  before `set_app_permissions_for_job`, fed by a new `databricks_app_names` register-job parameter
+  (default `genesis-workbench:mcp-genesis-workbench`) — covering kermt v1/v2, genmol, enzyme, alphafold,
+  rapidssinglecell, scanpy, and genomics (gwas/vcf/variant_annotation), plus bionemo. `set_app_permissions_for_job`
+  switched from `set_permissions` (REPLACE) to additive `update_permissions`, so re-registering one module can
+  no longer clobber a sibling app's grant. Net: deploy any module on any workspace and **both** the UI and MCP
+  SPs get `CAN_MANAGE_RUN` durably.
+- **Correct capability contracts.** Endpoint capability contracts are aligned to the deployed models' actual
+  signatures, and `execute_capability` now applies parameter defaults so `dataframe_records` payloads are
+  complete.
+- **Test harness.** A new MCP test harness (`mcp_app/scripts/test_mcp_server.py`) exercises the server's tools
+  end-to-end.
+
+### Vortex
+
+- **Animated "accretion vortex" empty-canvas backdrop** for first-run Vortex (`VortexEmptyState`).
+- **Wiring sees through shape-preserving transforms** when resolving extract paths — a transform that doesn't
+  change a value's shape no longer hides the upstream source from the path resolver.
+
+### Fresh-install & cloud-portability fixes
+
+- **`node_catalog` published on fresh install.** `core/deploy.sh` now runs `publish_node_catalog_job` on a
+  fresh install (previously only `update.sh` did), so the Vortex executor and MCP server — which read the
+  `node_catalog` table directly — see a populated catalog from the first deploy.
+- **DiffDock — concurrent endpoint deploys + 2h wait.** `02_import_model_gwb.py` launches both the ESM
+  embeddings and DiffDock scoring deployments before waiting, then waits for both together (bounded by the
+  slower deploy); each wait timeout raised 1h → 2h.
+- **GenMol — cloud-portable cluster availability.** GenMol hardcoded `aws_attributes: ON_DEMAND` in its base
+  resources with no Azure/GCP overlay. Moved to per-target `aws/azure/gcp_attributes` overrides in
+  `databricks.yml` (the kermt/diffdock pattern) for all three jobs; validated for prod_aws/azure/gcp. Also
+  dropped the hardcoded, workspace-specific GenMol app SP id — `CAN_MANAGE_RUN` is granted by app name at
+  registration time.
+
+### Docs
+
+- Refreshed the README **architecture diagram**.
+
+### Notes
+
+- Verified on ci-demo. No new external model beyond KERMT v2; no schema/breaking changes. Wheel 0.1.32 → 0.1.35
+  (with `app/requirements.txt` + `mcp_app/requirements.txt` refs bumped in step).
 
 ## v2.1.0 (2026-06-12) — Vortex: deterministic wiring + Past Vortex Runs (inspect · re-run · failure triage)
 

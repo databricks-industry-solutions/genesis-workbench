@@ -4,6 +4,7 @@ dbutils.widgets.text("schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Sc
 dbutils.widgets.text("run_alphafold_job_id", "167486110869223", "AlphaFold Job ID")
 dbutils.widgets.text("user_email", "a@b.com", "Email of the user running the deploy")
 dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
+dbutils.widgets.text("databricks_app_names", "genesis-workbench:mcp-genesis-workbench", "Databricks App Names (colon/comma-separated, UI + MCP)")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
@@ -66,6 +67,10 @@ from genesis_workbench.workbench import (
     set_app_permissions_for_job,
     set_app_permissions_for_volume,
 )
+
+import os
+_app_names_raw = dbutils.widgets.get("databricks_app_names")
+os.environ["DATABRICKS_APP_NAMES"] = ",".join([n.strip() for n in _app_names_raw.replace(":", ",").split(",") if n.strip()])  # UI + MCP
 
 set_app_permissions_for_job(job_id=run_alphafold_job_id, user_email=user_email)
 

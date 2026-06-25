@@ -86,12 +86,10 @@ esm_run_id = deploy_model(user_email=user_email,
 
 # COMMAND ----------
 
-esm_result = wait_for_job_run_completion(esm_run_id, timeout=21600)
-
-# COMMAND ----------
-
 # MAGIC %md
 # MAGIC #### Import and deploy DiffDock Scoring endpoint
+# MAGIC The ESM deployment job is already running; kick off the DiffDock deployment now
+# MAGIC (without waiting), then wait for both jobs together below.
 
 # COMMAND ----------
 
@@ -121,7 +119,15 @@ run_id = deploy_model(user_email=user_email,
 
 # COMMAND ----------
 
-result = wait_for_job_run_completion(run_id, timeout=21600)
+# MAGIC %md
+# MAGIC #### Wait for both deployments to complete
+# MAGIC Both deployment jobs were launched above and run concurrently. Wait for them
+# MAGIC together here — the total wait is bounded by the slower deployment (2h cap each).
+
+# COMMAND ----------
+
+esm_result = wait_for_job_run_completion(esm_run_id, timeout=7200)
+result = wait_for_job_run_completion(run_id, timeout=7200)
 
 # COMMAND ----------
 

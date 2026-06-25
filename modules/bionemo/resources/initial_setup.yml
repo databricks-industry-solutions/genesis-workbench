@@ -29,7 +29,9 @@ resources:
           default: ${resources.jobs.bionemo_esm_finetune.id}
         - name: bionemo_esm_inference_job_id
           default: ${resources.jobs.bionemo_esm_inference.id}
-        - name: sql_warehouse_id 
+        - name: sql_warehouse_id
           default: ${var.sql_warehouse_id}
+        - name: databricks_app_names
+          default: genesis-workbench:mcp-genesis-workbench
 
       tags: ${var.common_resource_tags}

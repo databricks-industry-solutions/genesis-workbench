@@ -7,21 +7,58 @@ description: Interactive guided tear-down of Genesis Workbench from a Databricks
 
 Drive an interactive, validated destroy of [Genesis Workbench](https://github.com/databricks-industry-solutions/genesis-workbench) from a Databricks workspace. Counterpart to `SKILL_GENESIS_WORKBENCH_DEPLOY_WIZARD.md`. This skill enforces the **core-must-be-destroyed-last** ordering rule, confirms every destructive action with the user, and surfaces resources that the destroy scripts do not clean up automatically.
 
-Use this skill whenever the user says things like "destroy Genesis Workbench", "tear down GWB", "uninstall genesis workbench", "remove all modules", "rip out everything", or is sitting in a `genesis-workbench` repo and asks to clean up.
+Use this skill whenever the user says things like "destroy", "I want to destroy", "destroy Genesis Workbench", "tear down GWB", "uninstall genesis workbench", "remove all modules", "rip out everything", or is sitting in a `genesis-workbench` repo and asks to clean up.
 
-## Pre-flight checks (run first, in parallel)
+> **Runs in a fixed phase order — same front-end as the deploy wizard for a consistent experience.** Confirm the *where* (workspace) before the destructive *what* (modules). Each phase gates the next, and **every destructive action is individually confirmed.**
 
-```bash
-databricks --version
-databricks current-user me              # confirm auth and which workspace
-databricks auth describe | grep Host    # show host explicitly
-ls modules/*/.deployed 2>/dev/null      # which modules have deployment markers
-databricks apps list | grep -i genesis  # is the GWB app currently deployed?
+## Wizard banner (print this first, verbatim, before Phase 0)
+
+Open every destroy session by printing the Genesis Workbench banner, then the "Destroy Wizard" subtitle so the user has an unmistakable visual cue this is the teardown flow:
+
+```
+   ╔═╗╔═╗╔╗╔╔═╗╔═╗╦╔═╗   ╦ ╦╔═╗╦═╗╦╔═╔═╗╔═╗╔╗╔╔═╗╦ ╦    ╲ ╱
+   ║ ╦║╣ ║║║║╣ ╚═╗║╚═╗   ║║║║ ║╠╦╝╠╩╗╠╩╗║╣ ║║║║  ╠═╣      ╳
+   ╚═╝╚═╝╝╚╝╚═╝╚═╝╩╚═╝   ╚╩╝╚═╝╩╚═╩ ╩╚═╝╚═╝╝╚╝╚═╝╩ ╩    ╱ ╲
+                  Genesis Workbench — Destroy Wizard
 ```
 
-If `databricks current-user me` 401s, instruct the user to re-auth: `databricks auth login --host <workspace_url>` in their own terminal. Don't auto-run interactive auth.
+## Phase 0 — Confirm the TARGET WORKSPACE (always first)
 
-If no `.deployed` markers exist, there's likely nothing to destroy via this flow — ask the user to confirm what they actually want torn down before proceeding (workspace-only resources may need manual cleanup via UI/CLI).
+Never assume the workspace — destroy is irreversible, so be certain *which* workspace before touching anything.
+
+```bash
+databricks auth profiles                 # profiles + hosts + validity
+databricks current-user me 2>&1          # resolved ACTIVE default identity + host
+```
+Show the resolved host + authenticated email and confirm with `AskUserQuestion`:
+> "Tear down Genesis Workbench from **`<host>`** (authenticated as `<email>`)? "
+Options: **Yes, this workspace** · **No, a different workspace**.
+
+If a different workspace: ask for the URL, have the user authenticate **in their own terminal** (`! databricks auth login --host <url>` — never auto-run), re-run `databricks current-user me`, and re-confirm the host. Do not leave Phase 0 until the workspace is affirmatively confirmed.
+
+## Phase 1 — CLI installed + configured to that workspace as the default
+
+The `destroy.sh` scripts shell out to `databricks` using the **default profile** unless `DATABRICKS_CONFIG_PROFILE` is set. Make the target workspace the one they hit.
+
+```bash
+databricks --version                     # missing → install + stop
+databricks current-user me               # must not 401; matches confirmed host
+```
+- If auth 401s → `databricks auth login --host <workspace_url>` in the user's terminal, then re-confirm.
+- If the user used a **named profile** (not `DEFAULT`), pick one approach and use it for **every** command this session — either make it the default, or prefix everything with `DATABRICKS_CONFIG_PROFILE=<profile>` (e.g. `DATABRICKS_CONFIG_PROFILE=ci-demo ./destroy.sh ...`). State which one you're using; never switch silently.
+
+## Phase 2 — Inventory + which modules to destroy (multi-select)
+
+Take inventory, then let the user choose scope.
+
+```bash
+ls modules/*/.deployed 2>/dev/null       # which modules are actually deployed
+databricks apps list | grep -i genesis   # is the GWB app live?
+```
+- If **no `.deployed` markers** exist, there's likely nothing to tear down via this flow — confirm with the user what they actually want removed (workspace-only resources may need manual UI/CLI cleanup) before proceeding.
+- Present the deployed modules and ask, with `AskUserQuestion` (`multiSelect: true`), **which to destroy**. Only offer modules that actually have a `.deployed` marker.
+- Enforce the **core-last** rule below: if the user selects `core` while other selected/deployed modules remain, sequence `core` after all of them (or tell the user core can't go until the rest are gone).
+- A partial tear-down (e.g. only `single_cell`) is valid — do **not** auto-cascade to core unless the user explicitly includes it.
 
 ## The hard ordering rule — core LAST
 

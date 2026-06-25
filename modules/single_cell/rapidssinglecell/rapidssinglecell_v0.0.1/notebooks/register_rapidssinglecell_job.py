@@ -4,6 +4,7 @@ dbutils.widgets.text("core_schema", "genesis_schema", "Schema")
 dbutils.widgets.text("run_rapidssinglecell_job_id", "", "Rapids-SingleCell Job ID")
 dbutils.widgets.text("user_email", "a@b.com", "Email of the user running the deploy")
 dbutils.widgets.text("sql_warehouse_id", "", "SQL Warehouse Id")
+dbutils.widgets.text("databricks_app_names", "genesis-workbench:mcp-genesis-workbench", "Databricks App Names (colon/comma-separated, UI + MCP)")
 
 catalog = dbutils.widgets.get("core_catalog")
 schema = dbutils.widgets.get("core_schema")
@@ -62,7 +63,11 @@ WHEN NOT MATCHED THEN INSERT (key, value, module) VALUES (source.key, source.val
 # COMMAND ----------
 
 #Grant app permission to run this job
+import os
 from genesis_workbench.workbench import set_app_permissions_for_job
+
+_app_names_raw = dbutils.widgets.get("databricks_app_names")
+os.environ["DATABRICKS_APP_NAMES"] = ",".join([n.strip() for n in _app_names_raw.replace(":", ",").split(",") if n.strip()])  # UI + MCP
 
 set_app_permissions_for_job(job_id=run_rapidssinglecell_job_id, user_email=user_email)
 
