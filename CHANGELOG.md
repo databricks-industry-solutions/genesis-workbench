@@ -1,5 +1,12 @@
 # Genesis Workbench — Changelog
 
+## Unreleased
+
+### Fixes
+
+- **KERMT fine-tune fails on a fresh user/workspace — `RestException: BAD_REQUEST: For input string: "None"`.** The deploy-time init fine-tune (`kermt_finetune`, no dispatcher `mlflow_run_id`) took the fallback branch in `02_kermt_finetune.py` and called `mlflow.set_experiment("/Users/{user_email}/mlflow_experiments/{experiment_name}")` — a **non-canonical per-user path with no `mkdirs` guard**. On a fresh user whose experiment parent folder doesn't exist, `create_experiment` returns an invalid id and the next `get_experiment` fails with the `"For input string: None"` backend parse error. (Didn't surface on ci-demo because that user's folder already existed.)
+  **Fix:** the fallback branch now routes to the canonical GWB deploy-time location **`/Shared/dbx_genesis_workbench_models/{experiment_name}`** and `w.workspace.mkdirs(...)` the parent first — matching `genesis_workbench.models.set_mlflow_experiment(..., shared=True)` and the register notebooks (e.g. diffdock). Applied to both `kermt_v2` and `kermt_v1`. Verified on AWS: register → fine-tune → deploy all succeed and the `kermt_admet` endpoint serves predictions.
+
 ## v2.2.0 (2026-06-22) — KERMT 2.0 live out-of-the-box · MCP server hardened (UI + MCP grants) · fresh-install & cloud-portability fixes
 
 A consolidation release that makes the **MCP server** dependable as a first-class surface, ships **KERMT 2.0**

@@ -75,7 +75,14 @@ mlflow.set_tracking_uri("databricks")
 if mlflow_run_id:
     _run_ctx = mlflow.start_run(run_id=mlflow_run_id)
 else:
-    exp_path = f"/Users/{user_email}/mlflow_experiments/{experiment_name}"
+    # Canonical GWB deploy-time experiment location: the Shared base path used by
+    # genesis_workbench.models.set_mlflow_experiment(..., shared=True) and the register
+    # notebooks. mkdirs the parent first so a fresh user/workspace doesn't fail inside
+    # create_experiment (BAD_REQUEST: "For input string: None").
+    from databricks.sdk import WorkspaceClient
+    _exp_base = "Shared/dbx_genesis_workbench_models"
+    WorkspaceClient().workspace.mkdirs(f"/Workspace/{_exp_base}")
+    exp_path = f"/{_exp_base}/{experiment_name}"
     exp = mlflow.set_experiment(exp_path)
     MlflowClient().set_experiment_tag(exp.experiment_id, "used_by_genesis_workbench", "yes")
     _run_ctx = mlflow.start_run(run_name=mlflow_run_name)
