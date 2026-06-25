@@ -5,7 +5,7 @@ set -e
 # Use locally-installed Terraform to avoid the expired HashiCorp PGP key
 # that breaks the Databricks CLI's embedded Terraform download.
 export DATABRICKS_TF_EXEC_PATH=/opt/homebrew/bin/terraform
-export DATABRICKS_TF_VERSION=1.3.9
+export DATABRICKS_TF_VERSION=1.14.9
 
 if [ "$#" -lt 2 ]; then
     echo "Usage: deploy <module> <cloud> [--only-submodule <path>]"
