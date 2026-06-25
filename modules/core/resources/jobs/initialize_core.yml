@@ -57,6 +57,8 @@ resources:
           default: ${resources.jobs.run_ai_canvas_workflow_job.id}
         - name: databricks_app_name
           default: ${var.app_name}
+        - name: databricks_app_names
+          default: ${var.app_names}
         - name: dev_user_prefix
           default: ${var.dev_user_prefix}       
         - name: admin_usage_dashboard_id

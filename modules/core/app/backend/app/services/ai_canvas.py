@@ -165,15 +165,20 @@ def _batch_job_names() -> set[str]:
 
 
 # Prebuilt-workflow jobs (genomics, fine-tunes, KERMT, …) aren't all registered
-# as batch_models — they're plain Jobs. List every job name once (cached for the
-# app's lifetime; deploys restart the app) so availability reflects what's
-# actually deployed without a per-node lookup.
+# as batch_models — they're plain Jobs. List every job name and cache it with a
+# short TTL so availability reflects newly-deployed modules WITHOUT an app restart:
+# a module deployed after the app started (e.g. on a fresh install, where the app
+# comes up during core deploy — before modules register their jobs) appears once
+# the TTL lapses, instead of reading "not deployed" until the next restart.
+_ALL_JOB_NAMES_TTL_SECONDS = 300  # 5 min — fresh enough to pick up a module deploy, cheap on jobs.list()
 _all_job_names_cache: set[str] | None = None
+_all_job_names_cache_ts: float = 0.0
 
 
 def _all_job_names() -> set[str]:
-    global _all_job_names_cache
-    if _all_job_names_cache is not None:
+    global _all_job_names_cache, _all_job_names_cache_ts
+    now = time.monotonic()
+    if _all_job_names_cache is not None and (now - _all_job_names_cache_ts) < _ALL_JOB_NAMES_TTL_SECONDS:
         return _all_job_names_cache
     names: set[str] = set()
     try:
@@ -183,7 +188,12 @@ def _all_job_names() -> set[str]:
                 names.add(str(settings.name))
     except Exception as e:  # noqa: BLE001 — degrade gracefully
         logger.warning("catalog: jobs list failed: %s", e)
+        # On failure keep serving the prior cache (if any) rather than wiping every
+        # node to "not deployed"; retry on the next call past the TTL.
+        if _all_job_names_cache is not None:
+            return _all_job_names_cache
     _all_job_names_cache = names
+    _all_job_names_cache_ts = now
     return names
 
 
