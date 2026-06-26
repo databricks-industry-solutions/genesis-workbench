@@ -1,107 +1,102 @@
-# Vortex prefilled demo inputs — design (MVP)
+# Demo example inputs — shared registry (MVP)
 
 **Date:** 2026-06-25 · **Branch:** `feat/gwb-demo-ux` (off `mmt/usw2_main_redeploy`)
 
 ## Problem
 
-Every prebuilt-workflow node dropped on the Vortex canvas loads with **empty required inputs**, so demos hit "N issues to fix before running" (FASTQ R1/R2 empty, sequence empty, AnnData payload empty). A presenter must hand-type UC paths before anything runs. Goal: prebuilt workflows load **runnable** with usable example inputs (presenter can still edit), so end-to-end canvas demos work out of the box.
+Two surfaces let a user run GWB workflows: the **Vortex canvas** (composed node graphs) and the **per-module walkthrough tabs** (GWAS, KERMT, single-cell, …). Today:
+
+- **Module tabs** prefill file inputs from per-module `GET /defaults` endpoints (`genomics`, `kermt`, `bionemo`, `large_molecule/enzyme_optimization`), each **hardcoding** its own `/Volumes/{catalog}/{schema}/…` paths.
+- **The canvas does not prefill at all** — every prebuilt-workflow node loads with empty required inputs → "N issues to fix before running."
+
+So example paths are **duplicated and drifting** across module routers, and the canvas is unusable for a quick demo. We want **one source of truth** for example inputs that both surfaces read, and that a future per-disease scenario overlay can override in one place.
 
 ## Scope (MVP)
 
-Prefill demo-usable values for the required **source** inputs of prebuilt-workflow + endpoint nodes. Explicitly **out of MVP** (same branch, fast-follow): the curated-`examples` dropdown + live "Browse Volume" endpoint (Approach 3); the collapsible nav; and the scGPT-perturbation `cells` payload.
+Build a **shared example-inputs registry** (the SSOT), make the canvas + the existing module `/defaults` both read it, and prefill the canvas. **Out of MVP** (fast-follow, same branch unless noted): curated `examples` dropdown + live "Browse Volume" endpoint; `scgpt_perturbation` payload; collapsible nav; and the scenario-overlay/disease-thread system (separate guided-demo project — this spec only leaves the seam for it).
 
-All example files are **verified present** on `fevm-mmt-aws-usw2` under `/Volumes/mmt_aws_usw2/genesis_workbench/` (2026-06-25). Paths are stored templated as `{catalog}/{schema}` and substituted client-side from `bootstrap.env`, so this is portable (works upstream / any workspace following the same volume layout).
+All example files are **verified present** on `fevm-mmt-aws-usw2` under `/Volumes/mmt_aws_usw2/genesis_workbench/` (2026-06-25); the MVP baseline is intentionally scoped to these already-present inputs (no staging).
 
-### Input → example mapping (verified against builtin_nodes.py)
+## Architecture
 
-| Node `type` (label) | Input port `name`:`dtype` | Example (templated) |
-| --- | --- | --- |
-| `variant_calling` (Variant Calling) | `fastq_r1`:PATH, `fastq_r2`:PATH | `…/gwas_data/sample_fastq/sample_1.fq.gz`, `…/sample_2.fq.gz` |
-| `vcf_ingestion` (VCF Ingestion) | `vcf`:PATH | `…/gwas_data/sample_vcf/ALL.chr6.…GRCh38.phased.vcf.gz` |
-| `gwas` (GWAS) | `vcf`:PATH, `phenotype`:PATH | sample VCF (above), `…/gwas_data/sample_phenotype/breast_cancer_phenotype.tsv` |
-| `esm2_finetune` (Fine-Tune ESM2) | `train_data`:PATH, `evaluation_data`:PATH | `…/bionemo/esm2/ft_data/BLAT_ECOLX_…_train.csv`, `…_eval.csv` |
-| `kermt_finetune` (Fine-Tune KERMT) | `train_data`,`validation_data`,`test_data`:PATH | `…/kermt/ft_data/clintox_train.csv`, `…_val.csv`, `…_test.csv` |
-| `alphafold2`, `pltnum`, `netsolp`, `deepstabp`, `esm2_embeddings`, `esmfold`, `boltz` | `sequence`:SEQUENCE | a short literal demo protein sequence (constant) |
-| `admet_screen`, `chemprop_*`, `kermt_admet` | `smiles`:SMILES | a literal demo SMILES (constant) |
-| `scimilarity_get_embedding` (SCimilarity) | `cells`:JSON | prebaked **SCimilarity** payload path (see §3) |
-| `scgpt_embeddings`, `teddy` | `cells`:JSON | prebaked **`_SCGPT_EMB`** payload path (see §3) |
+`demo_inputs` registry (shared lib) → consumed by **(a)** `publish_node_catalog` (sets `Port.example`) and **(b)** the module `/defaults` endpoints → app reads → frontend prefills both surfaces. Paths templated `{catalog}/{schema}`, substituted with the app's catalog/schema.
 
-**Wired-from-upstream, NOT prefilled** (dtype is a pipeline product, not a source): `variant_annotation.table` (TABLE — output of VCF Ingestion), ProteinMPNN `pdb`, etc. The genomics demo runs as a wired chain (Variant Calling → VCF Ingestion → Variant Annotation) whose only source input (FASTQ) is prefilled.
+### 1. Shared registry — `genesis_workbench/demo_inputs.py` (new, in the wheel)
 
-## Design
+A single mapping from a stable input key to an example spec. Key = `"{node_type}.{port}"` (canvas vocabulary; module tabs reference the same keys). Importable by both FastAPI routers and the publish notebook (same wheel the app + executor already use).
 
-Follows the existing node-catalog flow: `builtin_nodes.py` → `publish_node_catalog` → `node_catalog` Delta table → app reads → frontend renders.
+```python
+# key -> example value (templated path | literal sequence/SMILES | /Volumes/*.json payload path)
+DEMO_INPUTS: dict[str, str] = {
+    "variant_calling.fastq_r1": "/Volumes/{catalog}/{schema}/gwas_data/sample_fastq/sample_1.fq.gz",
+    "variant_calling.fastq_r2": "/Volumes/{catalog}/{schema}/gwas_data/sample_fastq/sample_2.fq.gz",
+    "gwas.vcf":        "/Volumes/{catalog}/{schema}/gwas_data/sample_vcf/ALL.chr6.…GRCh38.phased.vcf.gz",
+    "gwas.phenotype":  "/Volumes/{catalog}/{schema}/gwas_data/sample_phenotype/breast_cancer_phenotype.tsv",
+    "vcf_ingestion.vcf": "…/gwas_data/sample_vcf/…vcf.gz",
+    "kermt_finetune.train_data": "…/kermt/ft_data/clintox_train.csv",   # + val/test
+    "esm2_finetune.train_data":  "…/bionemo/esm2/ft_data/BLAT_ECOLX_…_train.csv",  # + eval
+    "alphafold2.sequence": "<short demo protein sequence>",   # also pltnum/netsolp/esmfold/… sequence
+    "admet_screen.smiles": "<demo SMILES>",                    # also chemprop_*/kermt_admet
+    "scimilarity_get_embedding.cells": "/Volumes/{catalog}/{schema}/ai_canvas_demo/scimilarity_cells_demo.json",
+    "scgpt_embeddings.cells": "/Volumes/{catalog}/{schema}/ai_canvas_demo/scgpt_cells_demo.json",  # + teddy
+}
 
-### 1. Model — `genesis_workbench/node_catalog.py`
+def example_for(key: str, catalog: str, schema: str) -> str | None:
+    v = DEMO_INPUTS.get(key)
+    return v.format(catalog=catalog, schema=schema) if v else None
+```
 
-Add one optional field to `Port`:
+Resolution helper keeps `{catalog}/{schema}` substitution in one place. (Sequence/SMILES literals defined once as module constants.)
 
-- `example: str | None = None` — prefill default (templated path, literal sequence/SMILES, or a `/Volumes/*.json` path to a prebaked payload).
+### 2. Canvas consumes the registry
 
-Update `_serialize_port` (`"example": p.example`) and `port_from_dict` (`d.get("example")`) so it round-trips into the `node_catalog` table. No change to `required`/dtype semantics.
+- `node_catalog.Port` gains `example: str | None` (round-tripped via `_serialize_port` / `port_from_dict`).
+- `publish_node_catalog` sets each port's `example` from `DEMO_INPUTS["{node_type}.{port}"]` (left templated; substituted client-side). Re-publish so the table carries it.
+- Frontend (Vortex inputs panel): seed a required input's field with its `example`, substituting `{catalog}/{schema}` from `bootstrap.env`. Editable; validation passes once a value is present → "issues" clears.
 
-### 2. Data — `builtin_nodes.py`
+### 3. Module `/defaults` endpoints read the registry
 
-Set `example=` on each source input port per the mapping table. Use `{catalog}`/`{schema}` tokens for volume paths. Sequence/SMILES examples are short constants defined once.
+Refactor `genomics`/`kermt`/`bionemo`/`large_molecule` `/defaults` to build their responses from `demo_inputs.example_for(...)` (backend substitutes catalog/schema) instead of hardcoded literals. Response shapes unchanged → no frontend-tab changes. Removes the duplication; both surfaces now resolve identical paths.
 
-### 3. AnnData payload helper (`cells` JSON inputs)
+### 4. AnnData payload helper (`cells` JSON inputs)
 
-The `cells` payload is a *processed* artifact, and **the shapes differ by endpoint** (verified `capabilities.py`):
+`cells` payloads are *processed* artifacts and **differ by endpoint** (verified `capabilities.py`):
 
-- **SCimilarity** (`scimilarity_get_embedding`, line 215): `celltype_sample:json` (+ param `celltype_sample_obs`). Built by `scimilarity.py:69-71` (`[{"celltype_sample": <expr_df.to_json(orient="split")>, "celltype_sample_obs": <obs json>}]`) via gene-order-align + lognorm + subsample.
-- **`_SCGPT_EMB`** (`scgpt_embeddings`, `teddy`, line 174/210-211): "anndata-style sparse matrix + obs/var (real genes needed)" — a different shape.
+- **SCimilarity** (`scimilarity_get_embedding`, line 215): `celltype_sample:json` (+ param `celltype_sample_obs`); built by `scimilarity.py:69-71` via gene-order-align + lognorm + subsample.
+- **`_SCGPT_EMB`** (`scgpt_embeddings`, `teddy`, line 174/210-211): "anndata-style sparse matrix + obs/var (real genes)" — different shape.
 
-So MVP prebakes **two** demo payloads, each via the app's existing builder for that shape, from a chosen `…/raw_h5ad/*.h5ad`, subsampled small (~tens of cells), written to:
+MVP prebakes **two** small demo payloads (subsampled, via the app's existing builder per shape) from an existing `…/raw_h5ad/*.h5ad`, written to `…/ai_canvas_demo/{scimilarity,scgpt}_cells_demo.json` (one-time script; locate exact builders in planning — `scimilarity.py`, and the scgpt/teddy builder in `single_cell.py`/`endpoints.py`). `scgpt_perturbation` (third shape) is out of MVP.
 
-- `…/ai_canvas_demo/scimilarity_cells_demo.json`
-- `…/ai_canvas_demo/scgpt_cells_demo.json`
+**Executor reads path-as-JSON** — mirror `_resolve_pdb_content` (`executor.py:354`: `/Volumes/` → `w.files.download(v).contents.read()`, else literal) with `_resolve_json_content` (download + `json.loads`), applied to JSON inputs where inputs are assembled before `_query_endpoint` (line 92). Non-path JSON passes through.
 
-A one-time prebake script (locate the exact builders in planning: `scimilarity.py` for the first; the scgpt/teddy payload builder in `single_cell.py`/`endpoints.py` for the second) generates both. `scgpt_perturbation` (yet another shape: `expression + gene_names + genes_to_perturb`) is **out of MVP**.
+## Relationship to the guided demo (layering — forward-compat)
 
-**Executor reads path-as-JSON** — mirror the existing `_resolve_pdb_content` (`executor.py:354`: `if value.startswith("/Volumes/"): w.files.download(value).contents.read()` else literal). Add `_resolve_json_content` that downloads + `json.loads` a `/Volumes/*.json` value, applied to JSON-dtype inputs where inputs are assembled before `_query_endpoint` (line 92). Non-path JSON still passes through unchanged.
+- **Baseline (this MVP):** `DEMO_INPUTS` registry = a runnable default per input. Disconnected across modules, but every workflow (canvas + tabs) loads runnable from one source.
+- **Scenario overlay (guided-demo project):** a *named* scenario (e.g. `breast_cancer`) **overrides** registry entries to tell one coherent R&D story across BOTH surfaces (variant → gene/protein → structure → single-cell context → candidate molecule → ADMET).
+- **Scenario data provisioning:** a scenario references themed inputs that **may not exist in UC** (BRCA seq, breast-tumor h5ad, PARP-inhibitor SMILES, chr-correct GWAS). So a scenario carries a **data contract** — declared assets + *stage-if-missing* (like module `initialize` jobs) + activation gated on availability. Built in the guided-demo, not here.
+- **Additional use-cases** = more scenario overlays via the same registry — adding a use-case is adding a scenario.
 
-**Prefill:** `scimilarity_get_embedding.cells.example` and `scgpt_embeddings/teddy.cells.example` = their respective demo-payload paths.
-
-### 4. Frontend — Vortex inputs panel
-
-For a required input with an `example`: seed the input field with `example`, substituting `{catalog}`/`{schema}` from `bootstrap.env`. The presenter can edit/clear it. Existing validation passes once a value is present → "issues to fix" clears. (No dropdown/browse in MVP.)
-
-### 5. Publish
-
-Re-run `publish_node_catalog` so the table carries `example`.
+**Resolution precedence:** active scenario overlay → `DEMO_INPUTS` baseline → empty. MVP requirement: backend `/defaults` and the frontend canvas-prefill each resolve through a **single function** so the overlay slots in ahead of the baseline later without rework. MVP does **not** build the overlay/scenario/provisioning system.
 
 ## Portability
 
-Paths are `{catalog}/{schema}`-templated and substituted client-side. Sequence/SMILES are workspace-agnostic constants. The prebaked-payload paths are also templated. Works on usw2 now and upstream unchanged.
+Registry stores `{catalog}/{schema}` tokens; resolved with the app's catalog/schema (backend for `/defaults`, client for canvas). Sequence/SMILES are workspace-agnostic constants. Works on usw2 now and upstream unchanged.
 
 ## Error handling
 
 - A prefilled path that's missing/edited-wrong fails at run with the existing node error — prefill is best-effort, never blocks editing.
-- Frontend substitution: if `bootstrap.env` lacks catalog/schema, leave the `{…}` token visible rather than render a broken path.
-- Prebake script: if the chosen h5ad is absent, fail loudly with the path so it can be staged.
+- Missing catalog/schema in `bootstrap.env` → leave the `{…}` token visible rather than render a broken path.
+- Prebake script fails loudly with the path if the chosen h5ad is absent.
 
 ## Testing
 
-- **Unit:** `Port` serialize/deserialize round-trips `example`; `node_catalog` republish includes it; `{catalog}/{schema}` substitution helper.
-- **Executor:** a JSON input given a `/Volumes/*.json` path loads + parses; non-path JSON passes through.
-- **Manual (usw2):** load each prebuilt workflow → source inputs prefilled, "issues" cleared; run the genomics chain, GWAS, a Fine-Tune, AlphaFold, SCimilarity, and scGPT/TEDDY end-to-end.
-
-## Relationship to the guided demo (layering — forward-compat)
-
-The MVP is the **baseline** layer; it must not preclude the guided demo's per-use-case tracks:
-
-- **Baseline (this MVP):** `Port.example` = a runnable default per input (today's module-local real files). Disconnected across modules, but every workflow loads runnable.
-- **Scenario overlay (guided-demo project):** a *named* scenario (e.g. `breast_cancer`) maps node/port → themed input and **overrides** the baseline when active — turning the canvas into one coherent R&D story (variant → gene/protein → structure → single-cell context → candidate molecule → ADMET). This is where narrative + data-correctness curation lives (e.g. chr-correct GWAS, BRCA protein seq, breast-tumor h5ad, PARP-inhibitor SMILES).
-- **Additional use-cases:** each new disease/customer = **another scenario overlay** via the same mechanism — adding a use-case is adding a scenario, not re-plumbing.
-- **Scenario data provisioning (overlay-layer concern):** a scenario references *themed* inputs that **may not exist in UC yet** (BRCA protein seq, breast-tumor h5ad, PARP-inhibitor SMILES, chr-correct GWAS set). So a scenario is not just a port→value map — it carries a **data contract**: declared assets + a *stage-if-missing* step (analogous to the module `initialize` jobs that download sample/reference data), and overlay activation should **gate on asset availability**. This staging system is part of the guided-demo project, not the MVP.
-
-**Why the MVP baseline is staging-free:** the baseline is scoped to inputs **already verified-present** on usw2 (§Scope), so it needs zero provisioning and is runnable immediately. All curation/staging complexity is deferred to the scenario layer.
-
-**Resolution precedence:** active scenario overlay → `Port.example` baseline → empty. MVP requirement: keep the frontend value-resolution a single function so the overlay slots in ahead of the baseline later without rework. MVP does **not** build the overlay/scenario/provisioning system — only the baseline + an overlay-ready resolution seam.
+- **Unit:** `Port` round-trips `example`; `example_for` substitution; `node_catalog` republish includes example; module `/defaults` resolve to the same paths the canvas does (parity test against the registry).
+- **Executor:** JSON input given `/Volumes/*.json` loads + parses; non-path JSON passes through.
+- **Manual (usw2):** each prebuilt workflow loads prefilled, "issues" cleared; module tabs still prefill (unchanged shapes); run the genomics chain, GWAS, a Fine-Tune, AlphaFold, SCimilarity, scGPT/TEDDY end-to-end.
 
 ## Out of scope (fast-follow, same branch unless noted)
 
-- Curated `examples` list + dropdown + live "Browse Volume" backend endpoint (Approach 3).
+- Curated `examples` list + dropdown + live "Browse Volume" endpoint.
 - `scgpt_perturbation` `cells` payload (third shape).
 - Collapsible nav (`Layout.tsx`).
-- Guided demo — **separate project**: end-to-end R&D, canvas-centric, per-customer-use-case tracks.
+- Guided demo — **separate project**: scenario overlays + provisioning + walkthrough + per-customer-use-case tracks, built on this registry.
