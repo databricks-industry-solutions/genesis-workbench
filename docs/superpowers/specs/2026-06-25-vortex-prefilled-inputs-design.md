@@ -93,8 +93,11 @@ The MVP is the **baseline** layer; it must not preclude the guided demo's per-us
 - **Baseline (this MVP):** `Port.example` = a runnable default per input (today's module-local real files). Disconnected across modules, but every workflow loads runnable.
 - **Scenario overlay (guided-demo project):** a *named* scenario (e.g. `breast_cancer`) maps node/port → themed input and **overrides** the baseline when active — turning the canvas into one coherent R&D story (variant → gene/protein → structure → single-cell context → candidate molecule → ADMET). This is where narrative + data-correctness curation lives (e.g. chr-correct GWAS, BRCA protein seq, breast-tumor h5ad, PARP-inhibitor SMILES).
 - **Additional use-cases:** each new disease/customer = **another scenario overlay** via the same mechanism — adding a use-case is adding a scenario, not re-plumbing.
+- **Scenario data provisioning (overlay-layer concern):** a scenario references *themed* inputs that **may not exist in UC yet** (BRCA protein seq, breast-tumor h5ad, PARP-inhibitor SMILES, chr-correct GWAS set). So a scenario is not just a port→value map — it carries a **data contract**: declared assets + a *stage-if-missing* step (analogous to the module `initialize` jobs that download sample/reference data), and overlay activation should **gate on asset availability**. This staging system is part of the guided-demo project, not the MVP.
 
-**Resolution precedence:** active scenario overlay → `Port.example` baseline → empty. MVP requirement: keep the frontend value-resolution a single function so the overlay slots in ahead of the baseline later without rework. MVP does **not** build the overlay/scenario system — only the baseline + an overlay-ready resolution seam.
+**Why the MVP baseline is staging-free:** the baseline is scoped to inputs **already verified-present** on usw2 (§Scope), so it needs zero provisioning and is runnable immediately. All curation/staging complexity is deferred to the scenario layer.
+
+**Resolution precedence:** active scenario overlay → `Port.example` baseline → empty. MVP requirement: keep the frontend value-resolution a single function so the overlay slots in ahead of the baseline later without rework. MVP does **not** build the overlay/scenario/provisioning system — only the baseline + an overlay-ready resolution seam.
 
 ## Out of scope (fast-follow, same branch unless noted)
 
