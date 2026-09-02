@@ -19,6 +19,8 @@ from typing import Annotated, Literal, Optional
 
 import uvicorn
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
+from starlette.middleware.cors import CORSMiddleware
 from pydantic import Field
 
 from genesis_workbench.capabilities import CHAIN, ENDPOINT, JOB, list_capabilities
@@ -28,7 +30,15 @@ from genesis_workbench.workbench import initialize
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gwb_mcp")
 
-mcp = FastMCP("genesis-workbench")
+# https://github.com/modelcontextprotocol/python-sdk/blob/v1.27.2/src/mcp/server/fastmcp/server.py
+mcp = FastMCP(
+    "genesis-workbench",
+    stateless_http=True,
+    transport_security=TransportSecuritySettings(
+        allowed_origins=["https://fevm-srijit-nair-ci-demo.cloud.databricks.com"],
+        allowed_hosts=["localhost", "localhost:8000", "*.databricksapps.com"],
+    ),
+)
 
 _PYTYPE = {"int": int, "float": float, "bool": bool}
 
@@ -143,7 +153,16 @@ def build_app():
         _register_tools()
     except Exception as e:  # noqa: BLE001 — never block startup
         logger.exception("Tool registration failed (serving minimal tool set): %s", e)
-    return mcp.streamable_http_app()
+    starlette_app = mcp.streamable_http_app()
+    starlette_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["https://fevm-srijit-nair-ci-demo.cloud.databricks.com"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["Mcp-Session-Id"],
+        allow_credentials=True,
+    )
+    return starlette_app
 
 
 app = build_app()
