@@ -19,7 +19,9 @@ schema = dbutils.widgets.get("schema")
 # COMMAND ----------
 
 #requirements for genesis workbench library
-%pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 #mlflow==2.22.0
+#On serverless GPU (AI runtime) torch/CUDA is preinstalled, but transformers/
+#accelerate are not — install them here (mirrors the esm2_embeddings notebook).
+%pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 transformers==4.41.2 accelerate==0.31.0 hf_transfer==0.1.9
 #requirements for current library
 #%pip install -r ../requirements.txt
 
@@ -81,6 +83,11 @@ initialize(core_catalog_name = catalog, core_schema_name = schema, sql_warehouse
 
 # COMMAND ----------
 
+import os
+# ESMFold weights (~2.8GB) are logged as MLflow artifacts. The default 5-min
+# artifact-upload timeout is too short on serverless GPU and caused a
+# TimeoutError('Timed out after 0:05:00'). Raise it (read at upload time).
+os.environ.setdefault("MLFLOW_ARTIFACT_UPLOAD_DOWNLOAD_TIMEOUT", "3600")
 import mlflow
 import torch
 from transformers import AutoTokenizer, EsmForProteinFolding
@@ -109,22 +116,38 @@ from genesis_workbench.workbench import wait_for_job_run_completion
 
 # COMMAND ----------
 
-tokenizer = AutoTokenizer.from_pretrained("facebook/esmfold_v1", cache_dir=cache_full_path)
+# Download to FAST LOCAL temp, not the Volume FUSE mount (writing/reading ~2.8GB
+# through /Volumes FUSE stretched each run to ~40 min). Local temp downloads in
+# a couple of minutes; the flat copy + artifact upload are also local/fast.
+import tempfile
+_dl_cache = tempfile.mkdtemp(prefix="esmfold_dl_")
+tokenizer = AutoTokenizer.from_pretrained("facebook/esmfold_v1", cache_dir=_dl_cache)
 model = EsmForProteinFolding.from_pretrained(
-    "facebook/esmfold_v1", low_cpu_mem_usage=True, cache_dir=cache_full_path
+    "facebook/esmfold_v1", low_cpu_mem_usage=True, cache_dir=_dl_cache
 )
+
+# COMMAND ----------
+
+# Save a FLAT copy of the model (single safetensors + config, no HF cache
+# symlink/blob structure). Logging the raw HF cache uploaded the weights TWICE
+# (snapshot symlink + blob ≈ 5.6GB of many files) and hit the 5-min UC
+# model-registry upload timeout. A flat single-file artifact uploads in ~1 min.
+# NOTE: write to fast LOCAL temp, NOT the UC Volume — save_pretrained of ~2.8GB
+# safetensors to a FUSE-mounted /Volumes path is pathologically slow (near-hang).
+import tempfile
+flat_model_path = tempfile.mkdtemp(prefix="esmfold_flat_")
+model.save_pretrained(flat_model_path)
+tokenizer.save_pretrained(flat_model_path)
 
 # COMMAND ----------
 
 class ESMFoldPyFunc(mlflow.pyfunc.PythonModel):
     def load_context(self, context):
-        cache_dir = context.artifacts["cache"]
+        model_dir = context.artifacts["model"]
 
-        self.tokenizer = transformers.AutoTokenizer.from_pretrained(
-            "facebook/esmfold_v1", cache_dir=cache_dir
-        )
+        self.tokenizer = transformers.AutoTokenizer.from_pretrained(model_dir)
         self.model = transformers.EsmForProteinFolding.from_pretrained(
-            "facebook/esmfold_v1", low_cpu_mem_usage=True, cache_dir=cache_dir
+            model_dir, low_cpu_mem_usage=True
         )
 
         self.model = self.model.cuda()
@@ -217,7 +240,7 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
         artifact_path="esmfold",
         python_model=esmfold_model,
         artifacts={
-            "cache": cache_full_path,
+            "model": flat_model_path,
         },
         pip_requirements=[
             "--extra-index-url https://download.pytorch.org/whl/cu121",

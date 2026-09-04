@@ -9,7 +9,7 @@ authors = [{name = "Peter Hawkins", email = "peter.hawkins@databricks.com"}]
 description = "boltz for mlflow integration and further msa options"
 dependencies = [
   "requests>=2.25.1",
-  "boltz==0.4.0",
+  "boltz==2.2.1",
   "rdkit",
   "absl-py==1.0.0",
   "transformers>=4.41",
@@ -21,7 +21,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-gpu = ["flash_attn==1.0.9"]
+# boltz 2.2.1 ships its own attention path and installs cleanly on Python 3.12
+# without the old flash_attn==1.0.9 (which has no py3.12 wheel and broke the
+# serverless-GPU install). Keep the extras present but empty for compatibility.
+gpu = []
 cpu = []
 
 [tool.setuptools]

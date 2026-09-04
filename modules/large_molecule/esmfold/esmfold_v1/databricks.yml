@@ -7,6 +7,8 @@ include:
   - resources/*.yml
 
 targets:
+  # Serverless GPU tasks (see resources/register_esm_fold.job.yml) need no
+  # per-target job_cluster / cloud-attribute overrides. Mirrors esm2_embeddings.
   prod_aws:
     mode: production
     default: true
@@ -17,14 +19,6 @@ targets:
         level: CAN_MANAGE
     run_as:
       user_name: ${var.current_user}
-    resources:
-      jobs:
-        register_esm_fold:
-          job_clusters:
-            - job_cluster_key: job_cluster
-              new_cluster:
-                aws_attributes:
-                  availability: ON_DEMAND
 
   prod_azure:
     mode: production
@@ -35,14 +29,6 @@ targets:
         level: CAN_MANAGE
     run_as:
       user_name: ${var.current_user}
-    resources:
-      jobs:
-        register_esm_fold:
-          job_clusters:
-            - job_cluster_key: job_cluster
-              new_cluster:
-                azure_attributes:
-                  availability: ON_DEMAND_AZURE
 
   prod_gcp:
     mode: production
@@ -53,11 +39,3 @@ targets:
         level: CAN_MANAGE
     run_as:
       user_name: ${var.current_user}
-    resources:
-      jobs:
-        register_esm_fold:
-          job_clusters:
-            - job_cluster_key: job_cluster
-              new_cluster:
-                gcp_attributes:
-                  availability: ON_DEMAND_GCP

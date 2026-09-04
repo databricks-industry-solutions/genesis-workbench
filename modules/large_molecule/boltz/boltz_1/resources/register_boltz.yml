@@ -8,13 +8,19 @@ resources:
           - ${var.current_user}
 
       tasks:
-        #this task need serverless runtime with python 3.11
+        # Serverless GPU (GPU_1xA10). The notebook self-installs dbboltz[gpu]
+        # (modern torch). Bypasses the classic-cluster EC2 GPU vCPU quota.
+        # Mirrors esm2_embeddings. (Authors already wanted serverless py3.11 here.)
         - task_key: register_boltz_task
+          disable_auto_optimization: true
+          environment_key: gpu_env
           max_retries: 0
-          job_cluster_key: job_cluster
+          retry_on_timeout: false
           timeout_seconds: 7200
           notebook_task:
             notebook_path: ../notebooks/01_register_boltz.py
+          compute:
+            hardware_accelerator: GPU_1xA10
             
       parameters:
         - name: catalog
@@ -34,21 +40,10 @@ resources:
         - name: workload_type
           default: ${var.gpu_small_setting}
 
-      job_clusters:
-        - job_cluster_key: job_cluster
-          new_cluster:
-            num_workers: 0
-            node_type_id: ${var.t4_node_type}
-            driver_node_type_id: ${var.t4_node_type}
-            spark_version: '15.4.x-gpu-ml-scala2.12'
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: local[*]
-            custom_tags:
-              ResourceClass: SingleNode
+      environments:
+        - environment_key: gpu_env
+          spec:
+            client: "4"
 
       tags: ${var.common_resource_tags}
             
