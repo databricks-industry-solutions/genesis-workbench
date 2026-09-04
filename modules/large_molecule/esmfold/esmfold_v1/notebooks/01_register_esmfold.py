@@ -84,10 +84,13 @@ initialize(core_catalog_name = catalog, core_schema_name = schema, sql_warehouse
 # COMMAND ----------
 
 import os
-# ESMFold weights (~2.8GB) are logged as MLflow artifacts. The default 5-min
-# artifact-upload timeout is too short on serverless GPU and caused a
-# TimeoutError('Timed out after 0:05:00'). Raise it (read at upload time).
-os.environ.setdefault("MLFLOW_ARTIFACT_UPLOAD_DOWNLOAD_TIMEOUT", "3600")
+# Multi-GB UC model registration was failing with TimeoutError('Timed out after
+# 0:05:00'): the Databricks-SDK models artifact repo wraps the upload in a 5-min
+# SDK retry-timeout that a large model exceeds on throttled workspaces. Defining
+# this flag false routes MLflow to the presigned-URL/S3 upload path (boto3
+# multipart, no 5-min cap) — is_databricks_sdk_models_artifact_repository_enabled()
+# returns this value directly when the env var is defined.
+os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"
 import mlflow
 import torch
 from transformers import AutoTokenizer, EsmForProteinFolding
@@ -132,11 +135,16 @@ model = EsmForProteinFolding.from_pretrained(
 # symlink/blob structure). Logging the raw HF cache uploaded the weights TWICE
 # (snapshot symlink + blob ≈ 5.6GB of many files) and hit the 5-min UC
 # model-registry upload timeout. A flat single-file artifact uploads in ~1 min.
-# NOTE: write to fast LOCAL temp, NOT the UC Volume — save_pretrained of ~2.8GB
-# safetensors to a FUSE-mounted /Volumes path is pathologically slow (near-hang).
+# NOTE: write to fast LOCAL temp, NOT the UC Volume — save_pretrained to a
+# FUSE-mounted /Volumes path is pathologically slow (near-hang).
+# SIZE: half the ESM-2 backbone before saving (ESMFold's intended serving
+# precision — the pyfunc does the same at load time). This keeps the checkpoint
+# at its native ~8.4GB instead of a fp32-upcast ~14GB, and single-shard so it
+# uploads as ONE file — both keep the UC upload under the 5-min SDK timeout.
 import tempfile
+model.esm = model.esm.half()
 flat_model_path = tempfile.mkdtemp(prefix="esmfold_flat_")
-model.save_pretrained(flat_model_path)
+model.save_pretrained(flat_model_path, max_shard_size="20GB", safe_serialization=True)
 tokenizer.save_pretrained(flat_model_path)
 
 # COMMAND ----------
@@ -244,8 +252,11 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
         },
         pip_requirements=[
             "--extra-index-url https://download.pytorch.org/whl/cu121",
-            "mlflow==2.15.1",
-            "cloudpickle==2.2.1",
+            # mlflow/cloudpickle MUST match the logging runtime (serverless GPU:
+            # mlflow 2.22.0, cloudpickle 3.0.0) or the serving container fails to
+            # parse/unpickle the model ("Phase: mlflow_parse ... AttributeError").
+            "mlflow==2.22.0",
+            "cloudpickle==3.0.0",
             "transformers==4.41.2",
             "torch==2.3.1+cu121",
             "torchvision==0.18.1+cu121",
