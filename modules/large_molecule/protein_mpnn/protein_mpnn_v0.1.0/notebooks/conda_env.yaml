@@ -2,18 +2,32 @@ name: pmpnn-env
 channels:
   - conda-forge
   - nvidia
+  - pytorch
   - nodefaults
 dependencies:
-  - python=3.10
-  - nvidia::cudatoolkit=11.3
+  # Serving Python MUST match the logging runtime (serverless GPU AI runtime =
+  # Python 3.12). The ProteinMPNN pyfunc is defined INLINE in the notebook, so
+  # cloudpickle serializes it BY VALUE incl. 3.12 bytecode; loading that under a
+  # different minor (3.11) SEGFAULTs the model server (worker exits code 139) in a
+  # crash loop until the deployment times out. 3.12 loads cleanly. (boltz is immune
+  # because its class lives in the dbboltz package -> pickled by reference.)
+  - python=3.12
   - pip
   - pip:
-    - --extra-index-url https://download.pytorch.org/whl/cu113
+    - --extra-index-url https://download.pytorch.org/whl/cu121
     - setuptools<82
-    - torch==1.11.0+cu113
-    - torchvision==0.12.0+cu113
-    - torchaudio==0.11.0
-    - mlflow==2.15.1
-    - cloudpickle==2.2.1
-    - biopython==1.79
-    - /model/artifacts/package
+    # Modern torch (ProteinMPNN runs on it); matches esmfold's serving CUDA build.
+    - torch==2.3.1+cu121
+    - torchvision==0.18.1+cu121
+    # mlflow/cloudpickle MUST match the logging runtime (serverless GPU: mlflow
+    # 2.22.0, cloudpickle 3.0.0) or the serving container fails to unpickle the
+    # model ("Phase: mlflow_parse ... AttributeError"). See esmfold/boltz notes.
+    - mlflow==2.22.0
+    - cloudpickle==3.0.0
+    - biopython==1.84
+    - numpy<2.0
+    # The vendored `proteinmpnn` package ships via mlflow `code_paths` (see the
+    # notebook), NOT a `- /model/artifacts/package` pip line: that absolute path
+    # does not exist during the serving image build (the build runs with the model
+    # at ./model) and broke the container build. proteinmpnn's runtime deps (torch,
+    # numpy, biopython) are the PyPI packages listed above.

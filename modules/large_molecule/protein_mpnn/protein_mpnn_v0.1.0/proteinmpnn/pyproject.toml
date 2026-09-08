@@ -8,8 +8,11 @@ version = "0.1.0"
 authors = [{name = "Peter Hawkins", email = "peter.hawkins@databricks.com"}]
 description = "proteinMPNN adapted for pip install"
 dependencies = [
-  "mlflow==2.15.1",
-  "cloudpickle==2.2.1",
+  # Match the serverless GPU AI runtime (and the serving conda_env). Old
+  # 2.15.1/2.2.1 pins would downgrade the logging env and desync serving,
+  # breaking model unpickling in the serving container. See esmfold/boltz notes.
+  "mlflow==2.22.0",
+  "cloudpickle==3.0.0",
 ]
 
 [tool.setuptools]

@@ -8,18 +8,25 @@ resources:
           - ${var.current_user}
 
       tasks:
-        #this task need 14.3 LTS L runtime
+        # Serverless GPU (GPU_1xA10). ProteinMPNN is tiny and runs on modern torch;
+        # this bypasses the classic-cluster EC2 GPU vCPU quota. (was a 14.3 LTS T4
+        # single-node job_cluster.) Mirrors esm2_embeddings / esmfold / boltz.
         - task_key: register_proteinmpnn_task
+          disable_auto_optimization: true
+          environment_key: gpu_env
           max_retries: 0
-          job_cluster_key: job_cluster
+          retry_on_timeout: false
           notebook_task:
             notebook_path: ../notebooks/01_register_proteinmpnn.py
+          compute:
+            hardware_accelerator: GPU_1xA10
 
-        #this task need serverless runtime with python 3.11
+        #this task needs serverless runtime with python 3.11
         - task_key: import_protein_mpnn_task
           max_retries: 0
           disable_auto_optimization: true
-          depends_on: 
+          environment_key: default
+          depends_on:
             - task_key: register_proteinmpnn_task
           notebook_task:
             notebook_path: ../notebooks/02_import_model_gwb.py
@@ -28,7 +35,10 @@ resources:
         - environment_key: default
           spec:
             client: '4'
-            
+        - environment_key: gpu_env
+          spec:
+            client: '4'
+
       parameters:
         - name: catalog
           default: ${var.core_catalog_name}
@@ -46,23 +56,5 @@ resources:
           default: ${var.current_user}
         - name: workload_type
           default: ${var.gpu_small_setting}
-          
-      job_clusters:
-        - job_cluster_key: job_cluster
-          new_cluster:
-            num_workers: 0
-            node_type_id: ${var.t4_node_type}
-            driver_node_type_id: ${var.t4_node_type}
-            spark_version: '14.3.x-gpu-ml-scala2.12'
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: local[*]
-            custom_tags:
-              ResourceClass: SingleNode
 
       tags: ${var.common_resource_tags}
-            
-            

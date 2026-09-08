@@ -1,8 +1,9 @@
---extra-index-url https://download.pytorch.org/whl/cu113
-torch==1.11.0+cu113
-torchvision==0.12.0+cu113
-torchaudio==0.11.0
-mlflow==2.15.1
-cloudpickle==2.2.1
-biopython==1.79
-numpy==1.26.4
+# torch/torchvision are preinstalled on the serverless GPU AI runtime
+# (torch 2.7.1+cu126). ProteinMPNN runs fine on modern torch, so do NOT pin the
+# old torch 1.11.0+cu113 (it has no py3.12 wheel and fails to install on
+# serverless). numpy<2.0 avoids the numpy-2 removed-alias breakages in the
+# vendored ProteinMPNN code; mlflow/cloudpickle match the runtime + serving env.
+mlflow==2.22.0
+cloudpickle==3.0.0
+biopython==1.84
+numpy<2.0

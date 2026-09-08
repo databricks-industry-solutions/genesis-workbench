@@ -84,4 +84,7 @@ run_id = deploy_model(user_email=user_email,
 
 # COMMAND ----------
 
-result = wait_for_job_run_completion(run_id, timeout = 3600)
+# 7200s (matches esmfold/boltz): GPU endpoint provisioning (container build +
+# GPU compute + served-entity deploy) can exceed the old 3600s cap, which made
+# this task time out and report FAILED even though the endpoint deployed fine.
+result = wait_for_job_run_completion(run_id, timeout = 7200)
