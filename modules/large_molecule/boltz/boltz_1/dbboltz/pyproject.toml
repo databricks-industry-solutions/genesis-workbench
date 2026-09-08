@@ -8,16 +8,22 @@ version = "0.1.0"
 authors = [{name = "Peter Hawkins", email = "peter.hawkins@databricks.com"}]
 description = "boltz for mlflow integration and further msa options"
 dependencies = [
-  "requests>=2.25.1",
+  # Serving imports ONLY these: boltz (dbboltz.boltz -> boltz.main.predict),
+  # rdkit (from rdkit import Chem), and absl-py (dbboltz.alphafold -> absl.logging).
+  # transformers / sentence-transformers / pyspark / pandas / requests were
+  # template cruft — never imported in dbboltz — and each drags a huge tree
+  # (pyspark ~350MB, transformers+tokenizers+safetensors, sentence-transformers).
+  # On top of torch+cu121 and the packaged Boltz-2 weights they bloated the
+  # serving image until the container build timed out ("internal error /
+  # ambiguous_other"). boltz==2.2.1 still pulls pandas/requests/numpy transitively.
   "boltz==2.2.1",
   "rdkit",
-  "absl-py==1.0.0",
-  "transformers>=4.41",
-  "sentence-transformers>=2.7",
-  "pyspark",
-  "pandas",
-  "mlflow==2.15.1",
-  "cloudpickle==2.2.1",
+  "absl-py",
+  # Match the serverless GPU AI runtime (and the serving conda_env). Pinning the
+  # old 2.15.1/2.2.1 here would downgrade the logging env and desync serving,
+  # causing the serving container to fail unpickling the model. See esmfold notes.
+  "mlflow==2.22.0",
+  "cloudpickle==3.0.0",
 ]
 
 [project.optional-dependencies]
@@ -28,9 +34,9 @@ gpu = []
 cpu = []
 
 [tool.setuptools]
-#packages = ["dbboltz"]
-#package-dir = {"" = "src"}
-packages = { find = { where = ["src"] } }  # Auto-discovers pkg and subpkg
-
-[tool.setuptools.package-dir]
-"" = "src"  # Maps root package to src directory
+package-dir = {"" = "src"}
+# Explicit package list: the src-layout `find` auto-discovery missed the
+# `dbboltz.alphafold` subpackage on the serverless build (→ ModuleNotFoundError:
+# dbboltz.alphafold.parsers). Listing packages explicitly guarantees the
+# subpackage ships in the wheel.
+packages = ["dbboltz", "dbboltz.alphafold"]

@@ -288,7 +288,14 @@ def process_boltz_inputs(
 
     if msa_file_paths is None:
         in_list.append('--use_msa_server')
-    
+
+    # Disable the trifast / cuequivariance CUDA kernels. Those live in boltz's
+    # optional `cuda` extra (cuequivariance_torch, cuequivariance_ops_torch_cu12);
+    # without them Boltz-2 raises ModuleNotFoundError: cuequivariance_torch at
+    # predict time. --no_kernels routes through the pure-PyTorch path (slightly
+    # slower, no extra CUDA deps) — the robust choice for A10 serverless serving.
+    in_list.append('--no_kernels')
+
     return in_list
 
 

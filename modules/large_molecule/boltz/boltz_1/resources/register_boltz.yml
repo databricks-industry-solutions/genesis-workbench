@@ -38,7 +38,10 @@ resources:
         - name: user_email
           default: ${var.current_user}
         - name: workload_type
-          default: ${var.gpu_small_setting}
+          # Boltz-2 (AlphaFold3-class) OOMs a T4/GPU_SMALL at serving; use A10.
+          # GPU serving draws from the managed fleet, not the EC2 GPU quota.
+          # Mirrors esmfold (which also needs GPU_MEDIUM).
+          default: ${var.gpu_medium_setting}
 
       environments:
         - environment_key: gpu_env
