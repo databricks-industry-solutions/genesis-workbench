@@ -56,34 +56,8 @@ from genesis_workbench.workbench import wait_for_job_run_completion
 
 # COMMAND ----------
 
-model_uc_name=f"{catalog}.{schema}.rfdiffusion_unconditional"
-model_version = get_latest_model_version(model_uc_name)
-model_uri = f"models:/{model_uc_name}/{model_version}"
-
-gwb_model_id_unconditional = import_model_from_uc(user_email=user_email,
-                    model_category=ModelCategory.LARGE_MOLECULE,
-                    model_uc_name=f"{catalog}.{schema}.rfdiffusion_unconditional",
-                    model_uc_version=model_version,
-                    model_name="RFdiffusion_Unconditional",
-                    model_display_name="RFdiffusion Unconditional",
-                    model_source_version="v1.1.0",
-                    model_description_url="https://github.com/RosettaCommons/RFdiffusion")
-
-# COMMAND ----------
-
-run_id_unconditional = deploy_model(user_email=user_email,
-                gwb_model_id=gwb_model_id_unconditional,
-                deployment_name=f"RFdiffusion_Unconditional",
-                deployment_description="RFdiffusion v1.1.0 unconditional protein backbone generator (BSD-3-Clause). Diffusion model from the RoseTTAFold lineage; samples de-novo monomer backbones at a user-specified length — returns PDB.",
-                input_adapter_str="none",
-                output_adapter_str="none",
-                sample_input_data_dict_as_json="none",
-                sample_params_as_json="none",
-                workload_type=workload_type,
-                workload_size="Small")
-
-# COMMAND ----------
-
+# Only rfdiffusion_inpainting is served (now backed by RFD3). The old
+# rfdiffusion_unconditional model was unused by GWB and is no longer registered.
 model_uc_name=f"{catalog}.{schema}.rfdiffusion_inpainting"
 model_version = get_latest_model_version(model_uc_name)
 model_uri = f"models:/{model_uc_name}/{model_version}"
@@ -94,15 +68,15 @@ gwb_model_id_inpainting = import_model_from_uc(user_email=user_email,
                     model_uc_version=model_version,
                     model_name="RFdiffusion_Inpainting",
                     model_display_name="RFdiffusion Inpainting",
-                    model_source_version="v1.1.0",
-                    model_description_url="https://github.com/RosettaCommons/RFdiffusion")
+                    model_source_version="v3.0.0",
+                    model_description_url="https://github.com/RosettaCommons/rfdiffusion")
 
 # COMMAND ----------
 
 run_id_inpainting = deploy_model(user_email=user_email,
                 gwb_model_id=gwb_model_id_inpainting,
                 deployment_name=f"RFdiffusion_Inpainting",
-                deployment_description="RFdiffusion v1.1.0 motif-scaffolding / partial-diffusion model (BSD-3-Clause). Designs new protein backbones conditioned on a fixed motif region — returns PDB. Use for binder design, enzyme scaffolding, etc.",
+                deployment_description="RFdiffusion3 (RFD3) motif-scaffolding / inpainting model (BSD-3-Clause). Designs new protein backbones conditioned on a fixed motif region — returns a backbone PDB. Use for binder design, enzyme scaffolding, etc.",
                 input_adapter_str="none",
                 output_adapter_str="none",
                 sample_input_data_dict_as_json="none",
@@ -112,8 +86,6 @@ run_id_inpainting = deploy_model(user_email=user_email,
 
 # COMMAND ----------
 
-result1 = wait_for_job_run_completion(run_id_unconditional, timeout = 3600)
-
-# COMMAND ----------
-
-result2 = wait_for_job_run_completion(run_id_inpainting, timeout = 3600)
+# 7200s (matches esmfold/boltz): GPU endpoint provisioning + container build can
+# exceed the old 3600s cap, which times out the task while the endpoint still comes up.
+result_inpainting = wait_for_job_run_completion(run_id_inpainting, timeout = 7200)

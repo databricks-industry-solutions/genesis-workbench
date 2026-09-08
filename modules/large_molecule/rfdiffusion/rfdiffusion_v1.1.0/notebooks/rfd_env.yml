@@ -1,29 +1,23 @@
-name: SE3nv
+name: rfd3-env
 channels:
   - conda-forge
-  - nvidia
   - nodefaults
 dependencies:
-  - python=3.10
-  - nvidia::cudatoolkit=11.3
+  # Serving Python MUST match the logging runtime (serverless GPU AI runtime =
+  # Python 3.12). The RFD3 pyfunc is defined INLINE in the register notebook, so
+  # cloudpickle serializes it BY VALUE; a different serving minor (e.g. 3.11) would
+  # segfault the model server on load (see the protein_mpnn migration notes).
+  - python=3.12
   - pip
   - pip:
-    - --extra-index-url https://download.pytorch.org/whl/cu113
-    - --find-links https://data.dgl.ai/wheels/repo.html 
-    - setuptools<82
-    - dgl-cu113
-    - hydra-core==1.3.2
-    - pyrsistent==0.20.0
-    - e3nn==0.3.3
-    - wandb==0.12.0
-    - pynvml==11.0.0
-    - decorator==5.1.0
-    - torch==1.11.0+cu113
-    - torchvision==0.12.0+cu113
-    - torchaudio==0.11.0
-    - mlflow==2.15.1
-    - cloudpickle==2.2.1
-    - biopython==1.79
-    - git+https://github.com/NVIDIA/dllogger#egg=dllogger
-    - git+http://github.com/RosettaCommons/RFdiffusion/#egg=SE3-Transformer&subdirectory=env/SE3Transformer
-    - git+http://github.com/RosettaCommons/RFdiffusion.git@b44206a2a79f219bb1a649ea50603a284c225050
+    # rc-foundry (RFdiffusion3 / RFD3) is NOT on the Databricks private pypi-proxy,
+    # so point the serving build at public PyPI. Verified: the serving container
+    # build reaches + installs it. rc-foundry pulls a CUDA-enabled torch from PyPI
+    # (default linux wheels are cu-enabled), so RFD3 uses the A10 GPU at serving.
+    - --extra-index-url https://pypi.org/simple
+    - rc-foundry
+    - biopython
+    # mlflow/cloudpickle MUST match the logging runtime or the serving container
+    # fails to unpickle the model ("Phase: mlflow_parse ... AttributeError").
+    - mlflow==2.22.0
+    - cloudpickle==3.0.0

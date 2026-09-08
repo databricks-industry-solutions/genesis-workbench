@@ -85,9 +85,14 @@ fail on a failed pending config).
 |---|---|---|
 | esm2_embeddings | ✅ (pre-existing) | **live** endpoint |
 | esmfold | ✅ **live end-to-end** | `gwb_demo_esmfold_endpoint` READY on GPU_MEDIUM, folds a sequence → PDB. Full register+endpoint build ≈ 42 min. Applies all fixes above (serverless GPU + local-temp + fp16 single-shard + presigned-upload env var + aligned pip_requirements) |
-| boltz | ✅ + dep bump to **Boltz-2** (`boltz==2.2.1`, dropped `flash_attn==1.0.9`) | notebook still needs: remove the `%sh` miniconda/jackhmmer step (not serverless-compatible) and switch to boltz2 weights via `BOLTZ_CACHE`, then apply the esmfold template |
-| protein_mpnn | pending | port off `torch==1.11+cu113` (no py3.12 wheel) → `proteinmpnn` (foundry supplies weights), then apply the esmfold template |
-| rfdiffusion | pending | **RFdiffusion3 adoption PoC proven** — see below; then apply the esmfold template |
+| boltz | ✅ **live end-to-end** (**Boltz-2**, `boltz==2.2.1`) | `gwb_demo_boltz_endpoint` READY on GPU_MEDIUM; sequence → PDB + confidence. Weights auto-download to local temp + packaged in; `--no_kernels`. |
+| protein_mpnn | ✅ **live end-to-end** (ported off `torch 1.11`) | `gwb_demo_proteinmpnn_endpoint` READY on GPU_SMALL; backbone PDB → designed sequences. Modern torch 2.3.1+cu121, `weights_only=False`. |
+| rfdiffusion | ✅ **live end-to-end** (**RFD3 via rc-foundry**) | `gwb_demo_rfdiffusion_inpainting_endpoint` READY on GPU_MEDIUM; inpainting preserved (`{pdb,start_idx,end_idx}` → backbone PDB); `rfdiffusion_unconditional` dropped (unused). Inline pyfunc (`python=3.12`), checkpoint via `foundry install rfd3` packaged in, `--extra-index-url https://pypi.org/simple` for rc-foundry, mmCIF→backbone PDB via Biopython. |
+
+## Two more serving-build fixes (found porting boltz + protein_mpnn)
+
+1. **Never pip-install the model's own package via a `- /model/artifacts/<pkg>` conda line.** That absolute path does not exist during the serving image build (it runs with the model at `./model`) → the container build fails instantly with `ambiguous_other`. Instead ship the package with mlflow **`code_paths`** and list its deps as normal PyPI packages (or define the pyfunc **inline** in the notebook). `rc-foundry` isn't on the private pypi-proxy → add `--extra-index-url https://pypi.org/simple` in the serving env (verified the build reaches it).
+2. **Serving `python` must match the logging runtime (3.12).** An **inline** pyfunc class is cloudpickled by value (3.12 bytecode); a serving container pinned to 3.11 segfaults the model server (`Worker … code 139!`) in a crash loop until the deploy times out. Pin `conda_env` `python=3.12` (packaged-class models like boltz are immune — pickled by reference). Bump `wait_for_job_run_completion` to `7200`.
 
 ## RFdiffusion3 adoption (proven PoC — follow-up wiring)
 
@@ -100,4 +105,5 @@ unused). RFdiffusion3 (all-atom) covers this and installs/runs on serverless GPU
   `{"name": {"input": "<pdb>", "contig": "A1-{s-1},{e-s+1},A{e+1}-{N}", "select_fixed_atoms": "A1-{s-1},A{e+1}-{N}"}}`.
   Verified: motif inpainting ran in ~16 s on A10G, output gzipped **mmCIF** → wrapper converts to
   backbone PDB to preserve the endpoint contract (no app/executor/node/UI changes needed).
-- Remaining work is the register-notebook wiring + applying the (now-unblocked) esmfold template.
+- ✅ Wired end-to-end: register notebook (`01_register_rfdiffusion.py`) logs the inline
+  `RFD3Inpainting` pyfunc, `02_import_model_gwb.py` imports + deploys, endpoint verified READY.

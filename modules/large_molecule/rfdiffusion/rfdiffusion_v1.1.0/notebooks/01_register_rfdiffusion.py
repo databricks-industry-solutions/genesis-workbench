@@ -1,6 +1,13 @@
 # Databricks notebook source
-# MAGIC %pip install -r requirements.txt
-# MAGIC dbutils.library.restartPython()
+# MAGIC %md
+# MAGIC ## Register RFdiffusion (RFdiffusion3 / RFD3) on serverless GPU
+# MAGIC Ports the motif-inpainting model off the torch-1.11 / SE3-Transformer stack (no
+# MAGIC py3.12 wheels, classic-GPU only) to **RFD3 via `rc-foundry`**, which runs on the
+# MAGIC serverless GPU AI runtime. The **serving contract is preserved exactly**:
+# MAGIC `predict([{pdb, start_idx, end_idx}]) -> [backbone_pdb_str]`, registered as
+# MAGIC `…​.rfdiffusion_inpainting`, so no app/executor/node/UI changes are needed.
+# MAGIC RFD3 emits gzipped mmCIF → the pyfunc converts it back to a backbone PDB.
+# MAGIC (The old unused `rfdiffusion_unconditional` model is dropped.)
 
 # COMMAND ----------
 
@@ -11,6 +18,16 @@ dbutils.widgets.text("experiment_name", "dbx_genesis_workbench_modules", "Experi
 dbutils.widgets.text("sql_warehouse_id", "w123", "SQL Warehouse Id")
 dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
 dbutils.widgets.text("cache_dir", "rfdiffussion_cache_dir", "Cache dir")
+dbutils.widgets.text("workload_type", "GPU_MEDIUM", "Workload Type for endpoints")
+
+# COMMAND ----------
+
+# rc-foundry (RFD3) + biopython. torch/CUDA + mlflow are preinstalled on the
+# serverless GPU AI runtime (Python 3.12); do NOT reinstall them.
+# MAGIC %pip install -r requirements.txt
+# MAGIC dbutils.library.restartPython()
+
+# COMMAND ----------
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
@@ -18,497 +35,249 @@ MODEL_NAME = dbutils.widgets.get("model_name")
 EXPERIMENT_NAME = dbutils.widgets.get("experiment_name")
 USER_EMAIL = dbutils.widgets.get("user_email")
 SQL_WAREHOUSE_ID = dbutils.widgets.get("sql_warehouse_id")
-CACHE_DIR = dbutils.widgets.get("cache_dir")
-
-print(f"Cache dir: {CACHE_DIR}")
-cache_full_path = f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}"
-print(f"Cache full path: {cache_full_path}")
+WORKLOAD_TYPE = dbutils.widgets.get("workload_type")
 
 # COMMAND ----------
 
-import os
+import os, tempfile, subprocess
 
-databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
-os.environ["SQL_WAREHOUSE"]=SQL_WAREHOUSE_ID
-os.environ["IS_TOKEN_AUTH"]="Y"
-os.environ["DATABRICKS_TOKEN"]=databricks_token
-
-# COMMAND ----------
-
-# MAGIC %sh
-# MAGIC mkdir -p /rfd
-# MAGIC cd /rfd
-# MAGIC rm -rf RFdiffusion
-# MAGIC git clone https://github.com/RosettaCommons/RFdiffusion.git
-# MAGIC cd RFdiffusion
-# MAGIC git checkout b44206a2a79f219bb1a649ea50603a284c225050
+# Route the (2.7GB) UC model upload through the presigned-URL/S3 path (boto3
+# multipart, no 5-min cap). Same fix as esmfold/boltz.
+os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Download the RFDiffusion code and model weights to Unity Catalog
+# MAGIC ### Fetch the RFD3 checkpoint → fast LOCAL temp (packaged into the model)
+# MAGIC `foundry install rfd3` downloads `rfd3_latest.ckpt` (2.7GB, ~1 min). We install
+# MAGIC it to a fast local temp dir (serverless has no `/local_disk0`, and `/Volumes`
+# MAGIC FUSE writes are pathologically slow) and package it into the model as the
+# MAGIC `checkpoints` artifact. At serving, `FOUNDRY_CHECKPOINT_DIRS` points RFD3 at
+# MAGIC that artifact dir (Model Serving does not read `/Volumes` at runtime).
 
 # COMMAND ----------
 
-# MAGIC %sh
-# MAGIC cd /rfd/RFdiffusion
-# MAGIC mkdir models && cd models
-# MAGIC wget http://files.ipd.uw.edu/pub/RFdiffusion/6f5902ac237024bdd0c176cb93063dc4/Base_ckpt.pt
-# MAGIC wget http://files.ipd.uw.edu/pub/RFdiffusion/e29311f6f1bf1af907f9ef9f44b8328b/Complex_base_ckpt.pt
-# MAGIC wget http://files.ipd.uw.edu/pub/RFdiffusion/60f09a193fb5e5ccdc4980417708dbab/Complex_Fold_base_ckpt.pt
-# MAGIC wget http://files.ipd.uw.edu/pub/RFdiffusion/74f51cfb8b440f50d70878e05361d8f0/InpaintSeq_ckpt.pt
-# MAGIC wget http://files.ipd.uw.edu/pub/RFdiffusion/76d00716416567174cdb7ca96e208296/InpaintSeq_Fold_ckpt.pt
-# MAGIC wget http://files.ipd.uw.edu/pub/RFdiffusion/5532d2e1f3a4738decd58b19d633b3c3/ActiveSite_ckpt.pt
-# MAGIC wget http://files.ipd.uw.edu/pub/RFdiffusion/12fc204edeae5b57713c5ad7dcb97d39/Base_epoch8_ckpt.pt
-
-# COMMAND ----------
-
-spark.sql(f"CREATE VOLUME IF NOT EXISTS {CATALOG}.{SCHEMA}.{CACHE_DIR}")
-
-# COMMAND ----------
-
-import shutil
-
-shutil.copytree("/rfd/", f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}", dirs_exist_ok=True)
+RFD3_CKPT_DIR = tempfile.mkdtemp(prefix="rfd3_ckpt_")
+subprocess.run(["foundry", "install", "rfd3", "-d", RFD3_CKPT_DIR], check=True)
+print("RFD3 checkpoint dir:", RFD3_CKPT_DIR, "->", os.listdir(RFD3_CKPT_DIR))
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Model definition for RFDiffusion for Unconstrained Problem
-# MAGIC  - this is for predicting a backbone with only the protein legth being a constraint.
-# MAGIC  - We use the mlflow PythonModel as the base class
-# MAGIC  - Although RFDiffusion expects to run from command line, we set Hydra config within python to be able to run the main function from within our python code
+# MAGIC ### Define the RFD3 inpainting pyfunc (preserves the rfdiffusion_inpainting contract)
 
 # COMMAND ----------
 
-import subprocess
-import os
-import tempfile
 import mlflow
 from mlflow.types.schema import ColSpec, Schema
 from typing import Any, Dict, List, Optional
 
-import logging
 
-# COMMAND ----------
+class RFD3Inpainting(mlflow.pyfunc.PythonModel):
+    """RFdiffusion3 motif inpainting behind the legacy rfdiffusion_inpainting contract.
 
-class RFDiffusionUnconditional(mlflow.pyfunc.PythonModel):
+    predict(model_input=[{"pdb": <str>, "start_idx": <int>, "end_idx": <int>}])
+      -> [<backbone_pdb_str>]
+
+    start_idx/end_idx are 1-indexed, inclusive; the [start_idx, end_idx] span is
+    regenerated (masked) and the flanking residues are held fixed — matching the
+    original RFdiffusion inpainting semantics. RFD3 output (gzipped mmCIF) is
+    converted to a backbone-only PDB so downstream (ProteinMPNN) is unchanged.
+    """
+
+    # RFD3 diffusion steps. The original RFdiffusion used T=20 for serving; keep the
+    # inference fast enough for a real-time endpoint.
+    NUM_TIMESTEPS = 20
+
     def load_context(self, context):
-        self.model_path = context.artifacts['model_path']
-        self.script_path = context.artifacts['script_path']
-        self.example_path = context.artifacts['example_path']
-        
-        import sys
-        import os
-        self.config_path = context.artifacts['config_path']
-        self.rel_config_path = os.path.relpath("/", sys.argv[0])[:-3] + self.config_path
+        # Point RFD3 at the checkpoint packaged into the model (no /Volumes at serving).
+        self.ckpt_dir = context.artifacts["checkpoints"]
+        os.environ["FOUNDRY_CHECKPOINT_DIRS"] = self.ckpt_dir
 
-    def _validate_input(self,plen):
-        if not isinstance(plen,int):
-            try:
-                plen = int(plen)
-            except:
-                raise TypeError("plen should be an int (and less than 180)")
-        if plen>180:
-            raise ValueError("plen must be less than 180, {plen} was passed")
-        if plen==0:
-            raise ValueError("protein length must be greater than 0")
-        return plen
-    
-    def _make_config(self,plen:int,outpath:str='out'):
-        """ creates a hydra config file for the run script"""
-        import hydra
-        # with hydra.initialize(version_base=None, config_path=self.rel_config_path):
-        cfg = hydra.compose(
-            config_name="base", 
-            overrides=[
-                f'contigmap.contigs=[{plen}-{plen}]',
-                f'inference.output_prefix={outpath}/output',
-                'inference.num_designs=1',
-                f'inference.model_directory_path={self.model_path}',
-                f'inference.input_pdb={self.example_path}/input_pdbs/1qys.pdb',
-                f'diffuser.T=20'
-            ],
-            return_hydra_config=True,
-            )
-        return cfg
-    
-    def _dummy_hydra(self):
-        import os
-        from omegaconf import OmegaConf
-        hydra_runtime = OmegaConf.create({
-            "runtime": {
-                "output_dir": "/path/to/outputs",  
-                "cwd": os.getcwd()
-            },
-            "job": {
-                "name": "manual_job",
-                "num": 0
-            }
-        })
-        return hydra_runtime
+    @staticmethod
+    def _max_resid(pdb_str: str) -> int:
+        idxs = [int(l[22:26]) for l in pdb_str.splitlines() if l.startswith("ATOM")]
+        if not idxs:
+            raise ValueError("input pdb has no ATOM records")
+        return max(idxs)
 
-    def _run_inference(self,plen:int):
-        """ runs inference script with fixed environment 
-        
-        parameters
-        -----------
-        plen:
-            The length of protein to generate
+    @staticmethod
+    def _contigs(start_idx: int, end_idx: int, n_res: int):
+        """Build RFD3 contig + select_fixed_atoms, omitting empty flanks.
+
+        Mirrors the old RFdiffusion contig `A1-{s-1}/{len}-{len}/A{e+1}-{N}` in RFD3
+        comma syntax: fixed left flank, {len} regenerated residues, fixed right flank.
         """
-        import sys
-        sys.path.append(self.script_path)
-        import hydra
-        from run_inference import main as mn
-        from omegaconf import OmegaConf
-        from hydra.core.hydra_config import HydraConfig
+        x_len = end_idx - start_idx + 1
+        left = f"A1-{start_idx - 1}" if start_idx > 1 else None
+        right = f"A{end_idx + 1}-{n_res}" if end_idx < n_res else None
+        contig = ",".join([p for p in (left, str(x_len), right) if p])
+        fixed = ",".join([p for p in (left, right) if p])
+        return contig, fixed
 
-        plen = self._validate_input(plen)
-        
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            with hydra.initialize(version_base=None, config_path=self.rel_config_path):
-                cfg = self._make_config(plen=plen,outpath=tmpdirname)
-                # add dummy hydra pieces and Merge with existing config
-                cfg = OmegaConf.merge(
-                    {"hydra": self._dummy_hydra()},
-                    cfg
-                )
-                HydraConfig.instance().set_config(cfg)
-                mn(cfg)
-            with open('{}/output_0.pdb'.format(tmpdirname),'r') as f:
-                pdbtext = f.read()
-        return pdbtext
-    
-    def predict(self, context, model_input : List[str], params=None) -> List[str]:
-        """ Generate structure of protein of given length
-        parameters
-        --------
+    @staticmethod
+    def _cif_to_backbone_pdb(cif_path: str) -> str:
+        """Convert an (all-atom) mmCIF to a backbone-only (N,CA,C,O) PDB string."""
+        import gzip, shutil
+        from Bio.PDB import MMCIFParser, PDBIO, Select
 
-        context:
-            The mlflow context of the model. Gathered by load_context()
-        
-        model_input:
-            A list of strings of protein lengths. Should only contain one entry in the list.
-            The string of protein length, e.g "10" will internally be converted to int.
+        if cif_path.endswith(".gz"):
+            plain = cif_path[:-3]
+            with gzip.open(cif_path, "rb") as fi, open(plain, "wb") as fo:
+                shutil.copyfileobj(fi, fo)
+            cif_path = plain
 
-        params: Optional[Dict[str, Any]]
-            Additional parameters
-        """
-        if len(model_input)>1:
-            raise ValueError("input must be a list with a single integer as string")
+        structure = MMCIFParser(QUIET=True).get_structure("rfd3", cif_path)
 
-        # convert to int (str input is easier to manage on server side)
-        plen = int(model_input[0])
-        pdb = self._run_inference(plen)
-        return pdb
+        class _Backbone(Select):
+            def accept_atom(self, atom):
+                return atom.get_name() in ("N", "CA", "C", "O")
 
-# COMMAND ----------
+        io = PDBIO()
+        io.set_structure(structure)
+        with tempfile.NamedTemporaryFile(suffix=".pdb", delete=False) as f:
+            out_pdb = f.name
+        io.save(out_pdb, select=_Backbone())
+        with open(out_pdb, "r") as f:
+            return f.read()
 
-# MAGIC %md
-# MAGIC ## Inpainting version of RFDiffusion
+    def _run_inference(self, input_pdb: str, start_idx: int, end_idx: int) -> List[str]:
+        import glob, json
 
-# COMMAND ----------
+        n_res = self._max_resid(input_pdb)
+        contig, fixed = self._contigs(start_idx, end_idx, n_res)
+        print("RFD3 contig:", contig, "| fixed:", fixed)
 
-class RFDiffusionInpainting(mlflow.pyfunc.PythonModel):
-    def load_context(self, context):
-        self.model_path = context.artifacts['model_path']
-        self.script_path = context.artifacts['script_path']
-        
-        import sys
-        import os
-        self.config_path = context.artifacts['config_path']
-        self.rel_config_path = os.path.relpath("/", sys.argv[0])[:-3] + self.config_path
-
-        # more than this is too slow for serving...
-        self.num_designs=1
-        self.steps=20 # rfdiffusion repo suggests 20steps is usually sufficient
-
-    def _validate_input(self,pdb_str):
-        return True
-    
-    def _make_config(self,contig_statement:str,pdb_path:str,outpath:str='out'):
-        """ creates a hydra config file for the run script"""
-        import hydra
-        # with hydra.initialize(version_base=None, config_path=self.rel_config_path):
-        cfg = hydra.compose(
-            config_name="base", 
-            overrides=[
-                f'contigmap.contigs=[{contig_statement}]',
-                f'inference.output_prefix={outpath}/output',
-                f'inference.num_designs={self.num_designs}',
-                f'inference.model_directory_path={self.model_path}',
-                f'inference.input_pdb={pdb_path}',
-                f'diffuser.T={self.steps}'
-            ],
-            return_hydra_config=True,
-        )
-        return cfg
-    
-    def _dummy_hydra(self):
-        import os
-        from omegaconf import OmegaConf
-        hydra_runtime = OmegaConf.create({
-            "runtime": {
-                "output_dir": "/path/to/outputs",  
-                "cwd": os.getcwd()
-            },
-            "job": {
-                "name": "manual_job",
-                "num": 0
-            }
-        })
-        return hydra_runtime
-
-    def _run_inference(self,input_pdb:str, start_idx:int, end_idx:int):
-        """ runs inference script with fixed environment 
-        
-        parameters
-        -----------
-        input_pdb:
-            the pdb string to generate backbone for
-
-        idxs are inclusive (of mask) and based on indexing in the pdb file
-        ie idx for start and end will both be generated
-        """
-        import sys
-        sys.path.append(self.script_path)
-        from run_inference import main as mn
-        from Bio.PDB.Polypeptide import d3_to_index, dindex_to_1
-        from Bio.PDB import PDBParser
-        import hydra
-        from omegaconf import OmegaConf
-        from hydra.core.hydra_config import HydraConfig
-        
-        with (
-            tempfile.TemporaryDirectory() as tmpdirname,
-            tempfile.TemporaryDirectory() as in_tmpdirname):
-
-            input_pdb_path = os.path.join(in_tmpdirname, 'input.pdb')
-            with open(input_pdb_path, 'w') as f:
+        with tempfile.TemporaryDirectory() as work:
+            pdb_path = os.path.join(work, "input.pdb")
+            with open(pdb_path, "w") as f:
                 f.write(input_pdb)
 
-            x_len = end_idx - start_idx + 1
+            in_json = os.path.join(work, "inputs.json")
+            with open(in_json, "w") as f:
+                json.dump(
+                    {"rfd3_inpaint": {"input": pdb_path, "contig": contig,
+                                      "select_fixed_atoms": fixed}},
+                    f,
+                )
 
-            mysplit = input_pdb.split('\n')[:-1]
-            idxs = set()
-            for i,v in enumerate(mysplit):
-                if v.startswith('ATOM'):
-                    idxs.add(int(v[22:26].strip()))
-            seq_final_pos = max(idxs)
+            out_dir = os.path.join(work, "out")
+            proc = subprocess.run(
+                ["rfd3", "design", f"out_dir={out_dir}", f"inputs={in_json}",
+                 "n_batches=1", "diffusion_batch_size=1",
+                 f"inference_sampler.num_timesteps={self.NUM_TIMESTEPS}"],
+                capture_output=True, text=True,
+            )
+            if proc.returncode != 0:
+                raise RuntimeError(
+                    f"rfd3 design failed (rc={proc.returncode})\n"
+                    f"STDOUT:\n{proc.stdout[-2000:]}\nSTDERR:\n{proc.stderr[-2000:]}"
+                )
 
-            contigmap = f"A1-{start_idx-1}/{x_len}-{x_len}/A{end_idx+1}-{seq_final_pos}"
-            print(contigmap)
-                
-            with hydra.initialize(version_base=None, config_path=self.rel_config_path):
-                cfg = self._make_config(contigmap, input_pdb_path, outpath=tmpdirname)
-                cfg = OmegaConf.merge(
-                        {"hydra": self._dummy_hydra()},
-                        cfg
-                    )
-                HydraConfig.instance().set_config(cfg)
-                mn(cfg)
-            texts = []
-            for i in range(self.num_designs):
-                with open(f'{tmpdirname}/output_{i}.pdb','r') as f:
-                    pdbtext = f.read()
-                    texts.append(pdbtext)
-        return texts
-    
-    def predict(self, context, model_input : List[Dict[str,str]], params=None) -> List[str]:
-        """ Generate structure of protein of given length
-        parameters
-        --------
+            outputs = sorted(
+                glob.glob(os.path.join(out_dir, "**", "*.cif.gz"), recursive=True)
+                + glob.glob(os.path.join(out_dir, "**", "*.cif"), recursive=True)
+            )
+            if not outputs:
+                raise RuntimeError(
+                    f"no RFD3 mmCIF output found under {out_dir}. "
+                    f"STDOUT:\n{proc.stdout[-2000:]}"
+                )
+            return [self._cif_to_backbone_pdb(p) for p in outputs]
 
-        context:
-            The mlflow context of the model. Gathered by load_context()
-        
-        model_input:
-            A list of dicts (pdb, start_idx, end_idx). Should only contain one entry in the list.
-            start_idx and end_idx positions are 1-indexed and are includive to the mask for inpaint
-            the pdb string should be of a pdb file that is 1-indexed for residues, no hetatm, single A chain
-
-        params: Optional[Dict[str, Any]]
-            Additional parameters
-        """
-        if len(model_input)>1:
+    def predict(self, context, model_input: List[Dict[str, Any]], params=None) -> List[str]:
+        # Dict values are mixed types (pdb: str, start_idx/end_idx: int as sent by the
+        # executor), so the hint must be Dict[str, Any] — mlflow 2.22 enforces predict
+        # type hints and rejects Dict[str, str] when int values are present.
+        if len(model_input) > 1:
             raise ValueError("input must be a list with a single entry")
-
-        # pdb_texts = self._run_inference(model_input[0])
-        pdb_texts = self._run_inference(model_input[0]['pdb'], int(model_input[0]['start_idx']), int(model_input[0]['end_idx']))
-        return pdb_texts
+        d = model_input[0]
+        return self._run_inference(d["pdb"], int(d["start_idx"]), int(d["end_idx"]))
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Test the Unconditioned version
+# MAGIC ### Smoke-test the model
+# MAGIC Grab an example PDB, reindex chain A to be 1-indexed / HETATM-free (the input
+# MAGIC shape the endpoint receives from the executor), then inpaint residues 12-22.
 
 # COMMAND ----------
-
-model = RFDiffusionUnconditional()
-repo_path = f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}/RFdiffusion/"
-artifacts={
-    "script_path" : os.path.join(repo_path,"scripts"),
-    "model_path" : os.path.join(repo_path,"models"),
-    "example_path" : os.path.join(repo_path,"examples"),
-    "config_path" : os.path.join(repo_path,"config/inference"),
-}
-
-model.load_context(mlflow.pyfunc.PythonModelContext(artifacts=artifacts, model_config=dict()))
-pdb = model._run_inference(100)
-pdb
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC #### test the inpainting version
-# MAGIC  - first make a dummy pdb that's been formatted correctly 
-
-# COMMAND ----------
-
-from Bio.PDB import PDBList
-from Bio.PDB import PDBParser
-from Bio import PDB
-parser = PDBParser()
 
 import requests
-with tempfile.TemporaryDirectory() as tmpdirname:
-    response = requests.get("https://files.rcsb.org/download/8dgr.pdb")
-    pdb_file_path = f"{tmpdirname}/8dgr.pdb"
-    with open(pdb_file_path, 'wb') as file:
-        file.write(response.content)
-    structure = parser.get_structure("8DGR", pdb_file_path)
+from Bio import PDB
+from Bio.PDB import PDBParser
 
-def extract_chain_reindex(structure, chain_id='A'):
-    # Extract chain A
+
+def extract_chain_reindex(structure, chain_id="A"):
     chain = structure[0][chain_id]
-    
-    # Create a new structure with only chain A & 1-indexed
-    new_structure = PDB.Structure.Structure('new_structure')
+    new_structure = PDB.Structure.Structure("new_structure")
     new_model = PDB.Model.Model(0)
     new_chain = PDB.Chain.Chain(chain_id)
-    
-    # Reindex residues starting from 1
-    for i, residue in enumerate(chain, start=1):
-        if residue.id[0] == ' ':  # Ensure no HETATM
-            residue.id = (' ', i, ' ')
-            new_chain.add(residue)
-    
+    for i, residue in enumerate((r for r in chain if r.id[0] == " "), start=1):
+        residue.id = (" ", i, " ")
+        new_chain.add(residue)
     new_model.add(new_chain)
     new_structure.add(new_model)
-    
-    # Save the new structure to a PDB file
     io = PDB.PDBIO()
     io.set_structure(new_structure)
-    with tempfile.NamedTemporaryFile(suffix='.pdb') as f:
+    with tempfile.NamedTemporaryFile(suffix=".pdb") as f:
         io.save(f.name)
-        with open(f.name, 'r') as f_handle:
-            pdb_text = f_handle.read()
-    return pdb_text
+        with open(f.name, "r") as fh:
+            return fh.read()
+
+
+with tempfile.TemporaryDirectory() as td:
+    resp = requests.get("https://files.rcsb.org/download/8dgr.pdb")
+    pdb_path = os.path.join(td, "8dgr.pdb")
+    with open(pdb_path, "wb") as f:
+        f.write(resp.content)
+    structure = PDBParser(QUIET=True).get_structure("8DGR", pdb_path)
+
+example_pdb = extract_chain_reindex(structure)
 
 # COMMAND ----------
 
-model = RFDiffusionInpainting()
-repo_path = f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}/RFdiffusion/"
-artifacts={
-    "script_path" : os.path.join(repo_path,"scripts"),
-    "model_path" : os.path.join(repo_path,"models"),
-    "example_path" : os.path.join(repo_path,"examples"),
-    "config_path" : os.path.join(repo_path,"config/inference"),
-}
+model = RFD3Inpainting()
+model.load_context(mlflow.pyfunc.PythonModelContext(
+    artifacts={"checkpoints": RFD3_CKPT_DIR}, model_config={}))
 
-model.load_context(mlflow.pyfunc.PythonModelContext(artifacts=artifacts, model_config=dict()))
-
-# mask our pdb at residues 12-22 inclusive and generate new protein backbone
-pdbs = model._run_inference( extract_chain_reindex(structure), 12, 22 )
-
-# COMMAND ----------
-
-pdbs[0].split('\n')[:10]
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Begin the Model registration
-# MAGIC  - first set input examples (to keep with the model)
-# MAGIC  - and the model signatures
-
-# COMMAND ----------
-
-signature = mlflow.models.signature.ModelSignature(
-    inputs = Schema([ColSpec(type="string")]),
-    outputs = Schema([ColSpec(type="string")]),
-    params = None
-)
-
-
-context = mlflow.pyfunc.PythonModelContext(artifacts=artifacts, model_config=dict())
-input_example=[
-    {
-        'pdb':extract_chain_reindex(structure),
-        'start_idx' : 12,
-        'end_idx': 22 
-    }
-]
-inpaint_signature = mlflow.models.infer_signature(
-    input_example,
-    model.predict(context, input_example)
-)
-print(inpaint_signature)
+input_example = [{"pdb": example_pdb, "start_idx": 12, "end_idx": 22}]
+result = model.predict(None, input_example)
+print("designs:", len(result), "| first design head:")
+print("\n".join(result[0].splitlines()[:5]))
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Perform the model registration
+# MAGIC ### Log and register RFD3 as `rfdiffusion_inpainting` on Unity Catalog
 
 # COMMAND ----------
 
 from databricks.sdk import WorkspaceClient
 
-def set_mlflow_experiment(experiment_tag, user_email):    
+
+def set_mlflow_experiment(experiment_tag, user_email):
     w = WorkspaceClient()
-    mlflow_experiment_base_path = "Shared/dbx_genesis_workbench_models"
-    w.workspace.mkdirs(f"/Workspace/{mlflow_experiment_base_path}")
-    experiment_path = f"/{mlflow_experiment_base_path}/{experiment_tag}"
+    base = "Shared/dbx_genesis_workbench_models"
+    w.workspace.mkdirs(f"/Workspace/{base}")
     mlflow.set_registry_uri("databricks-uc")
     mlflow.set_tracking_uri("databricks")
-    return mlflow.set_experiment(experiment_path)
+    return mlflow.set_experiment(f"/{base}/{experiment_tag}")
 
-# COMMAND ----------
 
-mlflow.set_registry_uri("databricks-uc")
+signature = mlflow.models.infer_signature(input_example, result)
+print(signature)
 
-repo_path = f"/Volumes/{CATALOG}/{SCHEMA}/{CACHE_DIR}/RFdiffusion/"
+experiment = set_mlflow_experiment(EXPERIMENT_NAME, USER_EMAIL)
 
-experiment = set_mlflow_experiment(experiment_tag=EXPERIMENT_NAME, user_email=USER_EMAIL)
-
-with mlflow.start_run(run_name='rfdiffusion_unconditional', experiment_id=experiment.experiment_id):
+with mlflow.start_run(run_name="rfdiffusion_inpainting", experiment_id=experiment.experiment_id):
     model_info = mlflow.pyfunc.log_model(
         artifact_path="rfdiffusion",
-        python_model=RFDiffusionUnconditional(),
-        artifacts={
-            "script_path" : os.path.join(repo_path,"scripts"),
-            "model_path" : os.path.join(repo_path,"models"),
-            "example_path" : os.path.join(repo_path,"examples"),
-            "config_path" : os.path.join(repo_path,"config/inference"),
-        },
-        input_example=["100"],
-        signature=signature,
-        conda_env='rfd_env.yml',
-        registered_model_name=f"{CATALOG}.{SCHEMA}.rfdiffusion_unconditional"
-    )
-
-with mlflow.start_run(run_name='rfdiffusion_inpainting', experiment_id=experiment.experiment_id):
-    model_info = mlflow.pyfunc.log_model(
-        artifact_path="rfdiffusion",
-        python_model=RFDiffusionInpainting(),
-        artifacts={
-            "script_path" : os.path.join(repo_path,"scripts"),
-            "model_path" : os.path.join(repo_path,"models"),
-            "example_path" : os.path.join(repo_path,"examples"),
-            "config_path" : os.path.join(repo_path,"config/inference"),
-        },
+        python_model=RFD3Inpainting(),
+        artifacts={"checkpoints": RFD3_CKPT_DIR},
         input_example=input_example,
-        signature=inpaint_signature,
-        conda_env='rfd_env.yml',
-        registered_model_name=f"{CATALOG}.{SCHEMA}.rfdiffusion_inpainting"
+        signature=signature,
+        conda_env="rfd_env.yml",
+        registered_model_name=f"{CATALOG}.{SCHEMA}.rfdiffusion_inpainting",
     )
+    print("logged:", model_info.model_uri)
