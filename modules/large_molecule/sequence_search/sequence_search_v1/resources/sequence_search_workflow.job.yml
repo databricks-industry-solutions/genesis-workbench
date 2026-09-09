@@ -25,13 +25,22 @@ resources:
             notebook_path: ../notebooks/02_create_delta_tables.py
             source: WORKSPACE
 
+        # Serverless GPU: embeds on the single A10 the task lands on, drawing from the
+        # managed serverless-GPU pool instead of the account's EC2 GPU vCPU quota
+        # (which blocked the old classic 4×A10 multi_gpu_cluster). max_sequences caps
+        # the corpus. Single-node is the simplest/most reliable to provision (a
+        # multi-node @distributed fan-out is possible but not used here).
         - task_key: batch_embed_sequences
           max_retries: 0
           depends_on:
             - task_key: create_delta_tables
-          job_cluster_key: multi_gpu_cluster
+          environment_key: gpu_env
+          disable_auto_optimization: true
+          retry_on_timeout: false
+          compute:
+            hardware_accelerator: GPU_1xA10
           notebook_task:
-            notebook_path: ../notebooks/03_batch_embed_sequences.py
+            notebook_path: ../notebooks/03_batch_embed_sequences_sgc.py
             source: WORKSPACE
 
         - task_key: create_vector_index
@@ -46,14 +55,19 @@ resources:
         # Human SwissProt companion index. gene_sequences is built by core's
         # ingest_uniprot_genes.py; we embed it (same ESM-2 model as UniRef) and
         # index it so protein search also returns human targets (e.g. PARP1).
-        # Chained after batch_embed_sequences to serialise GPU-cluster use.
+        # ~20K rows → embed on the single A10 the task lands on (no fan-out needed).
+        # Chained after batch_embed_sequences to serialise serverless-GPU use.
         - task_key: embed_gene_sequences
           max_retries: 0
           depends_on:
             - task_key: batch_embed_sequences
-          job_cluster_key: multi_gpu_cluster
+          environment_key: gpu_env
+          disable_auto_optimization: true
+          retry_on_timeout: false
+          compute:
+            hardware_accelerator: GPU_1xA10
           notebook_task:
-            notebook_path: ../notebooks/05_batch_embed_gene_sequences.py
+            notebook_path: ../notebooks/05_batch_embed_gene_sequences_sgc.py
             source: WORKSPACE
 
         - task_key: create_gene_vector_index
@@ -76,6 +90,10 @@ resources:
           default: ${var.current_user}
         - name: sql_warehouse_id
           default: ${var.sql_warehouse_id}
+        # Batch-embed corpus cap (03). Production default; override per-run to cap
+        # the corpus (e.g. for a quick verification run).
+        - name: max_sequences
+          default: "1000000"
 
       job_clusters:
         - job_cluster_key: cpu_cluster
@@ -92,18 +110,12 @@ resources:
             data_security_mode: SINGLE_USER
             num_workers: 0
 
-        - job_cluster_key: multi_gpu_cluster
-          new_cluster:
-            cluster_name: ""
-            spark_version: 15.4.x-gpu-ml-scala2.12
-            node_type_id: ${var.a10_node_type}
-            driver_node_type_id: ${var.a10_node_type}
-            custom_tags:
-              work_type: sequence_embedding
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            runtime_engine: STANDARD
-            num_workers: 4
+      # Serverless GPU environment for the two embedding tasks (client "4" matches
+      # the register jobs' serverless GPU AI runtime).
+      environments:
+        - environment_key: gpu_env
+          spec:
+            client: "4"
 
       tags: ${var.common_resource_tags}
 

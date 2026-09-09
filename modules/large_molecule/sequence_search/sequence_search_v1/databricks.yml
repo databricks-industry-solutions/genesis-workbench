@@ -25,10 +25,6 @@ targets:
               new_cluster:
                 aws_attributes:
                   availability: ON_DEMAND
-            - job_cluster_key: multi_gpu_cluster
-              new_cluster:
-                aws_attributes:
-                  availability: ON_DEMAND
 
   prod_azure:
     mode: production
@@ -47,10 +43,6 @@ targets:
               new_cluster:
                 azure_attributes:
                   availability: ON_DEMAND_AZURE
-            - job_cluster_key: multi_gpu_cluster
-              new_cluster:
-                azure_attributes:
-                  availability: ON_DEMAND_AZURE
 
   prod_gcp:
     mode: production
@@ -66,10 +58,6 @@ targets:
         sequence_search_workflow:
           job_clusters:
             - job_cluster_key: cpu_cluster
-              new_cluster:
-                gcp_attributes:
-                  availability: ON_DEMAND_GCP
-            - job_cluster_key: multi_gpu_cluster
               new_cluster:
                 gcp_attributes:
                   availability: ON_DEMAND_GCP

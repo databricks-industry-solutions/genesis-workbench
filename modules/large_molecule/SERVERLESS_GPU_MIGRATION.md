@@ -88,6 +88,27 @@ fail on a failed pending config).
 | boltz | ✅ **live end-to-end** (**Boltz-2**, `boltz==2.2.1`) | `gwb_demo_boltz_endpoint` READY on GPU_MEDIUM; sequence → PDB + confidence. Weights auto-download to local temp + packaged in; `--no_kernels`. |
 | protein_mpnn | ✅ **live end-to-end** (ported off `torch 1.11`) | `gwb_demo_proteinmpnn_endpoint` READY on GPU_SMALL; backbone PDB → designed sequences. Modern torch 2.3.1+cu121, `weights_only=False`. |
 | rfdiffusion | ✅ **live end-to-end** (**RFD3 via rc-foundry**) | `gwb_demo_rfdiffusion_inpainting_endpoint` READY on GPU_MEDIUM; inpainting preserved (`{pdb,start_idx,end_idx}` → backbone PDB); `rfdiffusion_unconditional` dropped (unused). Inline pyfunc (`python=3.12`), checkpoint via `foundry install rfd3` packaged in, `--extra-index-url https://pypi.org/simple` for rc-foundry, mmCIF→backbone PDB via Biopython. |
+| sequence_search | ✅ **verified (subset)** — batch pipeline, not a serving endpoint | `sequence_search_workflow` embed tasks moved off the classic 4×A10 `multi_gpu_cluster` (`VcpuLimitExceeded`, limit 0) → **single `GPU_1xA10`** serverless. `batch_embed_sequences` (03) embeds ESM-2 → `sequence_embeddings` (verified: 2000 UniRef90 seqs → 1280-d vectors); `embed_gene_sequences` (05) single-node too (input `gene_sequences` absent on the workshop → not run here). See the batch-pipeline notes below. |
+| alphafold | ⛔ **not serverless-portable** | Bootstraps Miniconda + `conda env create` (py3.8) + `git clone alphafold` + `/local_disk0` + `jaxlib 0.3.25/cuda11.1` at runtime — none available on the serverless runtime (py3.12/CUDA12, no conda-env/apt/Miniconda/`/local_disk0`); code even notes A10 regressed this env. `featurize` is CPU-only; `fold` needs GPU. A serverless port = full re-architecture (modern JAX + pip bioinformatics), out of scope. |
+
+## Batch-pipeline conversion (sequence_search)
+
+sequence_search is a **batch embedding workflow** (not a register/serving job): download UniRef90 →
+`sequence_db` → embed → build a Vector Search index. Only the two embed tasks used GPU (classic
+4×A10 `multi_gpu_cluster`, quota-blocked). Conversion mirrors the register-job pattern but the task
+**does the GPU work itself** rather than logging a model:
+
+- Both embed tasks → `environment_key: gpu_env` + `compute: {hardware_accelerator: GPU_1xA10}` (+ job
+  `environments: [{client: "4"}]`); `multi_gpu_cluster` deleted; CPU tasks stay on `cpu_cluster`.
+- `03_batch_embed_sequences_sgc.py` embeds on the single A10 in FP16 and **flushes embeddings to
+  parquet in chunks**, then consolidates to `sequence_embeddings` — driver RAM stays bounded for the
+  1M-row (`max_sequences`, a job param) corpus. `05_..._sgc.py` is single-node too (~20K rows).
+- **`hf_transfer` gotcha:** the serverless GPU runtime sets `HF_HUB_ENABLE_HF_TRANSFER=1`, so any
+  `from_pretrained` HF download **fails** unless `hf_transfer` is `%pip install`ed (esm2 already does).
+- **Multi-node `@distributed(remote=True)` was NOT used:** its remote worker clusters would not
+  provision in a non-interactive Job during testing (a `_ray.py` variant remains for interactive SGC).
+  Single-node is the simplest/most reliable to provision. Serverless GPU can also have transient
+  provisioning outages — tasks sit in `PENDING`/"Waiting for cluster" — unrelated to the code.
 
 ## Two more serving-build fixes (found porting boltz + protein_mpnn)
 
