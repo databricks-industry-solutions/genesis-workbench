@@ -89,7 +89,7 @@ fail on a failed pending config).
 | protein_mpnn | ✅ **live end-to-end** (ported off `torch 1.11`) | `gwb_demo_proteinmpnn_endpoint` READY on GPU_SMALL; backbone PDB → designed sequences. Modern torch 2.3.1+cu121, `weights_only=False`. |
 | rfdiffusion | ✅ **live end-to-end** (**RFD3 via rc-foundry**) | `gwb_demo_rfdiffusion_inpainting_endpoint` READY on GPU_MEDIUM; inpainting preserved (`{pdb,start_idx,end_idx}` → backbone PDB); `rfdiffusion_unconditional` dropped (unused). Inline pyfunc (`python=3.12`), checkpoint via `foundry install rfd3` packaged in, `--extra-index-url https://pypi.org/simple` for rc-foundry, mmCIF→backbone PDB via Biopython. |
 | sequence_search | ✅ **verified (subset)** — batch pipeline, not a serving endpoint | `sequence_search_workflow` embed tasks moved off the classic 4×A10 `multi_gpu_cluster` (`VcpuLimitExceeded`, limit 0) → **single `GPU_1xA10`** serverless. `batch_embed_sequences` (03) embeds ESM-2 → `sequence_embeddings` (verified: 2000 UniRef90 seqs → 1280-d vectors); `embed_gene_sequences` (05) single-node too (input `gene_sequences` absent on the workshop → not run here). See the batch-pipeline notes below. |
-| alphafold | ⛔ **not serverless-portable** | Bootstraps Miniconda + `conda env create` (py3.8) + `git clone alphafold` + `/local_disk0` + `jaxlib 0.3.25/cuda11.1` at runtime — none available on the serverless runtime (py3.12/CUDA12, no conda-env/apt/Miniconda/`/local_disk0`); code even notes A10 regressed this env. `featurize` is CPU-only; `fold` needs GPU. A serverless port = full re-architecture (modern JAX + pip bioinformatics), out of scope. |
+| alphafold | ✅ **verified end-to-end** (serverless CPU + GPU, no conda) | `run_alphafold` split into `featurize`→serverless **CPU** (pyhmmer jackhmmer MSA) and `fold`→serverless **GPU_1xA10** (modern-JAX AF-2.3.2). Verified: featurize+fold ran through the deployed job → `ranked_0.pdb` at the app's pull path. Dropped the Miniconda/conda/`fold_cluster` bootstrap. Template-free (model_3/4/5); OpenMM relax deferred. See the AlphaFold section below. |
 
 ## Batch-pipeline conversion (sequence_search)
 
@@ -128,3 +128,30 @@ unused). RFdiffusion3 (all-atom) covers this and installs/runs on serverless GPU
   backbone PDB to preserve the endpoint contract (no app/executor/node/UI changes needed).
 - ✅ Wired end-to-end: register notebook (`01_register_rfdiffusion.py`) logs the inline
   `RFD3Inpainting` pyfunc, `02_import_model_gwb.py` imports + deploys, endpoint verified READY.
+
+## AlphaFold → serverless (the "not portable" one, re-architected)
+
+AlphaFold-2.3.2 originally bootstrapped **Miniconda + `conda env create` (py3.8) + `git clone` +
+`jaxlib 0.3.25/cuda11.1` + `/local_disk0`** on a classic T4 cluster — none of which exist on the
+serverless runtime. It turned out to be portable after all, with **no AF model-code patches**:
+
+- **`fold` → serverless `GPU_1xA10`.** `%pip install "jax[cuda12]==0.4.28" dm-haiku==0.0.12 chex
+  dm-tree ml-collections immutabledict absl-py biopython "tensorflow-cpu==2.18.0"`. AF-2.3.2's JAX
+  model **imports and runs unpatched** on jax 0.4.28 (no `jax.tree_multimap` breakage). Runs the
+  **template-free** models (model_3/4/5, `_ptm`), ranks by pLDDT, writes `ranked_0.pdb`.
+- **`featurize` → serverless CPU.** `pyhmmer` (pip, bundles HMMER — no conda binary) runs the
+  reduced-DBs jackhmmer MSA; its `IterationResult.msa` → Stockholm → AF's `parsers.parse_stockholm`
+  → `make_msa_features`. Template-free ⇒ **no hhsuite/kalign/pdb70 needed**. `max_msa_seqs` caps the
+  per-DB scan (bounds serverless-CPU RAM/time).
+- **Three small fixes:** (1) don't pin `biopython==1.79` (no py3.12 wheel) — use modern biopython +
+  a `Bio.Data.SCOPData` shim (removed in ≥1.80; map `protein_letters_3to1` from `Bio.Data.PDBData`);
+  (2) the AF params tar extracts **flat** → move `params_model_*.npz` into `<data_dir>/params/`
+  (also fixed the previously-failed `download_params`); (3) `tensorflow-cpu` (JAX owns the GPU).
+- **App contract preserved:** widgets `catalog/schema/model_volume/run_id/protein_sequence/user_email`;
+  MLflow `job_status` featurize_complete → fold_complete; output at
+  `results/{run_id}/{run_id}/ranked_0.pdb`. `job_clusters` removed; `featurize`→`cpu_env`, `fold`→`gpu_env`.
+- **Deferred (not blockers):** OpenMM relax (`ranked_0.pdb` is the unrelaxed top model); templated
+  models (1/2, need hhsearch/pdb70); multimer (uniprot MSA + multimer model); full-depth MSA over
+  the entire DBs (currently capped by `max_msa_seqs` — a larger cap / streaming search deepens it).
+- ✅ Verified: `featurize`+`fold` ran through the deployed `run_alphafold` job (GB1, model_5_ptm) →
+  valid `ranked_0.pdb`.

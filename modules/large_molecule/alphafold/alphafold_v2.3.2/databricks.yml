@@ -19,12 +19,6 @@ targets:
       user_name: ${var.current_user}
     resources:
       jobs:
-        alphafold:
-          job_clusters:
-            - job_cluster_key: fold_cluster
-              new_cluster:
-                aws_attributes:
-                  availability: ON_DEMAND
         alphafold_register_and_downloads:
           job_clusters:
             - job_cluster_key: download_common_files_cluster
@@ -63,12 +57,6 @@ targets:
       user_name: ${var.current_user}
     resources:
       jobs:
-        alphafold:
-          job_clusters:
-            - job_cluster_key: fold_cluster
-              new_cluster:
-                azure_attributes:
-                  availability: ON_DEMAND_AZURE
         alphafold_register_and_downloads:
           job_clusters:
             - job_cluster_key: download_common_files_cluster
@@ -107,12 +95,6 @@ targets:
       user_name: ${var.current_user}
     resources:
       jobs:
-        alphafold:
-          job_clusters:
-            - job_cluster_key: fold_cluster
-              new_cluster:
-                gcp_attributes:
-                  availability: ON_DEMAND_GCP
         alphafold_register_and_downloads:
           job_clusters:
             - job_cluster_key: download_common_files_cluster

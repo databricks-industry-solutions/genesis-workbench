@@ -30,7 +30,9 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/run_alphafold_featurize.py
             source: WORKSPACE
-          job_cluster_key: fold_cluster
+          environment_key: cpu_env
+          disable_auto_optimization: true
+          retry_on_timeout: false
           timeout_seconds: 28800
           health:
             rules:
@@ -54,7 +56,11 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/run_alphafold_fold.py
             source: WORKSPACE
-          job_cluster_key: fold_cluster
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xA10
+          disable_auto_optimization: true
+          retry_on_timeout: false
           timeout_seconds: 14400
           health:
             rules:
@@ -112,47 +118,27 @@ resources:
           default: XXX
         - name: run_id
           default: run
+        # Serverless featurize/fold tuning (defaults; the GWB app passes only the
+        # five params above, so these take effect via their defaults).
+        - name: max_msa_seqs
+          default: "2000000"
+        - name: fold_models
+          default: model_3_ptm,model_4_ptm,model_5_ptm
+        - name: num_recycle
+          default: "3"
 
 
-      job_clusters:
-      #   - job_cluster_key: featurize_cluster
-      #     new_cluster:
-      #       cluster_name: ""
-      #       spark_version: 15.4.x-scala2.12
-      #       spark_conf:
-      #         spark.master: local[*, 4]
-      #         spark.databricks.cluster.profile: singleNode
-      #       node_type_id: ${var.cpu_node_type}
-      #       driver_node_type_id: ${var.cpu_node_type}
-      #       custom_tags:
-      #         ResourceClass: SingleNode
-      #         work_type: protein_folding
-      #       spark_env_vars:
-      #         PYSPARK_PYTHON: /databricks/python3/bin/python3
-      #       enable_elastic_disk: true
-      #       data_security_mode: SINGLE_USER
-      #       runtime_engine: STANDARD
-      #       num_workers: 0
-
-        - job_cluster_key: fold_cluster
-          new_cluster:
-            cluster_name: ""
-            spark_version: 15.4.x-gpu-ml-scala2.12
-            spark_conf:
-              spark.master: local[*, 4]
-              spark.databricks.cluster.profile: singleNode
-            node_type_id: ${var.t4_node_type}
-            driver_node_type_id: ${var.t4_node_type}
-            custom_tags:
-              ResourceClass: SingleNode
-              work_type: protein_folding
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            runtime_engine: STANDARD
-            num_workers: 0
-            # On-demand avoids spot preemption during long-running protein folding jobs
+      # Serverless: featurize on serverless CPU (cpu_env), fold on serverless GPU
+      # (gpu_env / GPU_1xA10). No classic job_clusters — draws from the managed
+      # serverless pools instead of the account's EC2 GPU vCPU quota.
       environments:
         - environment_key: default
+          spec:
+            client: '4'
+        - environment_key: cpu_env
+          spec:
+            client: '4'
+        - environment_key: gpu_env
           spec:
             client: '4'
 
