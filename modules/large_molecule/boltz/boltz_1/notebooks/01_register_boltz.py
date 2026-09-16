@@ -23,12 +23,27 @@ SCHEMA = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
+# Stage the dbboltz package OFF the Workspace FUSE mount to local /tmp before pip
+# installing it. Building a pyproject package in-place on the Workspace filesystem
+# fails on the serverless runtime — setuptools writes build/bdist.../egg-info that
+# the Workspace FS then 404s (RESOURCE_DOES_NOT_EXIST). Installing from a plain local
+# dir avoids that. /tmp survives the %pip-triggered Python restart (same node).
+import os, shutil
+_nb_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+_dbboltz_ws = "/Workspace" + os.path.dirname(os.path.dirname(_nb_path)) + "/dbboltz"
+shutil.rmtree("/tmp/dbboltz", ignore_errors=True)
+shutil.copytree(_dbboltz_ws, "/tmp/dbboltz")
+print("dbboltz staged to /tmp/dbboltz from", _dbboltz_ws)
+
+# COMMAND ----------
+
 # MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0
 # MAGIC # dbboltz pulls boltz==2.2.1 (+ numpy<2.0, hydra-core, pytorch-lightning, rdkit …).
 # MAGIC # On the serverless GPU AI runtime torch 2.7.1+cu126 is preinstalled and satisfies
 # MAGIC # boltz's torch>=2.2, so torch is NOT reinstalled. Boltz-2 has its own attention
 # MAGIC # path, so it needs no flash_attn (the [gpu] extra is intentionally empty).
-# MAGIC %pip install ../dbboltz[gpu]
+# MAGIC # Installed from the local /tmp copy (staged above) — NOT the Workspace FUSE path.
+# MAGIC %pip install /tmp/dbboltz[gpu]
 
 # COMMAND ----------
 
