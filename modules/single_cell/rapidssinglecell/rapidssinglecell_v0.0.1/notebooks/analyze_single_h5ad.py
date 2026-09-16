@@ -8,15 +8,23 @@
 
 # COMMAND ----------
 
+# MAGIC # Serverless GPU (GPU_1xA10) node driver is CUDA 13.0, so RAPIDS must be the
+# MAGIC # -cu13 wheels — the -cu12 wheels' libcuml++.so fails to load / crashes the kernel
+# MAGIC # under the cu13 driver. cuvs-cu13 is required (rapids_singlecell neighbors imports
+# MAGIC # cuvs). Explicit lib*-cu13 native pins ensure the C++ .so's install. Only the
+# MAGIC # packages the analyze pipeline actually uses are installed (dropped cuxfilter/
+# MAGIC # cucim/nx-cugraph/dask-cudf/raft-dask — unused, and they bloat host RAM at import).
 # MAGIC %pip install --extra-index-url=https://pypi.nvidia.com \
-# MAGIC   cudf-cu12==25.10.00 dask-cudf-cu12==25.10.00 cuml-cu12==25.10.00 \
-# MAGIC   cugraph-cu12==25.10.00 nx-cugraph-cu12==25.10.00 cuxfilter-cu12==25.10.00 \
-# MAGIC   cucim-cu12==25.10.00 pylibraft-cu12==25.10.00 raft-dask-cu12==25.10.00 \
-# MAGIC   cuvs-cu12==25.10.00
-
-# MAGIC %pip install cupy-cuda12x==13.6.0
-
-# MAGIC %pip install rapids-singlecell==0.14.1 scikit-learn==1.5.2 numpy==1.26.4
+# MAGIC   cudf-cu13==25.10.* cuml-cu13==25.10.* cugraph-cu13==25.10.* cuvs-cu13==25.10.* \
+# MAGIC   libcudf-cu13==25.10.* libcuml-cu13==25.10.* libcugraph-cu13==25.10.* libcuvs-cu13==25.10.* \
+# MAGIC   librmm-cu13==25.10.* libraft-cu13==25.10.*
+# MAGIC %pip install cupy-cuda13x
+# MAGIC # rapids-singlecell + pandas pin MUST share one %pip line, else scanpy/anndata
+# MAGIC # re-upgrade pandas to 3.x (which removed pandas.api.types.is_interval that cudf
+# MAGIC # calls). typing_extensions>=4.13 provides `Format` that scverse_misc needs.
+# MAGIC # numpy is intentionally NOT pinned — cupy-cuda13x is built for numpy 2.x, so the
+# MAGIC # runtime's numpy 2.1.3 is kept (the old numpy==1.26.4 pin broke cupy's ABI).
+# MAGIC %pip install rapids-singlecell==0.14.1 scikit-learn==1.5.2 "typing_extensions>=4.13.2" "pandas>=2.0,<3.0"
 
 # MAGIC %restart_python
 

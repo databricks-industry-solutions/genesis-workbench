@@ -10,7 +10,11 @@ resources:
       tasks:
         - task_key: run_rapidssinglecell
           max_retries: 0
-          job_cluster_key: gpu_ml_cluster
+          disable_auto_optimization: true
+          retry_on_timeout: false
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xA10
           notebook_task:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
@@ -38,22 +42,9 @@ resources:
         - environment_key: default
           spec:
             client: '4'
-
-      job_clusters:
-        - job_cluster_key: gpu_ml_cluster
-          new_cluster:
-            num_workers: 0
-            node_type_id: ${var.gpu_t4_rapids_node_type}
-            driver_node_type_id: ${var.gpu_t4_rapids_node_type}
-            spark_version: ${var.gpu_ml_spark_version}
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: local[*, 4]
-            custom_tags:
-              ResourceClass: SingleNode
+        - environment_key: gpu_env
+          spec:
+            client: '4'
 
       parameters:
         - name: catalog
