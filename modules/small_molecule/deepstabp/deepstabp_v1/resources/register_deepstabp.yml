@@ -7,28 +7,21 @@ resources:
         on_failure:
           - ${var.current_user}
 
-      job_clusters:
-        - job_cluster_key: deepstabp_gpu_cluster
-          new_cluster:
-            num_workers: 0
-            node_type_id: ${var.t4_node_type}
-            driver_node_type_id: ${var.t4_node_type}
-            spark_version: '16.4.x-gpu-ml-scala2.12'
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: local[*]
-            custom_tags:
-              ResourceClass: SingleNode
-
       tasks:
         - task_key: register_deepstabp_thermostability
           max_retries: 0
-          job_cluster_key: deepstabp_gpu_cluster
+          disable_auto_optimization: true
+          retry_on_timeout: false
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xA10
           notebook_task:
             notebook_path: ../notebooks/01_register_deepstabp.py
+
+      environments:
+        - environment_key: gpu_env
+          spec:
+            client: "4"
 
       parameters:
         - name: catalog

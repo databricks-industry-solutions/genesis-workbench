@@ -28,7 +28,17 @@ schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
-# MAGIC %pip install -q torch==2.3.1 rdkit==2025.3.6 descriptastorus==2.8.0 scikit-learn==1.5.2 numpy==1.26.4 pandas==1.5.3 tqdm==4.67.1
+# MAGIC %md
+# MAGIC ### Install dependencies
+# MAGIC
+# MAGIC torch/numpy are intentionally NOT pinned — the serverless GPU runtime already
+# MAGIC has CUDA torch (2.7.1+cu126) + numpy 2.x, which the GPU smoke test below needs
+# MAGIC (a pinned `torch==2.3.1` from PyPI installs a CPU build and breaks it). pandas is
+# MAGIC unpinned too (the runtime is Python 3.12 and `pandas==1.5.3` has no cp312 wheel).
+
+# COMMAND ----------
+
+# MAGIC %pip install -q rdkit==2025.3.6 descriptastorus==2.8.0 scikit-learn==1.5.2 tqdm==4.67.1
 # MAGIC %pip install -q mlflow[databricks]==2.22.0 databricks-sdk==0.50.0 databricks-sql-connector==4.0.3
 
 # COMMAND ----------
@@ -82,9 +92,9 @@ print(f"deploying ft_label={ft_label} dataset_type={dataset_type} tasks={task_na
 
 # Stage vendored source + checkpoint locally.
 WS_SRC = "/Workspace" + kermt_src_path
-LOCAL_SRC = "/local_disk0/kermt_src"
+LOCAL_SRC = "/tmp/kermt_src"
 shutil.rmtree(LOCAL_SRC, ignore_errors=True); shutil.copytree(WS_SRC, LOCAL_SRC)
-LOCAL_CKPT = "/local_disk0/kermt_ckpt"
+LOCAL_CKPT = "/tmp/kermt_ckpt"
 shutil.rmtree(LOCAL_CKPT, ignore_errors=True); shutil.copytree(weights_loc, LOCAL_CKPT)
 sys.path.insert(0, LOCAL_SRC)
 print("staged source + checkpoint")
@@ -200,7 +210,7 @@ import json
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 
-CALIB_PATH = "/local_disk0/calibration.json"
+CALIB_PATH = "/tmp/calibration.json"
 calib: dict = {}
 
 calib_csv = None
@@ -260,6 +270,10 @@ signature = ModelSignature(
     outputs=Schema([ColSpec("double", name=t) for t in task_names]),
 )
 
+# KERMT artifacts (kermt_src + checkpoint_dir + calibration) can be several hundred
+# MB. Route the UC upload through the presigned-URL repo (direct S3, boto3 multipart,
+# no 5-min cap) to avoid TimeoutError('Timed out after 0:05:00').
+os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"
 mlflow.set_registry_uri("databricks-uc")
 with mlflow.start_run(run_name=f"register_{model_name}"):
     model_info = mlflow.pyfunc.log_model(
@@ -270,8 +284,10 @@ with mlflow.start_run(run_name=f"register_{model_name}"):
         signature=signature,
         input_example=pd.DataFrame({"smiles": _sample}),
         pip_requirements=[
+            # pandas 1.5.3 has no cp312 wheel; the model is logged on py3.12 (serverless)
+            # and served on py3.12, so the serving-container build needs a cp312 pandas.
             "torch==2.3.1", "rdkit==2025.3.6", "descriptastorus==2.8.0",
-            "scikit-learn==1.5.2", "numpy==1.26.4", "pandas==1.5.3", "tqdm==4.67.1",
+            "scikit-learn==1.5.2", "numpy==1.26.4", "pandas==2.2.3", "tqdm==4.67.1",
             "mlflow==2.22.0",
         ],
         registered_model_name=f"{catalog}.{schema}.{model_name}",
@@ -314,5 +330,7 @@ run_id = deploy_model(
     workload_type=workload_type,
     workload_size="Small",
 )
-result = wait_for_job_run_completion(run_id, timeout=3600)
+# 7200s: serverless GPU endpoint provisioning + container build can exceed the
+# old 3600s cap (times out the task while the endpoint still comes up).
+result = wait_for_job_run_completion(run_id, timeout=7200)
 print("deploy result:", result)

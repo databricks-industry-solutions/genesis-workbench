@@ -58,7 +58,7 @@ metric = "auc" if dataset_type == "classification" else "mae"
 
 # Stage the vendored (patched) KERMT source to a writable local dir.
 WS_SRC = ("/Workspace" + kermt_src_path) if kermt_src_path else None
-LOCAL_SRC = "/local_disk0/kermt_src"
+LOCAL_SRC = "/tmp/kermt_src"
 shutil.rmtree(LOCAL_SRC, ignore_errors=True)
 assert WS_SRC and os.path.exists(WS_SRC), f"kermt_src not found at {WS_SRC}"
 shutil.copytree(WS_SRC, LOCAL_SRC)
@@ -75,7 +75,15 @@ mlflow.set_tracking_uri("databricks")
 if mlflow_run_id:
     _run_ctx = mlflow.start_run(run_id=mlflow_run_id)
 else:
-    exp_path = f"/Users/{user_email}/mlflow_experiments/{experiment_name}"
+    # Create the experiment's parent workspace folder first. On a fresh workspace
+    # /Users/<email>/mlflow_experiments does not exist, and mlflow.set_experiment at a
+    # nested path whose parent is missing fails with an opaque RestException
+    # ("BAD_REQUEST: For input string: 'None'" — create_experiment returns no id).
+    # Mirrors genesis_workbench.set_mlflow_experiment, which mkdirs before set.
+    from databricks.sdk import WorkspaceClient
+    _exp_folder = f"/Users/{user_email}/mlflow_experiments"
+    WorkspaceClient().workspace.mkdirs(f"/Workspace{_exp_folder}")
+    exp_path = f"{_exp_folder}/{experiment_name}"
     exp = mlflow.set_experiment(exp_path)
     MlflowClient().set_experiment_tag(exp.experiment_id, "used_by_genesis_workbench", "yes")
     _run_ctx = mlflow.start_run(run_name=mlflow_run_name)
@@ -96,14 +104,14 @@ try:
         })
 
         # --- stage data + pretrained checkpoint locally ---
-        data_dir = "/local_disk0/kermt_data"; os.makedirs(data_dir, exist_ok=True)
+        data_dir = "/tmp/kermt_data"; os.makedirs(data_dir, exist_ok=True)
         local_train = f"{data_dir}/train.csv"; local_val = f"{data_dir}/val.csv"; local_test = f"{data_dir}/test.csv"
         shutil.copy(train_loc, local_train); shutil.copy(val_loc, local_val); shutil.copy(test_loc, local_test)
         ckpt_local = f"{LOCAL_SRC}/kermt_contrastive_v2.0.pt"
         shutil.copy(f"{vol_root}/pretrained/kermt_contrastive_v2.0.pt", ckpt_local)
 
         mlflow.set_tag("job_status", "training")
-        save_dir = "/local_disk0/kermt_run/finetune"
+        save_dir = "/tmp/kermt_run/finetune"
 
         env = os.environ.copy()
         env["PYTHONPATH"] = LOCAL_SRC

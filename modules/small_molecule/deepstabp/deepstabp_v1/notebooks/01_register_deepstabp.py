@@ -41,7 +41,15 @@ schema = dbutils.widgets.get("schema")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Install dependencies (exact pins)
+# MAGIC ### Install dependencies
+# MAGIC
+# MAGIC numpy/pandas are intentionally left unpinned: the serverless AI runtime is
+# MAGIC Python 3.12 and `pandas==1.5.3` has no cp312 wheel (they start at pandas
+# MAGIC 2.1.1), so pinning it fails this `%pip` at a source build. This notebook
+# MAGIC never runs the model — it only builds example DataFrames and logs the
+# MAGIC pyfunc via `python_model=WRAPPER_PATH` — and the serving env is the explicit
+# MAGIC `conda_env` below (python=3.11, where the 1.5.3/1.26.4 wheels exist), so the
+# MAGIC runtime's py3.12 numpy/pandas here never reach serving.
 
 # COMMAND ----------
 
@@ -49,11 +57,10 @@ schema = dbutils.widgets.get("schema")
 # MAGIC     transformers==4.46.3 \
 # MAGIC     safetensors==0.4.5 \
 # MAGIC     huggingface-hub==0.26.2 \
+# MAGIC     hf_transfer==0.1.9 \
 # MAGIC     pytorch-lightning==2.5.5 \
 # MAGIC     sentencepiece==0.2.0 \
 # MAGIC     biopython==1.84 \
-# MAGIC     numpy==1.26.4 \
-# MAGIC     pandas==1.5.3 \
 # MAGIC     mlflow==2.22.0 \
 # MAGIC     cloudpickle==2.0.0 \
 # MAGIC     databricks-sdk==0.50.0 \
@@ -250,6 +257,13 @@ example_output = pd.DataFrame({
 })
 example_signature = infer_signature(example_input, example_output)
 
+# The ProtT5-XL backbone bundled in artifacts_dir is ~3 GB. MLflow's default UC
+# upload path (Databricks-SDK models artifact repo) wraps the whole upload in a
+# 5-min retry_timeout and fails multi-GB models with TimeoutError('Timed out
+# after 0:05:00'). Defining this env var routes the upload to the
+# PresignedUrlArtifactRepository (direct S3, boto3 multipart, no 5-min cap).
+os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"
+
 with mlflow.start_run(run_name=f"register-{model_name}") as run:
     mlflow.log_params({
         "model_class": MODEL_CLASS_NAME,
@@ -320,5 +334,7 @@ print(f"Deploy run ID: {deploy_run_id}")
 
 # COMMAND ----------
 
-result = wait_for_job_run_completion(deploy_run_id, timeout=3600)
+# 7200s: serverless GPU endpoint provisioning + container build can exceed the
+# old 3600s cap (times out the task while the endpoint still comes up).
+result = wait_for_job_run_completion(deploy_run_id, timeout=7200)
 print(f"Deployment finished: {result}")

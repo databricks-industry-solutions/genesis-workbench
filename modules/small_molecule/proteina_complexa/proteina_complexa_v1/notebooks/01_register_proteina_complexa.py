@@ -919,6 +919,13 @@ set_mlflow_experiment(experiment_tag=experiment_name,
 mlflow.set_registry_uri("databricks-uc")
 mlflow.set_tracking_uri("databricks")
 
+# The Proteina-Complexa checkpoints bundled per model (main + autoencoder .ckpt)
+# are large. MLflow's default UC upload path (Databricks-SDK models artifact repo)
+# wraps the whole upload in a 5-min retry_timeout and fails multi-GB models with
+# TimeoutError('Timed out after 0:05:00'). Defining this env var routes the upload
+# to the PresignedUrlArtifactRepository (direct S3, boto3 multipart, no 5-min cap).
+os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"
+
 # COMMAND ----------
 
 registered_models = {}
@@ -1055,5 +1062,7 @@ for variant_key, model_info in MODELS.items():
 
 for mlflow_name, run_id in deploy_run_ids:
     print(f"\nWaiting for deployment: {mlflow_name} (run_id={run_id})")
-    result = wait_for_job_run_completion(run_id, timeout=3600)
+    # 7200s: serverless GPU endpoint provisioning + container build can exceed the
+    # old 3600s cap (times out the task while the endpoint still comes up).
+    result = wait_for_job_run_completion(run_id, timeout=7200)
     print(f"  Result: {result}")

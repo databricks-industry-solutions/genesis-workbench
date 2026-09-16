@@ -9,10 +9,14 @@ resources:
 
       tasks:
         - task_key: kermt_deploy_task
-          job_cluster_key: gpu_cluster
+          max_retries: 0
+          disable_auto_optimization: true
+          retry_on_timeout: false
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xA10
           notebook_task:
             notebook_path: ../notebooks/03_kermt_register_serving.py
-          max_retries: 0
 
       parameters:
         - name: catalog
@@ -39,21 +43,9 @@ resources:
         - name: calibration_data_location
           default: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/${var.cache_dir}/ft_data/clintox_test.csv
 
-      job_clusters:
-        - job_cluster_key: gpu_cluster
-          new_cluster:
-            num_workers: 0
-            node_type_id: ${var.t4_node_type}
-            driver_node_type_id: ${var.t4_node_type}
-            spark_version: 15.4.x-gpu-ml-scala2.12
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.databricks.unityCatalog.volumes.enabled: true
-              spark.master: local[*]
-            custom_tags:
-              ResourceClass: SingleNode
+      environments:
+        - environment_key: gpu_env
+          spec:
+            client: "4"
 
       tags: ${var.common_resource_tags}

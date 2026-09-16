@@ -30,8 +30,17 @@ target_name = dbutils.widgets.get("target_name")
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ### Install dependencies
+# MAGIC
+# MAGIC pandas is intentionally left unpinned — this runs on the serverless CPU runtime
+# MAGIC (Python 3.12) where `pandas==1.5.3` has no cp312 wheel (they start at 2.1.1). The
+# MAGIC only pandas use here is writing the TDC sample CSVs, so the runtime's pandas is fine.
+
+# COMMAND ----------
+
 # MAGIC %pip install --no-deps PyTDC==1.1.15
-# MAGIC %pip install fuzzywuzzy==0.18.0 tqdm==4.67.1 requests==2.32.3 pandas==1.5.3 huggingface_hub==0.25.2
+# MAGIC %pip install fuzzywuzzy==0.18.0 tqdm==4.67.1 requests==2.32.3 huggingface_hub==0.25.2
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
@@ -74,7 +83,7 @@ else:
     print(f"Downloading GROVERbase from {grover_base_url} ...")
     with requests.get(grover_base_url, stream=True, allow_redirects=True, timeout=600) as r:
         r.raise_for_status()
-        tmp = "/local_disk0/kermt_contrastive_v2.0.pt"
+        tmp = "/tmp/kermt_contrastive_v2.0.pt"
         with open(tmp, "wb") as f:
             for chunk in r.iter_content(chunk_size=8 << 20):
                 if chunk:
@@ -138,7 +147,7 @@ else:
         from tdc.single_pred import Tox as _TDC
     else:
         from tdc.single_pred import ADME as _TDC
-    data = _TDC(name=tdc_dataset, path="/local_disk0/tdc_data")
+    data = _TDC(name=tdc_dataset, path="/tmp/tdc_data")
     split = data.get_split()  # dict: train/valid/test, columns Drug (SMILES), Y (label)
 
     def _to_csv(df, path):

@@ -6,8 +6,9 @@ include:
   - variables.yml
   - resources/*.yml
 
-# Per-cloud targets. GWB rule: all workflow jobs run on ON_DEMAND compute (no spot)
-# — the GPU finetune/deploy clusters are overlaid here per cloud.
+# Per-cloud targets. Jobs run on serverless compute (register_kermt on serverless
+# CPU cpu_env; kermt_finetune/kermt_deploy on serverless GPU gpu_env / GPU_1xA10) —
+# no classic job_clusters, so no per-cloud cluster overrides are needed.
 targets:
   prod_aws:
     mode: production
@@ -19,26 +20,6 @@ targets:
         level: CAN_MANAGE
     run_as:
       user_name: ${var.current_user}
-    resources:
-      jobs:
-        register_kermt:
-          job_clusters:
-            - job_cluster_key: stage_cluster
-              new_cluster:
-                aws_attributes:
-                  availability: ON_DEMAND
-        kermt_finetune:
-          job_clusters:
-            - job_cluster_key: gpu_cluster
-              new_cluster:
-                aws_attributes:
-                  availability: ON_DEMAND
-        kermt_deploy:
-          job_clusters:
-            - job_cluster_key: gpu_cluster
-              new_cluster:
-                aws_attributes:
-                  availability: ON_DEMAND
 
   prod_azure:
     mode: production
@@ -49,26 +30,6 @@ targets:
         level: CAN_MANAGE
     run_as:
       user_name: ${var.current_user}
-    resources:
-      jobs:
-        register_kermt:
-          job_clusters:
-            - job_cluster_key: stage_cluster
-              new_cluster:
-                azure_attributes:
-                  availability: ON_DEMAND_AZURE
-        kermt_finetune:
-          job_clusters:
-            - job_cluster_key: gpu_cluster
-              new_cluster:
-                azure_attributes:
-                  availability: ON_DEMAND_AZURE
-        kermt_deploy:
-          job_clusters:
-            - job_cluster_key: gpu_cluster
-              new_cluster:
-                azure_attributes:
-                  availability: ON_DEMAND_AZURE
 
   prod_gcp:
     mode: production
@@ -79,23 +40,3 @@ targets:
         level: CAN_MANAGE
     run_as:
       user_name: ${var.current_user}
-    resources:
-      jobs:
-        register_kermt:
-          job_clusters:
-            - job_cluster_key: stage_cluster
-              new_cluster:
-                gcp_attributes:
-                  availability: ON_DEMAND_GCP
-        kermt_finetune:
-          job_clusters:
-            - job_cluster_key: gpu_cluster
-              new_cluster:
-                gcp_attributes:
-                  availability: ON_DEMAND_GCP
-        kermt_deploy:
-          job_clusters:
-            - job_cluster_key: gpu_cluster
-              new_cluster:
-                gcp_attributes:
-                  availability: ON_DEMAND_GCP
