@@ -10,7 +10,11 @@ resources:
       tasks:
         - task_key: register_scgpt_task
           max_retries: 0
-          job_cluster_key: job_cluster_get_embedding
+          disable_auto_optimization: true
+          retry_on_timeout: false
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xA10
           notebook_task:
             notebook_path: ../notebooks/01_register_scgpt.py
 
@@ -28,9 +32,13 @@ resources:
         # the job-level model_name=scgpt used by the embedding model
         - task_key: register_scgpt_perturbation_task
           max_retries: 0
+          disable_auto_optimization: true
+          retry_on_timeout: false
           depends_on:
             - task_key: "register_scgpt_task"
-          job_cluster_key: job_cluster_get_embedding
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xA10
           notebook_task:
             notebook_path: ../notebooks/03_register_scgpt_perturbation.py
 
@@ -46,6 +54,9 @@ resources:
         - environment_key: default
           spec:
             client: '2'
+        - environment_key: gpu_env
+          spec:
+            client: '4'
 
       parameters:
         - name: catalog
@@ -67,28 +78,5 @@ resources:
           default: ${var.current_user}
         - name: workload_type
           default: ${var.gpu_large_setting}
-
-      job_clusters:
-        - job_cluster_key: job_cluster_get_embedding
-          new_cluster:
-            num_workers: 0
-            node_type_id: ${var.t4_node_type} 
-            driver_node_type_id: ${var.t4_node_type} 
-            spark_version: '15.4.x-gpu-ml-scala2.12'
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: local[*]
-            custom_tags:
-              ResourceClass: SingleNode
-
-        ## critical for model training
-        ## singleNode GPU options: ## Standard_NV36ads_A10_v5 #440gigs #'Standard_NC16as_T4_v3' #110gigs #'Standard_NC4as_T4_v3'
-        ## 14.3.x-gpu-ml-scala2.12
-
-        ## singleNode CPU options: # Standard_E48ads_v5 #384gigs # Standard_E32ads_v5 #256gigs
-        ## 14.3.x-cpu-ml-scala2.12
 
       tags: ${var.common_resource_tags}
