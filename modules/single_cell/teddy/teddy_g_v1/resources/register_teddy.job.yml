@@ -39,15 +39,20 @@ resources:
             notebook_path: ../notebooks/06_extract_gene_mapping.py
 
         # 4) Re-embed a stratified Census subset into the reference Delta
-        # `teddy_cells`. Heavy GPU job (8× A10 multi-node, ~45-60 min for 2M
-        # cells with bf16+batch=32 via pandas_udf, soma_id-sorted partitions
-        # for sequential Census reads). The notebook is idempotent — skips
-        # if the table is already populated at the target size + dim.
+        # `teddy_cells`. Serverless GPU + Ray Data: the notebook runs on a
+        # serverless A10 and uses serverless_gpu.ray.ray_launch to bring up a
+        # Ray cluster across `num_gpu_workers` single-A10 nodes (replaces the
+        # quota-blocked classic 4×A10 multi-node cluster). Idempotent — skips
+        # if teddy_cells is already populated at the target size + dim.
         - task_key: reembed_reference_task
           max_retries: 0
+          disable_auto_optimization: true
+          retry_on_timeout: false
           depends_on:
             - task_key: "register_teddy_task"
-          job_cluster_key: job_cluster_teddy_a10_multinode
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xA10
           notebook_task:
             notebook_path: ../notebooks/03_reembed_reference.py
 
@@ -102,29 +107,10 @@ resources:
           default: ${var.teddy_reembed_per_stratum_cap}
         - name: census_version
           default: ${var.teddy_reembed_census_version}
-
-      job_clusters:
-        # Multi-node A10 cluster for the reembed task. 4 workers × 1 A10 = 4
-        # GPUs in parallel via pandas_udf / mapInPandas — ~4× the throughput
-        # of the original single-node A10 setup. Driver does Census obs query
-        # + Spark coordination only; workers do all GPU embedding.
-        # `spark.task.resource.gpu.amount=1` pins one Spark task per GPU so
-        # we don't fight for the same CUDA context.
-        # Sized for ~320 vCPU (5 × g5.16xlarge @ 64 vCPU) to stay well under
-        # the AWS G/VT-family vCPU quota of 768 — the 8-worker sizing tipped
-        # over when other G-family clusters were running concurrently.
-        - job_cluster_key: job_cluster_teddy_a10_multinode
-          new_cluster:
-            num_workers: 4
-            node_type_id: ${var.a10_node_type}
-            driver_node_type_id: ${var.a10_node_type}
-            spark_version: '15.4.x-gpu-ml-scala2.12'
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            spark_conf:
-              spark.task.resource.gpu.amount: "1"
-            # cloud-specific availability is set per-target in databricks.yml
+        # Number of single-A10 serverless-GPU Ray workers for the reembed
+        # (serverless_gpu.ray.ray_launch provisions this many A10 nodes).
+        - name: num_gpu_workers
+          default: "4"
 
       timeout_seconds: 43200  # 12h hard cap — covers the 5-8h reembed plus
                               # mapping, register, and serving deploy overhead.
