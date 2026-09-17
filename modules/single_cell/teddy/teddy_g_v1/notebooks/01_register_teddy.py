@@ -237,6 +237,11 @@ def set_mlflow_experiment(experiment_tag):
 experiment = set_mlflow_experiment(experiment_name)
 registered_model_name = f"{catalog}.{schema}.{model_name}"
 
+# Route the UC artifact upload through the presigned-URL repo (direct S3, boto3
+# multipart, no 5-min cap) — avoids TimeoutError on log_model when the bundled
+# TEDDY weights (esp. the 400M variant, ~1.6 GB) are large.
+os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"
+
 with mlflow.start_run(run_name=f"{model_name}_{model_size}_embedder", experiment_id=experiment.experiment_id) as run:
     mlflow.pyfunc.log_model(
         artifact_path="teddy",

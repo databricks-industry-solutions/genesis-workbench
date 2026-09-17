@@ -21,10 +21,6 @@ targets:
       jobs:
         register_teddy:
           job_clusters:
-            - job_cluster_key: job_cluster_teddy
-              new_cluster:
-                aws_attributes:
-                  availability: ON_DEMAND
             - job_cluster_key: job_cluster_teddy_a10_multinode
               new_cluster:
                 aws_attributes:
@@ -43,10 +39,6 @@ targets:
       jobs:
         register_teddy:
           job_clusters:
-            - job_cluster_key: job_cluster_teddy
-              new_cluster:
-                azure_attributes:
-                  availability: ON_DEMAND_AZURE
             - job_cluster_key: job_cluster_teddy_a10_multinode
               new_cluster:
                 azure_attributes:
@@ -65,10 +57,6 @@ targets:
       jobs:
         register_teddy:
           job_clusters:
-            - job_cluster_key: job_cluster_teddy
-              new_cluster:
-                gcp_attributes:
-                  availability: ON_DEMAND_GCP
             - job_cluster_key: job_cluster_teddy_a10_multinode
               new_cluster:
                 gcp_attributes:
