@@ -142,8 +142,11 @@ run_id_get_embedding = deploy_model(user_email=user_email,
 
 # COMMAND ----------
 
-result1 = wait_for_job_run_completion(run_id_gene_order, timeout = 3600)
+# GetEmbedding serves on MULTIGPU_MEDIUM; the container build + GPU provisioning
+# routinely exceeds 1h, so 3600s spuriously times out this task while the underlying
+# deploy job is still succeeding. 7200s matches the teddy import/serve task.
+result1 = wait_for_job_run_completion(run_id_gene_order, timeout = 7200)
 
 # COMMAND ----------
 
-result2 = wait_for_job_run_completion(run_id_get_embedding, timeout = 3600)
+result2 = wait_for_job_run_completion(run_id_get_embedding, timeout = 7200)
