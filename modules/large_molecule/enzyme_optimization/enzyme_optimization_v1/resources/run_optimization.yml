@@ -120,30 +120,26 @@ resources:
         on_failure:
           - ${var.current_user}
 
-      job_clusters:
-        - job_cluster_key: enzyme_optimization_a10_gpu_cluster
-          new_cluster:
-            num_workers: 0
-            node_type_id: ${var.a10_node_type}
-            driver_node_type_id: ${var.a10_node_type}
-            spark_version: '16.4.x-gpu-ml-scala2.12'
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: local[*]
-            custom_tags:
-              ResourceClass: SingleNode
-            # availability (on-demand vs spot) is set per-cloud in
-            # databricks.yml — see the prod_aws / prod_azure / prod_gcp targets.
-
+      # Serverless GPU (GPU_1xA10) — the workshop AWS account has EC2 GPU vCPU
+      # quota = 0, so the classic a10 (g5) cluster cannot provision. The Accurate
+      # path already pins torch==2.7.0 + PyG cu126 wheels (see
+      # proteinfoundation_requirements.txt), which matches the serverless GPU ABI
+      # (torch 2.7.1+cu126), so this is a clean lift with no dependency changes.
       tasks:
         - task_key: run_loop
           max_retries: 0
-          job_cluster_key: enzyme_optimization_a10_gpu_cluster
+          disable_auto_optimization: true
+          retry_on_timeout: false
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xA10
           notebook_task:
             notebook_path: ../notebooks/01_run_optimization.py
+
+      environments:
+        - environment_key: gpu_env
+          spec:
+            client: '4'
 
       timeout_seconds: 86400  # 24h hard cap; FK-steering loop is typically 1-6h.
 
