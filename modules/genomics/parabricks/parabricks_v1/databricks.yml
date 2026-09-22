@@ -21,11 +21,6 @@ targets:
         level: CAN_MANAGE
     run_as:
       user_name: ${var.current_user}
-    resources:
-      clusters:
-        parabricks_cluster:
-          aws_attributes:
-            availability: ON_DEMAND
 
   prod_azure:
     mode: production
@@ -36,11 +31,6 @@ targets:
         level: CAN_MANAGE
     run_as:
       user_name: ${var.current_user}
-    resources:
-      clusters:
-        parabricks_cluster:
-          azure_attributes:
-            availability: ON_DEMAND_AZURE
 
   prod_gcp:
     mode: production
@@ -51,8 +41,3 @@ targets:
         level: CAN_MANAGE
     run_as:
       user_name: ${var.current_user}
-    resources:
-      clusters:
-        parabricks_cluster:
-          gcp_attributes:
-            availability: ON_DEMAND_GCP

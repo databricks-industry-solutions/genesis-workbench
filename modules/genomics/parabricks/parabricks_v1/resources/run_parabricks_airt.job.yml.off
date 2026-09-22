@@ -1,0 +1,48 @@
+# Serverless-GPU Parabricks via the AI Runtime task (ai_runtime_task) — first such task
+# in GWB. Runs the Parabricks container (docker_image_url) on serverless GPU_1xA10, so it
+# bypasses the workshop's EC2 GPU vCPU quota=0 (classic a10 clusters can't provision).
+#
+# NOTE: ai_runtime_task is Public Preview and its DAB schema is not published in
+# `databricks bundle schema` (loosely/pass-through validated). Fields below follow the
+# empirically-reverse-engineered contract: bare `experiment` name, absolute `command_path`,
+# `environment_key` + a job-level `environments` block, and a packaged tgz at
+# `code_source_path` (the airt/ dir carries run_parabricks.py + env_vars.json +
+# secret_env_vars.json). Expect to iterate on the tarball packaging.
+resources:
+  jobs:
+    run_parabricks_airt:
+      name: run_parabricks_airt
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: parabricks_germline
+          max_retries: 0
+          environment_key: gpu_env
+          ai_runtime_task:
+            # Code bundle (run_parabricks.{sh,py} + env_vars.json + secret_env_vars.json)
+            # lives on /Workspace, NOT /Volumes: the AI Runtime launcher runs in a non-Spark
+            # context that isn't vended UC storage creds, so reading the bundle from
+            # /Volumes fails with "Operation not permitted" (ENV_VARS_FILE_READ_FAILED).
+            # A fixed /Workspace/Shared path is user-independent and readable by the launcher.
+            # (Uploaded via `databricks workspace import --format RAW`; keep the repo airt/
+            # copy in sync — the module deploy re-imports it.)
+            code_source_path: /Workspace/Shared/parabricks_airt
+            experiment: parabricks_airt
+            docker_image_url: ${var.parabricks_docker_image}
+            deployments:
+              # command_path must end in '.sh' (or '/udp-metadata.json') AND start with
+              # '/Workspace/' or '/Volumes/'.
+              - command_path: /Workspace/Shared/parabricks_airt/run_parabricks.sh
+                compute:
+                  accelerator_type: GPU_1xA10
+                  accelerator_count: 1
+
+      environments:
+        - environment_key: gpu_env
+          spec:
+            client: '4'
+
+      tags: ${var.common_resource_tags}
