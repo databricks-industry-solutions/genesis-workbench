@@ -25,6 +25,7 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.request
 
 
 def _env(name: str, default: str = "") -> str:
@@ -78,6 +79,30 @@ def run(cmd: list[str]) -> None:
         sys.exit(rc)
 
 
+def download(url: str, dest: str, retries: int = 3) -> None:
+    """Stream a URL to dest using the Python stdlib (no curl/wget dependency).
+
+    The stock NVIDIA NGC Parabricks image ships neither curl nor wget, so relying on
+    python3 (always present) keeps the pipeline runnable on the bare NGC image as well as
+    the custom Databricks-scaffolded one.
+    """
+    t0 = time.time()
+    last_err = None
+    for attempt in range(1, retries + 1):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as resp, open(dest, "wb") as f:
+                shutil.copyfileobj(resp, f, length=8 * 1024 * 1024)
+            print(f"[stage] downloaded {os.path.getsize(dest):,} bytes in {time.time()-t0:.0f}s", flush=True)
+            return
+        except Exception as e:  # network hiccup -> retry a couple times before giving up
+            last_err = e
+            print(f"[stage] download attempt {attempt}/{retries} failed: {e}", flush=True)
+            if os.path.exists(dest):
+                os.remove(dest)
+            time.sleep(5)
+    raise RuntimeError(f"download of {url} failed after {retries} attempts: {last_err}")
+
+
 def ensure_sample_data() -> None:
     """Populate node-local scratch with the Parabricks sample inputs (idempotent).
 
@@ -98,7 +123,7 @@ def ensure_sample_data() -> None:
         else:
             print(f"[stage] downloading {SAMPLE_URL} -> {local_tb}", flush=True)
             part = f"{local_tb}.part"
-            run(["curl", "-fSL", "--retry", "3", "--retry-delay", "5", "-o", part, SAMPLE_URL])
+            download(SAMPLE_URL, part)
             os.replace(part, local_tb)
 
     print(f"[stage] extracting {local_tb} -> {WORK}", flush=True)
