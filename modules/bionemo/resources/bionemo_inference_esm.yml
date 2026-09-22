@@ -1,3 +1,6 @@
+# BioNeMo ESM2 inference — serverless GPU ai_runtime_task (stock NGC BioNeMo image), replacing
+# the classic a10 GPU cluster. Deployed once; launched ON DEMAND from the UI. See
+# bionemo_finetune_esm.yml for the code-delivery / patch notes.
 resources:
   jobs:
     bionemo_esm_inference:
@@ -9,18 +12,30 @@ resources:
 
       tasks:
         - task_key: bionemo_esm_inference_task
-          job_cluster_key: job_cluster
-          notebook_task:
-            notebook_path: ../notebooks/bionemo_esm_inference.py
-          max_retries: 0 
+          max_retries: 0
+          environment_key: airt
+          ai_runtime_task:
+            experiment: bionemo_esm_inference
+            code_source_path: ./dist/code.tgz
+            docker_image_url: nvcr.io/nvidia/clara/bionemo-framework:2.6.1
+            deployments:
+              - command_path: /Workspace/Shared/bionemo/command_inference.sh
+                compute:
+                  accelerator_type: GPU_1xA10
+                  accelerator_count: 1
+
+      environments:
+        - environment_key: airt
+          spec:
+            environment_version: '6'
 
       parameters:
         - name: core_catalog
           default: ${var.core_catalog_name}
         - name: core_schema
           default: ${var.core_schema_name}
-        - name: sql_warehouse_id 
-          default: ${var.sql_warehouse_id}          
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
         - name: is_base_model
           default: true
         - name: esm_variant
@@ -43,30 +58,5 @@ resources:
           default: esm2_inference
         - name: mlflow_run_id
           default: ''
-
-      job_clusters:
-        - job_cluster_key: job_cluster
-          new_cluster:
-            num_workers: 0
-            node_type_id: ${var.a10_node_type}
-            driver_node_type_id: ${var.a10_node_type}
-            spark_version: 15.4.x-scala2.12
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            docker_image:
-              url: ${var.bionemo_docker_image}  
-              basic_auth:
-                username: ${var.bionemo_docker_userid}
-                password: ${var.bionemo_docker_token}
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.databricks.unityCatalog.volumes.enabled: true
-              spark.master: local[*]
-            custom_tags:
-              ResourceClass: SingleNode
-            # On-demand avoids spot preemption during inference jobs on AWS
-            aws_attributes:
-              availability: ON_DEMAND
 
       tags: ${var.common_resource_tags}
