@@ -6,6 +6,17 @@ include:
   - variables.yml
   - resources/*.yml
 
+# Packages airt/ (run_alignment.py + command.sh) into ./dist/code.tgz for the
+# parabricks_alignment ai_runtime_task's code_source_path. The bundle packages the tarball.
+artifacts:
+  gwas_parabricks_code:
+    type: tgz
+    path: .
+    include:
+      - airt
+    files:
+      - source: ./dist/code.tgz
+
 targets:
   prod_aws:
     mode: production
@@ -28,12 +39,6 @@ targets:
         gwas_analysis:
           job_clusters:
             - job_cluster_key: gwas_spark_cluster
-              new_cluster:
-                aws_attributes:
-                  availability: ON_DEMAND
-        parabricks_alignment:
-          job_clusters:
-            - job_cluster_key: parabricks_gpu_cluster
               new_cluster:
                 aws_attributes:
                   availability: ON_DEMAND
@@ -61,12 +66,6 @@ targets:
               new_cluster:
                 azure_attributes:
                   availability: ON_DEMAND_AZURE
-        parabricks_alignment:
-          job_clusters:
-            - job_cluster_key: parabricks_gpu_cluster
-              new_cluster:
-                azure_attributes:
-                  availability: ON_DEMAND_AZURE
 
   prod_gcp:
     mode: production
@@ -88,12 +87,6 @@ targets:
         gwas_analysis:
           job_clusters:
             - job_cluster_key: gwas_spark_cluster
-              new_cluster:
-                gcp_attributes:
-                  availability: ON_DEMAND_GCP
-        parabricks_alignment:
-          job_clusters:
-            - job_cluster_key: parabricks_gpu_cluster
               new_cluster:
                 gcp_attributes:
                   availability: ON_DEMAND_GCP

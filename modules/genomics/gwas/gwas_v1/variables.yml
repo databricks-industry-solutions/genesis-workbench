@@ -43,12 +43,3 @@ variables:
 
   sql_warehouse_id:
     description: Id of the SQL Warehouse that will be used by the app
-
-  parabricks_docker_image:
-    description: The docker image tag for Parabricks
-
-  parabricks_docker_userid:
-    description: The docker repo user_id for Parabricks
-
-  parabricks_docker_token:
-    description: The docker repo token for Parabricks
