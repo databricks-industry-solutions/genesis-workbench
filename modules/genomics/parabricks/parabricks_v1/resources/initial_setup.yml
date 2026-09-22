@@ -1,0 +1,42 @@
+# Runs once per deploy (deploy.sh runs it after bundle deploy). Registers Parabricks as a
+# GWB batch model and grants the app SP CAN_MANAGE_RUN on the run_parabricks job, so the UI
+# can launch it on demand. Does NOT run pbrun.
+resources:
+  jobs:
+    parabricks_initial_setup_job:
+      name: dbx_parabricks_initial_setup
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: initialize_task
+          disable_auto_optimization: true
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/initialize.py
+          max_retries: 0
+          timeout_seconds: 900
+
+      environments:
+        - environment_key: default
+          spec:
+            client: '4'
+
+      parameters:
+        - name: core_catalog
+          default: ${var.core_catalog_name}
+        - name: core_schema
+          default: ${var.core_schema_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        # Bundle substitutes the deployed run_parabricks job's numeric id here.
+        - name: run_parabricks_job_id
+          default: ${resources.jobs.run_parabricks.id}
+        - name: user_email
+          default: ${var.current_user}
+        - name: databricks_app_names
+          default: genesis-workbench:mcp-genesis-workbench
+
+      tags: ${var.common_resource_tags}

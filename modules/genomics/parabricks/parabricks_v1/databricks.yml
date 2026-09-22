@@ -6,6 +6,18 @@ include:
   - variables.yml
   - resources/*.yml
 
+# Packages the airt/ code (run_parabricks.py + command.sh) into ./dist/code.tgz, which the
+# run_parabricks ai_runtime_task references as code_source_path. The bundle builds the tarball
+# — no air CLI / hand-built tarball needed (Databricks AI Runtime productionizing docs).
+artifacts:
+  parabricks_code:
+    type: tgz
+    path: .
+    include:
+      - airt
+    files:
+      - source: ./dist/code.tgz
+
 sync:
   paths:
     - .
