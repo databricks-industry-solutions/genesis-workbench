@@ -199,6 +199,12 @@ for file in library/glow/*; do
 done
 
 echo ""
+echo "▶️ Ensuring the Transformer Engine wheel is in the libraries volume (serverless GPU build)"
+echo "🚨 Self-skips if present; first build ~40 min. --no-wait so it doesn't block the update."
+echo ""
+databricks bundle run --target $TARGET build_transformer_engine_job --var="$EXTRA_PARAMS" --no-wait
+
+echo ""
 echo "▶️ Publishing the node catalog (Vortex/MCP single source of truth)"
 echo "    (writes the node_catalog table from the wheel's built-in nodes)"
 echo ""

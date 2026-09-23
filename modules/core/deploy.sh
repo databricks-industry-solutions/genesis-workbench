@@ -168,6 +168,16 @@ if [[ ! -e ".deployed" ]]; then
 fi
 
 echo ""
+echo "▶️ Building the Transformer Engine wheel on serverless GPU -> libraries volume"
+echo "    Like the genesis_workbench wheel, TE is cached in the UC libraries volume and reused"
+echo "    by downstream GPU jobs (bionemo ESM2, esm2_embeddings, sequence_search). Unlike the"
+echo "    pure-python gwb wheel it compiles CUDA kernels, so it builds on a serverless GPU job."
+echo "🚨 First build takes ~40 min; it SELF-SKIPS if the wheel already exists. Runs in the"
+echo "    background (--no-wait) so it doesn't block the rest of the deploy."
+echo ""
+databricks bundle run --target $TARGET build_transformer_engine_job --var="$EXTRA_PARAMS" --no-wait
+
+echo ""
 echo "▶️ Publishing the node catalog (Vortex/MCP single source of truth)"
 echo "    (writes the node_catalog table from the wheel's built-in nodes)"
 echo ""

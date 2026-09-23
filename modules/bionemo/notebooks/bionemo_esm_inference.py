@@ -71,7 +71,7 @@ os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Install Transformer Engine (same layered best-effort as the fine-tune notebook)
+# MAGIC ### Install Transformer Engine (prebuilt wheel from the libraries Volume; same as finetune)
 
 # COMMAND ----------
 
@@ -82,34 +82,19 @@ def _pip(*args):
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", *args])
 
 
-def _cuda_include_cpath():
-    roots = []
-    try:
-        import nvidia
-        roots.append(os.path.dirname(nvidia.__file__))
-    except Exception:
-        pass
-    incs = sorted({d for r in roots for d in glob.glob(os.path.join(r, "*", "include")) if os.path.isdir(d)})
-    return ":".join(incs)
-
-
-te_status = "not-installed"
+te_status = "stock-hf-no-te"
 try:
     vol_wheels = glob.glob(f"/Volumes/{catalog}/{schema}/libraries/transformer_engine*.whl")
     if vol_wheels:
-        _pip(vol_wheels[0])
-        te_status = f"volume-wheel:{os.path.basename(vol_wheels[0])}"
+        _pip("--no-deps", *vol_wheels)  # install all TE wheels; never source-build inline
+        te_status = "volume-wheel:" + ",".join(os.path.basename(w) for w in vol_wheels)
     else:
-        cpath = _cuda_include_cpath()
-        if cpath:
-            os.environ["CPATH"] = cpath + (":" + os.environ["CPATH"] if os.environ.get("CPATH") else "")
-        os.environ.setdefault("NVTE_CUDA_ARCHS", "86")
-        _pip("transformer_engine[pytorch]")
-        te_status = "pypi"
+        print("[TE] no transformer_engine wheel in the libraries Volume "
+              "(run core/build_transformer_engine) — running stock HF ESM-2 without TE")
 except Exception as e:
-    te_status = f"UNAVAILABLE ({type(e).__name__}: {str(e)[:200]})"
+    te_status = f"install-failed ({type(e).__name__}: {str(e)[:160]}); stock HF"
 
-print("Transformer Engine install:", te_status)
+print("Transformer Engine:", te_status)
 
 # COMMAND ----------
 
