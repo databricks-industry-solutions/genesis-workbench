@@ -1,8 +1,7 @@
-# BioNeMo ESM2 fine-tune — serverless GPU. The task is a serverless ai_runtime_task (stock NGC
-# BioNeMo image) instead of a classic a10 GPU cluster with a custom Docker image (can't provision
-# at EC2 GPU quota=0). Deployed once; launched ON DEMAND from the UI (jobs run-now). Code + the
-# patched finetune_esm2.py are delivered by the bundle's artifacts:{type:tgz} (databricks.yml);
-# command.sh applies the patch onto the stock image at runtime.
+# BioNeMo ESM2 fine-tune — serverless GPU. Containerless: a serverless-GPU notebook_task
+# (hardware_accelerator: GPU_1xA10) that reads ESM-2 from Hugging Face and runs it on
+# Transformer Engine (no NGC container, no classic A10 cluster — both are unavailable at the
+# workshop's EC2 GPU quota=0). Deployed once; launched ON DEMAND from the UI (jobs run-now).
 resources:
   jobs:
     bionemo_esm_finetune:
@@ -15,21 +14,18 @@ resources:
       tasks:
         - task_key: bionemo_esm_finetune_task
           max_retries: 0
-          environment_key: airt
-          ai_runtime_task:
-            experiment: bionemo_esm_finetune
-            code_source_path: ./dist/code.tgz
-            docker_image_url: nvcr.io/nvidia/clara/bionemo-framework:2.6.1
-            deployments:
-              - command_path: /Workspace/Shared/bionemo/command_finetune.sh
-                compute:
-                  accelerator_type: GPU_1xA10
-                  accelerator_count: 1
+          disable_auto_optimization: true
+          retry_on_timeout: false
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xA10
+          notebook_task:
+            notebook_path: ../notebooks/bionemo_esm_finetune.py
 
       environments:
-        - environment_key: airt
+        - environment_key: gpu_env
           spec:
-            environment_version: '6'
+            client: "4"
 
       parameters:
         - name: core_catalog
@@ -45,7 +41,7 @@ resources:
         - name: validation_data_location
           default: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/bionemo/esm2/ft_data/BLAT_ECOLX_Tenaillon2013_metadata_eval.csv
         - name: should_use_lora
-          default: false
+          default: "false"
         - name: finetune_label
           default: esm_650m_ft_xyz
         - name: model_volume
@@ -53,26 +49,26 @@ resources:
         - name: task_type
           default: regression
         - name: mlp_ft_dropout
-          default: 0.25
+          default: "0.25"
         - name: mlp_hidden_size
-          default: 256
+          default: "256"
         - name: mlp_target_size
-          default: 1
+          default: "1"
         - name: experiment_name
           default: sequence_level_regression
         - name: num_steps
-          default: 50
+          default: "50"
         - name: lr
-          default: 5e-3
+          default: "5e-3"
         - name: lr_multiplier
-          default: 1e2
-        - name: scale_lr_layer
-          default: regression_head
+          default: "1e2"
         - name: micro_batch_size
-          default: 2
+          default: "2"
         - name: precision
           default: bf16-mixed
         - name: user_email
           default: a@b.com
+        - name: mlflow_run_id
+          default: ""
 
       tags: ${var.common_resource_tags}

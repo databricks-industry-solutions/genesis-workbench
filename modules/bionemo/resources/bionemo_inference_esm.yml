@@ -1,6 +1,7 @@
-# BioNeMo ESM2 inference — serverless GPU ai_runtime_task (stock NGC BioNeMo image), replacing
-# the classic a10 GPU cluster. Deployed once; launched ON DEMAND from the UI. See
-# bionemo_finetune_esm.yml for the code-delivery / patch notes.
+# BioNeMo ESM2 inference — serverless GPU. Containerless serverless-GPU notebook_task
+# (hardware_accelerator: GPU_1xA10) that loads ESM-2 from Hugging Face on Transformer Engine
+# and either a fine-tuned head (from bionemo_weights) or a base model. Deployed once; launched
+# ON DEMAND from the UI. See bionemo_finetune_esm.yml for the migration notes.
 resources:
   jobs:
     bionemo_esm_inference:
@@ -13,21 +14,18 @@ resources:
       tasks:
         - task_key: bionemo_esm_inference_task
           max_retries: 0
-          environment_key: airt
-          ai_runtime_task:
-            experiment: bionemo_esm_inference
-            code_source_path: ./dist/code.tgz
-            docker_image_url: nvcr.io/nvidia/clara/bionemo-framework:2.6.1
-            deployments:
-              - command_path: /Workspace/Shared/bionemo/command_inference.sh
-                compute:
-                  accelerator_type: GPU_1xA10
-                  accelerator_count: 1
+          disable_auto_optimization: true
+          retry_on_timeout: false
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xA10
+          notebook_task:
+            notebook_path: ../notebooks/bionemo_esm_inference.py
 
       environments:
-        - environment_key: airt
+        - environment_key: gpu_env
           spec:
-            environment_version: '6'
+            client: "4"
 
       parameters:
         - name: core_catalog
@@ -36,14 +34,16 @@ resources:
           default: ${var.core_schema_name}
         - name: sql_warehouse_id
           default: ${var.sql_warehouse_id}
+        - name: model_volume
+          default: ${resources.volumes.bionemo_dir.name}
         - name: is_base_model
-          default: true
+          default: "true"
         - name: esm_variant
           default: 650M
         - name: task_type
           default: regression
         - name: finetune_run_id
-          default: 3
+          default: "3"
         - name: data_location
           default: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/bionemo/esm2/ft_data/BLAT_ECOLX_Tenaillon2013_metadata_train.csv
         - name: sequence_column_name
@@ -57,6 +57,6 @@ resources:
         - name: run_name
           default: esm2_inference
         - name: mlflow_run_id
-          default: ''
+          default: ""
 
       tags: ${var.common_resource_tags}

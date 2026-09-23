@@ -6,17 +6,6 @@ include:
   - variables.yml
   - resources/*.yml
 
-# Packages airt/ (run_finetune.py + run_inference.py + command_*.sh + the patched
-# finetune_esm2.py) into ./dist/code.tgz for the ai_runtime_task code_source_path.
-artifacts:
-  bionemo_code:
-    type: tgz
-    path: .
-    include:
-      - airt
-    files:
-      - source: ./dist/code.tgz
-
 sync:
   paths:
     - .

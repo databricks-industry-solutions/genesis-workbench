@@ -20,43 +20,10 @@ fi
 
 EXTRA_PARAMS="$EXTRA_PARAMS_GENERAL,$EXTRA_PARAMS_CLOUD,$EXTRA_PARAMS_MODULE"
 
-# BioNeMo ESM2 fine-tune + inference run on serverless GPU via ai_runtime_task, using the STOCK
-# NGC BioNeMo image DIRECTLY (public; AI Runtime pulls it — no Docker Hub mirror or credentials).
-# This registers the image, stages the ai_runtime_task entrypoints to a literal /Workspace path
-# (the launcher rejects /Users/... command_path), deploys the bundle (which packages the code
-# tarball via artifacts:), and runs the registration job. The finetune/inference jobs are launched
-# ON DEMAND from the UI (jobs run-now), not at deploy.
-
-IMAGE=nvcr.io/nvidia/clara/bionemo-framework:2.6.1
-WS=/Workspace/Shared/bionemo
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-export PATH="$HOME/.local/bin:$PATH"
-PROFILE_ARG=""
-[ -n "$DATABRICKS_CONFIG_PROFILE" ] && PROFILE_ARG="-p $DATABRICKS_CONFIG_PROFILE"
-
-# --- Install the AI Runtime (air) CLI if missing (only to register the image) ---
-if ! command -v air >/dev/null 2>&1; then
-  echo ""
-  echo "▶️ [BioNeMo] Installing the databricks-air (AI Runtime) CLI"
-  command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
-  uv tool install --force databricks-air --python 3.12
-fi
-
-# --- Register the public NGC BioNeMo image with AI Compute (no credentials) ---
-echo ""
-echo "▶️ [BioNeMo] Registering public NGC image with AI Compute: $IMAGE"
-echo "🚨 First registration replicates a large image (several minutes)"
-set +e
-air register image "$IMAGE" $PROFILE_ARG
-set -e
-
-# --- Stage the ai_runtime_task entrypoints to a literal /Workspace path ---
-echo ""
-echo "▶️ [BioNeMo] Staging ai_runtime_task entrypoints to $WS"
-databricks workspace mkdirs "$WS"
-for f in command_common.sh command_finetune.sh command_inference.sh; do
-  databricks workspace import "$WS/$f" --file "$SCRIPT_DIR/airt/$f" --format RAW --overwrite
-done
+# BioNeMo ESM2 fine-tune + inference are containerless: they run on serverless GPU as
+# notebook_task jobs (hardware_accelerator: GPU_1xA10) that read ESM-2 from Hugging Face and
+# run it on Transformer Engine. No NGC container, no classic A10 cluster, no air CLI / image
+# registration. Deploy just registers the jobs; the UI launches them ON DEMAND (jobs run-now).
 
 echo ""
 echo "▶️ [BioNeMo] Validating bundle"
