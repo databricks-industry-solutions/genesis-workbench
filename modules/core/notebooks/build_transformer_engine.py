@@ -79,7 +79,9 @@ if cpath:
     os.environ["CPATH"] = cpath + (":" + os.environ["CPATH"] if os.environ.get("CPATH") else "")
 os.environ["NVTE_CUDA_ARCHS"] = "86"      # A10 = Ampere sm_86
 os.environ["NVTE_FRAMEWORK"] = "pytorch"
-os.environ["MAX_JOBS"] = "8"              # cap parallel nvcc jobs (memory)
+# Keep parallel nvcc jobs LOW: each compiles large CUDA kernels and uses several GB; too many
+# OOM-kill the single serverless node ("cluster is unhealthy"). 2 trades build time for stability.
+os.environ["MAX_JOBS"] = "2"
 print("CPATH set:", bool(cpath), "| NVTE_CUDA_ARCHS=86 | NVTE_FRAMEWORK=pytorch")
 print("nvcc:", shutil.which("nvcc"))
 
