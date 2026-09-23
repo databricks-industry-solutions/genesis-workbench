@@ -113,7 +113,9 @@ _dtype = torch.bfloat16
 
 
 def _local_or_hub(repo_id: str) -> str:
-    local = f"{_vol_root}/hf_models/{repo_id.split('/')[-1]}"
+    # Prefer a pre-staged snapshot on the Volume (serverless can't reach the HF LFS CDN); full
+    # org--name (HF cache convention) so facebook/ and nvidia/ don't collide.
+    local = f"{_vol_root}/hf_models/{repo_id.replace('/', '--')}"
     return local if os.path.isdir(local) else repo_id
 
 

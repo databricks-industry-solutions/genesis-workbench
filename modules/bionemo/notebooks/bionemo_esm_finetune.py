@@ -151,8 +151,9 @@ _dtype = torch.bfloat16 if use_bf16 else torch.float32
 
 
 def _local_or_hub(repo_id: str) -> str:
-    """Prefer a pre-staged snapshot on the Volume (serverless HF-egress workaround), else the hub id."""
-    local = f"{_vol_root}/hf_models/{repo_id.split('/')[-1]}"
+    """Prefer a pre-staged snapshot on the Volume (serverless can't reach the HF LFS CDN), else the
+    hub id. Uses the full org--name (HF cache convention) so facebook/ and nvidia/ don't collide."""
+    local = f"{_vol_root}/hf_models/{repo_id.replace('/', '--')}"
     return local if os.path.isdir(local) else repo_id
 
 
