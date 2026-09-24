@@ -26,6 +26,28 @@ variables:
   a10_node_type:
     description: Node type for A10 GPUs
 
+  # Declared because single_cell/module_aws.env always passes these via --var at
+  # deploy time; scanpy itself is serverless now and does not reference them, but
+  # a bundle rejects a --var for an undeclared variable, so the declarations must
+  # stay even though there is no default (values come from module_aws.env).
+  cpu_small_node_type:
+    description: Node type for small CPU vms
+
+  cpu_medium_node_type:
+    description: Node type for medium CPU vms
+
+  cpu_large_node_type:
+    description: Node type for large high-RAM CPU vms
+
+  cpu_xlarge_node_type:
+    description: Node type for xlarge high-RAM CPU vms
+
+  gpu_t4_rapids_node_type:
+    description: Node type for T4 GPU (RAPIDS single-cell)
+
+  gpu_ml_spark_version:
+    description: GPU ML runtime Spark version
+
   gpu_small_setting:
     description: The config setting for small gpu
 
