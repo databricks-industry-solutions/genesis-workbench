@@ -121,14 +121,18 @@ def _local_or_hub(repo_id: str) -> str:
 
 def load_te_esm2_encoder(variant: str):
     nvidia_id, facebook_id = _HF_IDS.get(variant, _HF_IDS["650M"])
-    tokenizer = AutoTokenizer.from_pretrained(_local_or_hub(facebook_id))
-    try:
-        enc = AutoModel.from_pretrained(_local_or_hub(nvidia_id), trust_remote_code=True, torch_dtype=_dtype)
-        return tokenizer, enc, enc.config.hidden_size, f"nvidia-te:{nvidia_id}"
-    except Exception as e:
-        print(f"[TE] nvidia remote-code failed ({type(e).__name__}: {str(e)[:160]}); "
-              f"trying facebook + convert_esm_hf_to_te")
-    enc = AutoModel.from_pretrained(_local_or_hub(facebook_id), torch_dtype=_dtype)
+    fb, nv = _local_or_hub(facebook_id), _local_or_hub(nvidia_id)
+    tokenizer = AutoTokenizer.from_pretrained(fb)
+    # Only attempt the nvidia TE checkpoint if pre-staged locally — never a hub download (the
+    # serverless HF LFS CDN is blocked and would hang).
+    if os.path.isdir(nv):
+        try:
+            enc = AutoModel.from_pretrained(nv, trust_remote_code=True, torch_dtype=_dtype)
+            return tokenizer, enc, enc.config.hidden_size, f"nvidia-te:{nvidia_id}"
+        except Exception as e:
+            print(f"[TE] nvidia TE checkpoint failed ({type(e).__name__}: {str(e)[:160]}); "
+                  f"trying facebook + convert_esm_hf_to_te")
+    enc = AutoModel.from_pretrained(fb, torch_dtype=_dtype)
     try:
         from esm.convert import convert_esm_hf_to_te
         enc = convert_esm_hf_to_te(enc)
