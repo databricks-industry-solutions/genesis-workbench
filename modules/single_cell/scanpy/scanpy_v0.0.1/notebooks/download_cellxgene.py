@@ -16,7 +16,10 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install numpy==1.26.4 scanpy==1.11.4 anndata
+# MAGIC # anndata pinned to 0.10.x: 0.11+ imports `Format` from a newer typing_extensions
+# MAGIC # than the serverless base ships, which breaks `import anndata`. This cell only
+# MAGIC # needs numpy + scipy (via anndata) + anndata, so scanpy/gget aren't installed.
+# MAGIC %pip install numpy==1.26.4 anndata==0.10.9
 # MAGIC %restart_python
 
 # COMMAND ----------
