@@ -84,9 +84,12 @@ export function RawProcessingTab() {
 
 function RunNewAnalysisForm() {
   const bootstrap = useUserStore((s) => s.bootstrap)
+  // The scanpy deploy stages this curated HGSOC demo h5ad (see download_cellxgene.py).
+  // The demo is keyed by gene symbol, so it needs gene_name_column=feature_name plus the
+  // HGSOC-tuned QC defaults below (pct_counts_mt=20, n_genes_by_counts=8000).
   const defaultH5ad =
     bootstrap?.env
-      ? `/Volumes/${bootstrap.env.catalog}/${bootstrap.env.schema_name}/raw_h5ad/0ae6f031-2f9c-4247-8b26-db320d6efd32.h5ad`
+      ? `/Volumes/${bootstrap.env.catalog}/${bootstrap.env.schema_name}/raw_h5ad/hgsoc_demo_15k.h5ad`
       : ''
 
   const form = useForm<FormValues>({
@@ -96,12 +99,12 @@ function RunNewAnalysisForm() {
       data_path: defaultH5ad,
       mlflow_experiment: defaultExperiment('scanpy'),
       mlflow_run_name: defaultRunName('scanpy'),
-      gene_name_column: '',
+      gene_name_column: 'feature_name',
       species: 'hsapiens',
       min_genes: 200,
       min_cells: 3,
-      pct_counts_mt: 5,
-      n_genes_by_counts: 2500,
+      pct_counts_mt: 20,
+      n_genes_by_counts: 8000,
       target_sum: 10000,
       n_top_genes: 2000,
       n_pcs: 50,
