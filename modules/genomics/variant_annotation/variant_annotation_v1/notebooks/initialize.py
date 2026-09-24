@@ -170,9 +170,16 @@ fastq_files = {
 
 for dest_name, url in fastq_files.items():
     dest_path = os.path.join(sample_fastq_dir, dest_name)
-    if os.path.exists(dest_path):
-        print(f"{dest_name} already exists, skipping")
+    # A prior run's timeout (SIGKILL) can leave a 0-byte / partial file that an
+    # existence-only guard would wrongly treat as complete and skip forever. These
+    # are multi-GB, so only skip a fully-sized file; otherwise drop the partial and
+    # re-download.
+    if os.path.exists(dest_path) and os.path.getsize(dest_path) > 1_000_000:
+        print(f"{dest_name} already exists ({os.path.getsize(dest_path)} bytes), skipping")
         continue
+    if os.path.exists(dest_path):
+        print(f"Removing partial {dest_name} ({os.path.getsize(dest_path)} bytes) and re-downloading")
+        os.remove(dest_path)
     print(f"Downloading {dest_name} from {url} ...")
     try:
         subprocess.run(

@@ -21,20 +21,18 @@ resources:
           disable_auto_optimization: true
           depends_on:
             - task_key: download_clinvar
+          # Run on the classic setup cluster (NOT serverless): the ~3.6 GB FASTQ pull
+          # from 1000 Genomes stalled on serverless egress and left 0-byte files, while
+          # the classic cluster (which download_clinvar already uses successfully) reaches
+          # external hosts reliably and has local disk. Reuses the same cluster instance,
+          # so no extra cluster start.
+          job_cluster_key: variant_annotation_setup_cluster
           notebook_task:
             notebook_path: ../notebooks/initialize.py
           max_retries: 0
-          # Bumped from 600s — fresh installs do pip install on serverless
-          # (slow cold-pull) plus a ~3.6 GB HTTPS download of the sample FASTQs
-          # from 1000 Genomes. 30 min leaves ample margin over HTTPS (the prior
-          # ftp:// pull stalled on serverless egress and timed out).
-          # Re-runs short-circuit on the `os.path.exists` guards.
-          timeout_seconds: 1800
-
-      environments:
-        - environment_key: default
-          spec:
-            client: '4'
+          # Ample margin for pip install + the multi-GB FASTQ download; re-runs
+          # short-circuit on the size-checked guard in initialize.py.
+          timeout_seconds: 3600
 
       parameters:
         - name: catalog
