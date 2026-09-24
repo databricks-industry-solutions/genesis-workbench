@@ -11,44 +11,17 @@ resources:
         - task_key: register_genmol_generator
           max_retries: 0
           disable_auto_optimization: true
-          job_cluster_key: genmol_register_cluster
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/01_register_genmol.py
             base_parameters:
               model_name: genmol
               cache_dir: genmol_cache
 
-      job_clusters:
-        # Classic single-node cluster pinned to DBR 15.4 LTS = Python 3.11.
-        #
-        # GenMol hard-pins pandas==2.1.0 and transformers==4.52.4. On serverless
-        # (Python 3.12) pandas 2.1.0 has NO prebuilt wheel and its C source build
-        # fails against the newer NumPy headers. On py3.11 those pins have wheels
-        # and install cleanly. Logging the model from a py3.11 env also makes the
-        # Model Serving endpoint inherit py3.11, so the exact same pins resolve at
-        # endpoint-build time. Registration is CPU-only (the 89M model loads + does
-        # a smoke generation on CPU fine); the *serving* endpoint is GPU via
-        # deploy_model(workload_type=GPU_SMALL).
-        - job_cluster_key: genmol_register_cluster
-          new_cluster:
-            spark_version: "15.4.x-scala2.12"
-            node_type_id: ${var.cpu_node_type}
-            num_workers: 0
-            # SINGLE_USER access mode is required for this classic cluster to read
-            # Unity Catalog Volumes (/Volumes/.../libraries holds the gwb wheel and
-            # the genmol cache). Without it: InvalidMountException on dbutils.fs.ls.
-            data_security_mode: SINGLE_USER
-            single_user_name: ${var.current_user}
-            # On-demand driver (not spot): the notebook's final step waits for the
-            # serving-endpoint deploy job, and a spot driver gets reclaimed mid-wait
-            # ("Spark Driver ... was lost"). Single node ⇒ the driver is the only VM.
-            # Cloud-specific availability is set per-target (aws/azure/gcp_attributes)
-            # in databricks.yml.
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: "local[*]"
-            custom_tags:
-              ResourceClass: SingleNode
+      environments:
+        - environment_key: default
+          spec:
+            client: '4'
 
       parameters:
         - name: catalog

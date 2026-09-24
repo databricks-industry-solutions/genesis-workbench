@@ -17,34 +17,6 @@ targets:
         level: CAN_MANAGE
     run_as:
       user_name: ${var.current_user}
-    resources:
-      jobs:
-        alphafold_register_and_downloads:
-          job_clusters:
-            - job_cluster_key: download_common_files_cluster
-              new_cluster:
-                aws_attributes:
-                  availability: ON_DEMAND
-            - job_cluster_key: download_params_cluster
-              new_cluster:
-                aws_attributes:
-                  availability: ON_DEMAND
-            - job_cluster_key: download_unirefs_cluster
-              new_cluster:
-                aws_attributes:
-                  availability: ON_DEMAND
-            - job_cluster_key: download_mgnifyPLUS_cluster
-              new_cluster:
-                aws_attributes:
-                  availability: ON_DEMAND
-            - job_cluster_key: download_uniprot_cluster
-              new_cluster:
-                aws_attributes:
-                  availability: ON_DEMAND
-            - job_cluster_key: pdb_mmcif_cluster
-              new_cluster:
-                aws_attributes:
-                  availability: ON_DEMAND
 
   prod_azure:
     mode: production
@@ -55,34 +27,6 @@ targets:
         level: CAN_MANAGE
     run_as:
       user_name: ${var.current_user}
-    resources:
-      jobs:
-        alphafold_register_and_downloads:
-          job_clusters:
-            - job_cluster_key: download_common_files_cluster
-              new_cluster:
-                azure_attributes:
-                  availability: ON_DEMAND_AZURE
-            - job_cluster_key: download_params_cluster
-              new_cluster:
-                azure_attributes:
-                  availability: ON_DEMAND_AZURE
-            - job_cluster_key: download_unirefs_cluster
-              new_cluster:
-                azure_attributes:
-                  availability: ON_DEMAND_AZURE
-            - job_cluster_key: download_mgnifyPLUS_cluster
-              new_cluster:
-                azure_attributes:
-                  availability: ON_DEMAND_AZURE
-            - job_cluster_key: download_uniprot_cluster
-              new_cluster:
-                azure_attributes:
-                  availability: ON_DEMAND_AZURE
-            - job_cluster_key: pdb_mmcif_cluster
-              new_cluster:
-                azure_attributes:
-                  availability: ON_DEMAND_AZURE
 
   prod_gcp:
     mode: production
@@ -93,31 +37,3 @@ targets:
         level: CAN_MANAGE
     run_as:
       user_name: ${var.current_user}
-    resources:
-      jobs:
-        alphafold_register_and_downloads:
-          job_clusters:
-            - job_cluster_key: download_common_files_cluster
-              new_cluster:
-                gcp_attributes:
-                  availability: ON_DEMAND_GCP
-            - job_cluster_key: download_params_cluster
-              new_cluster:
-                gcp_attributes:
-                  availability: ON_DEMAND_GCP
-            - job_cluster_key: download_unirefs_cluster
-              new_cluster:
-                gcp_attributes:
-                  availability: ON_DEMAND_GCP
-            - job_cluster_key: download_mgnifyPLUS_cluster
-              new_cluster:
-                gcp_attributes:
-                  availability: ON_DEMAND_GCP
-            - job_cluster_key: download_uniprot_cluster
-              new_cluster:
-                gcp_attributes:
-                  availability: ON_DEMAND_GCP
-            - job_cluster_key: pdb_mmcif_cluster
-              new_cluster:
-                gcp_attributes:
-                  availability: ON_DEMAND_GCP

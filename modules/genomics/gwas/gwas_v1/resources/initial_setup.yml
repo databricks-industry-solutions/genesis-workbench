@@ -10,13 +10,14 @@ resources:
       tasks:
         - task_key: download_reference_genome
           max_retries: 0
-          job_cluster_key: gwas_setup_cluster
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/01_download_reference_genome.py
             source: WORKSPACE
 
         - task_key: initialize
           disable_auto_optimization: true
+          environment_key: default
           depends_on:
             - task_key: download_reference_genome
           notebook_task:
@@ -44,23 +45,5 @@ resources:
           default: ${var.current_user}
         - name: databricks_app_names
           default: genesis-workbench:mcp-genesis-workbench
-
-      job_clusters:
-        - job_cluster_key: gwas_setup_cluster
-          new_cluster:
-            cluster_name: ""
-            spark_version: 15.4.x-scala2.12
-            spark_conf:
-              spark.master: "local[*, 4]"
-              spark.databricks.cluster.profile: singleNode
-            node_type_id: ${var.cpu_node_type}
-            driver_node_type_id: ${var.cpu_node_type}
-            custom_tags:
-              ResourceClass: SingleNode
-              work_type: gwas_setup
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            runtime_engine: STANDARD
-            num_workers: 0
 
       tags: ${var.common_resource_tags}

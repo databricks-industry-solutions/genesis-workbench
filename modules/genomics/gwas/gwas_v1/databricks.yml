@@ -30,12 +30,6 @@ targets:
       user_name: ${var.current_user}
     resources:
       jobs:
-        gwas_initial_setup_job:
-          job_clusters:
-            - job_cluster_key: gwas_setup_cluster
-              new_cluster:
-                aws_attributes:
-                  availability: ON_DEMAND
         gwas_analysis:
           job_clusters:
             - job_cluster_key: gwas_spark_cluster
@@ -54,12 +48,6 @@ targets:
       user_name: ${var.current_user}
     resources:
       jobs:
-        gwas_initial_setup_job:
-          job_clusters:
-            - job_cluster_key: gwas_setup_cluster
-              new_cluster:
-                azure_attributes:
-                  availability: ON_DEMAND_AZURE
         gwas_analysis:
           job_clusters:
             - job_cluster_key: gwas_spark_cluster
@@ -78,12 +66,6 @@ targets:
       user_name: ${var.current_user}
     resources:
       jobs:
-        gwas_initial_setup_job:
-          job_clusters:
-            - job_cluster_key: gwas_setup_cluster
-              new_cluster:
-                gcp_attributes:
-                  availability: ON_DEMAND_GCP
         gwas_analysis:
           job_clusters:
             - job_cluster_key: gwas_spark_cluster

@@ -69,7 +69,7 @@ resources:
           depends_on:
             - task_key: check_small
               outcome: "false"
-          job_cluster_key: scanpy_small
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
@@ -83,7 +83,7 @@ resources:
           depends_on:
             - task_key: check_medium
               outcome: "false"
-          job_cluster_key: scanpy_medium
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
@@ -97,7 +97,7 @@ resources:
           depends_on:
             - task_key: check_large
               outcome: "false"
-          job_cluster_key: scanpy_large
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
@@ -111,7 +111,7 @@ resources:
           depends_on:
             - task_key: check_large
               outcome: "true"
-          job_cluster_key: scanpy_xlarge
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/analyze_single_h5ad.py
             base_parameters:
@@ -142,72 +142,6 @@ resources:
         - environment_key: default
           spec:
             client: '4'
-
-      # Per-route job_clusters — each analyze task picks the one matching its
-      # file-size bucket. SingleNode CPU + ML runtime (gives us scanpy +
-      # anndata + scipy pre-installed). data_security_mode=SINGLE_USER so
-      # the cluster runs under the user's identity and can read the Volume.
-      job_clusters:
-        - job_cluster_key: scanpy_small
-          new_cluster:
-            num_workers: 0
-            node_type_id: ${var.cpu_small_node_type}
-            driver_node_type_id: ${var.cpu_small_node_type}
-            spark_version: '15.4.x-cpu-ml-scala2.12'
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            enable_elastic_disk: true
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: local[*]
-            custom_tags:
-              ResourceClass: SingleNode
-            # cloud-specific availability set per-target in databricks.yml
-
-        - job_cluster_key: scanpy_medium
-          new_cluster:
-            num_workers: 0
-            node_type_id: ${var.cpu_medium_node_type}
-            driver_node_type_id: ${var.cpu_medium_node_type}
-            spark_version: '15.4.x-cpu-ml-scala2.12'
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            enable_elastic_disk: true
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: local[*]
-            custom_tags:
-              ResourceClass: SingleNode
-
-        - job_cluster_key: scanpy_large
-          new_cluster:
-            num_workers: 0
-            node_type_id: ${var.cpu_large_node_type}
-            driver_node_type_id: ${var.cpu_large_node_type}
-            spark_version: '15.4.x-cpu-ml-scala2.12'
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            enable_elastic_disk: true
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: local[*]
-            custom_tags:
-              ResourceClass: SingleNode
-
-        - job_cluster_key: scanpy_xlarge
-          new_cluster:
-            num_workers: 0
-            node_type_id: ${var.cpu_xlarge_node_type}
-            driver_node_type_id: ${var.cpu_xlarge_node_type}
-            spark_version: '15.4.x-cpu-ml-scala2.12'
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            enable_elastic_disk: true
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: local[*]
-            custom_tags:
-              ResourceClass: SingleNode
 
       parameters:
         - name: catalog

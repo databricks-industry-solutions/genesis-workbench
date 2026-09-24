@@ -11,7 +11,7 @@ resources:
 
         - task_key: download_sequences
           max_retries: 0
-          job_cluster_key: cpu_cluster
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/01_download_sequences.py
             source: WORKSPACE
@@ -20,7 +20,7 @@ resources:
           max_retries: 0
           depends_on:
             - task_key: download_sequences
-          job_cluster_key: cpu_cluster
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/02_create_delta_tables.py
             source: WORKSPACE
@@ -47,7 +47,7 @@ resources:
           max_retries: 0
           depends_on:
             - task_key: batch_embed_sequences
-          job_cluster_key: cpu_cluster
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/04_create_vector_index.py
             source: WORKSPACE
@@ -74,7 +74,7 @@ resources:
           max_retries: 0
           depends_on:
             - task_key: embed_gene_sequences
-          job_cluster_key: cpu_cluster
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/06_create_gene_vector_index.py
             source: WORKSPACE
@@ -95,24 +95,13 @@ resources:
         - name: max_sequences
           default: "1000000"
 
-      job_clusters:
-        - job_cluster_key: cpu_cluster
-          new_cluster:
-            cluster_name: ""
-            spark_version: 15.4.x-scala2.12
-            spark_conf:
-              spark.master: "local[*, 4]"
-              spark.databricks.cluster.profile: singleNode
-            node_type_id: ${var.cpu_node_type}
-            custom_tags:
-              ResourceClass: SingleNode
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            num_workers: 0
-
       # Serverless GPU environment for the two embedding tasks (client "4" matches
-      # the register jobs' serverless GPU AI runtime).
+      # the register jobs' serverless GPU AI runtime). Default CPU environment for
+      # the remaining tasks.
       environments:
+        - environment_key: default
+          spec:
+            client: "4"
         - environment_key: gpu_env
           spec:
             client: "4"
