@@ -121,6 +121,46 @@ else:
 
 # COMMAND ----------
 
+# Download sample FASTQ files from 1000 Genomes for the Variant Calling demo so the
+# gwas module is self-contained. The app's Variant Calling tab prefills these paths, but
+# previously ONLY the variant_annotation module staged them — deploying gwas on its own
+# left those defaults pointing at missing files. HTTPS (not FTP): serverless egress does
+# not reliably allow FTP. curl with retries + stall detection pulls the ~3.6 GB reliably;
+# on failure the partial file is removed so a re-run doesn't treat a truncated download as
+# complete. Idempotent: existing files are skipped (a no-op if variant_annotation already
+# staged them).
+import subprocess
+
+sample_fastq_dir = f"/Volumes/{catalog}/{schema}/gwas_data/sample_fastq"
+os.makedirs(sample_fastq_dir, exist_ok=True)
+
+fastq_base_url = "https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/data/HG00096/sequence_read"
+fastq_files = {
+    "sample_1.fq.gz": f"{fastq_base_url}/SRR062634_1.filt.fastq.gz",
+    "sample_2.fq.gz": f"{fastq_base_url}/SRR062634_2.filt.fastq.gz",
+}
+
+for dest_name, url in fastq_files.items():
+    dest_path = os.path.join(sample_fastq_dir, dest_name)
+    if os.path.exists(dest_path):
+        print(f"{dest_name} already exists, skipping")
+        continue
+    print(f"Downloading {dest_name} from {url} ...")
+    try:
+        subprocess.run(
+            ["curl", "-L", "--fail", "--retry", "5", "--retry-delay", "10",
+             "--connect-timeout", "30", "--speed-limit", "10000", "--speed-time", "60",
+             "-o", dest_path, url],
+            check=True,
+        )
+    except Exception:
+        if os.path.exists(dest_path):
+            os.remove(dest_path)  # don't leave a partial a re-run would treat as complete
+        raise
+    print(f"Downloaded {dest_name}")
+
+# COMMAND ----------
+
 # Register Glow as a batch model so it appears in the Deployed Models tab
 from genesis_workbench.models import register_batch_model
 

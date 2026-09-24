@@ -73,6 +73,21 @@ dataset_id_sdf = sdf_count.filter(
     (F.col("count") < 8_000) & (F.col("count") > 6_000)
 )
 
+# Always include the dataset the app UI prefills as the default scanpy input (the
+# frontend RawProcessingTab hardcodes this id as raw_h5ad/<id>.h5ad), so the
+# "Run new analysis" form works out of the box even if census cell-count drift pushes
+# this dataset outside the 6k-8k filter window above. Best-effort: the download UDF
+# below try/excepts, so an id absent from the pinned census version won't fail the job.
+UI_DEFAULT_DATASET_IDS = ["0ae6f031-2f9c-4247-8b26-db320d6efd32"]
+pinned_sdf = (
+    spark.createDataFrame([(d,) for d in UI_DEFAULT_DATASET_IDS], ["dataset_id"])
+    .join(sdf_count, on="dataset_id", how="left")  # carry 'count' when the census knows it
+)
+dataset_id_sdf = (
+    dataset_id_sdf.unionByName(pinned_sdf, allowMissingColumns=True)
+    .dropDuplicates(["dataset_id"])
+)
+
 n_datasets = dataset_id_sdf.count()
 print(f"Datasets matching filter (6k-8k cells): {n_datasets}")
 
