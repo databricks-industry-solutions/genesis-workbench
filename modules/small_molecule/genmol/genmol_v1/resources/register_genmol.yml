@@ -21,7 +21,11 @@ resources:
       environments:
         - environment_key: default
           spec:
-            client: '4'
+            # client 2 = Python 3.11. GenMol pins pandas==2.1.0 / transformers==4.52.4,
+            # which only ship wheels up to py3.11; on client 4 (py3.12) pip builds pandas
+            # from source and the C extensions fail to compile (metadata-generation-failed).
+            # Keep GenMol-installing jobs on py3.11.
+            client: '2'
 
       parameters:
         - name: catalog

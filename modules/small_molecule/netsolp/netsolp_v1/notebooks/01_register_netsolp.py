@@ -43,6 +43,13 @@ schema = dbutils.widgets.get("schema")
 
 # MAGIC %md
 # MAGIC ### Install dependencies (exact pins)
+# MAGIC
+# MAGIC `pandas==1.5.3` is intentionally NOT installed at register time: it has no cp312
+# MAGIC wheel (they start at 2.1.1), so on serverless (Python 3.12) pip builds it from
+# MAGIC source and the C extensions fail to compile. Register only uses pandas to build
+# MAGIC the example-input/output DataFrames for the signature — the serverless base
+# MAGIC pandas (2.x) handles that. The model's *serving* env pins `pandas==1.5.3` via the
+# MAGIC explicit `conda_env` (python=3.11) below, where a wheel exists — same as pltnum/kermt.
 
 # COMMAND ----------
 
@@ -51,7 +58,6 @@ schema = dbutils.widgets.get("schema")
 # MAGIC     fair-esm==2.0.0 \
 # MAGIC     torch==2.7.1 \
 # MAGIC     numpy==1.26.4 \
-# MAGIC     pandas==1.5.3 \
 # MAGIC     mlflow==2.22.0 \
 # MAGIC     cloudpickle==2.0.0 \
 # MAGIC     databricks-sdk==0.50.0 \
