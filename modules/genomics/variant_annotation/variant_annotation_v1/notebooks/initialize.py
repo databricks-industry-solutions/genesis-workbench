@@ -162,7 +162,10 @@ import os
 sample_fastq_dir = f"/Volumes/{catalog}/{schema}/gwas_data/sample_fastq"
 os.makedirs(sample_fastq_dir, exist_ok=True)
 
-fastq_base_url = "https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/data/HG00096/sequence_read"
+# AWS Open Data S3 mirror of 1000 Genomes (registry.opendata.aws/1000-genomes).
+# EBI's HTTPS (ftp.1000genomes.ebi.ac.uk) is too slow from the workshop and timed out
+# on both serverless and classic; S3 is fast + reliable from AWS compute.
+fastq_base_url = "https://1000genomes.s3.amazonaws.com/phase3/data/HG00096/sequence_read"
 fastq_files = {
     "sample_1.fq.gz": f"{fastq_base_url}/SRR062634_1.filt.fastq.gz",
     "sample_2.fq.gz": f"{fastq_base_url}/SRR062634_2.filt.fastq.gz",

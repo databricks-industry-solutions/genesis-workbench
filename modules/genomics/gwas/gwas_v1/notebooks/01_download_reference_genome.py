@@ -42,7 +42,7 @@ os.environ['SCHEMA'] = schema
 # MAGIC
 # MAGIC if [ ! -f "$GENOME_PATH/GRCh38_full_analysis_set_plus_decoy_hla.fa" ]; then
 # MAGIC   echo "Downloading GRCh38 reference genome..."
-# MAGIC   wget -q https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/GRCh38_reference_genome/GRCh38_full_analysis_set_plus_decoy_hla.fa -P tmp_ref/
+# MAGIC   wget -q https://1000genomes.s3.amazonaws.com/technical/reference/GRCh38_reference_genome/GRCh38_full_analysis_set_plus_decoy_hla.fa -P tmp_ref/
 # MAGIC   cp tmp_ref/GRCh38_full_analysis_set_plus_decoy_hla.fa $GENOME_PATH/
 # MAGIC   echo "Downloaded GRCh38 FASTA"
 # MAGIC else
@@ -54,7 +54,7 @@ os.environ['SCHEMA'] = schema
 # MAGIC %sh
 # MAGIC if [ ! -f "$GENOME_PATH/GRCh38_full_analysis_set_plus_decoy_hla.fa.fai" ]; then
 # MAGIC   echo "Downloading GRCh38 FASTA index..."
-# MAGIC   wget -q https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/GRCh38_reference_genome/GRCh38_full_analysis_set_plus_decoy_hla.fa.fai -P /local_disk0/tmp_ref/
+# MAGIC   wget -q https://1000genomes.s3.amazonaws.com/technical/reference/GRCh38_reference_genome/GRCh38_full_analysis_set_plus_decoy_hla.fa.fai -P /local_disk0/tmp_ref/
 # MAGIC   cp /local_disk0/tmp_ref/GRCh38_full_analysis_set_plus_decoy_hla.fa.fai $GENOME_PATH/
 # MAGIC   echo "Downloaded GRCh38 FASTA index"
 # MAGIC else
@@ -69,7 +69,7 @@ os.environ['SCHEMA'] = schema
 # COMMAND ----------
 
 # MAGIC %sh
-# MAGIC BASE_URL="https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/GRCh38_reference_genome"
+# MAGIC BASE_URL="https://1000genomes.s3.amazonaws.com/technical/reference/GRCh38_reference_genome"
 # MAGIC REF_BASE="GRCh38_full_analysis_set_plus_decoy_hla.fa"
 # MAGIC
 # MAGIC for ext in bwt sa ann amb pac; do
