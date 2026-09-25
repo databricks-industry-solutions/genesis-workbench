@@ -10,25 +10,43 @@ resources:
       tasks:
         - task_key: download_reference_genome
           max_retries: 0
-          environment_key: default
+          # Classic cluster (NOT serverless): 01_download_reference_genome.py uses %sh +
+          # /local_disk0 (neither exists on serverless) and pulls the ~13 GB reference
+          # FASTA + BWA index + sample VCF. The big files now come from the fast AWS S3
+          # mirror; i3.4xlarge has ample local NVMe for the /local_disk0 staging.
+          job_cluster_key: gwas_setup_cluster
+          timeout_seconds: 5400
           notebook_task:
             notebook_path: ../notebooks/01_download_reference_genome.py
             source: WORKSPACE
 
         - task_key: initialize
           disable_auto_optimization: true
-          environment_key: default
+          job_cluster_key: gwas_setup_cluster
           depends_on:
             - task_key: download_reference_genome
           notebook_task:
             notebook_path: ../notebooks/initialize.py
           max_retries: 0
-          timeout_seconds: 600
+          timeout_seconds: 1800
 
-      environments:
-        - environment_key: default
-          spec:
-            client: '4'
+      job_clusters:
+        - job_cluster_key: gwas_setup_cluster
+          new_cluster:
+            cluster_name: ""
+            spark_version: 15.4.x-scala2.12
+            spark_conf:
+              spark.master: "local[*, 4]"
+              spark.databricks.cluster.profile: singleNode
+            node_type_id: ${var.cpu_node_type}
+            driver_node_type_id: ${var.cpu_node_type}
+            custom_tags:
+              ResourceClass: SingleNode
+              work_type: gwas_setup
+            enable_elastic_disk: true
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            num_workers: 0
 
       parameters:
         - name: catalog
