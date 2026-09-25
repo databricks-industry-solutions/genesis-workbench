@@ -96,26 +96,39 @@ import os, subprocess
 sample_vcf_dir = f"/Volumes/{catalog}/{schema}/gwas_data/sample_vcf"
 os.makedirs(sample_vcf_dir, exist_ok=True)
 
-vcf_filename = "ALL.chr6.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz"
+# 1000 Genomes Phase 3 chr6 genotypes, lifted to GRCh38 positions (matches the
+# GRCh38 reference genome above). Served from the AWS Open Data S3 mirror — the EBI
+# HTTPS host is unusably slow from the workshop (multi-GB downloads time out). The
+# 20190312 biallelic release is NOT on the S3 bucket; this Phase 3 GRCh38 release is,
+# and its 2504 samples (HG00096, HG00097, ...) exactly match breast_cancer_phenotype.tsv.
+vcf_filename = "ALL.chr6.phase3_shapeit2_mvncall_integrated_v3plus_nounphased.rsID.genotypes.GRCh38_dbSNP_no_SVs.vcf.gz"
 vcf_dest = os.path.join(sample_vcf_dir, vcf_filename)
 
-if not os.path.exists(vcf_dest):
-    vcf_url = f"https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000_genomes_project/release/20190312_biallelic_SNV_and_INDEL/{vcf_filename}"
+# Size-checked guard: a prior timeout can leave a truncated file — re-download unless
+# the existing file is plausibly complete (chr6 VCF is ~1 GB).
+MIN_VCF_BYTES = 1_000_000
+if os.path.exists(vcf_dest) and os.path.getsize(vcf_dest) > MIN_VCF_BYTES:
+    print(f"Sample VCF already exists at {vcf_dest} "
+          f"({os.path.getsize(vcf_dest) / (1024*1024):.0f} MB), skipping")
+else:
+    if os.path.exists(vcf_dest):
+        print(f"Existing VCF is truncated ({os.path.getsize(vcf_dest)} bytes), re-downloading")
+        os.remove(vcf_dest)
+    vcf_url = f"https://1000genomes.s3.amazonaws.com/release/20130502/supporting/GRCh38_positions/{vcf_filename}"
     print(f"Downloading sample VCF to {vcf_dest}...")
     # Download to local disk first, then copy to Volume (avoids FUSE write issues)
     local_tmp = f"/local_disk0/tmp_ref/{vcf_filename}"
     os.makedirs("/local_disk0/tmp_ref", exist_ok=True)
     result = subprocess.run(["wget", "-q", "-O", local_tmp, vcf_url], capture_output=True, text=True)
     if result.returncode != 0:
-        print(f"ERROR: wget failed: {result.stderr}")
-    elif os.path.exists(local_tmp) and os.path.getsize(local_tmp) > 1000:
+        raise RuntimeError(f"wget failed for {vcf_url}: {result.stderr}")
+    elif os.path.exists(local_tmp) and os.path.getsize(local_tmp) > MIN_VCF_BYTES:
         import shutil
         shutil.copy2(local_tmp, vcf_dest)
         print(f"Downloaded sample VCF: {os.path.getsize(vcf_dest) / (1024*1024):.0f} MB")
     else:
-        print(f"ERROR: Downloaded file is missing or too small")
-else:
-    print(f"Sample VCF already exists at {vcf_dest}, skipping")
+        got = os.path.getsize(local_tmp) if os.path.exists(local_tmp) else 0
+        raise RuntimeError(f"Downloaded VCF is missing or too small ({got} bytes) from {vcf_url}")
 
 # COMMAND ----------
 

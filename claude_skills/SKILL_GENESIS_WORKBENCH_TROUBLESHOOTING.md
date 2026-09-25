@@ -189,7 +189,7 @@ databricks jobs reset --json '<updated_spec>'
 ### Genomics setup: download hangs/times out on `ftp.1000genomes.ebi.ac.uk`
 **Symptom:** `gwas_initial_setup_job` / `variant_annotation_initial_setup_job` times out (30–60 min) pulling the reference genome / FASTQ / VCF; files end up missing or partial. NCBI/ClinVar downloads on the same job succeed.
 **Root cause:** EBI's HTTPS is too slow from the workshop for multi-GB files (host-specific, not compute).
-**Fix:** Pull from the AWS Open Data S3 mirror instead — `https://1000genomes.s3.amazonaws.com/<path after /vol1/ftp/>`. Verified on S3: reference FASTA + `.fai` + full BWA index (`.amb/.ann/.bwt/.pac/.sa`) and the HG00096 FASTQs. (The chr6 `20190312_biallelic_SNV_and_INDEL` VCF is **not** on that bucket — keep it on EBI or copy from an existing workspace.)
+**Fix:** Pull from the AWS Open Data S3 mirror instead — `https://1000genomes.s3.amazonaws.com/<path after /vol1/ftp/>`. Verified on S3: reference FASTA + `.fai` + full BWA index (`.amb/.ann/.bwt/.pac/.sa`) and the HG00096 FASTQs. For the sample chr6 VCF, the `20190312_biallelic_SNV_and_INDEL` release is **not** on that bucket, but the Phase 3 GRCh38-lifted genotypes **are** — use `release/20130502/supporting/GRCh38_positions/ALL.chr6.phase3_shapeit2_mvncall_integrated_v3plus_nounphased.rsID.genotypes.GRCh38_dbSNP_no_SVs.vcf.gz` (GRCh38 coords, same 2504 samples as `breast_cancer_phenotype.tsv`). To find any file on the mirror, list it: `https://1000genomes.s3.amazonaws.com/?list-type=2&prefix=<path>`.
 
 ### Serverless job fails: `/local_disk0` missing or `%sh` unsupported
 **Symptom:** A job converted to serverless (`environment_key`) fails immediately in a `%sh` cell or on a `/local_disk0/...` path.

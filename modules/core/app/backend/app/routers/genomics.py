@@ -74,7 +74,8 @@ def genomics_defaults(_: CurrentUserDep) -> GenomicsDefaultsResponse:
         gwas=GwasDefaults(
             vcf_path=(
                 f"{base}/gwas_data/sample_vcf/"
-                "ALL.chr6.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz"
+                "ALL.chr6.phase3_shapeit2_mvncall_integrated_v3plus_nounphased."
+                "rsID.genotypes.GRCh38_dbSNP_no_SVs.vcf.gz"
             ),
             phenotype_path=f"{base}/gwas_data/sample_phenotype/breast_cancer_phenotype.tsv",
         ),

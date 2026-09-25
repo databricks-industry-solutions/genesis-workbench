@@ -17,7 +17,12 @@ cluster-start time) and hardens deploy-time sample-data staging.
   scimilarity stays classic (py3.10-locked). CPU classic is not quota-blocked; only GPU classic is.
 - **1000 Genomes downloads → AWS Open Data S3 mirror** (`1000genomes.s3.amazonaws.com`). EBI's HTTPS
   (`ftp.1000genomes.ebi.ac.uk`) is too slow from the workshop and timed out (30–60 min) on the reference
-  genome / BWA index / FASTQ. (The chr6 2019 biallelic VCF isn't on that bucket — stays on EBI.)
+  genome / BWA index / FASTQ / sample VCF. The sample chr6 VCF was switched from the (un-mirrored) 2019
+  biallelic release to the Phase 3 **GRCh38-lifted** genotypes, which _are_ on the mirror
+  (`ALL.chr6.phase3_shapeit2_mvncall_integrated_v3plus_nounphased.rsID.genotypes.GRCh38_dbSNP_no_SVs.vcf.gz`):
+  GRCh38 coordinates (matching the reference genome) and the same 2504 samples as `breast_cancer_phenotype.tsv`.
+  So a **fresh deploy now stages every genomics file from S3** with no cross-workspace copy. The download raises
+  on failure instead of printing an error (setup no longer reports success with a missing VCF).
 - **scanpy Single Cell demo.** `download_cellxgene` no longer scans the whole CELLxGENE census into
   `spark.createDataFrame` (exceeded serverless Spark Connect's 3 GiB local-relation cap); it stages the curated
   **HGSOC demo** (`raw_h5ad/hgsoc_demo_15k.h5ad`) directly. The Single Cell UI default now points at it (with

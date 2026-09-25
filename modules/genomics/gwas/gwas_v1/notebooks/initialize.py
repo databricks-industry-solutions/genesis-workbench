@@ -70,7 +70,7 @@ query = f"""
             ('parabricks_alignment_job_id', '{parabricks_alignment_job_id}', 'genomics'),
             ('gwas_analysis_job_id', '{gwas_analysis_job_id}', 'genomics'),
             ('gwas_reference_genome_path', '{ref_genome_path}', 'genomics'),
-            ('gwas_sample_vcf_path', '/Volumes/{catalog}/{schema}/gwas_data/sample_vcf/ALL.chr6.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz', 'genomics'),
+            ('gwas_sample_vcf_path', '/Volumes/{catalog}/{schema}/gwas_data/sample_vcf/ALL.chr6.phase3_shapeit2_mvncall_integrated_v3plus_nounphased.rsID.genotypes.GRCh38_dbSNP_no_SVs.vcf.gz', 'genomics'),
             ('gwas_sample_phenotype_path', '/Volumes/{catalog}/{schema}/gwas_data/sample_phenotype/breast_cancer_phenotype.tsv', 'genomics')
         AS src(key, value, module)
     ) AS source
