@@ -7,9 +7,23 @@ description: Interactive, guided deployment of Genesis Workbench to a Databricks
 
 Drive a deployment of [Genesis Workbench](https://github.com/databricks-industry-solutions/genesis-workbench) (GWB) to a Databricks workspace through an interactive, validated conversational flow that feels the same for every user. Ask **one short question at a time**, check each answer against the live workspace with the `databricks` CLI, write only the `.env` files the chosen modules need, then invoke `./deploy.sh` in the correct order.
 
-**Trigger this skill** whenever the user says "deploy", "I want to deploy", "deploy Genesis Workbench", "install GWB", "set up genesis workbench on a workspace", or runs/asks about `./deploy.sh`.
+**Trigger this skill** whenever the user says "deploy", "I want to deploy", "deploy Genesis Workbench", "install GWB", "set up genesis workbench on a workspace", "redeploy `<module>`", "push this submodule", or runs/asks about `./deploy.sh` / `./update.sh`.
 
-> **The wizard runs in a fixed phase order. Do not skip ahead, do not reorder.** The order below is the contract — it confirms the *where* before the *what*, and only collects configuration for modules the user actually wants. Each phase gates the next.
+> ⛔ **Do not shortcut to a raw `./deploy.sh` / `databricks bundle deploy` without following this skill — even for a one-line change or a single submodule.** Every deploy path below still enforces the same invariants (confirmed workspace + profile, `application.env` catalog/schema, one module at a time, post-deploy verification). Skipping them is how deploys hit the wrong workspace/catalog, run modules concurrently, or "succeed" while the data never staged. (This exact shortcut has been a reported miss.)
+
+## Pick the MODE first
+
+**Mode A — Full guided install** (fresh workspace, or the user says "deploy GWB / install / set up"): run Phases 0–7 below in order.
+
+**Mode B — Targeted re-deploy / iterate** (an existing install — `modules/core/.deployed` present — and the user wants to (re)deploy one module or submodule, push a notebook/resource change, or re-run a setup job): you may **skip the interactive env-collection phases**, but you MUST still, in order:
+1. **Confirm the workspace + profile** (Phase 0–1 checks): `databricks current-user me` resolves the host the user means; state the exact profile you will use on **every** command (e.g. `DATABRICKS_CONFIG_PROFILE=<name>`). Never guess.
+2. **Confirm `application.env` catalog/schema** match that workspace (`grep -E 'core_catalog_name|core_schema_name' application.env`). A deploy reads these — deploying with the wrong catalog writes to the wrong place.
+3. **Deploy ONE module/submodule at a time** (see the serialization rule in Phase 7). For a single submodule: `./deploy.sh <module> <cloud> --only-submodule <path>`. For a frontend/app-only change: `cd modules/core && ./update.sh <cloud> --ui-only` (rebuilds the React app; skips wheel/grants/volume-copy). Never `./deploy.sh core` on a live install (hard rule in Phase 7).
+4. **Verify after** (Post-deploy §): the script returning is NOT done — confirm the module's setup/download jobs reached a terminal SUCCESS and that any staged files actually exist **by content**.
+
+Announce which mode you're in before acting.
+
+> **Mode A runs in a fixed phase order. Do not skip ahead, do not reorder.** The order below is the contract — it confirms the *where* before the *what*, and only collects configuration for modules the user actually wants. Each phase gates the next.
 
 ## Wizard banner (print this first, verbatim, before Phase 0)
 
@@ -178,11 +192,13 @@ cd modules/core
 - `small_molecule` / `large_molecule` / `single_cell` / `genomics` → spawn `register_*` jobs on GPU clusters (these hit quota at cluster-create).
 - `bionemo` → `dbx_bionemo_initial_setup`, then on-demand finetune/inference jobs.
 
-**Between modules, poll until the predecessor's first post-deploy job reaches `RUNNING` (or terminal), not just `PENDING`:**
+> 🚫 **Never run two module (or submodule) deploys concurrently.** One at a time, start to finish, even when they look independent. (Reported miss: two `deploy.sh` runs launched in parallel — they contend on Terraform/poetry and make failures impossible to attribute.) If you kick a deploy in the background, wait for it before starting the next.
+
+**Between modules, poll the predecessor's post-deploy job at the TASK level — run-level `RUNNING` can hide a task still `PENDING` on cluster acquisition:**
 ```bash
-databricks jobs list --limit 50 | grep -iE "<module-keyword>"
-databricks jobs list-runs --job-id <id> --limit 1
-databricks jobs get-run <run-id> | jq '.state'
+databricks jobs list --limit 50 -o json | jq -r '.[]|select(.settings.name|test("<module-keyword>"))|"\(.job_id) \(.settings.name)"'
+databricks jobs list-runs --job-id <id> --limit 1 -o json | jq -r '.[]//.runs[]|.run_id'
+databricks jobs get-run <run-id> -o json | jq -r '.state.life_cycle_state, (.tasks[]?|"  \(.task_key): \(.state.life_cycle_state) \(.state.result_state//"") cluster=\(.cluster_instance.cluster_id//"none")")'
 ```
 This serializes GPU cluster-create and surfaces quota issues one module at a time. Watch `<workspace_url>/jobs` throughout.
 
@@ -225,18 +241,35 @@ If `terraform` isn't installed: `brew install terraform` (macOS) and retry.
 | App name collision | Apps names are workspace-unique. Ask for a new `app_name`, rewrite `modules/core/module.env`, retry. |
 | LLM endpoint not found | Offer to pick an existing one from `databricks serving-endpoints list`. |
 | `./deploy.sh` exits non-zero before `.deployed` | Surface the last ~30 lines; match against catalog/warehouse/secret-scope patterns; hand off to `SKILL_GENESIS_WORKBENCH_TROUBLESHOOTING.md` for anything else. |
+| Setup job times out downloading from `ftp.1000genomes.ebi.ac.uk` | EBI HTTPS is too slow from the workshop (times out at 30–60 min). Repoint the URL at the AWS S3 mirror: `https://1000genomes.s3.amazonaws.com/<same path after /vol1/ftp/>`. |
+| Serverless job fails with `/local_disk0` not found, `%sh` unsupported, or `LOCAL_RELATION_SIZE_LIMIT_EXCEEDED` (a `spark.createDataFrame(pandas)` > 3 GiB) | The task can't run on serverless — it needs shell/local disk or a large local→Spark load. Move that task to a classic single-node `job_cluster_key` instead of a serverless `environment_key` (see genomics setup jobs). |
+| `bundle validate`: `variable X has not been defined` | The `--var` set passes `X` (from a `*.env`) but the module's `variables.yml` doesn't declare it. Add the declaration (no default is fine — the env supplies it). Conversely `no value assigned to required variable X` = declared-but-unused-and-unsupplied → remove the dead declaration. |
 | Python < 3.11 | Warn once, recommend a 3.11 venv; continue unless < 3.10 (then stop). |
 
 ---
 
-## Post-deploy
+## Post-deploy — VERIFY, don't assume
 
-When `modules/core/.deployed` exists, print:
+**`deploy.sh` / `update.sh` returning 0 does NOT mean the module is ready.** They kick `register_*` / `*_initial_setup` / download jobs that run *after* the script returns (some `--no-wait`). A module is "done" only when those jobs reach a **terminal SUCCESS** and any sample/reference data they stage actually exists.
+
+1. **Confirm the setup/download jobs finished** (terminal `TERMINATED`/`SUCCESS`, not `RUNNING`/`INTERNAL_ERROR`), inspecting task-level state as above. For a failed task, read the real error: `databricks jobs get-run-output <task-run-id> -o json | jq -r '.error // .error_trace'` (run-level `INTERNAL_ERROR` is often just "task X timed out" — get the task's own error).
+2. **Verify staged files by CONTENT, never by `databricks fs ls` size.** For UC Volumes `fs ls` reports `file_size` as `null`/0 even for full files, so a size check gives false "0-byte / missing" readings. Confirm real content instead:
+   ```bash
+   databricks fs cat dbfs:/Volumes/<cat>/<schema>/<vol>/<file> | head -c 16 | xxd   # magic bytes: 1f8b gzip, 8948444601 HDF5
+   ```
+   An empty **directory listing** (no entries) IS reliable — that means genuinely absent.
+
+Then print:
 - Databricks App URL: `<workspace_url>/apps/<app_name>`
 - Jobs UI (track background registration): `<workspace_url>/jobs`
 - Reminder: registration jobs for some models (AlphaFold, Parabricks, BioNeMo) can run for hours.
 
-Then offer the next module in the approved list, or stop.
+Offer the next module in the approved list, or stop.
+
+### Compute + data-source realities (so a deploy doesn't quietly fail)
+- **Most jobs are serverless now** (the CPU/GPU serverless migration). Two deliberate exceptions stay on **classic single-node clusters** and must not be "converted": the **genomics setup jobs** (`gwas_initial_setup_job`, `variant_annotation_initial_setup_job`) — their notebooks use `%sh` + `/local_disk0` (absent on serverless) and pull multi-GB reference/FASTQ data; and the **Glow** jobs (they attach a Spark JAR serverless can't). CPU classic is **not** quota-blocked on the workshop; only GPU classic is.
+- **1000 Genomes downloads come from the AWS Open Data S3 mirror** (`https://1000genomes.s3.amazonaws.com/...`), not EBI's `ftp.1000genomes.ebi.ac.uk` HTTPS, which is too slow from the workshop and times out (30–60 min) on multi-GB files. If you add/adjust a genomics download, keep it on S3. (The one exception is the chr6 sample VCF's 2019 release, not mirrored on that bucket — still EBI.)
+- **scanpy's Single Cell demo** is `raw_h5ad/hgsoc_demo_15k.h5ad` (staged by `download_cellxgene`); the UI prefills it. If regeneration is unavailable, it can be copied from an existing workspace's `raw_h5ad` volume.
 
 ---
 

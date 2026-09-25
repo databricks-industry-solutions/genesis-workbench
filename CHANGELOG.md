@@ -1,5 +1,34 @@
 # Genesis Workbench — Changelog
 
+## Unreleased (branch `feature/serverless-gpu-jobs`) — serverless migration + genomics/single-cell deploy fixes
+
+Migrates module jobs off classic clusters to **serverless** (to bypass the workshop's EC2 GPU quota=0 and cut
+cluster-start time) and hardens deploy-time sample-data staging.
+
+- **Serverless migration.** Classic CPU register/setup jobs and GPU jobs converted to serverless
+  `notebook_task` (`environment_key` + job-level `environments`); GPU jobs use `compute.hardware_accelerator:
+  GPU_1xA10`. bionemo ESM-2 re-architected **containerless** (HF + Transformer Engine); the TE wheel is built
+  once on a serverless GPU job into the `libraries` volume. kermt_v2 already serverless.
+- **kermt_v1 removed** — legacy, superseded by the serverless `kermt_v2` (identical job/bundle names; only v2
+  is deployed). Fixed the stale deploy hint in `app/services/kermt.py`.
+- **Deliberately left on classic** (do NOT convert): the **Glow** genomics jobs (attach a Spark JAR serverless
+  can't) and the **genomics setup jobs** `gwas_initial_setup_job` / `variant_annotation_initial_setup_job`
+  (their notebooks use `%sh` + `/local_disk0`, absent on serverless, and stage multi-GB reference/FASTQ data).
+  scimilarity stays classic (py3.10-locked). CPU classic is not quota-blocked; only GPU classic is.
+- **1000 Genomes downloads → AWS Open Data S3 mirror** (`1000genomes.s3.amazonaws.com`). EBI's HTTPS
+  (`ftp.1000genomes.ebi.ac.uk`) is too slow from the workshop and timed out (30–60 min) on the reference
+  genome / BWA index / FASTQ. (The chr6 2019 biallelic VCF isn't on that bucket — stays on EBI.)
+- **scanpy Single Cell demo.** `download_cellxgene` no longer scans the whole CELLxGENE census into
+  `spark.createDataFrame` (exceeded serverless Spark Connect's 3 GiB local-relation cap); it stages the curated
+  **HGSOC demo** (`raw_h5ad/hgsoc_demo_15k.h5ad`) directly. The Single Cell UI default now points at it (with
+  `gene_name_column=feature_name`).
+- **Deploy-time sample-data staging** made self-contained + robust: gwas stages its own demo FASTQ; size-checked
+  download guards (a timeout no longer leaves a 0-byte file that a re-run skips).
+- **Skills tightened.** Deploy-wizard skill gains a targeted/iterative-deploy fast path, a hard "one module at a
+  time, never parallel" rule, post-deploy job-completion + verify-by-content checks, and the serverless-vs-classic
+  + S3 realities; troubleshooting skill gains recipes for the S3 mirror, serverless `%sh`/`/local_disk0` and
+  `LOCAL_RELATION_SIZE_LIMIT_EXCEEDED`, and the unreliable `fs ls` size on UC Volumes.
+
 ## v2.2.0 (2026-06-22) — KERMT 2.0 live out-of-the-box · MCP server hardened (UI + MCP grants) · fresh-install & cloud-portability fixes
 
 A consolidation release that makes the **MCP server** dependable as a first-class surface, ships **KERMT 2.0**

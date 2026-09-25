@@ -332,6 +332,18 @@ resources:
 - Model registration (needs GPU for test prediction): Use `t4_node_type` + `gpu-ml` runtime
 - Import/deploy (serverless): No cluster needed, use `environments` with `client: '2'`
 
+**Serverless vs classic — prefer serverless (`environment_key` + `environments`), but keep a task on a classic
+`job_cluster_key` when it does any of these** (all learned the hard way):
+- Runs `%sh` cells or reads/writes `/local_disk0` — neither exists on serverless.
+- Loads a large local object into Spark via `spark.createDataFrame(pandas_df)` — serverless (Spark Connect)
+  caps a cached local relation at **3 GiB** (`LOCAL_RELATION_SIZE_LIMIT_EXCEEDED`).
+- Attaches a Spark **JAR** as a cluster library (e.g. Glow) — unsupported on serverless.
+- Pins **Python 3.10** deps (serverless is 3.11/3.12; env-version 1 is the only 3.10 option).
+- Downloads many GB from a slow external host — classic egress + local disk are more forgiving (and pull big
+  public datasets from a cloud-native mirror, e.g. the AWS S3 1000 Genomes mirror, not a slow FTP/HTTPS origin).
+
+CPU classic is **not** quota-blocked on the workshop (only GPU classic is), so classic-CPU for these tasks is fine.
+
 ### Step 5: Wire into the parent module deploy/destroy scripts
 
 Edit `modules/<module>/deploy.sh`:

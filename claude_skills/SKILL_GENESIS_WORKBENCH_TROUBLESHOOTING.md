@@ -184,6 +184,33 @@ databricks jobs reset --json '<updated_spec>'
 **Symptom:** destroy.sh exits with error if module was never deployed.
 **Fix:** Use `rm -f .deployed` (force flag) in all destroy.sh scripts.
 
+## Serverless Migration & Genomics Data
+
+### Genomics setup: download hangs/times out on `ftp.1000genomes.ebi.ac.uk`
+**Symptom:** `gwas_initial_setup_job` / `variant_annotation_initial_setup_job` times out (30–60 min) pulling the reference genome / FASTQ / VCF; files end up missing or partial. NCBI/ClinVar downloads on the same job succeed.
+**Root cause:** EBI's HTTPS is too slow from the workshop for multi-GB files (host-specific, not compute).
+**Fix:** Pull from the AWS Open Data S3 mirror instead — `https://1000genomes.s3.amazonaws.com/<path after /vol1/ftp/>`. Verified on S3: reference FASTA + `.fai` + full BWA index (`.amb/.ann/.bwt/.pac/.sa`) and the HG00096 FASTQs. (The chr6 `20190312_biallelic_SNV_and_INDEL` VCF is **not** on that bucket — keep it on EBI or copy from an existing workspace.)
+
+### Serverless job fails: `/local_disk0` missing or `%sh` unsupported
+**Symptom:** A job converted to serverless (`environment_key`) fails immediately in a `%sh` cell or on a `/local_disk0/...` path.
+**Root cause:** Serverless has no `/local_disk0` and limited shell support. `gwas 01_download_reference_genome.py` relies on both.
+**Fix:** Keep that task on a **classic single-node** `job_cluster_key` (CPU classic is not quota-blocked; only GPU is). Don't blanket-convert download/shell-heavy setup tasks to serverless.
+
+### Serverless: `LOCAL_RELATION_SIZE_LIMIT_EXCEEDED` (Spark Connect)
+**Symptom:** `CONNECT_INVALID_PLAN.LOCAL_RELATION_SIZE_LIMIT_EXCEEDED — Cached local relation size (… bytes) exceeds the limit (3221225472 bytes)`.
+**Root cause:** `spark.createDataFrame(pandas_df)` on serverless ships the frame to the service as a cached local relation, capped at 3 GiB. Classic (in-JVM) had no such cap. (Hit by scanpy `download_cellxgene` doing a whole-census `createDataFrame`.)
+**Fix:** Don't materialize a >3 GiB pandas object into Spark. Aggregate in pandas first, fetch known IDs directly, or run the task on classic. scanpy now stages the HGSOC demo h5ad directly (no census scan).
+
+### `databricks fs ls` shows 0-byte / "missing" files that actually have content
+**Symptom:** `fs ls -o json` reports `file_size: null`/0 for files on a UC Volume, or a file looks empty.
+**Root cause:** The size field is unreliable for UC Volume paths — it does **not** reflect real size. (Led to a false "FASTQ is 0-byte" diagnosis.)
+**Fix:** Verify by **content**, not size: `databricks fs cat <path> | head -c 16 | xxd` (magic bytes: `1f8b` gzip, `89484446` HDF5). An empty **directory listing** (no entries) is reliable = genuinely absent.
+
+### Single Cell tab: default demo h5ad missing
+**Symptom:** Single Cell → Run New Analysis prefills `raw_h5ad/hgsoc_demo_15k.h5ad` but the file isn't there.
+**Root cause:** `download_cellxgene` didn't complete (see the createDataFrame issue above), or the module wasn't deployed.
+**Fix:** Re-run `download_cellxgene_gwb` (stages the HGSOC demo directly), or copy `hgsoc_demo_15k.h5ad` from an existing workspace's `raw_h5ad` volume (download with one profile, upload with the target profile).
+
 ## Instructions
 
 1. When a user reports a deployment error, first identify which module and which step failed (download, registration, endpoint deployment, or UI).
