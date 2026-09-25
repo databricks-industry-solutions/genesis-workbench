@@ -129,7 +129,17 @@ else:
     # 4) Build output: X = raw integer counts; var keyed by gene symbol (deduped).
     raw = a.raw if a.raw is not None else a
     raw_X = raw[keep].X
-    raw_X = raw_X.tocsr() if sp.issparse(raw_X) else sp.csr_matrix(raw_X)
+    # Normalize to a float32 CSR matrix. Backed slicing of some curated H5ADs hands
+    # back an object-dtype array here (integer counts boxed as Python objects), which
+    # scipy rejects with "scipy.sparse does not support dtype object". Coerce to a
+    # numeric dtype before building/converting the sparse matrix — this also keeps
+    # out.write() (which serializes X as sparse) from hitting the same error.
+    if sp.issparse(raw_X):
+        raw_X = raw_X.tocsr()
+        if not np.issubdtype(raw_X.dtype, np.number):
+            raw_X = raw_X.astype(np.float32)
+    else:
+        raw_X = sp.csr_matrix(np.asarray(raw_X, dtype=np.float32))
     var = raw.var.copy()
     fn = var["feature_name"].astype(str) if "feature_name" in var.columns else var.index.astype(str)
     keep_genes = ~fn.duplicated(keep="first")
