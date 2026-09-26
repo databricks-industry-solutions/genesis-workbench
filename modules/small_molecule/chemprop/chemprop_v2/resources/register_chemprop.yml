@@ -68,7 +68,11 @@ resources:
               - mlflow>=2.15
               - databricks-sdk>=0.50.0
               - databricks-sql-connector>=4.0.2
-              - PyTDC
+              # NOTE: PyTDC is intentionally NOT an env dependency. Installed unpinned +
+              # with deps here, the serverless env builder pulls an old scikit-learn that
+              # has no cp312 wheel and fails to compile on py3.12 (env_version 4). The
+              # notebook installs it correctly instead: `%pip install --no-deps PyTDC==1.1.15`,
+              # relying on scikit-learn>=1.3 (cp312 wheel) below for its runtime needs.
               - scikit-learn>=1.3
 
       parameters:
