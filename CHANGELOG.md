@@ -1,5 +1,17 @@
 # Genesis Workbench — Changelog
 
+## Unreleased
+
+### Fixes
+
+- **KERMT fine-tune fails on a fresh user/workspace — `RestException: BAD_REQUEST: For input string: "None"`.** The deploy-time init fine-tune (`kermt_finetune`, no dispatcher `mlflow_run_id`) took the fallback branch in `02_kermt_finetune.py` and called `mlflow.set_experiment("/Users/{user_email}/mlflow_experiments/{experiment_name}")` — a **non-canonical per-user path with no `mkdirs` guard**. On a fresh user whose experiment parent folder doesn't exist, `create_experiment` returns an invalid id and the next `get_experiment` fails with the `"For input string: None"` backend parse error. (Didn't surface on ci-demo because that user's folder already existed.)
+  **Fix:** the fallback branch now routes to the canonical GWB deploy-time location **`/Shared/dbx_genesis_workbench_models/{experiment_name}`** and `w.workspace.mkdirs(...)` the parent first — matching `genesis_workbench.models.set_mlflow_experiment(..., shared=True)` and the register notebooks (e.g. diffdock). Applied to both `kermt_v2` and `kermt_v1`. Verified on AWS: register → fine-tune → deploy all succeed and the `kermt_admet` endpoint serves predictions.
+
+- **Per-module app-SP grants silently no-op'd on any workspace whose app isn't named `genesis-workbench` → Vortex/AI-canvas nodes show "not deployed".** Every module's register job sets `DATABRICKS_APP_NAMES` from a job param **hardcoded to `genesis-workbench:mcp-genesis-workbench`**, and `set_app_permissions_for_job` → `_list_app_names()` → `w.apps.get(name=...)` silently skips a non-existent app — so on a workspace whose UI app is e.g. `gwb-app`, the app SP never gets `CAN_MANAGE_RUN` on the module's jobs. Canvas nodes backed by plain Jobs (not `batch_models`) then read "not deployed" because `jobs.list()` (run as the app SP) can't see them.
+  **Fix (works for any app name, no per-module wiring):** `initialize_core` now persists `databricks_app_names` (from the existing `${var.app_names}` = UI + MCP) into the `settings` table, alongside the `databricks_app_name` it already wrote. Since `initialize()` fans every `settings` row into env (and runs *after* each register notebook's hardcoded env-set), every module now exports the **real** `DATABRICKS_APP_NAMES` and grants the correct SP at registration — on any workspace. `_list_app_names()` also now accepts `:` or `,` separators so a colon-list can't degrade into one bogus name.
+- **AI-canvas job-name cache had no TTL → newly-deployed module workflows read "not deployed" until an app restart.** `_all_job_names()` cached `jobs.list()` for the app's lifetime; on a fresh install the app starts during core deploy (before modules register their jobs), so the cache was permanently stale. Added a 5-min TTL (and keep-last-good on `jobs.list()` failure) so freshly-deployed modules appear without a restart.
+- **"Deploy KERMT" canvas node showed "not deployed" even with a live endpoint.** `register_kermt_jobs.py` registered only the *finetune* job in `batch_models`; the deploy job relied on the SP-visibility path above. Now also registers the deploy job in `batch_models` (kermt_v2) so it shows deployed unconditionally.
+
 ## v2.2.0 (2026-06-22) — KERMT 2.0 live out-of-the-box · MCP server hardened (UI + MCP grants) · fresh-install & cloud-portability fixes
 
 A consolidation release that makes the **MCP server** dependable as a first-class surface, ships **KERMT 2.0**

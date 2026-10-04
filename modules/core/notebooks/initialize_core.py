@@ -13,6 +13,7 @@ dbutils.widgets.text("run_ai_canvas_workflow_job_id", "1234", "Vortex (ai_canvas
 dbutils.widgets.text("admin_usage_dashboard_id", "1234", "ID of usage dashboard")
 dbutils.widgets.text("application_secret_scope", "dbx_genesis_workbench", "Secret Scope used by application")
 dbutils.widgets.text("databricks_app_name", "dev-scn-genesis-workbench", "UI Application name")
+dbutils.widgets.text("databricks_app_names", "", "All app names to grant (UI + MCP; colon- or comma-separated)")
 dbutils.widgets.text("dev_user_prefix", "abc", "Prefix for resources")
 
 
@@ -24,6 +25,12 @@ run_ai_canvas_workflow_job_id = dbutils.widgets.get("run_ai_canvas_workflow_job_
 admin_usage_dashboard_id = dbutils.widgets.get("admin_usage_dashboard_id")
 secret_scope = dbutils.widgets.get("application_secret_scope")
 databricks_app_name = dbutils.widgets.get("databricks_app_name")
+# All app names (UI + MCP) to grant CAN_MANAGE_RUN at registration. Persisted to the
+# settings table so every module's initialize() exports it as DATABRICKS_APP_NAMES —
+# this is what makes per-module grants target the real app on any workspace (not a
+# hardcoded "genesis-workbench"). Normalised to comma-separated for _list_app_names().
+databricks_app_names = dbutils.widgets.get("databricks_app_names") or databricks_app_name
+databricks_app_names_csv = ",".join(n.strip() for n in databricks_app_names.replace(":", ",").split(",") if n.strip())
 dev_user_prefix = dbutils.widgets.get("dev_user_prefix")
 dev_user_prefix = None if dev_user_prefix.strip() == "" or dev_user_prefix.strip().lower()=="none" else dev_user_prefix
 
@@ -137,7 +144,8 @@ CREATE TABLE settings (
 query= f"""
     INSERT INTO settings VALUES
     ('admin_usage_dashboard_id', '{admin_usage_dashboard_id}', 'core'),
-    ('databricks_app_name', '{databricks_app_name}','core'),    
+    ('databricks_app_name', '{databricks_app_name}','core'),
+    ('databricks_app_names', '{databricks_app_names_csv}','core'),
     ('deploy_model_job_id', '{deploy_model_job_id}', 'core'),
     ('start_all_endpoints_job_id', '{start_all_endpoints_job_id}', 'core'),
     ('run_ai_canvas_workflow_job_id', '{run_ai_canvas_workflow_job_id}', 'core'),
