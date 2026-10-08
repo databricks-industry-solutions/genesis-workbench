@@ -230,6 +230,39 @@ echo ""
 databricks bundle run --target $TARGET grant_app_permissions_job --var="$EXTRA_PARAMS"
 
 echo ""
+echo "▶️ Deploying Genie Code workspace skills to /.assistant/skills"
+echo "    In-notebook Databricks Assistant (Genie Code) skills for GWB — one SKILL.md per subfolder of"
+echo "    genie_code_skills/ at the repo root, plus the workspace instructions file at the root. These"
+echo "    guide notebook users to consume GWB via serving endpoints / Vector Search / batch jobs."
+echo "    Workspace-admin only — tolerant: a non-admin workspace logs a warning and skips, so the deploy"
+echo "    never fails on this. Refresh out-of-band with the loop in genie_code_skills/README.md."
+echo ""
+set +e
+GENIE_SRC="../../genie_code_skills"
+if [ -d "$GENIE_SRC" ]; then
+  for skill_dir in "$GENIE_SRC"/*/; do
+    [ -f "${skill_dir}SKILL.md" ] || continue
+    skill_name=$(basename "$skill_dir")
+    if databricks workspace mkdirs "/.assistant/skills/$skill_name" \
+       && databricks workspace import "/.assistant/skills/$skill_name/SKILL.md" \
+            --file "${skill_dir}SKILL.md" --format AUTO --overwrite; then
+      echo "  ✅ $skill_name"
+    else
+      echo "  ⚠️  skipped $skill_name (writing /.assistant needs workspace-admin rights)"
+    fi
+  done
+  if [ -f "$GENIE_SRC/.assistant_workspace_instructions.md" ]; then
+    databricks workspace import "/.assistant_workspace_instructions.md" \
+      --file "$GENIE_SRC/.assistant_workspace_instructions.md" --format AUTO --overwrite \
+      && echo "  ✅ .assistant_workspace_instructions.md" \
+      || echo "  ⚠️  skipped workspace instructions (workspace-admin rights required)"
+  fi
+else
+  echo "  (genie_code_skills/ not found at repo root — skipping)"
+fi
+set -e
+
+echo ""
 echo "▶️ Cleaning up local build artifacts"
 echo ""
 # Both wheels were already uploaded by `bundle deploy` (sync.include force-

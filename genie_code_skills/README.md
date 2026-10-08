@@ -7,21 +7,37 @@ skill when a request matches its `description`; users can also force it with `@<
 
 ## Skills here
 
-| Skill | Purpose | Mirrors |
-|---|---|---|
-| `protein-design-from-paper/` | Generate a full endpoints-only protein-design funnel **into the current notebook** for the user's target (binder / ligand-binder / motif / de novo / optimize). Self-contained — embeds the GWB endpoint toolkit so it works in a blank notebook anywhere. | `claude_skills/SKILL_GENESIS_WORKBENCH_PROTEIN_DESIGN_FROM_PAPER.md` (keep in sync) |
+| Skill | Purpose |
+|---|---|
+| `genesis-workbench/` | **Entry point.** Broad trigger for any life-sciences / bio-ML workflow; explains how GWB is consumed (endpoints / VS / jobs, never the library) and routes to the specific skill below. |
+| `gwb-serving-endpoints/` | Call any GWB model via its serving endpoint — discovery, the three payload styles, and an exact per-model payload reference (protein, developability, small-molecule, single-cell, embeddings). |
+| `gwb-vector-search/` | Query the GWB Vector Search indices (UniRef + human protein, SCimilarity cells, TEDDY cells); the embed-then-query pattern; building your own index. |
+| `gwb-batch-jobs/` | Dispatch long/heavy GWB workflows via the Jobs API (enzyme optimization, Parabricks, GWAS, (re)builds), poll, and read MLflow / Delta / Volume results. |
+| `gwb-ray-batch-inference/` | Scale a forward pass across many A10s with Ray on serverless GPU (the teddy / sequence_search VS-reference pattern): stage→embed, UC Volume bridge, CTAS. |
+| `gwb-serverless-gpu/` | Get a GPU in a notebook or job (serverless A10 AI Runtime); the HF / torch / disk gotchas. Foundation for `gwb-ray-batch-inference`. |
+| `gwb-discover-resources/` | Discover which endpoints / indices / jobs are available (and awake) + the metadata tables and MCP server. |
+| `gwb-single-cell/` | Applied scRNA-seq / AnnData: cell-type annotation by reference KNN (TEDDY / SCimilarity), embeddings, scGPT perturbation. |
+| `gwb-sequence-search/` | Applied protein similarity: ESM-2 embed → UniRef + human-gene indices. |
+| `protein-design-from-paper/` | Generate a full endpoints-only protein-design funnel **into the current notebook** for the user's target (binder / ligand-binder / motif / de novo / optimize). Self-contained toolkit. Mirrors `claude_skills/SKILL_GENESIS_WORKBENCH_PROTEIN_DESIGN_FROM_PAPER.md` — keep in sync. |
 
 ## Deploy (workspace-level — requires workspace admin)
 
-Genie Code reads workspace skills from `/.assistant/skills/<name>/SKILL.md` at the workspace root. Deploy
-with the Databricks CLI (`workshop` profile = the workshop workspace):
+Genie Code reads workspace skills from `/.assistant/skills/<name>/SKILL.md` at the workspace root.
+
+**Automatic (preferred):** the core deploy (`modules/core/deploy.sh`) copies every skill folder here to
+`/.assistant/skills/<name>/SKILL.md`, and `.assistant_workspace_instructions.md` to the workspace root, on
+every `./deploy.sh core <cloud>` run. It's tolerant — a non-admin workspace just logs a warning and skips —
+so a fresh install ships these skills with no extra step.
+
+**Manual / out-of-band** (refresh without a redeploy — `workshop` profile shown; loops over every skill):
 
 ```bash
-databricks workspace mkdirs /.assistant/skills/protein-design-from-paper --profile workshop
-databricks workspace import /.assistant/skills/protein-design-from-paper/SKILL.md \
-  --file genie_code_skills/protein-design-from-paper/SKILL.md \
-  --format AUTO --overwrite --profile workshop
-```
+for d in genie_code_skills/*/; do
+  name=$(basename "$d"); [ -f "${d}SKILL.md" ] || continue
+  databricks workspace mkdirs "/.assistant/skills/$name" --profile workshop
+  databricks workspace import "/.assistant/skills/$name/SKILL.md" --file "${d}SKILL.md" \
+    --format AUTO --overwrite --profile workshop
+done
 
 Verify:
 ```bash
