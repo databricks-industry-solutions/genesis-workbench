@@ -35,7 +35,7 @@ ADMET (the same pattern as TEDDY running alongside SCimilarity for cell-type ann
    assay.
 2. Set the **target column(s)**, **task type** (classification or regression), a **fine-tune label**,
    epochs / batch / FFN size, and the MLflow experiment + run name.
-3. Click **Fine-tune KERMT** — a Databricks job runs on a classic A10 GPU cluster; the run appears
+3. Click **Fine-tune KERMT** — a Databricks job runs on serverless GPU; the run appears
    immediately in **Search Past Runs** and advances to `complete` (test AUC/metric logged to MLflow).
 
 ### Deploy (same tab → **Deploy a fine-tuned model**)
@@ -73,7 +73,7 @@ GROVERbase (UC volume)
       │  Fine-tune job (classic A10, pip-only — KERMT on the RDKit featurization path)
       ▼
 fine-tuned checkpoint → /Volumes/.../kermt/finetuned/<label>/  +  kermt_weights row  +  MLflow run
-      │  Deploy job (T4): wrap checkpoint in an MLflow PyFunc (in-process predict, plain RDKit)
+      │  Deploy job (serverless GPU): wrap checkpoint in an MLflow PyFunc (in-process predict, plain RDKit)
       ▼
 UC model kermt_admet → deploy_model → gwb_*_kermt_admet_endpoint (GPU)
       │  inputs=[smiles…] → predictions=[{task: value}…]  (Chemprop ADMET contract)
@@ -82,7 +82,7 @@ ADMET & Safety tab queries it side-by-side with Chemprop
 ```
 
 **Why pip-only / no container, and the cuik-molmaker note.** KERMT is installed from a vendored, pinned
-copy of the repo on a classic GPU cluster (the ChemProp pattern — no custom Docker). KERMT's
+copy of the repo on serverless GPU (the ChemProp pattern — no custom Docker). KERMT's
 `cuik_molmaker` accelerator is conda-only and hard-imported at module top; a small **lazy-import patch**
 guards those imports so KERMT runs on the **plain-RDKit featurization path** (`rdkit_2d_normalized_onthefly`)
 with a pip-only env. This keeps both the fine-tune job and — critically — the Model Serving endpoint env
@@ -104,4 +104,4 @@ collator sanitizes them (`np.nan_to_num`) so they don't propagate to NaN model o
 
 - KERMT (NVIDIA-BioNeMo/KERMT, Apache-2.0) — pretrained GROVERbase checkpoint (pre-staged to the
   `kermt` UC volume)
-- Classic A10 GPU compute for fine-tune; T4 for deploy; a GPU serving endpoint (`GPU_SMALL`) for inference
+- Serverless GPU (GPU_1xA10) for fine-tune and deploy; a GPU serving endpoint (`GPU_SMALL`) for inference

@@ -10,10 +10,9 @@
 # MAGIC protein–ligand complexes. It includes a score model (reverse diffusion) and a
 # MAGIC confidence model to rank predicted poses.
 # MAGIC
-# MAGIC **Cluster requirements:**
-# MAGIC - Runtime: **DBR 13.3 LTS ML GPU**
-# MAGIC - Node type: GPU instance (e.g., `g5.2xlarge` / A10G)
-# MAGIC - Single node is sufficient
+# MAGIC **Compute:**
+# MAGIC - Runtime: **Serverless GPU (AI Runtime, Python 3.12)**
+# MAGIC - Hardware: GPU_1xA10
 
 # COMMAND ----------
 

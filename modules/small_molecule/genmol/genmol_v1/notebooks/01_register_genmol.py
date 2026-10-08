@@ -13,10 +13,11 @@
 # MAGIC generation in an MLflow PyFunc, registers it in Unity Catalog, and deploys a
 # MAGIC serving endpoint via Genesis Workbench.
 # MAGIC
-# MAGIC **Runtime:** runs on a **classic DBR 15.4 LTS (Python 3.11)** cluster (see
-# MAGIC register_genmol.yml). GenMol pins `pandas==2.1.0` / `transformers==4.52.4`,
-# MAGIC which only have wheels on py3.11 — on serverless py3.12 the pandas source
-# MAGIC build fails. Logging here on py3.11 also makes the serving endpoint py3.11.
+# MAGIC **Runtime:** runs on **serverless (Python 3.11)** (see register_genmol.yml —
+# MAGIC `environment_key: default`, `client: '2'`, no GPU accelerator). GenMol pins
+# MAGIC `pandas==2.1.0` / `transformers==4.52.4`, which only have wheels on py3.11 — on
+# MAGIC py3.12 the pandas source build fails. The serverless environment uses py3.11 to
+# MAGIC support these deps, ensuring the serving endpoint also uses py3.11.
 # MAGIC
 # MAGIC **Licensing:** weights = NVIDIA Open Model License (commercial OK; not for
 # MAGIC life-critical use); GenMol code = Apache-2.0.

@@ -56,7 +56,7 @@ Genesis Workbench simplifies deploying GPU-accelerated biological AI models on D
 - **Binder Design** — Proteina-Complexa protein binder generation with ESMFold validation
 - **Ligand Binder Design** — Small-molecule binder design with DiffDock docking validation
 - **Motif Scaffolding** — Scaffold generation with ProteinMPNN sequence optimization
-- **Guided Enzyme Optimization** — Reward-weighted optimization loop around Proteina-Complexa-AME + ProteinMPNN + ESMFold. Scores each candidate on motif RMSD, pLDDT, optional Boltz substrate confidence, and four developability axes (solubility, half-life anchored vs reference enzyme, thermostability, immunogenicity). Form has a **Generation mode** toggle: **Fast** (default, ~30 min) — endpoint-based AME with parent resampling between iterations; **Accurate** (~30-60 min, ~$22 GPU) — in-process AME on an A10 with Feynman-Kac steering during diffusion (reward biases sampling, not just selection).
+- **Guided Enzyme Optimization** — Reward-weighted optimization loop around Proteina-Complexa-AME + ProteinMPNN + ESMFold. Scores each candidate on motif RMSD, pLDDT, optional Boltz substrate confidence, and four developability axes (solubility, half-life anchored vs reference enzyme, thermostability, immunogenicity). Form has a **Generation mode** toggle: **Fast** (default, ~30 min) — endpoint-based AME with parent resampling between iterations; **Accurate** (~30-60 min, ~$22 GPU) — in-process AME on serverless GPU with Feynman-Kac steering during diffusion (reward biases sampling, not just selection).
 - **ADMET & Safety** — Multi-model property profiling (BBB penetration, toxicity, ADMET)
 
 ### Genomics Module

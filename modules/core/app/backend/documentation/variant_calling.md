@@ -39,7 +39,7 @@ Variant Calling uses NVIDIA Parabricks to perform GPU-accelerated germline varia
 ### Architecture
 
 2. **Backend** (`modules/core/app/backend/app/services/genomics.py`): `start_parabricks_alignment()` creates an MLflow run and triggers the Databricks job
-3. **Job** (`modules/genomics/gwas/gwas_v1/resources/parabricks_alignment.job.yml`): Defines the Databricks workflow with a GPU cluster
+3. **Job** (`modules/genomics/gwas/gwas_v1/resources/parabricks_alignment.job.yml`): Defines the Databricks workflow with serverless GPU (NGC container)
 4. **Notebook** (`modules/genomics/gwas/gwas_v1/notebooks/02_parabricks_germline.py`): Executes the Parabricks germline pipeline
 
 ### Workflow Pipeline
