@@ -15,6 +15,10 @@ dependencies:
     # build reaches + installs it. rc-foundry pulls a CUDA-enabled torch from PyPI
     # (default linux wheels are cu-enabled), so RFD3 uses the A10 GPU at serving.
     - --extra-index-url https://pypi.org/simple
+    # Pin atomworks[ml]: rc-foundry pulls atomworks>=2.1.1, and atomworks 3.0.0 (2026-10-05)
+    # removed get_inferred_polymer_bonds, which RFD3 input_parsing imports -> serving ImportError.
+    # Must match notebooks/requirements.txt.
+    - atomworks[ml]==2.2.1
     - rc-foundry
     - biopython
     # mlflow/cloudpickle MUST match the logging runtime or the serving container

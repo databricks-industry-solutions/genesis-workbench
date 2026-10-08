@@ -34,7 +34,9 @@ resources:
       environments:
         - environment_key: default
           spec:
-            client: '4'
+            # py3.11: import_protein_mpnn_task installs genesis_workbench, which fails to resolve
+            # under the py3.12 (client '4') serverless immutable constraints (same fix as rfdiffusion).
+            client: '2'
         - environment_key: gpu_env
           spec:
             client: '4'

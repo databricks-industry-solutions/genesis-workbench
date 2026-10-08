@@ -413,7 +413,7 @@ def _norm(vals, invert=False):
     arr = np.array([v if v is not None and not np.isnan(v) else np.nan for v in vals], dtype=float)
     lo, hi = np.nanmin(arr), np.nanmax(arr)
     if not np.isfinite(lo) or hi == lo:
-        base = np.where(np.isnan(arr), 0.5, 0.5)   # degenerate axis → neutral 0.5
+        base = np.full(arr.shape, 0.5)   # degenerate axis → neutral 0.5
     else:
         base = (arr - lo) / (hi - lo)
         base = np.where(np.isnan(base), 0.0, base)
