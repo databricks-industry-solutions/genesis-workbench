@@ -45,9 +45,6 @@ variables:
   gpu_t4_rapids_node_type:
     description: Node type for T4 GPU (RAPIDS single-cell)
 
-  gpu_ml_spark_version:
-    description: GPU ML runtime Spark version
-
   gpu_small_setting:
     description: The config setting for small gpu
 

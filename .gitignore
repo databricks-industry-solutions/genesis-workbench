@@ -9,6 +9,7 @@ scratch/**
 .vscode
 .cursor
 .claude
+.isaac/
 **/dist/
 poetry.lock
 .DS_Store
