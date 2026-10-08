@@ -2,5 +2,11 @@
 # torch/CUDA + mlflow are preinstalled on the runtime — do NOT pin them here.
 # rc-foundry (RFD3) is not on the private pypi-proxy; pull from public PyPI.
 --extra-index-url https://pypi.org/simple
+# Pin atomworks: rc-foundry only floors it at `atomworks[ml]>=2.1.1`, so the resolver otherwise
+# pulls atomworks 3.0.0 (released 2026-10-05), which REMOVED
+# atomworks.io.utils.bonds.get_inferred_polymer_bonds that RFD3's input_parsing imports →
+# "ImportError: cannot import name 'get_inferred_polymer_bonds'". 2.2.1 (2026-06-08) is the last
+# release that still has it. Must appear before rc-foundry so this exact pin wins.
+atomworks[ml]==2.2.1
 rc-foundry
 biopython

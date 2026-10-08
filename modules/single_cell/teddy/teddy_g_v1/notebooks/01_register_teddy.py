@@ -56,6 +56,11 @@ print(f"Volume {cache_full_path} ready")
 
 # DBTITLE 1,Download TEDDY snapshot (weights + source code) from HuggingFace
 import os
+# hf_transfer (the Rust fast-downloader, enabled by default on the serverless-GPU runtime)
+# errors on the egress path to the HF LFS CDN: "An error occurred while downloading using
+# hf_transfer." Force the standard, reliable huggingface_hub downloader instead. Must be set
+# before the download. (kermt confirms plain HF resolve URLs are reachable from serverless.)
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
 from huggingface_hub import snapshot_download
 
 snapshot_dir = f"{cache_full_path}/snapshots/{hf_revision}"

@@ -34,9 +34,13 @@ resources:
             notebook_path: ../notebooks/02_import_model_gwb.py
 
       environments:
+        # default = py3.11 (client '2'): 02_import_model_gwb.py installs the genesis_workbench
+        # library + databricks-sdk/sql-connector/mlflow, which no longer resolve under the
+        # py3.12 (client '4') serverless immutable constraints (PipError in import_rfdiffusion_task).
+        # py3.11 matches teddy's working import env. The register task's gpu_env stays py3.12 for RFD3.
         - environment_key: default
           spec:
-            client: '4'
+            client: '2'
         - environment_key: gpu_env
           spec:
             client: '4'

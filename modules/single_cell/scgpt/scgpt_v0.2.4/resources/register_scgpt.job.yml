@@ -76,7 +76,10 @@ resources:
           default: ${var.sql_warehouse_id}
         - name: user_email
           default: ${var.current_user}
+        # GPU_MEDIUM (single A10), NOT MULTIGPU_MEDIUM: the multi-GPU tier aborts with
+        # "resource did not become available in time" on the workshop account (same fix as
+        # scimilarity). scGPT embedding + perturbation endpoints fit a single A10.
         - name: workload_type
-          default: ${var.gpu_large_setting}
+          default: ${var.gpu_medium_setting}
 
       tags: ${var.common_resource_tags}
