@@ -2,7 +2,7 @@
 # MAGIC %md
 # MAGIC # Batch Embed Human SwissProt Proteins with ESM-2 — Serverless GPU (single A10)
 # MAGIC
-# MAGIC Serverless-GPU variant of `05_batch_embed_gene_sequences.py`. Generates
+# MAGIC Serverless-GPU gene-sequence embed (ESM-2). Generates
 # MAGIC 1280-dimensional mean-pooled embeddings for the human reviewed proteins in
 # MAGIC `gene_sequences` (built by core's `ingest_uniprot_genes.py`) using the SAME
 # MAGIC model as the UniRef corpus — `facebook/esm2_t33_650M_UR50D` — and writes them

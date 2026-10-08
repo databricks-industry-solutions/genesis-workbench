@@ -97,6 +97,8 @@ _read_kwargs = dict(
 if obs_limit > 0:
     _read_kwargs["coords"] = (slice(0, obs_limit - 1),)
     print(f"obs_limit={obs_limit:,} — capping Census obs scan (test mode)")
+# Materializes the full primary-cell obs (soma_joinid + 7 small cols) on the driver — fine at ~2M;
+# if target_n_cells / the Census grows much larger, switch to a chunked obs read to bound driver RAM.
 obs_df = obs.read(**_read_kwargs).concat().to_pandas()
 print(f"Census primary cells: {len(obs_df):,}")
 

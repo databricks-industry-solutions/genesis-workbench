@@ -12,7 +12,9 @@ resources:
           disable_auto_optimization: true
           notebook_task:
             notebook_path: ../../notebooks/ingest_uniprot_genes.py
-          max_retries: 0
+          # Downloads from UniProt over the network on the critical core-deploy path;
+          # retry a transient fetch failure (the notebook is idempotent + skip-guarded).
+          max_retries: 2
 
       environments:
         - environment_key: default

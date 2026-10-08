@@ -91,7 +91,7 @@ by slug at runtime** via `get_ep` — don't hard-code the full name.
 | slug | style | payload | output |
 |---|---|---|---|
 | `teddy` | A | `[{"adata_sparsematrix": [[expr...]], "adata_obs": <obs df JSON orient=split>, "adata_var": <var df JSON orient=split, index=gene names>}]` | `[{"embedding": [float × 1024]}]` (512/768 for 70M/160M) |
-| `scgpt` | C | `[adata_sparsematrix, adata_obs, adata_var]` (+ preprocess params) | cell embeddings |
+| `scgpt` | C | `[adata_sparsematrix, adata_obs, adata_var]` (+ preprocess params) | cell embeddings (dict output — confirm exact shape via the scGPT wrapper) |
 | `scgpt_perturbation` | C | `[expression, gene_names, genes_to_perturb, perturbation_type("knockout"\|"overexpress")]` | `{gene_name, original_expression, predicted_expression, delta, abs_delta}` |
 | `scimilarity_get_embedding` | C | `[celltype_sample(JSON split, col "celltype_subsample"), celltype_sample_obs]` | `{embedding: [float × 128], input_index, ...}` |
 
