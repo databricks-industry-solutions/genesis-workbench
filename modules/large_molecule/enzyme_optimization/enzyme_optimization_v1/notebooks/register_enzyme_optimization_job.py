@@ -16,7 +16,7 @@ dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("run_enzyme_optimization_job_id", "", "Fast (CPU) Orchestrator Job ID")
 dbutils.widgets.text("run_enzyme_optimization_inprocess_ame_job_id", "", "Accurate (A10) Orchestrator Job ID")
 dbutils.widgets.text("user_email", "a@b.com", "User email")
-dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
+dbutils.widgets.text("sql_warehouse_id", "", "SQL Warehouse Id")
 dbutils.widgets.text("databricks_app_name", "genesis-workbench", "Databricks App Name")
 dbutils.widgets.text("databricks_app_names", "genesis-workbench:mcp-genesis-workbench", "Databricks App Names (colon/comma-separated, UI + MCP)")
 

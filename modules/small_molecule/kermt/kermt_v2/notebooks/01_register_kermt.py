@@ -10,10 +10,10 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "srijit_nair_ci_demo_catalog", "Catalog")
+dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "genesis_workbench", "Schema")
 dbutils.widgets.text("sql_warehouse_id", "", "SQL Warehouse Id")
-dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Id/Email")
+dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
 dbutils.widgets.text("cache_dir", "kermt", "KERMT UC volume name")
 dbutils.widgets.text("grover_base_url", "", "GROVERbase direct-download URL")
 dbutils.widgets.text("tdc_group", "Tox", "TDC single_pred group (Tox/ADME)")

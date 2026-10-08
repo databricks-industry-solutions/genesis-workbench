@@ -19,7 +19,7 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "srijit_nair_ci_demo_catalog", "Catalog")
+dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "genesis_workbench", "Schema")
 dbutils.widgets.text("target_genes", "PARP1,BRCA1,BRCA2,EGFR,KRAS,TP53,PARP2,ATM", "Comma-sep gene symbols")
 dbutils.widgets.text("max_actives_per_gene", "300", "Top-N actives per target (by pChEMBL)")

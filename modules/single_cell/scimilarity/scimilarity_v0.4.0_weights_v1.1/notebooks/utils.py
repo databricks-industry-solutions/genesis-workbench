@@ -41,7 +41,7 @@ dbutils.widgets.text("catalog", "<catalog_name>", "Catalog")
 dbutils.widgets.text("schema", "<schema_name>", "Schema")
 dbutils.widgets.text("model_name", "SCimilarity", "Model Name") 
 dbutils.widgets.text("experiment_name", "gwb_modules_scimilarity", "Experiment Name")
-dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id") 
+dbutils.widgets.text("sql_warehouse_id", "", "SQL Warehouse Id") 
 dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
 dbutils.widgets.text("cache_dir", "scimilarity", "Cache dir")
 

@@ -10,11 +10,11 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "srijit_nair_ci_demo_catalog", "Catalog")
+dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "genesis_workbench", "Schema")
 dbutils.widgets.text("cache_dir", "kermt", "KERMT UC volume name")
 dbutils.widgets.text("kermt_src_path", "", "Workspace path to vendored kermt_src (bundle files)")
-dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Id/Email")
+dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
 
 dbutils.widgets.text("train_data_location", "", "Train CSV (UC volume path; smiles + target cols)")
 dbutils.widgets.text("validation_data_location", "", "Validation CSV")

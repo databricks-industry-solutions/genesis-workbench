@@ -7,7 +7,7 @@ dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("parabricks_alignment_job_id", "1234", "Parabricks Alignment Job ID")
 dbutils.widgets.text("gwas_analysis_job_id", "1234", "GWAS Analysis Job ID")
 dbutils.widgets.text("user_email", "a@b.com", "Email of the user running the deploy")
-dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
+dbutils.widgets.text("sql_warehouse_id", "", "SQL Warehouse Id")
 dbutils.widgets.text("databricks_app_names", "genesis-workbench:mcp-genesis-workbench", "Databricks App Names (colon/comma-separated, UI + MCP)")
 
 catalog = dbutils.widgets.get("catalog")

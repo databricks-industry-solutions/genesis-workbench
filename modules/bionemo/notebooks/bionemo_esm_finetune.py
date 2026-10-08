@@ -39,7 +39,7 @@ dbutils.widgets.text("should_use_lora", "false", "Should use LORA")
 dbutils.widgets.text("finetune_label", "esm_650m_ft_xyz", "A label using which these finetune weights are saved")
 dbutils.widgets.text("core_catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("core_schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
-dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
+dbutils.widgets.text("sql_warehouse_id", "", "SQL Warehouse Id")
 dbutils.widgets.text("model_volume", "bionemo", "Volume where weights are stored")
 
 dbutils.widgets.text("task_type", "regression", "Task type")

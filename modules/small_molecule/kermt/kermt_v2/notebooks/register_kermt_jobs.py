@@ -9,10 +9,10 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "srijit_nair_ci_demo_catalog", "Catalog")
+dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "genesis_workbench", "Schema")
 dbutils.widgets.text("sql_warehouse_id", "", "SQL Warehouse Id")
-dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Id/Email")
+dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
 dbutils.widgets.text("kermt_finetune_job_id", "", "KERMT finetune orchestrator job id")
 dbutils.widgets.text("kermt_deploy_job_id", "", "KERMT deploy orchestrator job id")
 dbutils.widgets.text("databricks_app_name", "genesis-workbench", "Databricks App Name")

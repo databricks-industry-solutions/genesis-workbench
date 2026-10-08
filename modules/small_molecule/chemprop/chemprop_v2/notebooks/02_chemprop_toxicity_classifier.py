@@ -24,12 +24,12 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "srijit_nair_ci_demo_catalog", "Catalog")
+dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "genesis_workbench", "Schema")
 dbutils.widgets.text("model_name", "chemprop_clintox", "Model Name")
 dbutils.widgets.text("experiment_name", "dbx_genesis_workbench_modules", "Experiment Name")
-dbutils.widgets.text("sql_warehouse_id", "045df48d4afed522", "SQL Warehouse Id")
-dbutils.widgets.text("user_email", "srijit.nair@databricks.com", "User Id/Email")
+dbutils.widgets.text("sql_warehouse_id", "", "SQL Warehouse Id")
+dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
 dbutils.widgets.text("cache_dir", "chemprop_clintox", "Cache dir")
 dbutils.widgets.text("workload_type", "GPU_SMALL", "Workload Type for endpoints")
 

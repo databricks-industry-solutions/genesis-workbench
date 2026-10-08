@@ -20,7 +20,7 @@
 # default so the HF cache / weights Volume can be located; the app need not pass it.)
 dbutils.widgets.text("core_catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("core_schema", "dev_srijit_nair_dbx_genesis_workbench_core", "Schema")
-dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
+dbutils.widgets.text("sql_warehouse_id", "", "SQL Warehouse Id")
 dbutils.widgets.text("model_volume", "bionemo", "Volume where weights are stored")
 dbutils.widgets.text("is_base_model", "false", "Use Base Model?")
 dbutils.widgets.text("esm_variant", "650M", "ESM Variant")
