@@ -13,7 +13,7 @@ followed by Smith-Waterman alignment for exact scoring.
 │       ↓                                                          │
 │  Parse to Delta table (sequence_db)                              │
 │       ↓                                                          │
-│  Batch embed with ESM-2 650M via predict_batch_udf (GPU cluster) │
+│  Batch embed with ESM-2 650M via Ray on serverless GPU           │
 │       ↓                                                          │
 │  Create Databricks Vector Search Delta Sync index                │
 └──────────────────────────────────────────────────────────────────┘
@@ -139,7 +139,7 @@ A user who runs the same query on NCBI BLAST and on this system will get
 | Vector index | Databricks Vector Search (Delta Sync, TRIGGERED) |
 | Sequence database | UniRef90 (~150M sequences) in Delta table |
 | Alignment | parasail (SIMD-accelerated Smith-Waterman) |
-| Batch embedding | Spark `predict_batch_udf` on GPU cluster |
+| Batch embedding | Ray (ESM-2 forward) across A10 serverless-GPU workers |
 |||
 
 ## Deployment
@@ -161,7 +161,7 @@ This runs a 4-step workflow:
 
 1. **01_download_sequences.py** — Downloads UniRef90 FASTA to UC Volume
 2. **02_create_delta_tables.py** — Parses FASTA into `sequence_db` Delta table
-3. **03_batch_embed_sequences.py** — Generates embeddings with ESM-2 on GPU
+3. **03_batch_embed_sequences_ray.py** — Generates ESM-2 embeddings via Ray across A10 serverless-GPU workers (single-A10 `_sgc.py` variant also available)
 4. **04_create_vector_index.py** — Creates Vector Search endpoint and index
 
 ### Incremental Updates

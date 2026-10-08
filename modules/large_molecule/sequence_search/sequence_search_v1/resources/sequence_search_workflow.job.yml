@@ -25,11 +25,13 @@ resources:
             notebook_path: ../notebooks/02_create_delta_tables.py
             source: WORKSPACE
 
-        # Serverless GPU: embeds on the single A10 the task lands on, drawing from the
-        # managed serverless-GPU pool instead of the account's EC2 GPU vCPU quota
-        # (which blocked the old classic 4×A10 multi_gpu_cluster). max_sequences caps
-        # the corpus. Single-node is the simplest/most reliable to provision (a
-        # multi-node @distributed fan-out is possible but not used here).
+        # Serverless GPU + Ray: `serverless_gpu.ray.ray_launch(gpus=num_gpu_workers)`
+        # fans the ESM-2 embed across N A10 workers (default 4) — Ray Data stages the
+        # corpus to a UC Volume, embeds in parallel, and CTAS-promotes to the managed
+        # `sequence_embeddings` table. Draws from the managed serverless-GPU pool, not
+        # the account's EC2 GPU vCPU quota (which blocked the old classic 4×A10
+        # multi_gpu_cluster). max_sequences caps the corpus. The single-A10 variant is
+        # kept at 03_batch_embed_sequences_sgc.py for small-corpus / fallback runs.
         - task_key: batch_embed_sequences
           max_retries: 0
           depends_on:
@@ -40,7 +42,7 @@ resources:
           compute:
             hardware_accelerator: GPU_1xA10
           notebook_task:
-            notebook_path: ../notebooks/03_batch_embed_sequences_sgc.py
+            notebook_path: ../notebooks/03_batch_embed_sequences_ray.py
             source: WORKSPACE
 
         - task_key: create_vector_index
@@ -94,6 +96,9 @@ resources:
         # the corpus (e.g. for a quick verification run).
         - name: max_sequences
           default: "1000000"
+        # Ray embed fan-out width (03) — number of A10 serverless-GPU workers.
+        - name: num_gpu_workers
+          default: "4"
 
       # Serverless GPU environment for the two embedding tasks (client "4" matches
       # the register jobs' serverless GPU AI runtime). Default CPU environment for
