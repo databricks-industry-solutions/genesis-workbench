@@ -190,6 +190,17 @@ echo ""
 databricks bundle run --target $TARGET publish_node_catalog_job --var="$EXTRA_PARAMS"
 
 echo ""
+echo "▶️ Ingesting reviewed human SwissProt proteins -> gene_sequences"
+echo "    The Target Resolver, human protein similarity search, and target-motif"
+echo "    lookups all read this core-owned table; sequence_search's gene companion"
+echo "    index (05/06) embeds it too. Runs on a serverless job and SELF-SKIPS when"
+echo "    the table is already populated, so re-deploys are no-ops. Runs after the"
+echo "    schema exists (initialize_core) and before the app so its gene features work."
+echo ""
+
+databricks bundle run --target $TARGET ingest_uniprot_genes_job --var="$EXTRA_PARAMS"
+
+echo ""
 echo "▶️ Deploying UI Application (genesis-workbench)"
 echo ""
 

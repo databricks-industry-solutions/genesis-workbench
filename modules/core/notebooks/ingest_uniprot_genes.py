@@ -22,6 +22,19 @@ organism_id = dbutils.widgets.get("organism_id")
 
 # COMMAND ----------
 
+# DBTITLE 1,Skip-if-populated guard — re-deploys shouldn't re-hit UniProt
+# This notebook now runs on every core deploy (see modules/core/deploy.sh). The table
+# is a one-time ingest the app reads at runtime, so skip when it's already built; drop
+# the table (or lower the threshold) to force a refresh.
+table_name = f"{catalog}.{schema}.gene_sequences"
+if spark.catalog.tableExists(table_name):
+    _n = spark.table(table_name).count()
+    if _n > 1000:
+        print(f"{table_name} already has {_n:,} rows — skipping ingest (drop the table to refresh).")
+        dbutils.notebook.exit("skipped: gene_sequences already populated")
+
+# COMMAND ----------
+
 import re
 import urllib.request
 
