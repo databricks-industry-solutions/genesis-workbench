@@ -201,6 +201,7 @@ from utils import (
     call_esmfold, call_proteinmpnn, call_boltz,
     call_netsolp, call_pltnum, call_deepstabp, call_mhcflurry,
     warmup_developability_endpoints, _extract_mean_plddt_from_pdb,
+    liability_weighted_count, liability_detail,
 )
 
 # COMMAND ----------
@@ -250,6 +251,7 @@ AXES = [
     PredictorAxis("half_life",  weights.get("half_life", 0.0), pre_normalized=True),
     PredictorAxis("thermostab", weights.get("thermostab", 0.0)),
     PredictorAxis("immuno",     weights.get("immuno", 0.0), lower_is_better=True),
+    PredictorAxis("liability",  weights.get("liability", 0.0), lower_is_better=True),
 ]
 print("Enabled axes:", [a.name for a in AXES if a.enabled])
 
@@ -307,6 +309,9 @@ def score_iteration(seqs: List[str], pdbs: List[str], plddts: List[float],
         scores["thermostab"] = call_deepstabp(seqs, dev_user_prefix=dev_user_prefix)
     if any(a.name == "immuno" and a.enabled for a in AXES):
         scores["immuno"] = call_mhcflurry(seqs, dev_user_prefix=dev_user_prefix)
+    # Sequence-liability scan — rule-based, no endpoint. Weighted motif count (lower = more inert).
+    if any(a.name == "liability" and a.enabled for a in AXES):
+        scores["liability"] = [liability_weighted_count(s) for s in seqs]
     if any(a.name == "half_life" and a.enabled for a in AXES):
         raw = call_pltnum(seqs, dev_user_prefix=dev_user_prefix)
         scores["half_life"] = ([0.5] * K if math.isinf(anchor)
@@ -436,6 +441,8 @@ try:
                 for axis_name, vals in per_axis.items():
                     v = vals[k]
                     row[axis_name] = float(v) if not (isinstance(v, float) and math.isnan(v)) else None
+                # Human-readable liability breakdown for the result dialog (string → not a metric).
+                row["liability_detail"] = liability_detail(seqs[k])
                 trajectory_rows.append(row)
                 all_candidates.append({**row, "designed_pdb": pdbs[k]})
 

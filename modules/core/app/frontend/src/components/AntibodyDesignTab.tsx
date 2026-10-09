@@ -28,6 +28,7 @@ const WEIGHT_AXES: { key: string; label: string; help: string }[] = [
   { key: 'half_life', label: 'Half-life — PLTNUM', help: 'Anchored against the reference antibodies below (pre-normalised).' },
   { key: 'thermostab', label: 'Thermostability — DeepSTABp Tm', help: 'Predicted melting temperature.' },
   { key: 'immuno', label: 'Low immunogenicity — MHCflurry', help: 'Immunogenic burden (lower is better); the weight favours low-burden designs.' },
+  { key: 'liability', label: 'Low sequence liabilities', help: 'Rule-based scan for chemical/developability liability motifs (deamidation, isomerization, N-glyc sequons, free Cys, Met/Trp oxidation). Fewer = more inert/developable (lower raw count is better).' },
 ]
 
 export function AntibodyDesignTab() {
@@ -449,6 +450,8 @@ const _AXIS_LABELS: [string, string][] = [
   ['half_life', 'Half-life'],
   ['thermostab', 'Tm'],
   ['immuno', 'Immuno burden'],
+  ['liability', 'Seq liabilities (count)'],
+  ['liability_detail', 'Liability sites'],
 ]
 
 function AntibodyResultBody({ runId }: { runId: string }) {

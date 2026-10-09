@@ -30,6 +30,7 @@ import json
 import logging
 import math
 import os
+import re
 import tempfile
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
@@ -244,6 +245,48 @@ def half_life_anchor_rewards(candidate_pltnum_scores: List[float],
             for s in candidate_pltnum_scores]
 
 
+# ---------------------------------------------------------------------------
+# Sequence-liability scan (rule-based "chemical inertness" — no model/endpoint)
+#
+# Flags the standard antibody/protein developability liabilities straight from the
+# sequence (Therapeutic-Antibody-Profiler style). `liability_weighted_count` is the
+# reward-loop axis value (lower = more inert/developable); `liability_detail` is a
+# human-readable breakdown for the result dialog. Weights are tunable; oxidation is
+# surface-context-dependent so it carries a low weight.
+# ---------------------------------------------------------------------------
+
+_LIABILITY_RULES = [
+    # (name, regex, weight)
+    ("deamidation",   r"N[GS]",      1.0),   # NG/NS Asn deamidation hot-spots
+    ("isomerization", r"D[GSTH]",    1.0),   # Asp isomerization
+    ("fragmentation", r"DP",         1.0),   # Asp-Pro acid-labile cleavage
+    ("nglyc_sequon",  r"N[^P][ST]",  2.0),   # N-linked glycosylation sequon (N-X-S/T, X != P)
+    ("oxidation",     r"[MW]",       0.3),   # Met/Trp oxidation (surface-dependent -> low weight)
+]
+_LIABILITY_WEIGHTS = {name: w for name, _pat, w in _LIABILITY_RULES}
+_LIABILITY_WEIGHTS["unpaired_cys"] = 2.0
+
+
+def liability_scan(sequence: str) -> Dict[str, int]:
+    """Per-liability hit counts for a sequence (non-overlapping regex matches)."""
+    seq = (sequence or "").upper()
+    out: Dict[str, int] = {name: len(re.findall(pat, seq)) for name, pat, _w in _LIABILITY_RULES}
+    # An odd cysteine count implies at least one free (non-disulfide) Cys — a real liability.
+    out["unpaired_cys"] = 1 if (seq.count("C") % 2 == 1) else 0
+    return out
+
+
+def liability_weighted_count(sequence: str) -> float:
+    """Weighted sum of sequence liabilities (lower = more inert/developable) — the axis value."""
+    return float(sum(_LIABILITY_WEIGHTS.get(k, 1.0) * v for k, v in liability_scan(sequence).items()))
+
+
+def liability_detail(sequence: str) -> str:
+    """Human-readable breakdown for the dialog, e.g. 'deamidation:2, nglyc_sequon:1' (or 'none')."""
+    hits = [f"{k}:{v}" for k, v in liability_scan(sequence).items() if v]
+    return ", ".join(hits) if hits else "none"
+
+
 class Strategy:
     name: str = "abstract"
 
@@ -377,37 +420,48 @@ def load_rfd4(flow_ckpt: str, ae_ckpt: str) -> Dict[str, Any]:
             "device": device, "torch": torch}
 
 
-def _vhh_condition_spec(antigen_pdb_path: str, epitope_residues: List[int],
-                        antigen_chain: str, length_min: int, length_max: int,
+def _vhh_condition_spec(antigen_cif_path: str, epitope_residues: List[int],
+                        antigen_chain: str, antigen_res_range, length_min: int, length_max: int,
                         tmpdir: str) -> str:
-    """Build the RFD4 condition_spec JSON for VHH design against an antigen
-    epitope and return its path.
+    """Build the RFD4 condition_spec JSON for VHH design against an antigen epitope and return its path.
 
-    FIRST-DRAFT conditioning (same caveat as nb01's binder/motif path): a fresh
-    VHH-length chain is generated against the antigen, with the antigen backbone
-    + sequence kept as context (C_CRD/C_SEQ) and the epitope residues as
-    hotspots (C_HOT) so the design packs against the epitope. This does NOT yet
-    scaffold a true Ig/VHH framework (keep framework, design only CDR loops) —
-    that requires a VHH framework template structure and CDR contigs, and is the
-    intended deploy-time refinement. anarcii numbering downstream annotates how
-    antibody-like each design is.
+    FIRST-DRAFT conditioning (same caveat as nb01's binder/motif path): a fresh VHH-length chain is
+    generated against the antigen, with the antigen backbone + sequence kept as context (C_CRD/C_SEQ) and
+    the epitope residues as hotspots (C_HOT). Does NOT yet scaffold a true Ig/VHH framework — that's the
+    intended refinement. Syntax follows the model's own inference examples (rfproteina tests /
+    docs/workflow/condition-spec): a preserved contig segment is `<chain><start>-<end>` (NOT just the chain
+    letter — that raises "Malformed preserved-segment token"), and conditions use atomworks `res_id` selects
+    (NOT `sel(...)`).
     """
     import json as _json
-    # contig: a fresh VHH-length chain (length_min-length_max), chain break, then
-    # the whole antigen chain kept as context.
-    contig = f"{int(length_min)}-{int(length_max)}, /0, {antigen_chain}"
+    lo, hi = antigen_res_range if antigen_res_range else (1, 1)
+    # contig: fresh VHH chain (length window) + chain break (/0) + the preserved antigen chain, by range.
+    contig = f"{int(length_min)}-{int(length_max)}, /0, {antigen_chain}{lo}-{hi}"
+    whole_antigen = f"res_id>={lo} and res_id<={hi}"
     conditions: Dict[str, Any] = {
-        "C_CRD": {True: [{"select": f"sel('{antigen_chain}') and is_protein_backbone"}]},
-        "C_SEQ": {True: [{"select": f"sel('{antigen_chain}')"}]},
+        "C_CRD": {True: [{"select": whole_antigen}]},  # keep the antigen backbone coords as context
+        "C_SEQ": {True: [{"select": whole_antigen}]},  # keep the antigen sequence
     }
     if epitope_residues:
-        conditions["C_HOT"] = {True: [{"select": f"sel('{antigen_chain}/*/{r}')"}
-                                      for r in epitope_residues]}
-    spec = {"binder": {"input": antigen_pdb_path, "contig": contig, "conditions": conditions}}
+        conditions["C_HOT"] = {True: [{"select": f"res_id=={int(r)}"} for r in epitope_residues]}
+    spec = {"binder": {"input": antigen_cif_path, "contig": contig, "conditions": conditions}}
     spec_path = os.path.join(tmpdir, "vhh_spec.json")
     with open(spec_path, "w") as f:
         f.write(_json.dumps(spec))
     return spec_path
+
+
+def _chain_res_range(pdb_str: str, chain: str):
+    """Min/max residue id for `chain` from the antigen PDB ATOM/HETATM records (the author numbering the
+    CIF preserves). Returns (lo, hi), or None if the chain has no residues."""
+    ids = []
+    for line in pdb_str.splitlines():
+        if line[:6].strip() in ("ATOM", "HETATM") and len(line) >= 26 and line[21] == chain:
+            try:
+                ids.append(int(line[22:26]))
+            except ValueError:
+                pass
+    return (min(ids), max(ids)) if ids else None
 
 
 def _structure_to_pdb_and_seq(sample: Dict[str, Any]) -> tuple:
@@ -439,6 +493,30 @@ def _structure_to_pdb_and_seq(sample: Dict[str, Any]) -> tuple:
         return buf.getvalue(), seq
 
 
+def _pdb_to_cif(pdb_path: str, cif_path: str) -> None:
+    """RFD4's condition_spec `input` must be CIF/BinaryCIF — it rejects PDB ("PDB files don't reliably
+    encode the bonds/formal charges the model consumes directly"). Convert the antigen PDB → CIF. Prefer
+    atomworks (the model's own parser, as its error recommends; preserves bonds/charges); fall back to a
+    plain biotite atom_site CIF if the atomworks writer API differs across versions (fine for a standard
+    protein antigen, where bonds are inferred from residue templates)."""
+    try:
+        from atomworks.io.parser import parse as _aw_parse
+        try:
+            from atomworks.io.writer import to_cif_file as _to_cif
+        except Exception:
+            from atomworks.io import to_cif_file as _to_cif  # writer location varies across atomworks versions
+        _to_cif(_aw_parse(pdb_path), cif_path)
+        return
+    except Exception as e:  # noqa: BLE001
+        print(f"[antigen->cif] atomworks conversion unavailable ({type(e).__name__}: {str(e)[:140]}); using biotite")
+    import biotite.structure.io.pdb as _pdb
+    import biotite.structure.io.pdbx as _pdbx
+    arr = _pdb.PDBFile.read(pdb_path).get_structure(model=1)
+    cif = _pdbx.CIFFile()
+    _pdbx.set_structure(cif, arr)
+    cif.write(cif_path)
+
+
 def generate_vhh(ctx: Dict[str, Any], antigen_pdb_str: str, epitope_residues: List[int],
                  antigen_chain: str, length_min: int, length_max: int,
                  num_samples: int) -> pd.DataFrame:
@@ -450,11 +528,15 @@ def generate_vhh(ctx: Dict[str, Any], antigen_pdb_str: str, epitope_residues: Li
     model, transform, torch = ctx["model"], ctx["transform"], ctx["torch"]
     rows = []
     with tempfile.TemporaryDirectory() as tmp:
-        antigen_path = os.path.join(tmp, "antigen.pdb")
-        with open(antigen_path, "w") as f:
+        antigen_pdb = os.path.join(tmp, "antigen.pdb")
+        with open(antigen_pdb, "w") as f:
             f.write(antigen_pdb_str)
-        spec_path = _vhh_condition_spec(antigen_path, epitope_residues, antigen_chain,
-                                        length_min, length_max, tmp)
+        # RFD4's condition_spec `input` must be CIF/BinaryCIF, not PDB — convert the antigen first.
+        antigen_cif = os.path.join(tmp, "antigen.cif")
+        _pdb_to_cif(antigen_pdb, antigen_cif)
+        res_range = _chain_res_range(antigen_pdb_str, antigen_chain)
+        spec_path = _vhh_condition_spec(antigen_cif, epitope_residues, antigen_chain,
+                                        res_range, length_min, length_max, tmp)
         ds = get_contig_or_design_problem_dataset(spec_path, num_replicates=int(num_samples),
                                                   transform=transform)
         batch = collate_batch([ds[i] for i in range(len(ds))],

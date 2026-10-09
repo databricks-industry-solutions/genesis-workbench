@@ -380,3 +380,26 @@ try:
 except Exception:
     print("WARNING: GWB app-registry metadata step failed — the endpoint is already live, so NOT failing "
           "the task. Fix separately if the model should appear in the GWB app UI:\n" + traceback.format_exc())
+
+# COMMAND ----------
+
+# Grant the app SP(s) CAN_QUERY on the (re)deployed endpoint. The Express create_and_wait/update path above
+# does NOT grant the app SPs (unlike the standard deploy_model path, which calls set_app_permissions_for_endpoint
+# in deploy_model.py), so without this a fine-tuned redeploy can leave the app's models/settings page showing
+# "PermissionDenied: User does not have permission 'View' on Endpoint gwb_*_rfd4_proteina_endpoint". Independent
+# + non-fatal (the endpoint is already live). DATABRICKS_APP_NAMES defaults to the UI + MCP app pair; the helper
+# try/except-skips an app that isn't deployed.
+import os as _os
+try:
+    from genesis_workbench.workbench import set_app_permissions_for_endpoint
+    _model_name = dbutils.widgets.get("model_name")
+    _os.environ.setdefault("DATABRICKS_APP_NAMES", "genesis-workbench,mcp-genesis-workbench")
+    try:
+        _pfx = dbutils.secrets.get("dbx_genesis_workbench", "dev_user_prefix")
+    except Exception:
+        _pfx = ""
+    _endpoint = f"gwb_{_pfx}_{_model_name}_endpoint" if _pfx and _pfx.strip() else f"gwb_{_model_name}_endpoint"
+    set_app_permissions_for_endpoint(_endpoint)
+    print(f"granted app SP(s) CAN_QUERY on {_endpoint}")
+except Exception as _e:
+    print(f"WARNING: could not grant app perms on the endpoint: {_e}")

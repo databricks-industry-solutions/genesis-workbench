@@ -51,7 +51,7 @@ databricks_app_names = dbutils.widgets.get("databricks_app_names") or databricks
 os.environ["DATABRICKS_APP_NAMES"] = ",".join([n.strip() for n in databricks_app_names.replace(":", ",").split(",") if n.strip()])  # UI + MCP
 os.environ["DATABRICKS_APP_NAME"] = databricks_app_name  # legacy single-app fallback
 
-from genesis_workbench.workbench import initialize, set_app_permissions_for_job
+from genesis_workbench.workbench import initialize, set_app_permissions_for_job, set_app_permissions_for_endpoint
 from genesis_workbench.models import register_batch_model, ModelCategory
 
 databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
@@ -80,6 +80,25 @@ for key, val in (("rfd4_finetune_job_id", rfd4_finetune_job_id),
 set_app_permissions_for_job(job_id=rfd4_finetune_job_id, user_email=user_email)
 set_app_permissions_for_job(job_id=rfd4_deploy_job_id, user_email=user_email)
 print("app permissions granted on finetune + deploy jobs")
+
+# COMMAND ----------
+
+# 3. Grant the app SP(s) CAN_QUERY on the live RFD4-Proteina serving endpoint.
+# nb01 (01_register_rfd4_proteina) deploys the endpoint via the EXPRESS create_and_wait path — unlike the
+# standard deploy_model path, that does NOT call set_app_permissions_for_endpoint, so without this the app's
+# models/settings page shows "PermissionDenied: User does not have permission 'View' on Endpoint
+# gwb_*_rfd4_proteina_endpoint". This task depends_on register_rfd4_proteina_task, so the endpoint already
+# exists here, and DATABRICKS_APP_NAMES was set above so the grant covers both the UI + MCP app SPs.
+try:
+    _pfx = dbutils.secrets.get("dbx_genesis_workbench", "dev_user_prefix")
+except Exception:
+    _pfx = ""
+_rfd4_endpoint = f"gwb_{_pfx}_rfd4_proteina_endpoint" if _pfx and _pfx.strip() else "gwb_rfd4_proteina_endpoint"
+try:
+    set_app_permissions_for_endpoint(_rfd4_endpoint)
+    print(f"granted app SP(s) CAN_QUERY on {_rfd4_endpoint}")
+except Exception as e:
+    print(f"WARNING: could not grant app perms on {_rfd4_endpoint}: {e}")
 
 # COMMAND ----------
 

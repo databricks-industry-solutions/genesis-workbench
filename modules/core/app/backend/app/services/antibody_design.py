@@ -39,6 +39,7 @@ DEFAULT_AXIS_WEIGHTS: dict[str, float] = {
     "half_life":  1.0,
     "thermostab": 1.0,
     "immuno":     1.5,
+    "liability":  1.0,   # rule-based sequence-liability scan (lower raw count = more inert)
 }
 
 _orchestrator_job_id_cache: dict[str, int] = {}

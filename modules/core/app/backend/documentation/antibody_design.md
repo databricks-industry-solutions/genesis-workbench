@@ -52,7 +52,10 @@ the ranked candidates, per-axis scores, a 3D viewer, and a PDB download.
 - **`results/reward_trajectory.csv`** — every candidate with its composite reward + per-axis scores.
 - **`results/topK_pdbs/*.pdb`** — the top-ranked VHH structures (shown in the result dialog + downloadable).
 - Reward axes: binding (Boltz ipTM), fold confidence (ESMFold pLDDT), solubility (NetSolP), half-life
-  (PLTNUM, anchored), Tm (DeepSTABp), and immunogenic burden (MHCflurry, minimized).
+  (PLTNUM, anchored), Tm (DeepSTABp), immunogenic burden (MHCflurry, minimized), and a rule-based
+  **sequence-liability scan** (deamidation / isomerization / N-glyc sequon / free-Cys / Met-Trp oxidation
+  motifs — a weighted count, minimized; the per-candidate breakdown is shown in the result dialog as
+  `liability_detail`).
 
 ## How It's Implemented
 
