@@ -34,7 +34,23 @@ class HLAIIPredImmunoBurdenModel(mlflow.pyfunc.PythonModel):
 
     def load_context(self, context):
         import torch
-        from hlapred.predict import HLAIIPredict  # shipped via code_paths
+        import hlapred.predict as _hp          # shipped via code_paths
+        from hlapred.predict import HLAIIPredict
+
+        # HLAIIPred's predict() builds `DataLoader(..., num_workers=1, pin_memory=True)`. In a
+        # model-serving container the small /dev/shm kills the forked worker ("DataLoader worker
+        # exited unexpectedly"); pin_memory is also a no-op on CPU. Force an in-process loader by
+        # patching the name bound in hlapred.predict (it does `from ...dataloader import DataLoader`).
+        _OrigDataLoader = _hp.DataLoader
+
+        class _CPUDataLoader(_OrigDataLoader):
+            def __init__(self, *args, **kwargs):
+                kwargs["num_workers"] = 0
+                kwargs["pin_memory"] = False
+                kwargs.pop("persistent_workers", None)
+                super().__init__(*args, **kwargs)
+
+        _hp.DataLoader = _CPUDataLoader
 
         self._np = np
         device = torch.device("cpu")
