@@ -30,6 +30,16 @@ export function LargeMoleculePage() {
             content: <ProteinDesignTab />,
           },
           {
+            id: 'antibody_design',
+            label: 'Antibody Design',
+            content: <AntibodyDesignTab />,
+          },
+          {
+            id: 'enzyme_optimization',
+            label: 'Guided Enzyme Optimization',
+            content: <EnzymeOptimizationTab />,
+          },
+          {
             id: 'inverse_folding',
             label: 'Inverse Folding',
             content: <InverseFoldingTab />,
@@ -38,16 +48,6 @@ export function LargeMoleculePage() {
             id: 'binder_design',
             label: 'Protein Binder Design',
             content: <ProteinBinderDesignTab />,
-          },
-          {
-            id: 'enzyme_optimization',
-            label: 'Guided Enzyme Optimization',
-            content: <EnzymeOptimizationTab />,
-          },
-          {
-            id: 'antibody_design',
-            label: 'Antibody Design',
-            content: <AntibodyDesignTab />,
           },
         ]}
       />

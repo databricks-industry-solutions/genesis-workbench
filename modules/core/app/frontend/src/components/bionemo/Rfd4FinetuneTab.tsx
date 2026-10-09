@@ -23,10 +23,12 @@ export function Rfd4FinetuneTab() {
 
   const [deployFtId, setDeployFtId] = useState('')
 
-  // Prefill the ft_data dir + tutorial preset the rfd4_proteina module stages.
+  // Prefill the staged base checkpoint + tutorial preset. Training data stays
+  // blank on purpose (blank = rfd4-train's bundled tutorial dataset).
   const defaults = useQuery({ queryKey: ['rfd4', 'defaults'], queryFn: api.rfd4Defaults })
   useEffect(() => {
     if (defaults.data) {
+      setPretrainCkpt((v) => v || defaults.data!.pretrain_ckpt)
       setTrainData((v) => v || defaults.data!.train_data)
       setExperimentPreset((v) => v || defaults.data!.experiment_preset)
     }

@@ -23,19 +23,28 @@ router = APIRouter(prefix="/api/rfd4", tags=["rfd4"])
 
 
 class DefaultsResponse(BaseModel):
+    pretrain_ckpt: str
     train_data: str
     experiment_preset: str
 
 
+# The pinned RFD4 flow (denoiser) checkpoint the rfd4_proteina deploy stages
+# (matches variables.yml `rfd4_flow_ckpt`).
+_RFD4_FLOW_CKPT = "chk_epoch_00000169_step_000000340000-ema.ckpt"
+
+
 @router.get("/defaults", response_model=DefaultsResponse)
 def defaults(_: CurrentUserDep) -> DefaultsResponse:
-    """Pre-fill the fine-tune form so it works out of the box: the ft_data dir the
-    rfd4_proteina module stages, and the repo's tutorial finetune preset. The base
-    checkpoint is left blank — blank uses the staged flow checkpoint (job default)."""
+    """Pre-fill the fine-tune form so it runs out of the box: the staged RFD4 flow
+    checkpoint as the base, and the repo's tutorial finetune preset. Training data
+    is left BLANK on purpose — blank uses rfd4-train's bundled tutorial dataset
+    (the `tutorial/finetune_test_dataset` preset); pointing at a non-existent
+    ft_data dir would fail the run. A user supplies their own dir to override."""
     catalog = os.environ["CORE_CATALOG_NAME"]
     schema = os.environ["CORE_SCHEMA_NAME"]
     return DefaultsResponse(
-        train_data=f"/Volumes/{catalog}/{schema}/rfd4_proteina/ft_data",
+        pretrain_ckpt=f"/Volumes/{catalog}/{schema}/rfd4_proteina/flow_checkpoints/{_RFD4_FLOW_CKPT}",
+        train_data="",
         experiment_preset="tutorial/finetune_test_dataset",
     )
 

@@ -220,8 +220,28 @@ def antibody_design_top_k(
 
 class AntibodyDefaultsResponse(BaseModel):
     default_weights: dict[str, float]
+    antigen_pdb: str
+    antigen_chain: str
+    epitope_residues: list[int]
+
+
+# Bundled demo antigen: hen egg-white lysozyme (RCSB 1LYZ, chain A) — the canonical
+# VHH/nanobody target. The epitope is a HyHEL-10-style surface patch (real anti-HEL
+# antibody contact residues), so the form launches a sensible run out of the box.
+_DEMO_ANTIGEN_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "demo_antigen_lysozyme.pdb")
+_DEMO_EPITOPE = [19, 21, 23, 73, 75, 100, 101]
 
 
 @router.get("/defaults", response_model=AntibodyDefaultsResponse)
 def antibody_design_defaults(_: CurrentUserDep) -> AntibodyDefaultsResponse:
-    return AntibodyDefaultsResponse(default_weights=ab_pipeline.DEFAULT_AXIS_WEIGHTS)
+    try:
+        with open(_DEMO_ANTIGEN_PATH) as f:
+            antigen_pdb = f.read()
+    except Exception:
+        antigen_pdb = ""
+    return AntibodyDefaultsResponse(
+        default_weights=ab_pipeline.DEFAULT_AXIS_WEIGHTS,
+        antigen_pdb=antigen_pdb,
+        antigen_chain="A",
+        epitope_residues=_DEMO_EPITOPE,
+    )

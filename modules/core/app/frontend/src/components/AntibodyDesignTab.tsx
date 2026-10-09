@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 
 import { api } from '@/api/client'
@@ -32,6 +32,17 @@ export function AntibodyDesignTab() {
   const [experiment, setExperiment] = useState('gwb_antibody_design')
   const [runName, setRunName] = useState(`vhh_${ts()}`)
   const [searchToken, setSearchToken] = useState(0)
+
+  // Prefill a working demo antigen (hen egg-white lysozyme) + a plausible epitope
+  // so the form runs out of the box.
+  const defaults = useQuery({ queryKey: ['antibody_design', 'defaults'], queryFn: api.antibodyDesignDefaults })
+  useEffect(() => {
+    if (defaults.data) {
+      setAntigenPdb((v) => v || defaults.data!.antigen_pdb)
+      setAntigenChain((v) => v || defaults.data!.antigen_chain)
+      setEpitope((v) => v || defaults.data!.epitope_residues.join(','))
+    }
+  }, [defaults.data])
 
   const start = useMutation({
     mutationFn: () =>

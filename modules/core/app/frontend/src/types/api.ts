@@ -607,6 +607,7 @@ export type KermtDispatchResponse = { job_run_id: number; run_url: string }
 // ─── RFD4-Proteina (fine-tune + deploy) ─────────────────────────────────────
 
 export type Rfd4Defaults = {
+  pretrain_ckpt: string
   train_data: string
   experiment_preset: string
 }
@@ -776,7 +777,12 @@ export type AntibodyCandidate = { candidate_id: string; pdb: string; viewer_html
 
 export type AntibodyTopKResponse = { candidates: AntibodyCandidate[] }
 
-export type AntibodyDefaultsResponse = { default_weights: Record<string, number> }
+export type AntibodyDefaultsResponse = {
+  default_weights: Record<string, number>
+  antigen_pdb: string
+  antigen_chain: string
+  epitope_residues: number[]
+}
 
 // ─── Genomics ──────────────────────────────────────────────────────
 
