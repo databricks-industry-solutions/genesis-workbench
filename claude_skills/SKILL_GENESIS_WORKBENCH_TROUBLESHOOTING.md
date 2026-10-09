@@ -70,6 +70,42 @@ content = content.replace('\u2018', "'").replace('\u2019', "'")
 
 ## Serving Endpoint Issues
 
+### Model needs torch > 2.7.1 / CUDA > 11.8 (e.g. RFD4-Proteina): ImportError at serving load
+**Symptom:** The model logs + registers fine and generates on the register node (serverless GPU, CUDA 13),
+but the serving endpoint fails to load with `ImportError: cannot import name 'has_static_value' from
+torch.fx.experimental.symbolic_shapes`, `AttributeError: module 'torch.optim' has no attribute 'Muon'`,
+or `libcue_ops.so: libnvrtc.so.13: cannot open shared object file`. The MLflow log warns "current
+2.7.1+cu118, required 2.14.1".
+**Root cause:** STANDARD GPU Model Serving builds a container at DEPLOY time on a fixed **torch 2.7.1+cu118
+(CUDA 11.8)** base, and runs a HARDCODED post-step `conda run -n mlflow-env pip install torch torchvision
+--no-index --find-links=/package-repo/pip-repo` that force-reinstalls torch 2.7.1 over whatever you
+pinned. No `pip_requirements` / `conda_env` / inline `--extra-index-url` trick can override it. So any
+model needing torch > 2.7.1 or CUDA > 11.8 cannot run on the standard serving path.
+**Fix: use Express deployments (`env_pack`)** — they PACKAGE the serverless-GPU notebook env at
+REGISTRATION and RESTORE it identically at serving (no deploy-time rebuild, no force-install), so the
+serving env == your register env. Requires `mlflow>=3.12` + `databricks-sdk>=0.150.0`, registering FROM
+serverless GPU. See `large_molecule/rfd4_proteina` `01_register_*.py` and the Development skill's
+"Serving a torch>2.7.1 / CUDA-13 model via Express" pattern. Key points:
+```python
+# register FROM serverless GPU; log WITHOUT registered_model_name, then register_model separately
+assert torch.cuda.is_available()
+mi = mlflow.pyfunc.log_model(name=model_name, python_model=..., code_paths=[...],
+                             pip_requirements=["mlflow","cloudpickle","pandas","numpy"])  # minimal: env_pack governs serving env
+from mlflow.utils.env_pack import EnvPackConfig
+mv = mlflow.register_model(model_uri=mi.model_uri, name=uc_model_name,
+        env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False))  # False: don't re-resolve git/binary/local-tagged pkgs
+w.serving_endpoints.create_and_wait(..., ServedEntityInput(workload_type=ServingModelWorkloadType("GPU_XLARGE"),
+        workload_size="Small", scale_to_zero_enabled=False), tags=[...])
+```
+`install_dependencies=False` is essential when the env has git/binary/local-tagged wheels (torch
+`+cu132`, nvcc source builds) — the default `True` re-resolves them from an index and fails with
+`No matching distribution`. Express deploys in ~6 min (vs 30-38 min for a standard build). GPU_XLARGE =
+1× H100, us-west-2 + account-team enrolled, no scale-to-zero.
+**Gotcha:** the GWB `import_model_from_uc` step runs after a `restartPython()` to the GWB lib (mlflow
+2.22/sdk 0.50) — put it in its own cell, wrap it non-fatal (the endpoint is already live), and do NOT
+reference pre-restart variables (e.g. `endpoint_name`) in post-restart cells → `NameError`. With
+`max_retries` on the task, such a bug becomes a wasteful full-notebook retry storm.
+
 ### SCimilarity: Request size cannot exceed 16777216 bytes
 **Symptom:** `Request size cannot exceed 16777216 bytes` when calling GetEmbedding.
 **Root cause:** Sending too many cells in a single request. Each cell has ~18K gene values at ~10 bytes/float in JSON.

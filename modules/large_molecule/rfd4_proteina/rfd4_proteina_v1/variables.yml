@@ -1,0 +1,101 @@
+variables:
+  current_user:
+    description: User deploying the bundle. Can apply to service principals as well.
+    default: ${workspace.current_user.userName}
+
+  current_working_directory:
+    description: Working directory or bundle root.
+    default: /Users/${var.current_user}/.bundle/${bundle.name}/${bundle.target}
+
+  workspace_url:
+    description: Workspace url for deployment
+
+  common_resource_tags:
+    description: Resource tags
+    default:
+      application: genesis_workbench
+      module: rfd4_proteina
+      created_by: ${workspace.current_user.short_name}
+
+  cpu_node_type:
+    description: Node type for CPU vms
+
+  t4_node_type:
+    description: Node type for T4 GPUs
+
+  a10_node_type:
+    description: Node type for A10 GPUs
+
+  gpu_small_setting:
+    description: The config setting for small gpu
+
+  gpu_medium_setting:
+    description: The config setting for medium gpu
+
+  gpu_large_setting:
+    description: The config setting for large gpu
+
+  # Serving-endpoint workload type. GPU_XLARGE = 1x H100 (us-west-2, account-team enrolled, no
+  # scale-to-zero). RFD4 is a torch-2.14 / CUDA-13 model, which the STANDARD serving path cannot run (it
+  # rebuilds on a torch-2.7.1/CUDA-11.8 base and force-reinstalls torch 2.7.1). The register notebook
+  # instead uses EXPRESS deployments (env_pack): it packages this serverless-GPU/CUDA-13 kernel at
+  # registration and restores it identically at serving — so what fixes the torch mismatch is env PARITY,
+  # not the H100 base image. H100 is used here mainly for memory headroom + CUDA-13 driver certainty;
+  # Express should also work on cheaper CUDA-13-capable tiers (GPU_LARGE=A100, GPU_MEDIUM=A10) — untested.
+  # Deployed via a CURRENT databricks-sdk (>=0.150.0) + mlflow>=3.12 installed in the kernel. Declared
+  # module-local with a default so the shared <cloud>.env (every other module's bundle) isn't touched.
+  gpu_serving_setting:
+    description: Serving-endpoint workload type (GPU_XLARGE = 1x H100; served via Express env_pack for the torch-2.14 model)
+    default: GPU_XLARGE
+
+  core_catalog_name:
+    description: primary catalog where data, models, and files are stored for this project.
+
+  core_schema_name:
+    description: The schema where core components will be installed.
+
+  sql_warehouse_id:
+    description: Id of the SQL Warehouse that will be used by the app
+
+  module_registration_experiment_name:
+    description: The experiment to which all registered modules are logged
+    default: dbx_genesis_workbench_modules
+
+  cache_dir:
+    description: The cache directory (UC volume) for RFD4-Proteina model artifacts + fine-tuned weights
+    default: rfd4_proteina
+
+  # RFD4-Proteina released checkpoints (public HTTPS object store; no credentials). The flow
+  # denoiser + the partial-autoencoder, per the model repo's scripts/download_example_data.sh.
+  rfd4_ckpt_base_url:
+    description: Public base URL for the RFD4-Proteina released checkpoints
+    default: https://rfd4-proteina-public-e04a.cwobject.com
+
+  rfd4_flow_ckpt:
+    description: Flow (denoiser) checkpoint filename
+    default: chk_epoch_00000169_step_000000340000-ema.ckpt
+
+  rfd4_ae_ckpt:
+    description: Partial-autoencoder checkpoint filename
+    default: 2026_09_04_release_ae_z16_400k-ema.ckpt
+
+  # RFD4-Proteina MODEL CODE is pulled at job runtime from the private GitHub repo. A GWB customer
+  # deploying this module does NOT have the repo cloned locally, and there is no public HuggingFace
+  # mirror of the code (only the weights are on the public CDN above). So the register/finetune/deploy
+  # jobs pip-install `rfproteina` straight from this git ref, authenticating with a GitHub PAT read
+  # from the GWB secret scope. Pinned to a commit for reproducibility. Nothing is vendored into GWB.
+  rfd4_git_url:
+    description: Git host/path of the RFD4-Proteina model repo (no scheme; token is injected at runtime)
+    default: github.com/NVIDIA-BioNeMo/RFD4-Proteina-Open-Model-Private.git
+
+  rfd4_git_ref:
+    description: Git ref (commit/branch/tag) of the RFD4-Proteina repo to install — pinned for reproducibility
+    default: 84d83b98442e5946a6a626d0d99a19773207e894
+
+  rfd4_git_token_scope:
+    description: Databricks secret scope holding the GitHub PAT with read access to the RFD4-Proteina repo
+    default: dbx_genesis_workbench
+
+  rfd4_git_token_key:
+    description: Key in the secret scope for the GitHub PAT
+    default: rfd4_github_token

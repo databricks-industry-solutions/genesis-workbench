@@ -34,6 +34,51 @@ cluster-start time) and hardens deploy-time sample-data staging.
   + S3 realities; troubleshooting skill gains recipes for the S3 mirror, serverless `%sh`/`/local_disk0` and
   `LOCAL_RELATION_SIZE_LIMIT_EXCEEDED`, and the unreliable `fs ls` size on UC Volumes.
 
+## rfd4_proteina (2026-10-09) — RFD4-Proteina design model served on H100 via Express env_pack
+
+Adds the NVIDIA×Baker **RFD4-Proteina** flow-matching design model as a new `large_molecule` submodule
+(`rfd4_proteina/rfd4_proteina_v1`), mirroring `small_molecule/proteina_complexa` (serving) + `kermt_v2`
+(register → fine-tune → deploy chain). Base de-novo generation is confirmed end-to-end on a real H100 deploy.
+
+### What changed and why
+- **Served on a GPU_XLARGE (1× H100) endpoint via MLflow Express deployments (`env_pack`).** RFD4-Proteina
+  is torch 2.14.1 / CUDA 13 (cu132 wheels + a TMol nvcc source build + cuEquivariance-cu13); standard GPU
+  Model Serving rebuilds the container on a torch-2.7.1 / CUDA-11.8 base and force-reinstalls torch, which
+  the stack cannot run. Express packages the serverless-GPU register env (`env_pack`) and restores it
+  verbatim at serving — no deploy-time rebuild, no force-install — so the model loads + generates exactly as
+  on the register node (and came up in ~6 min vs the 30-38 min standard build).
+- **Source pip-installed at job runtime from the private NVIDIA-BioNeMo RFD4-Proteina repo** (nothing
+  vendored); a GitHub PAT is read from the `dbx_genesis_workbench/rfd4_github_token` secret (token-optional,
+  so it degrades to an unauthenticated clone once the repo is public). Checkpoints come from the public CDN.
+  Register / fine-tune / deploy jobs run on serverless `GPU_1xH100` (`client: '6'` = AI Runtime v6 = CUDA 13).
+- **nb03 (fine-tuned deploy) ported to the same Express path** as nb01: `log_model` without
+  `registered_model_name`, then `register_model(env_pack=EnvPackConfig(install_dependencies=False))`, then a
+  direct `serving_endpoints` create/update — replacing the old per-dep `pip_requirements` pinning +
+  `deploy_model()` (standard-serving) approach. The fine-tuned version (base flow + LoRA adapter) registers
+  as a new version of the same `rfd4_proteina` UC model and updates the same endpoint.
+- **Endpoint tags** (`application` + `created_by`) are applied on BOTH the create and update paths;
+  `update_config_and_wait` does not carry tags, so they are re-applied with `serving_endpoints.patch()`
+  after an update (same fix as `deploy_model_endpoint`), so a redeploy never drops them.
+
+### Anti-patterns avoided (and the bug behind them)
+- **`install_dependencies=True` for env_pack fails** here: rfproteina@git, the tmol nvcc build,
+  torch==2.14.1+cu132 and cuEquivariance-cu13 resolve on NO index, so re-resolution raises "No matching
+  distribution for torch==2.14.1+cu132" — the exact error that killed the standard build. `False` snapshots
+  the installed site-packages verbatim (serving egress is restricted anyway).
+- **Removed the base-torch compat shims + load-failure diagnostics from nb01's serving PyFunc** (the
+  `has_static_value` / `torch.optim.Muon` shims, the `load_context` try/except that captured a `_load_error`,
+  and the best-effort Volume `load_error.log` write). They existed only to survive the standard-serving base
+  torch 2.7.1; with Express the serving env == the register env (torch 2.14), so they were dead code.
+- **Post-restart NameError trap:** the GWB app-registry step runs after a `restartPython()` to the GWB wheel
+  (mlflow 2.22 / sdk 0.50), which wipes the kernel — it re-reads widgets, never references pre-restart names,
+  and is wrapped non-fatally so a registry hiccup can't fail the task (the endpoint is already live).
+
+### Reference implementations / files
+- `modules/large_molecule/rfd4_proteina/rfd4_proteina_v1/notebooks/{01_register_rfd4_proteina,02_rfd4_finetune,03_rfd4_register_serving}.py`
+- Serving + Express recipe mirror: `modules/small_molecule/proteina_complexa/proteina_complexa_v1` (Proteina
+  family, standard-serving era) and the Development skill's "Serving a torch>2.7.1 / CUDA-13 model via Express".
+- Doc: `modules/core/app/backend/documentation/rfd4_proteina_design.md`.
+
 ## v2.2.0 (2026-06-22) — KERMT 2.0 live out-of-the-box · MCP server hardened (UI + MCP grants) · fresh-install & cloud-portability fixes
 
 A consolidation release that makes the **MCP server** dependable as a first-class surface, ships **KERMT 2.0**

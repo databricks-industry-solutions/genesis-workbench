@@ -1,0 +1,70 @@
+resources:
+  jobs:
+    rfd4_finetune:
+      name: rfd4_finetune_job
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        # Fine-tune RFD4-Proteina (rfd4-train, PEFT/LoRA adapter on top of the released flow checkpoint).
+        # Needs an H100 (CUDA 13) + the rfproteina CUDA-13 stack, so same compute as register.
+        - task_key: rfd4_finetune_task
+          max_retries: 0
+          disable_auto_optimization: true
+          retry_on_timeout: false
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xH100
+          notebook_task:
+            notebook_path: ../notebooks/02_rfd4_finetune.py
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: cache_dir
+          default: ${var.cache_dir}
+        # RFD4-Proteina source is pip-installed from the private GitHub repo at runtime (nothing
+        # vendored locally); the job reads a GitHub PAT from rfd4_git_token_scope/key.
+        - name: rfd4_git_url
+          default: ${var.rfd4_git_url}
+        - name: rfd4_git_ref
+          default: ${var.rfd4_git_ref}
+        - name: rfd4_git_token_scope
+          default: ${var.rfd4_git_token_scope}
+        - name: rfd4_git_token_key
+          default: ${var.rfd4_git_token_key}
+        - name: user_email
+          default: ${var.current_user}
+        # Base checkpoint to fine-tune from (the released flow denoiser staged on the cache Volume).
+        - name: pretrain_ckpt_path
+          default: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/${var.cache_dir}/flow_checkpoints/${var.rfd4_flow_ckpt}
+        # Training data: a directory with a parquet manifest (path,key) + CIF files on the cache Volume.
+        - name: train_data_location
+          default: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/${var.cache_dir}/ft_data
+        # rfd4-train experiment preset (the repo's tutorial finetune on the small test dataset by default).
+        - name: experiment_preset
+          default: tutorial/finetune_test_dataset
+        - name: finetune_label
+          default: rfd4_proteina_ft
+        - name: max_epochs
+          default: "5"
+        - name: steps_per_epoch
+          default: "100"
+        - name: experiment_name
+          default: gwb_rfd4_finetune
+        - name: mlflow_run_name
+          default: ""
+        # Pre-created run id from the app/MCP dispatcher; empty = create a new run.
+        - name: mlflow_run_id
+          default: ""
+
+      environments:
+        - environment_key: gpu_env
+          spec:
+            client: '6'
+
+      tags: ${var.common_resource_tags}

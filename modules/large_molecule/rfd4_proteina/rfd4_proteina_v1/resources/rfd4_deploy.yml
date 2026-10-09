@@ -1,0 +1,59 @@
+resources:
+  jobs:
+    rfd4_deploy:
+      name: rfd4_deploy_job
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        # Take a fine-tuned RFD4-Proteina adapter (ft_id from rfd4_weights; empty = latest active),
+        # wrap base+adapter in an MLflow PyFunc, register to UC, import to GWB, and deploy an H100
+        # (GPU_XLARGE) serving endpoint. H100 + CUDA-13 stack needed to load + dry-run the model.
+        - task_key: rfd4_deploy_task
+          max_retries: 0
+          disable_auto_optimization: true
+          retry_on_timeout: false
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xH100
+          notebook_task:
+            notebook_path: ../notebooks/03_rfd4_register_serving.py
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: cache_dir
+          default: ${var.cache_dir}
+        # RFD4-Proteina source is pip-installed from the private GitHub repo at runtime (nothing
+        # vendored locally); the job reads a GitHub PAT from rfd4_git_token_scope/key.
+        - name: rfd4_git_url
+          default: ${var.rfd4_git_url}
+        - name: rfd4_git_ref
+          default: ${var.rfd4_git_ref}
+        - name: rfd4_git_token_scope
+          default: ${var.rfd4_git_token_scope}
+        - name: rfd4_git_token_key
+          default: ${var.rfd4_git_token_key}
+        - name: user_email
+          default: ${var.current_user}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        # Fine-tuned model id from rfd4_weights; empty = use the latest active fine-tune.
+        - name: ft_id
+          default: ""
+        - name: model_name
+          default: rfd4_proteina
+        # Serving-endpoint workload type (GPU_LARGE — top single-GPU serving tier; H100 is job-only here).
+        - name: workload_type
+          default: ${var.gpu_serving_setting}
+
+      environments:
+        - environment_key: gpu_env
+          spec:
+            client: '6'
+
+      tags: ${var.common_resource_tags}

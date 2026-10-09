@@ -18,6 +18,7 @@
 - [Protein Design](protein_design.md) — Design novel proteins by redesigning specified regions using RFDiffusion + ProteinMPNN
 - [Inverse Folding](inverse_folding.md) — Design new sequences for a fixed backbone with ProteinMPNN, each validated by re-folding with ESMFold
 - [Sequence Similarity Search](sequence_search.md) — Fast BLAST-like search across 150M+ sequences using ESM-2 embeddings
+- [RFD4-Proteina Design](rfd4_proteina_design.md) — Generate novel protein backbones + sequences with the NVIDIA×Baker RFD4-Proteina flow-matching model, served on a GPU_XLARGE (1× H100) endpoint via Express env_pack; de-novo monomer design, first-draft target-conditioned (binder/motif) design, and optional LoRA fine-tuning
 
 ## Small Molecule
 

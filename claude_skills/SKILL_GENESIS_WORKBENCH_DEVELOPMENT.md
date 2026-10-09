@@ -290,6 +290,59 @@ run_id = deploy_model(
 result = wait_for_job_run_completion(run_id, timeout=3600)
 ```
 
+#### Serving a torch > 2.7.1 / CUDA-13 model via Express deployments
+
+The standard `deploy_model()` path above uses Databricks' STANDARD GPU Model Serving, which rebuilds the
+container at deploy time on a **torch 2.7.1+cu118 (CUDA 11.8)** base and runs a hardcoded post-step that
+**force-reinstalls torch 2.7.1** over any pin. So a model that needs torch > 2.7.1 or CUDA > 11.8 (e.g.
+RFD4-Proteina = torch 2.14.1/cu132 + cuEquivariance-cu13) CANNOT be served the standard way — it loads on
+the register node (serverless GPU, CUDA 13) but fails at serving with `has_static_value` / `torch.optim.
+Muon` / `libnvrtc.so.13` import errors.
+
+Serve it with **Express deployments** instead (docs: `machine-learning/model-serving/express-deployments`),
+which package the serverless-GPU notebook env at REGISTRATION (`env_pack`) and restore it identically at
+serving — no deploy-time rebuild, no force-install. Reference: `large_molecule/rfd4_proteina/.../notebooks/
+01_register_rfd4_proteina.py`. Replace Step 3's `deploy_model(...)` with:
+
+```python
+# In the SAME serverless-GPU kernel that installed the model (needs mlflow>=3.12 + databricks-sdk>=0.150.0):
+import torch, mlflow
+from mlflow.utils.env_pack import EnvPackConfig
+assert torch.cuda.is_available()                     # register FROM GPU (Express is GPU-to-GPU)
+mlflow.set_registry_uri("databricks-uc")
+os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"   # fast path for multi-GB artifacts
+
+mi = mlflow.pyfunc.log_model(                         # log WITHOUT registered_model_name
+    name=model_name, python_model=MyModelWrapper(), artifacts=artifacts, code_paths=code_paths,
+    signature=signature, input_example=example,
+    pip_requirements=["mlflow", "cloudpickle", "pandas", "numpy"])   # minimal: env_pack defines the serving env
+mv = mlflow.register_model(                           # register SEPARATELY with env_pack
+    model_uri=mi.model_uri, name=f"{catalog}.{schema}.{model_name}",
+    env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False))
+
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.serving import (EndpointCoreConfigInput, ServedEntityInput,
+                                             ServingModelWorkloadType, EndpointTag)
+w = WorkspaceClient()
+served = [ServedEntityInput(entity_name=f"{catalog}.{schema}.{model_name}", entity_version=str(mv.version),
+            name=model_name, workload_type=ServingModelWorkloadType("GPU_XLARGE"),  # 1x H100, us-west-2, enrolled
+            workload_size="Small", scale_to_zero_enabled=False)]                    # GPU_XLARGE: no scale-to-zero
+w.serving_endpoints.create_and_wait(name=endpoint_name,
+    config=EndpointCoreConfigInput(name=endpoint_name, served_entities=served),
+    tags=[EndpointTag(key="application", value="genesis_workbench")], timeout=timedelta(minutes=120))
+```
+
+- **`install_dependencies=False`** is essential if the env has git/binary/local-tagged wheels (torch
+  `+cu132`, nvcc source builds, `cuequivariance-*-cu13`): the default `True` re-resolves them from an
+  index and fails with `No matching distribution`. `False` snapshots the installed site-packages verbatim.
+- Express deploys in **~6 min** (no 30-38 min container build).
+- Run `import_model_from_uc` (GWB app-registry metadata) in a SEPARATE cell AFTER restarting to the GWB lib
+  (mlflow 2.22/sdk 0.50) — wrap it NON-FATAL (endpoint already live) and never reference pre-restart
+  variables (e.g. `endpoint_name`) in post-restart cells (`restartPython()` wipes the kernel → `NameError`,
+  which with task `max_retries` becomes a wasteful full-notebook retry storm).
+- Because env *parity* (not the H100 base image) is the mechanism, Express should also work on cheaper
+  CUDA-13-capable tiers (GPU_LARGE=A100 / GPU_MEDIUM=A10) — test to drop the GPU_XLARGE enrollment need.
+
 ### Step 4: Write the job YAML
 
 ```yaml

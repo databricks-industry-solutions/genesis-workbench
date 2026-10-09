@@ -1,0 +1,93 @@
+resources:
+  jobs:
+    register_rfd4_proteina:
+      name: register_rfd4_proteina_gwb
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        # Pull the H100/CUDA-13 checkpoints, build the rfproteina CUDA-13 stack, wrap the model in an
+        # MLflow PyFunc, register to UC, import into GWB, and deploy the GPU_XLARGE (H100) serving endpoint.
+        # Needs an H100 (CUDA 13) + ~40-70GB VRAM to load + dry-run the flow model, so it runs on a
+        # serverless-GPU H100 node (not A10 — the model won't fit on A10).
+        # max_retries: H100 serverless-GPU capacity here is intermittent — the compute-start can exceed
+        # the 900s window and fail INTERNAL_ERROR. Auto-retry the task so a single job run makes several
+        # provisioning attempts (better odds of catching an available H100). (Also retries a code failure,
+        # acceptable while capacity is the dominant failure mode.)
+        - task_key: register_rfd4_proteina_task
+          max_retries: 2
+          disable_auto_optimization: true
+          retry_on_timeout: false
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xH100
+          notebook_task:
+            notebook_path: ../notebooks/01_register_rfd4_proteina.py
+
+        # Register the finetune + deploy jobs into GWB (batch_models + settings) and grant the app SP
+        # run permission, so the UI/MCP can dispatch the RFD4 finetune/deploy workflows on demand.
+        - task_key: register_rfd4_jobs_task
+          max_retries: 0
+          disable_auto_optimization: true
+          depends_on:
+            - task_key: register_rfd4_proteina_task
+          environment_key: cpu_env
+          notebook_task:
+            notebook_path: ../notebooks/register_rfd4_jobs.py
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: model_name
+          default: rfd4_proteina
+        - name: cache_dir
+          default: ${resources.volumes.rfd4_proteina_cache_dir.name}
+        # RFD4-Proteina source is pip-installed from the private GitHub repo at runtime (nothing
+        # vendored locally); the job reads a GitHub PAT from rfd4_git_token_scope/key.
+        - name: rfd4_git_url
+          default: ${var.rfd4_git_url}
+        - name: rfd4_git_ref
+          default: ${var.rfd4_git_ref}
+        - name: rfd4_git_token_scope
+          default: ${var.rfd4_git_token_scope}
+        - name: rfd4_git_token_key
+          default: ${var.rfd4_git_token_key}
+        - name: experiment_name
+          default: ${var.module_registration_experiment_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: user_email
+          default: ${var.current_user}
+        # Serving-endpoint workload type (GPU_LARGE — top single-GPU serving tier; H100 is job-only here).
+        - name: workload_type
+          default: ${var.gpu_serving_setting}
+        - name: rfd4_ckpt_base_url
+          default: ${var.rfd4_ckpt_base_url}
+        - name: rfd4_flow_ckpt
+          default: ${var.rfd4_flow_ckpt}
+        - name: rfd4_ae_ckpt
+          default: ${var.rfd4_ae_ckpt}
+        # Wired so register_rfd4_jobs can persist the on-demand job ids for the app/MCP dispatcher.
+        - name: rfd4_finetune_job_id
+          default: ${resources.jobs.rfd4_finetune.id}
+        - name: rfd4_deploy_job_id
+          default: ${resources.jobs.rfd4_deploy.id}
+        - name: databricks_app_names
+          default: genesis-workbench:mcp-genesis-workbench
+
+      # gpu_env = client '6' (AI Runtime v6 image = CUDA 13 + py3.12), the base RFD4-Proteina needs for
+      # torch 2.14.1/cu132 + cuEquivariance-cu13 + the TMol source build. cpu_env ('4') is the lightweight
+      # serverless env for the register_jobs task (SQL/GWB registration only, no CUDA).
+      environments:
+        - environment_key: gpu_env
+          spec:
+            client: '6'
+        - environment_key: cpu_env
+          spec:
+            client: '4'
+
+      tags: ${var.common_resource_tags}
