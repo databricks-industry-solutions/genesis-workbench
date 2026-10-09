@@ -4,6 +4,7 @@ import { Tabs } from '@/components/Tabs'
 import { BionemoFinetuneTab } from '@/components/bionemo/BionemoFinetuneTab'
 import { BionemoInferenceTab } from '@/components/bionemo/BionemoInferenceTab'
 import { KermtFinetuneTab } from '@/components/bionemo/KermtFinetuneTab'
+import { Rfd4FinetuneTab } from '@/components/bionemo/Rfd4FinetuneTab'
 
 function Esm2Tab() {
   return (
@@ -30,6 +31,7 @@ export function BionemoPage() {
       <Tabs
         tabs={[
           { id: 'kermt', label: 'KERMT', content: <KermtFinetuneTab /> },
+          { id: 'rfd4', label: 'RFD4-Proteina', content: <Rfd4FinetuneTab /> },
           { id: 'esm2', label: 'ESM2', content: <Esm2Tab /> },
           { id: 'geneformer', label: 'Geneformer', content: <GeneformerTab /> },
         ]}

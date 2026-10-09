@@ -34,6 +34,50 @@ cluster-start time) and hardens deploy-time sample-data staging.
   + S3 realities; troubleshooting skill gains recipes for the S3 mirror, serverless `%sh`/`/local_disk0` and
   `LOCAL_RELATION_SIZE_LIMIT_EXCEEDED`, and the unreliable `fs ls` size on UC Volumes.
 
+## antibody_design (2026-10-09) — Antibody Design (VHH) batch workflow on RFD4-Proteina (in-process H100)
+
+Adds a new `large_molecule/antibody_design/antibody_design_v1` batch workflow + UI tab (Large Molecule →
+Antibody Design): generate single-domain (VHH / nanobody) antibodies against an antigen epitope with
+**RFD4-Proteina loaded in-process on an H100**, then reward-optimize them. Full five-layer batch-workflow
+stack (orchestrator job, registration, dispatcher, Search Past Runs, result dialog), mirroring Guided
+Enzyme Optimization.
+
+### What changed and why
+- **Generation is RFD4-Proteina in-process on a `GPU_1xH100` orchestrator** (not the endpoint). A true VHH
+  needs antibody-framework conditioning, which the endpoint's first-draft generic-binder path can't give;
+  in-process control lets the loop drive a VHH condition_spec (epitope `C_HOT` hotspots). The submodule
+  bundle therefore FUSES the rfd4_proteina H100/`client:'6'`/rfproteina-git-install scaffolding with the
+  enzyme-opt batch-workflow structure. It loads RFD4's staged flow + AE checkpoints from the rfd4_proteina
+  cache volume (so that submodule must be deployed first — same cross-submodule dependency enzyme-opt has
+  on proteina_complexa).
+- **Reward loop reuses the enzyme machinery** (`PredictorAxis` / `compose_rewards` / half-life anchor) and
+  the same validation/scoring endpoints (ProteinMPNN, ESMFold, Boltz, NetSolP, PLTNUM, DeepSTABp, MHCflurry).
+  Axes = binding (Boltz ipTM, co-fold antigen+VHH) + fold pLDDT + the 4 developability axes, with binding
+  and low-immunogenicity weighted up — what matters for a developable antibody.
+- **CDR-preserving framework redesign.** `anarcii` numbers each design; ProteinMPNN then redesigns the
+  FRAMEWORK while FIXING the CDR positions (the inverse of enzyme-opt's fix-the-motif), so the binding loops
+  RFD4 designed survive. If a design doesn't number as a V-domain, the RFD4 sequence is kept as-is rather
+  than risking a binding-destroying redesign.
+
+### Anti-patterns avoided (from the batch-workflow pattern skill)
+- Dispatcher **pre-creates the MLflow run** and passes `mlflow_run_id` so Search Past Runs lights up during
+  the ~min GPU cold-start (not created only inside the orchestrator). The dispatcher returns the Databricks
+  `job_run_id` for the banner; search discovers the MLflow run via tags.
+- **Progressive `job_status`** (`submitted` → `iter_N_*` → `complete`/`failed`) surfaced as the stage column,
+  not the raw MLflow lifecycle; the orchestrator's `try/except` flips it to `failed` so a crash never shows a
+  perpetual "running". Search `run_url` is the MLflow run page (not the job-run page).
+- **Registration job** persists the orchestrator job id to `settings` and grants the app SP `CAN_MANAGE_RUN`
+  + `WRITE` on the antigen-upload volume (the app uploads each run's antigen PDB via the Files API, not a
+  POSIX write). Reuses the shared `RunSearchSection` (returns the `DBRunRow` contract) + `DispatchSuccess`.
+
+### Reference implementations / files
+- `modules/large_molecule/antibody_design/antibody_design_v1/` (orchestrator `notebooks/01_run_antibody_design.py`,
+  `notebooks/utils.py`, `notebooks/register_antibody_design_job.py`, resources, bundle).
+- App: `services/antibody_design.py`, `routers/antibody_design.py`, `components/AntibodyDesignTab.tsx`.
+- Mirrors: Guided Enzyme Optimization (batch-workflow) + the RFD4 register notebook (in-process RFD4 load).
+- Doc: `modules/core/app/backend/documentation/antibody_design.md`. **First-draft VHH condition_spec — needs
+  a deploy-time iteration** (true Ig-framework scaffolding is the follow-up; not locally GPU-testable).
+
 ## rfd4_proteina (2026-10-09) — RFD4-Proteina design model served on H100 via Express env_pack
 
 Adds the NVIDIA×Baker **RFD4-Proteina** flow-matching design model as a new `large_molecule` submodule

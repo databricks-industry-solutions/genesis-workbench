@@ -604,6 +604,35 @@ export type KermtFinetuneRequest = {
 
 export type KermtDispatchResponse = { job_run_id: number; run_url: string }
 
+// ─── RFD4-Proteina (fine-tune + deploy) ─────────────────────────────────────
+
+export type Rfd4Defaults = {
+  train_data: string
+  experiment_preset: string
+}
+
+export type Rfd4Weight = {
+  ft_id: string // BIGINT as string
+  ft_label: string
+  model_type: string
+  experiment_name?: string | null
+  run_id?: string | null
+  created_datetime?: string | null
+}
+
+export type Rfd4FinetuneRequest = {
+  finetune_label: string
+  pretrain_ckpt: string
+  train_data: string
+  experiment_preset: string
+  max_epochs: number
+  steps_per_epoch: number
+  experiment_name: string
+  run_name: string
+}
+
+export type Rfd4DispatchResponse = { job_run_id: number; run_url: string }
+
 // ─── Enzyme Optimization ──────────────────────────────────────────────────
 
 export type EnzymeRefRow = {
@@ -695,6 +724,59 @@ export type EnzymeDefaultsResponse = {
   default_weights: Record<string, number>
   default_references: EnzymeRefRow[]
 }
+
+// ─── Antibody Design (VHH) ──────────────────────────────────────────────────
+
+export type AntibodyRefRow = { sequence: string }
+
+export type AntibodyDesignStartRequest = {
+  antigen_pdb: string
+  epitope_residues: number[]
+  antigen_chain: string
+  vhh_length_min: number
+  vhh_length_max: number
+  num_samples: number
+  num_iterations: number
+  weights: Record<string, number>
+  references: AntibodyRefRow[]
+  half_life_margin: number
+  resampling_temperature: number
+  strategy: 'resample' | 'noop'
+  run_proteinmpnn: boolean
+  cofold_antigen: boolean
+  convergence_threshold: number | null
+  convergence_window: number
+  target_reward: number | null
+  best_k_target: number | null
+  best_k_threshold: number | null
+  mlflow_experiment: string
+  mlflow_run_name: string
+}
+
+export type AntibodyDesignStartResponse = {
+  job_id: number
+  job_run_id: number
+  mlflow_run_id: string
+  experiment_id: string
+  run_url: string
+}
+
+export type AntibodyStatusResponse = {
+  status: string
+  job_status: string
+  run_name: string
+  experiment_id: string
+  iter_max_reward_history: EnzymeRewardHistoryPoint[]
+  iter_mean_reward_history: EnzymeRewardHistoryPoint[]
+  current_metrics: Record<string, number>
+  trajectory: Record<string, number | string | null>[]
+}
+
+export type AntibodyCandidate = { candidate_id: string; pdb: string; viewer_html: string }
+
+export type AntibodyTopKResponse = { candidates: AntibodyCandidate[] }
+
+export type AntibodyDefaultsResponse = { default_weights: Record<string, number> }
 
 // ─── Genomics ──────────────────────────────────────────────────────
 

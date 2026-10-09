@@ -1,0 +1,118 @@
+resources:
+  jobs:
+    run_antibody_design:
+      name: run_antibody_design_gwb
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      # Serverless GPU_1xH100 (client '6' = AI Runtime v6 = CUDA 13). The orchestrator
+      # loads RFD4-Proteina in-process (torch 2.14.1/cu132 + the rfproteina CUDA-13
+      # stack), so it needs the same compute as the RFD4 register/finetune jobs.
+      tasks:
+        - task_key: run_loop
+          max_retries: 0
+          disable_auto_optimization: true
+          retry_on_timeout: false
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xH100
+          notebook_task:
+            notebook_path: ../notebooks/01_run_antibody_design.py
+
+      environments:
+        - environment_key: gpu_env
+          spec:
+            client: '6'
+
+      timeout_seconds: 86400  # 24h hard cap; a typical VHH design loop is 1-4h.
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: cache_dir
+          default: ${resources.volumes.antibody_design_cache_dir.name}
+        # Where the RFD4 flow + AE checkpoints are staged (by the rfd4_proteina deploy).
+        - name: rfd4_cache_dir
+          default: ${var.rfd4_cache_dir}
+        - name: rfd4_flow_ckpt
+          default: ${var.rfd4_flow_ckpt}
+        - name: rfd4_ae_ckpt
+          default: ${var.rfd4_ae_ckpt}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: user_email
+          default: ${var.current_user}
+
+        # rfproteina is pip-installed from the private GitHub repo at runtime.
+        - name: rfd4_git_url
+          default: ${var.rfd4_git_url}
+        - name: rfd4_git_ref
+          default: ${var.rfd4_git_ref}
+        - name: rfd4_git_token_scope
+          default: ${var.rfd4_git_token_scope}
+        - name: rfd4_git_token_key
+          default: ${var.rfd4_git_token_key}
+
+        # Per-run parameters (populated by start_antibody_design_job)
+        - name: mlflow_experiment
+          default: ""
+        - name: mlflow_run_name
+          default: ""
+        - name: mlflow_run_id
+          default: ""
+        # Antigen target: the app uploads the PDB to the cache volume and passes its path.
+        - name: antigen_pdb_path
+          default: ""
+        - name: epitope_residues_csv
+          default: ""
+        - name: antigen_chain
+          default: "A"
+        # VHH (nanobody) length window — a camelid VHH is typically ~110-130 residues.
+        - name: vhh_length_min
+          default: "110"
+        - name: vhh_length_max
+          default: "130"
+        - name: num_samples
+          default: "8"
+        - name: num_iterations
+          default: "6"
+        - name: run_proteinmpnn
+          default: "true"
+        - name: resampling_temperature
+          default: "0.1"
+        - name: strategy
+          default: "resample"
+        - name: dev_user_prefix
+          default: ""
+        # Co-fold the antigen + designed VHH with Boltz to score the interface (ipTM).
+        # Gates the `boltz` (binding) reward axis.
+        - name: cofold_antigen
+          default: "true"
+        # Reference antibodies (JSON list of {sequence}) to anchor the PLTNUM half-life axis.
+        - name: references_json
+          default: "[]"
+        - name: half_life_margin
+          default: "0.05"
+        # Reward weights. Binding (boltz) and low-immunogenicity are weighted up, which
+        # is what matters most for a developable antibody. immuno is lower-is-better.
+        - name: weights_json
+          default: '{"plddt":1.3,"boltz":2.0,"solubility":1.0,"half_life":1.0,"thermostab":1.0,"immuno":1.5}'
+
+        # Stopping criteria — convergence ON by default; the other two are opt-in
+        # (empty string parsed as "disabled" by the notebook).
+        - name: convergence_threshold
+          default: "0.01"
+        - name: convergence_window
+          default: "2"
+        - name: target_reward
+          default: ""
+        - name: best_k_target
+          default: ""
+        - name: best_k_threshold
+          default: ""
+
+      tags: ${var.common_resource_tags}

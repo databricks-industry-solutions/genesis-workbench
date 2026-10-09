@@ -1,0 +1,72 @@
+variables:
+  current_user:
+    description: User deploying the bundle. Can apply to service principals as well.
+    default: ${workspace.current_user.userName}
+
+  current_working_directory:
+    description: Working directory or bundle root.
+    default: /Users/${var.current_user}/.bundle/${bundle.name}/${bundle.target}
+
+  workspace_url:
+    description: Workspace url for deployment
+
+  common_resource_tags:
+    description: Resource tags
+    default:
+      application: genesis_workbench
+      module: antibody_design
+      created_by: ${workspace.current_user.short_name}
+
+  core_catalog_name:
+    description: primary catalog where data, models, and files are stored for this project.
+
+  core_schema_name:
+    description: The schema where core components will be installed.
+
+  sql_warehouse_id:
+    description: Id of the SQL Warehouse that will be used by the app
+
+  module_registration_experiment_name:
+    description: The experiment to which all registered modules are logged
+    default: dbx_genesis_workbench_modules
+
+  # This workflow's own UC volume — the app uploads each run's antigen PDB here
+  # before dispatching, and the orchestrator writes per-run logs here.
+  cache_dir:
+    description: The cache directory (UC volume) for Antibody Design run inputs/logs
+    default: antibody_design
+
+  # The RFD4-Proteina submodule's cache volume, where its register job staged the
+  # released flow + autoencoder checkpoints. The antibody orchestrator LOADS RFD4
+  # in-process from here, so the rfd4_proteina submodule must be deployed first.
+  rfd4_cache_dir:
+    description: The RFD4-Proteina cache volume holding the flow + AE checkpoints
+    default: rfd4_proteina
+
+  rfd4_flow_ckpt:
+    description: Flow (denoiser) checkpoint filename (staged under {rfd4_cache_dir}/flow_checkpoints)
+    default: chk_epoch_00000169_step_000000340000-ema.ckpt
+
+  rfd4_ae_ckpt:
+    description: Partial-autoencoder checkpoint filename (staged under {rfd4_cache_dir}/ae_checkpoints)
+    default: 2026_09_04_release_ae_z16_400k-ema.ckpt
+
+  # RFD4-Proteina MODEL CODE is pip-installed from the private GitHub repo at job
+  # runtime (nothing vendored); the orchestrator loads RFD4 in-process on the H100,
+  # authenticating with a GitHub PAT read from the GWB secret scope. Mirrors the
+  # rfd4_proteina submodule variables so both install the SAME pinned ref.
+  rfd4_git_url:
+    description: Git host/path of the RFD4-Proteina model repo (no scheme; token is injected at runtime)
+    default: github.com/NVIDIA-BioNeMo/RFD4-Proteina-Open-Model-Private.git
+
+  rfd4_git_ref:
+    description: Git ref (commit/branch/tag) of the RFD4-Proteina repo to install — pinned for reproducibility
+    default: 84d83b98442e5946a6a626d0d99a19773207e894
+
+  rfd4_git_token_scope:
+    description: Databricks secret scope holding the GitHub PAT with read access to the RFD4-Proteina repo
+    default: dbx_genesis_workbench
+
+  rfd4_git_token_key:
+    description: Key in the secret scope for the GitHub PAT
+    default: rfd4_github_token

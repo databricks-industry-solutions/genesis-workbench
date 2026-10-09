@@ -33,9 +33,18 @@ import type {
   KermtDispatchResponse,
   KermtFinetuneRequest,
   KermtWeight,
+  Rfd4Defaults,
+  Rfd4DispatchResponse,
+  Rfd4FinetuneRequest,
+  Rfd4Weight,
   GenomicsDefaultsResponse,
   DockingExampleResponse,
   DocsResponse,
+  AntibodyDefaultsResponse,
+  AntibodyDesignStartRequest,
+  AntibodyDesignStartResponse,
+  AntibodyStatusResponse,
+  AntibodyTopKResponse,
   EnzymeDefaultsResponse,
   EnzymeOptimizationStartRequest,
   EnzymeOptimizationStartResponse,
@@ -429,6 +438,27 @@ export const api = {
       { method: 'POST' },
     ),
 
+  // Antibody Design (VHH) — RFD4-Proteina in-process reward-weighted loop
+  antibodyDesignDefaults: () =>
+    request<AntibodyDefaultsResponse>('/api/antibody_design/defaults'),
+  antibodyDesignStart: (body: AntibodyDesignStartRequest) =>
+    request<AntibodyDesignStartResponse>('/api/antibody_design/start', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  antibodyDesignSearch: (by: 'run_name' | 'experiment_name', text: string) =>
+    request<DBSearchResponse>(
+      `/api/antibody_design/search?by=${by}&text=${encodeURIComponent(text)}`,
+    ),
+  antibodyDesignStatus: (run_id: string) =>
+    request<AntibodyStatusResponse>(
+      `/api/antibody_design/status?run_id=${encodeURIComponent(run_id)}`,
+    ),
+  antibodyDesignTopK: (run_id: string) =>
+    request<AntibodyTopKResponse>(
+      `/api/antibody_design/top_k?run_id=${encodeURIComponent(run_id)}`,
+    ),
+
   // ─── Genomics ────────────────────────────────────────────────────
 
   variantCallingStart: (body: VariantCallingStartRequest) =>
@@ -539,6 +569,24 @@ export const api = {
     ),
   kermtDeploy: (body: { ft_id: string; model_name?: string; workload_type?: string }) =>
     request<KermtDispatchResponse>('/api/kermt/deploy', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  // RFD4-Proteina (fine-tune + deploy a protein-design model)
+  rfd4Defaults: () => request<Rfd4Defaults>('/api/rfd4/defaults'),
+  rfd4Weights: () => request<{ weights: Rfd4Weight[] }>('/api/rfd4/weights'),
+  rfd4Finetune: (body: Rfd4FinetuneRequest) =>
+    request<Rfd4DispatchResponse>('/api/rfd4/finetune', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  rfd4FinetuneSearch: (by: 'run_name' | 'experiment_name', text: string) =>
+    request<DBSearchResponse>(
+      `/api/rfd4/finetune/search?by=${by}&text=${encodeURIComponent(text)}`,
+    ),
+  rfd4Deploy: (body: { ft_id: string; model_name?: string; workload_type?: string }) =>
+    request<Rfd4DispatchResponse>('/api/rfd4/deploy', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

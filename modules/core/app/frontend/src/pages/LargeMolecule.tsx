@@ -1,4 +1,5 @@
 import { Tabs } from '@/components/Tabs'
+import { AntibodyDesignTab } from '@/components/AntibodyDesignTab'
 import { DeployedModelsButton } from '@/components/DeployedModelsButton'
 import { EnzymeOptimizationTab } from '@/components/EnzymeOptimizationTab'
 import { InverseFoldingTab } from '@/components/InverseFoldingTab'
@@ -42,6 +43,11 @@ export function LargeMoleculePage() {
             id: 'enzyme_optimization',
             label: 'Guided Enzyme Optimization',
             content: <EnzymeOptimizationTab />,
+          },
+          {
+            id: 'antibody_design',
+            label: 'Antibody Design',
+            content: <AntibodyDesignTab />,
           },
         ]}
       />

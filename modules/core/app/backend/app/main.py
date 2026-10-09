@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.routers import (
     ai_canvas,
+    antibody_design,
     assistant,
     bionemo,
     bootstrap,
@@ -20,6 +21,7 @@ from app.routers import (
     models,
     monitoring,
     profile,
+    rfd4,
     settings,
     single_cell,
     small_molecule,
@@ -66,6 +68,8 @@ app.include_router(small_molecule.router)
 app.include_router(genomics.router)
 app.include_router(bionemo.router)
 app.include_router(kermt.router)
+app.include_router(rfd4.router)
+app.include_router(antibody_design.router)
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 
