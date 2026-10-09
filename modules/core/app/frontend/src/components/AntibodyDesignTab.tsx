@@ -27,7 +27,8 @@ const WEIGHT_AXES: { key: string; label: string; help: string }[] = [
   { key: 'solubility', label: 'Solubility — NetSolP', help: 'Predicted solubility of the VHH sequence.' },
   { key: 'half_life', label: 'Half-life — PLTNUM', help: 'Anchored against the reference antibodies below (pre-normalised).' },
   { key: 'thermostab', label: 'Thermostability — DeepSTABp Tm', help: 'Predicted melting temperature.' },
-  { key: 'immuno', label: 'Low immunogenicity — MHCflurry', help: 'Immunogenic burden (lower is better); the weight favours low-burden designs.' },
+  { key: 'immuno', label: 'Low immunogenicity — MHC-I (CD8)', help: 'MHCflurry MHC-I presentation burden (lower is better); the weight favours low-burden designs.' },
+  { key: 'immuno_mhc2', label: 'Low immunogenicity — MHC-II (CD4/ADA)', help: 'HLAIIPred MHC class II presentation burden across a DRB1 panel — the key anti-drug-antibody (ADA) signal for antibodies/VHH (lower is better).' },
   { key: 'liability', label: 'Low sequence liabilities', help: 'Rule-based scan for chemical/developability liability motifs (deamidation, isomerization, N-glyc sequons, free Cys, Met/Trp oxidation). Fewer = more inert/developable (lower raw count is better).' },
 ]
 
@@ -449,7 +450,8 @@ const _AXIS_LABELS: [string, string][] = [
   ['solubility', 'Solubility'],
   ['half_life', 'Half-life'],
   ['thermostab', 'Tm'],
-  ['immuno', 'Immuno burden'],
+  ['immuno', 'Immuno burden (MHC-I)'],
+  ['immuno_mhc2', 'Immuno burden (MHC-II)'],
   ['liability', 'Seq liabilities (count)'],
   ['liability_detail', 'Liability sites'],
 ]

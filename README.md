@@ -78,9 +78,9 @@ Protein structure prediction, design, and engineering. Fold proteins in seconds 
 📖 [Protein Structure Prediction](modules/core/app/backend/documentation/protein_structure_prediction.md) · [Protein Design](modules/core/app/backend/documentation/protein_design.md) · [Inverse Folding](modules/core/app/backend/documentation/inverse_folding.md) · [Sequence Similarity Search](modules/core/app/backend/documentation/sequence_search.md) · [RFD4-Proteina Design](modules/core/app/backend/documentation/rfd4_proteina_design.md) · [Antibody Design (VHH)](modules/core/app/backend/documentation/antibody_design.md) · [Guided Enzyme Optimization](modules/core/app/backend/documentation/enzyme_optimization.md)
 
 ### Small Molecule
-Drug-discovery essentials. Generate novel candidate molecules from a seed scaffold or binding motif with **GenMol** in a hard-constraint generate→score→reseed loop (**Guided Molecule Design**), profile candidates for drug-like properties and toxicity with ChemProp, predict protein-ligand binding poses with DiffDock, design protein binders to a target protein or small molecule with Proteina-Complexa, and transplant functional motifs into new scaffolds. Fine-tune **KERMT** (NVIDIA-BioNeMo's Kinetic GROVER Multi-Task GNN) on your own ADMET/tox assay and serve it side-by-side with ChemProp. Each generated candidate can be scored on developability through NetSolP (solubility), PLTNUM-ESM2 (relative half-life), DeepSTABp (melting temperature), and MHCflurry (immunogenic burden).
+Drug-discovery essentials. Generate novel candidate molecules from a seed scaffold or binding motif with **GenMol** in a hard-constraint generate→score→reseed loop (**Guided Molecule Design**), profile candidates for drug-like properties and toxicity with ChemProp, predict protein-ligand binding poses with DiffDock, design protein binders to a target protein or small molecule with Proteina-Complexa, and transplant functional motifs into new scaffolds. Fine-tune **KERMT** (NVIDIA-BioNeMo's Kinetic GROVER Multi-Task GNN) on your own ADMET/tox assay and serve it side-by-side with ChemProp. Each generated candidate can be scored on developability through NetSolP (solubility), PLTNUM-ESM2 (relative half-life), DeepSTABp (melting temperature), MHCflurry (MHC-I immunogenic burden), and HLAIIPred (MHC-II / anti-drug-antibody immunogenic burden).
 
-**Models bundled:** GenMol, KERMT, ChemProp, DiffDock, Proteina-Complexa, NetSolP-1.0, PLTNUM-ESM2, DeepSTABp, MHCflurry 2.x
+**Models bundled:** GenMol, KERMT, ChemProp, DiffDock, Proteina-Complexa, NetSolP-1.0, PLTNUM-ESM2, DeepSTABp, MHCflurry 2.x, HLAIIPred
 
 📖 [Guided Molecule Design](modules/core/app/backend/documentation/guided_molecule_design.md) · [Molecular Docking](modules/core/app/backend/documentation/molecular_docking.md) · [Protein Binder Design](modules/core/app/backend/documentation/protein_binder_design.md) · [Ligand Binder Design](modules/core/app/backend/documentation/ligand_binder_design.md) · [Motif Scaffolding](modules/core/app/backend/documentation/motif_scaffolding.md) · [ADMET & Safety](modules/core/app/backend/documentation/admet_safety.md)
 
@@ -155,7 +155,8 @@ Genesis Workbench ships open models and open datasets across all modules. Models
 | NetSolP-1.0 | small_molecule / netsolp | tvinet/NetSolP-1.0 | Protein solubility prediction |
 | PLTNUM-ESM2 | small_molecule / pltnum | `sagawa/PLTNUM-ESM2-NIH3T3` | Protein half-life / stability |
 | DeepSTABp | small_molecule / deepstabp | CSBiology/deepStabP (ProtT5-XL) | Protein melting temperature (Tm) |
-| MHCflurry 2.x | small_molecule / mhcflurry | openvax/mhcflurry | MHC-I peptide presentation / immunogenicity |
+| MHCflurry 2.x | small_molecule / mhcflurry | openvax/mhcflurry | MHC-I peptide presentation / immunogenicity (CD8) |
+| HLAIIPred | small_molecule / hlaiipred | [pfizer-opensource/HLAIIPred](https://github.com/pfizer-opensource/HLAIIPred) (Apache-2.0) | MHC-II peptide presentation / immunogenicity (CD4 / anti-drug-antibody) |
 | Proteina-Complexa (Binder / Ligand / AME) | small_molecule / proteina_complexa | NVIDIA-Digital-Bio/Proteina-Complexa | Flow-matching binder design + motif scaffolding |
 | scGPT (+ Perturbation) | single_cell / scgpt | bowang-lab/scGPT | Single-cell foundation model; gene-perturbation prediction |
 | TEDDY | single_cell / teddy | `Merck/TEDDY` | Single-cell embedding foundation model |
@@ -409,6 +410,19 @@ MHCflurry | cloudpickle==2.0.0 | BSD-3 | https://github.com/cloudpipe/cloudpickl
 MHCflurry | databricks-sdk==0.50.0 | Apache2.0 | https://pypi.org/project/databricks-sdk/
 MHCflurry | databricks-sql-connector==4.0.2 | Apache2.0 | https://github.com/databricks/databricks-sql-python
 MHCflurry | MODEL WEIGHTS (auto-fetched via `mhcflurry-downloads fetch models_class1_presentation`, ~150 MB) | Apache2.0 | https://github.com/openvax/mhcflurry
+HLAIIPred | hlapred (cloned + shipped via code_paths) | Apache2.0 | https://github.com/pfizer-opensource/HLAIIPred
+HLAIIPred | torch==2.7.1 | BSD-3 | https://github.com/pytorch/pytorch
+HLAIIPred | scipy==1.13.1 | BSD-3 | https://github.com/scipy/scipy
+HLAIIPred | numpy==1.26.4 | BSD-3 | https://github.com/numpy/numpy
+HLAIIPred | pandas==2.2.3 | BSD-3 | https://github.com/pandas-dev/pandas
+HLAIIPred | tqdm==4.66.5 | MPL-2.0/MIT | https://github.com/tqdm/tqdm
+HLAIIPred | pyyaml==6.0.2 | MIT | https://github.com/yaml/pyyaml
+HLAIIPred | biopython==1.84 | [BioPython License Agreement](https://github.com/biopython/biopython/blob/master/LICENSE.rst) | https://github.com/biopython/biopython
+HLAIIPred | mlflow==2.22.0 | Apache2.0 | https://github.com/mlflow/mlflow
+HLAIIPred | cloudpickle==2.0.0 | BSD-3 | https://github.com/cloudpipe/cloudpickle
+HLAIIPred | databricks-sdk==0.50.0 | Apache2.0 | https://pypi.org/project/databricks-sdk/
+HLAIIPred | databricks-sql-connector==4.0.2 | Apache2.0 | https://github.com/databricks/databricks-sql-python
+HLAIIPred | MODEL WEIGHTS (models/epT_{0,1}.pt + mhcII/ pseudosequences, ~9 MB, cloned from the repo and shipped via artifacts) | Apache2.0 | https://github.com/pfizer-opensource/HLAIIPred
 Genomics | glow | Apache2.0 | https://github.com/projectglow/glow
 Genomics | pyspark | Apache2.0 | https://github.com/apache/spark
 BioNeMo | six==1.16.0 | MIT | https://github.com/benjaminp/six

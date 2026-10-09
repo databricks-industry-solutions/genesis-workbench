@@ -78,6 +78,35 @@ Enzyme Optimization.
 - Doc: `modules/core/app/backend/documentation/antibody_design.md`. **First-draft VHH condition_spec — needs
   a deploy-time iteration** (true Ig-framework scaffolding is the follow-up; not locally GPU-testable).
 
+## antibody_design — "how inert?" reward axes: sequence-liability scan + MHC-II immunogenicity (HLAIIPred) (2026-10-09)
+
+Extends Antibody Design with two developability axes that answer "how inert / de-immunized is this VHH?",
+both minimized (lower = more developable), both exposed as per-axis reward sliders in the UI.
+
+### What changed and why
+- **Sequence-liability scan (`liability`, rule-based, no endpoint).** Weighted motif count over the designed
+  sequence — deamidation (NG/NS/NT), isomerization (DG/DS/DT), N-glyc sequons (N-x-[S/T]), free/unpaired Cys,
+  and Met/Trp oxidation hotspots. Self-contained (`liability_scan`/`liability_weighted_count`/`liability_detail`
+  in the orchestrator `utils.py`); the per-candidate motif breakdown shows in the result dialog as
+  `liability_detail`.
+- **MHC-II immunogenicity (`immuno_mhc2`) via a new HLAIIPred endpoint.** MHCflurry covers MHC-I (CD8); the
+  dominant immunogenicity risk for a *therapeutic antibody* is anti-drug antibodies (ADA), which is MHC-II /
+  CD4-driven. Added [HLAIIPred](https://github.com/pfizer-opensource/HLAIIPred) (Pfizer, **Apache-2.0**) as a
+  new `small_molecule/hlaiipred/hlaiipred_v1` CPU serving endpoint. The PyFunc slides a 15-mer window over the
+  chain across an 8-allele DRB1 panel, averages the two released folds (epT_0/epT_1), and returns
+  `predicted_immuno_burden` (strong presenters per residue). `hlapred` ships via `code_paths`, the ~9 MB
+  weights + `mhcII/` pseudosequences via `artifacts` (no git/PyPI at serving time). Standard `deploy_model`
+  path → auto-grants the app SP `CAN_QUERY`.
+- **Both axes wired end to end**: orchestrator (`PredictorAxis` + `score_iteration`), dispatcher
+  `DEFAULT_AXIS_WEIGHTS` (`immuno`=MHC-I 1.5, `immuno_mhc2`=MHC-II 1.5, `liability`=1.0), and the
+  `AntibodyDesignTab` weight sliders + result-dialog labels (`immuno` relabeled MHC-I / `immuno_mhc2` MHC-II).
+
+### Reference implementations / files
+- New submodule: `modules/small_molecule/hlaiipred/hlaiipred_v1/` (register notebook + PyFunc wrapper + bundle);
+  added to `small_molecule/{deploy,destroy}.sh` ALL_SUBMODULES. Mirrors the MHCflurry submodule.
+- Axis wiring: `antibody_design_v1/notebooks/{utils.py,01_run_antibody_design.py}`,
+  `app/services/antibody_design.py`, `app/frontend/src/components/AntibodyDesignTab.tsx`.
+
 ## rfd4_proteina (2026-10-09) — RFD4-Proteina design model served on H100 via Express env_pack
 
 Adds the NVIDIA×Baker **RFD4-Proteina** flow-matching design model as a new `large_molecule` submodule

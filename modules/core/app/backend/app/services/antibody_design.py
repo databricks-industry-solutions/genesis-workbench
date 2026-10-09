@@ -38,7 +38,8 @@ DEFAULT_AXIS_WEIGHTS: dict[str, float] = {
     "solubility": 1.0,
     "half_life":  1.0,
     "thermostab": 1.0,
-    "immuno":     1.5,
+    "immuno":     1.5,   # MHC-I (CD8) burden — MHCflurry
+    "immuno_mhc2": 1.5,  # MHC-II (CD4 / anti-drug-antibody) burden — HLAIIPred (right signal for VHH)
     "liability":  1.0,   # rule-based sequence-liability scan (lower raw count = more inert)
 }
 

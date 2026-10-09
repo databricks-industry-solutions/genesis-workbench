@@ -54,6 +54,7 @@ _AXIS_TO_UC_NAME = {
     "pltnum":      "pltnum_v1",
     "deepstabp":   "deepstabp_v1",
     "mhcflurry":   "mhcflurry_v2",
+    "hlaiipred":   "hlaiipred_v1",
 }
 
 # Every endpoint has scale_to_zero=true; a cold start can take 5-20 min. 1200s
@@ -157,6 +158,23 @@ def call_mhcflurry(sequences: List[str], alleles: Optional[str] = None,
     return [float(v) for v in pd.DataFrame(resp.predictions)["predicted_immuno_burden"]]
 
 
+# MHC class II (CD4 / anti-drug-antibody) de-immunization panel — 8 common DRB1 alleles.
+# This is the *right* immunogenicity signal for antibodies/VHH (ADA risk is MHC-II / CD4-driven),
+# complementing MHCflurry's MHC-I (CD8) burden.
+_DEFAULT_MHC2_ALLELES = (
+    "DRB1*01:01,DRB1*03:01,DRB1*04:01,DRB1*07:01,"
+    "DRB1*08:01,DRB1*11:01,DRB1*13:01,DRB1*15:01"
+)
+
+
+def call_hlaiipred(sequences: List[str], alleles: Optional[str] = None,
+                   dev_user_prefix: Optional[str] = None) -> List[float]:
+    a = alleles or _DEFAULT_MHC2_ALLELES
+    payload = [{"sequence": s, "alleles": a} for s in sequences]
+    resp = _query("hlaiipred", payload, dev_user_prefix=dev_user_prefix)
+    return [float(v) for v in pd.DataFrame(resp.predictions)["predicted_immuno_burden"]]
+
+
 def warmup_developability_endpoints(dev_user_prefix: Optional[str] = None,
                                     sample_seq: str = "QVQLVESGGGLVQAGGSLRLSCAASG") -> Dict[str, str]:
     """One dummy call per developability endpoint so the first scoring round
@@ -167,6 +185,7 @@ def warmup_developability_endpoints(dev_user_prefix: Optional[str] = None,
         ("pltnum",    lambda: call_pltnum([sample_seq], dev_user_prefix=dev_user_prefix)),
         ("deepstabp", lambda: call_deepstabp([sample_seq], dev_user_prefix=dev_user_prefix)),
         ("mhcflurry", lambda: call_mhcflurry([sample_seq], dev_user_prefix=dev_user_prefix)),
+        ("hlaiipred", lambda: call_hlaiipred([sample_seq], dev_user_prefix=dev_user_prefix)),
     ):
         try:
             fn()

@@ -52,10 +52,11 @@ the ranked candidates, per-axis scores, a 3D viewer, and a PDB download.
 - **`results/reward_trajectory.csv`** — every candidate with its composite reward + per-axis scores.
 - **`results/topK_pdbs/*.pdb`** — the top-ranked VHH structures (shown in the result dialog + downloadable).
 - Reward axes: binding (Boltz ipTM), fold confidence (ESMFold pLDDT), solubility (NetSolP), half-life
-  (PLTNUM, anchored), Tm (DeepSTABp), immunogenic burden (MHCflurry, minimized), and a rule-based
-  **sequence-liability scan** (deamidation / isomerization / N-glyc sequon / free-Cys / Met-Trp oxidation
-  motifs — a weighted count, minimized; the per-candidate breakdown is shown in the result dialog as
-  `liability_detail`).
+  (PLTNUM, anchored), Tm (DeepSTABp), MHC-I immunogenic burden (MHCflurry — CD8, minimized), MHC-II
+  immunogenic burden (HLAIIPred — CD4 / anti-drug-antibody, minimized; the key ADA signal for antibodies),
+  and a rule-based **sequence-liability scan** (deamidation / isomerization / N-glyc sequon / free-Cys /
+  Met-Trp oxidation motifs — a weighted count, minimized; the per-candidate breakdown is shown in the
+  result dialog as `liability_detail`).
 
 ## How It's Implemented
 
@@ -70,7 +71,7 @@ anarcii numbering → identify CDR loops
   ↓
 [optional] ProteinMPNN → redesign the FRAMEWORK (fix CDRs) → ESMFold re-fold
   ↓
-Score: Boltz ipTM (binding) · pLDDT · NetSolP · PLTNUM · DeepSTABp · MHCflurry
+Score: Boltz ipTM (binding) · pLDDT · NetSolP · PLTNUM · DeepSTABp · MHCflurry (MHC-I) · HLAIIPred (MHC-II) · liability scan
   ↓
 Composite reward (z-score→min-max per axis, weighted) → resample → next iteration
   ↓
@@ -90,7 +91,8 @@ Ranked shortlist + top-K PDBs
 - **Generation:** RFD4-Proteina loaded in-process on the orchestrator's `GPU_1xH100` job (requires the
   `rfd4_proteina` submodule deployed first — the orchestrator loads its staged flow + AE checkpoints).
 - **Validation / scoring endpoints:** ProteinMPNN, ESMFold, Boltz, NetSolP, PLTNUM, DeepSTABp, MHCflurry
-  (the same serving endpoints Guided Enzyme Optimization uses).
+  (MHC-I), HLAIIPred (MHC-II / CD4 / ADA). Most are shared with Guided Enzyme Optimization; HLAIIPred
+  (`hlaiipred_v1`, Pfizer, Apache-2.0) is a small-molecule-module CPU endpoint added for antibody ADA screening.
 
 ## Limitations and known issues
 
