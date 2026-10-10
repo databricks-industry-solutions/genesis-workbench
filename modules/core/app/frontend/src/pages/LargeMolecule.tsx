@@ -29,6 +29,7 @@ export function LargeMoleculePage() {
             id: 'protein_design',
             label: 'Protein Design',
             content: <ProteinDesignTab />,
+            overflow: true,
           },
           {
             id: 'antibody_design',
@@ -49,6 +50,7 @@ export function LargeMoleculePage() {
             id: 'inverse_folding',
             label: 'Inverse Folding',
             content: <InverseFoldingTab />,
+            overflow: true,
           },
           {
             id: 'binder_design',
