@@ -1,0 +1,28 @@
+resources:
+  jobs:
+    register_vaccine_immunogen_job:
+      name: register_vaccine_immunogen_job
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: register
+          max_retries: 0
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/register_vaccine_immunogen_job.py
+            base_parameters:
+              catalog: ${var.core_catalog_name}
+              schema: ${var.core_schema_name}
+              run_vaccine_immunogen_job_id: ${resources.jobs.run_vaccine_immunogen.id}
+              user_email: ${var.current_user}
+              sql_warehouse_id: ${var.sql_warehouse_id}
+
+      environments:
+        - environment_key: default
+          spec:
+            client: '2'
+
+      tags: ${var.common_resource_tags}

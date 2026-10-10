@@ -25,6 +25,7 @@ from app.routers import (
     settings,
     single_cell,
     small_molecule,
+    vaccine_immunogen,
 )
 from app.services.workbench import initialize_lib
 
@@ -70,6 +71,7 @@ app.include_router(bionemo.router)
 app.include_router(kermt.router)
 app.include_router(rfd4.router)
 app.include_router(antibody_design.router)
+app.include_router(vaccine_immunogen.router)
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 

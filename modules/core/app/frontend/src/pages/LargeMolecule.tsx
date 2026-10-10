@@ -7,6 +7,7 @@ import { ProteinBinderDesignTab } from '@/components/ProteinBinderDesignTab'
 import { ProteinDesignTab } from '@/components/ProteinDesignTab'
 import { SequenceSearchTab } from '@/components/SequenceSearchTab'
 import { StructurePredictionTab } from '@/components/StructurePredictionTab'
+import { VaccineImmunogenTab } from '@/components/VaccineImmunogenTab'
 
 export function LargeMoleculePage() {
   return (
@@ -33,6 +34,11 @@ export function LargeMoleculePage() {
             id: 'antibody_design',
             label: 'Antibody Design',
             content: <AntibodyDesignTab />,
+          },
+          {
+            id: 'vaccine_immunogen',
+            label: 'Vaccine Immunogen Design',
+            content: <VaccineImmunogenTab />,
           },
           {
             id: 'enzyme_optimization',

@@ -34,6 +34,45 @@ cluster-start time) and hardens deploy-time sample-data staging.
   + S3 realities; troubleshooting skill gains recipes for the S3 mirror, serverless `%sh`/`/local_disk0` and
   `LOCAL_RELATION_SIZE_LIMIT_EXCEEDED`, and the unreliable `fs ls` size on UC Volumes.
 
+## vaccine_immunogen (2026-10-10) — Vaccine Immunogen Design batch workflow on RFD4-Proteina (in-process H100)
+
+Adds a new `large_molecule/vaccine_immunogen/vaccine_immunogen_v1` batch workflow + UI tab (Large Molecule
+→ Vaccine Immunogen Design): design + reward-optimize stable scaffold proteins that present a conserved
+epitope motif (epitope-focused immunogen design) with **RFD4-Proteina motif-scaffolding loaded in-process
+on an H100**. Full five-layer batch-workflow stack (orchestrator job, registration, dispatcher, Search Past
+Runs, result dialog), mirroring Antibody Design.
+
+### What changed and why
+
+- **New submodule** `vaccine_immunogen_v1` — orchestrator `01_run_vaccine_immunogen.py` loads RFD4
+  in-process and drives a **motif-scaffolding** condition_spec: a single chain whose epitope residues are
+  held FIXED in coordinates (`C_CRD`) and sequence (`C_SEQ`) while symmetric flexible flanks are generated
+  (contrast Antibody Design's separate binder chain + `C_HOT` hotspots). (Optional) ProteinMPNN redesigns
+  the scaffold while FIXING the epitope → ESMFold → reward loop. `register_vaccine_immunogen_job.py`
+  persists the orchestrator job id, grants the app SP `CAN_MANAGE_RUN` + volume `WRITE`, and registers the
+  workflow in `batch_models`. GPU_1xH100 serverless (client '6'); rfproteina pip-installed from the private
+  repo at runtime (same scaffolding as rfd4_proteina / antibody_design). Wired into the large_molecule
+  deploy.sh/destroy.sh ALL_SUBMODULES.
+- **Reward axes differ from Antibody Design** — the headline is **epitope-presentation fidelity**: a
+  backbone RMSD of the ESMFold-folded design's motif region against the input epitope (a self-consistency
+  check; lower is better). The epitope is located in the designed sequence by exact subsequence match (the
+  output is renumbered 1..L, so the antibody loop's residue-id matching can't be reused). Plus scaffold
+  pLDDT, solubility (NetSolP), Tm (DeepSTABp), and a sequence-liability scan (manufacturability). Binding
+  (Boltz) and half-life are dropped — not central for an immunogen. Scaffold self-reactivity (MHCflurry
+  MHC-I / HLAIIPred MHC-II) is OFF by default (weight 0): a vaccine is *meant* to be immunogenic; opt in
+  only to trim T-cell epitopes in the carrier.
+- **App layer** — `services/vaccine_immunogen.py` (dispatcher + search + result loaders) and
+  `routers/vaccine_immunogen.py` (`/api/vaccine_immunogen/*`, included in `main.py`); frontend
+  `VaccineImmunogenTab.tsx` + Large Molecule page tab (after Antibody Design) + client/types.
+- **Bundled demo** — RSV F protein antigenic site II peptide (RCSB `3IXT` chain P, residues 254–277,
+  relabeled chain A), the canonical epitope-scaffolding target (Correia et al. 2014, *Nature*), served via
+  `/api/vaccine_immunogen/defaults` so the form launches a scientifically sensible run out of the box.
+- **Docs triad** — new `documentation/vaccine_immunogen.md` + index entry + README (narrative + docs links).
+
+> ⚠️ FIRST-DRAFT conditioning + NOT YET GPU-tested. The motif is centered with symmetric flanks; a terminal
+> placement or a discontinuous (multi-segment) epitope is a future refinement. Validated py_compile / tsc /
+> vite build only — the real test is a deploy + H100 run (same caveat as antibody_design on first build).
+
 ## antibody_design (2026-10-09) — Antibody Design (VHH) batch workflow on RFD4-Proteina (in-process H100)
 
 Adds a new `large_molecule/antibody_design/antibody_design_v1` batch workflow + UI tab (Large Molecule →

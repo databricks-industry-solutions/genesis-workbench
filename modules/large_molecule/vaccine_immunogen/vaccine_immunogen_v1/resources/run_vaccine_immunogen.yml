@@ -1,0 +1,110 @@
+resources:
+  jobs:
+    run_vaccine_immunogen:
+      name: run_vaccine_immunogen_gwb
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      # Serverless GPU_1xH100 (client '6' = AI Runtime v6 = CUDA 13). The orchestrator
+      # loads RFD4-Proteina in-process (torch 2.14.1/cu132 + the rfproteina CUDA-13
+      # stack), so it needs the same compute as the RFD4 register/finetune jobs.
+      tasks:
+        - task_key: run_loop
+          max_retries: 0
+          disable_auto_optimization: true
+          retry_on_timeout: false
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xH100
+          notebook_task:
+            notebook_path: ../notebooks/01_run_vaccine_immunogen.py
+
+      environments:
+        - environment_key: gpu_env
+          spec:
+            client: '6'
+
+      timeout_seconds: 86400  # 24h hard cap; a typical immunogen design loop is 1-4h.
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: cache_dir
+          default: ${resources.volumes.vaccine_immunogen_cache_dir.name}
+        # Where the RFD4 flow + AE checkpoints are staged (by the rfd4_proteina deploy).
+        - name: rfd4_cache_dir
+          default: ${var.rfd4_cache_dir}
+        - name: rfd4_flow_ckpt
+          default: ${var.rfd4_flow_ckpt}
+        - name: rfd4_ae_ckpt
+          default: ${var.rfd4_ae_ckpt}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: user_email
+          default: ${var.current_user}
+
+        # rfproteina is pip-installed from the private GitHub repo at runtime.
+        - name: rfd4_git_url
+          default: ${var.rfd4_git_url}
+        - name: rfd4_git_ref
+          default: ${var.rfd4_git_ref}
+        - name: rfd4_git_token_scope
+          default: ${var.rfd4_git_token_scope}
+        - name: rfd4_git_token_key
+          default: ${var.rfd4_git_token_key}
+
+        # Per-run parameters (populated by start_vaccine_immunogen_job)
+        - name: mlflow_experiment
+          default: ""
+        - name: mlflow_run_name
+          default: ""
+        - name: mlflow_run_id
+          default: ""
+        # Epitope motif target: the app uploads the PDB to the cache volume and passes its path.
+        - name: motif_pdb_path
+          default: ""
+        - name: motif_residues_csv
+          default: ""
+        - name: motif_chain
+          default: "A"
+        # Total designed-scaffold length window (incl. the grafted motif).
+        - name: scaffold_length_min
+          default: "80"
+        - name: scaffold_length_max
+          default: "120"
+        - name: num_samples
+          default: "8"
+        - name: num_iterations
+          default: "6"
+        - name: run_proteinmpnn
+          default: "true"
+        - name: resampling_temperature
+          default: "0.1"
+        - name: strategy
+          default: "resample"
+        - name: dev_user_prefix
+          default: ""
+        # Reward weights. Epitope-presentation fidelity (motif_rmsd, lower-is-better) and scaffold
+        # fold confidence (plddt) are weighted up — what matters most for an immunogen. Scaffold
+        # self-reactivity (immuno / immuno_mhc2) is OFF by default (a vaccine is meant to be immunogenic).
+        - name: weights_json
+          default: '{"motif_rmsd":2.0,"plddt":1.5,"solubility":1.0,"thermostab":1.0,"liability":1.0,"immuno":0.0,"immuno_mhc2":0.0}'
+
+        # Stopping criteria — convergence ON by default; the other two are opt-in
+        # (empty string parsed as "disabled" by the notebook).
+        - name: convergence_threshold
+          default: "0.01"
+        - name: convergence_window
+          default: "2"
+        - name: target_reward
+          default: ""
+        - name: best_k_target
+          default: ""
+        - name: best_k_threshold
+          default: ""
+
+      tags: ${var.common_resource_tags}

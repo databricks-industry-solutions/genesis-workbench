@@ -20,6 +20,7 @@
 - [Sequence Similarity Search](sequence_search.md) — Fast BLAST-like search across 150M+ sequences using ESM-2 embeddings
 - [RFD4-Proteina Design](rfd4_proteina_design.md) — Generate novel protein backbones + sequences with the NVIDIA×Baker RFD4-Proteina flow-matching model, served on a GPU_XLARGE (1× H100) endpoint via Express env_pack; de-novo monomer design, first-draft target-conditioned (binder/motif) design, and optional LoRA fine-tuning
 - [Antibody Design (VHH)](antibody_design.md) — Generate + reward-optimize single-domain (VHH/nanobody) antibodies against an antigen epitope with RFD4-Proteina (in-process, H100), scored on binding (Boltz ipTM), fold confidence (ESMFold pLDDT), and developability (solubility, half-life, Tm, low immunogenicity)
+- [Vaccine Immunogen Design](vaccine_immunogen.md) — Graft a conserved epitope onto de-novo stable scaffolds with RFD4-Proteina motif-scaffolding (in-process, H100); reward-optimized on epitope-presentation fidelity (motif RMSD), scaffold fold confidence (ESMFold pLDDT), and manufacturability (solubility, Tm, sequence liabilities)
 
 ## Small Molecule
 

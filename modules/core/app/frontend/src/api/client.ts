@@ -45,6 +45,11 @@ import type {
   AntibodyDesignStartResponse,
   AntibodyStatusResponse,
   AntibodyTopKResponse,
+  VaccineImmunogenDefaultsResponse,
+  VaccineImmunogenStartRequest,
+  VaccineImmunogenStartResponse,
+  VaccineImmunogenStatusResponse,
+  VaccineTopKResponse,
   EnzymeDefaultsResponse,
   EnzymeOptimizationStartRequest,
   EnzymeOptimizationStartResponse,
@@ -457,6 +462,27 @@ export const api = {
   antibodyDesignTopK: (run_id: string) =>
     request<AntibodyTopKResponse>(
       `/api/antibody_design/top_k?run_id=${encodeURIComponent(run_id)}`,
+    ),
+
+  // Vaccine Immunogen Design (VHH) — RFD4-Proteina in-process motif-scaffolding loop
+  vaccineImmunogenDefaults: () =>
+    request<VaccineImmunogenDefaultsResponse>('/api/vaccine_immunogen/defaults'),
+  vaccineImmunogenStart: (body: VaccineImmunogenStartRequest) =>
+    request<VaccineImmunogenStartResponse>('/api/vaccine_immunogen/start', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  vaccineImmunogenSearch: (by: 'run_name' | 'experiment_name', text: string) =>
+    request<DBSearchResponse>(
+      `/api/vaccine_immunogen/search?by=${by}&text=${encodeURIComponent(text)}`,
+    ),
+  vaccineImmunogenStatus: (run_id: string) =>
+    request<VaccineImmunogenStatusResponse>(
+      `/api/vaccine_immunogen/status?run_id=${encodeURIComponent(run_id)}`,
+    ),
+  vaccineImmunogenTopK: (run_id: string) =>
+    request<VaccineTopKResponse>(
+      `/api/vaccine_immunogen/top_k?run_id=${encodeURIComponent(run_id)}`,
     ),
 
   // ─── Genomics ────────────────────────────────────────────────────

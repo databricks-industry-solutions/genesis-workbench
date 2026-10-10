@@ -784,6 +784,59 @@ export type AntibodyDefaultsResponse = {
   epitope_residues: number[]
 }
 
+// ─── Vaccine Immunogen Design ───────────────────────────────────────────────
+
+export type VaccineImmunogenStartRequest = {
+  motif_pdb: string
+  motif_residues: number[]
+  motif_chain: string
+  scaffold_length_min: number
+  scaffold_length_max: number
+  num_samples: number
+  num_iterations: number
+  weights: Record<string, number>
+  resampling_temperature: number
+  strategy: 'resample' | 'noop'
+  run_proteinmpnn: boolean
+  convergence_threshold: number | null
+  convergence_window: number
+  target_reward: number | null
+  best_k_target: number | null
+  best_k_threshold: number | null
+  mlflow_experiment: string
+  mlflow_run_name: string
+}
+
+export type VaccineImmunogenStartResponse = {
+  job_id: number
+  job_run_id: number
+  mlflow_run_id: string
+  experiment_id: string
+  run_url: string
+}
+
+export type VaccineImmunogenStatusResponse = {
+  status: string
+  job_status: string
+  run_name: string
+  experiment_id: string
+  iter_max_reward_history: EnzymeRewardHistoryPoint[]
+  iter_mean_reward_history: EnzymeRewardHistoryPoint[]
+  current_metrics: Record<string, number>
+  trajectory: Record<string, number | string | null>[]
+}
+
+export type VaccineCandidate = { candidate_id: string; pdb: string; viewer_html: string }
+
+export type VaccineTopKResponse = { candidates: VaccineCandidate[] }
+
+export type VaccineImmunogenDefaultsResponse = {
+  default_weights: Record<string, number>
+  motif_pdb: string
+  motif_chain: string
+  motif_residues: number[]
+}
+
 // ─── Genomics ──────────────────────────────────────────────────────
 
 export type DBRunRow = {

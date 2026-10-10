@@ -27,7 +27,7 @@ echo "Extra Params: $EXTRA_PARAMS"
 echo "##############################################"
 echo "⏩️ Starting deploy of Large Molecule module #"
 
-ALL_SUBMODULES=(alphafold/alphafold_v2.3.2 boltz/boltz_1 esmfold/esmfold_v1 protein_mpnn/protein_mpnn_v0.1.0 rfdiffusion/rfdiffusion_v1.1.0 esm2_embeddings/esm2_embeddings_v1 sequence_search/sequence_search_v1 enzyme_optimization/enzyme_optimization_v1 rfd4_proteina/rfd4_proteina_v1 antibody_design/antibody_design_v1)
+ALL_SUBMODULES=(alphafold/alphafold_v2.3.2 boltz/boltz_1 esmfold/esmfold_v1 protein_mpnn/protein_mpnn_v0.1.0 rfdiffusion/rfdiffusion_v1.1.0 esm2_embeddings/esm2_embeddings_v1 sequence_search/sequence_search_v1 enzyme_optimization/enzyme_optimization_v1 rfd4_proteina/rfd4_proteina_v1 antibody_design/antibody_design_v1 vaccine_immunogen/vaccine_immunogen_v1)
 
 if [[ -n "$ONLY_SUBMODULE" ]]; then
     found=false
