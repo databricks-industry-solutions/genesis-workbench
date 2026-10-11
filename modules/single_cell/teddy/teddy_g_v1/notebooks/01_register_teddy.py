@@ -16,6 +16,7 @@
 # DBTITLE 1,[gwb] pip install pinned requirements
 # MAGIC %cat ../requirements.txt
 # MAGIC %pip install -r ../requirements.txt
+# MAGIC %pip install "mlflow>=3.12" "databricks-sdk>=0.150.0"
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
@@ -248,7 +249,7 @@ registered_model_name = f"{catalog}.{schema}.{model_name}"
 os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"
 
 with mlflow.start_run(run_name=f"{model_name}_{model_size}_embedder", experiment_id=experiment.experiment_id) as run:
-    mlflow.pyfunc.log_model(
+    model_info = mlflow.pyfunc.log_model(
         artifact_path="teddy",
         # File-path API (MLflow 2.20+): MLflow imports this file at load time via
         # importlib.util.spec_from_file_location — NO cloudpickle of the class.
@@ -261,7 +262,14 @@ with mlflow.start_run(run_name=f"{model_name}_{model_size}_embedder", experiment
         pip_requirements="../requirements.txt",
         signature=signature,
         input_example=(input_data, default_params),
-        registered_model_name=registered_model_name,
+    )
+
+    # Express: register with env_pack (snapshots this serverless-GPU env for serving). Only the
+    # registration changes — 02_import_model_gwb (import + deploy_model) is unchanged.
+    from mlflow.utils.env_pack import EnvPackConfig
+    mlflow.register_model(
+        model_uri=model_info.model_uri, name=registered_model_name,
+        env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False),
     )
 
 print(f"Registered {registered_model_name}")
