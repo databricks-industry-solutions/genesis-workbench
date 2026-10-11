@@ -9,6 +9,7 @@
 
 # MAGIC %pip install -r requirements.txt
 # MAGIC %pip install ../proteinmpnn
+# MAGIC %pip install "mlflow>=3.12" "databricks-sdk>=0.150.0"
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
@@ -365,5 +366,12 @@ with mlflow.start_run(run_name='protein_mpnn',experiment_id=experiment.experimen
         input_example=_input_example_df,
         signature=signature,
         conda_env="conda_env.yaml",
-        registered_model_name=f"{CATALOG}.{SCHEMA}.proteinmpnn"
     )
+
+# Express: register with env_pack (snapshots this serverless-GPU env for serving). Only the registration
+# changes — 02_import_model_gwb (import_model_from_uc + deploy_model) is unchanged.
+from mlflow.utils.env_pack import EnvPackConfig
+mlflow.register_model(
+    model_uri=model_info.model_uri, name=f"{CATALOG}.{SCHEMA}.proteinmpnn",
+    env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False),
+)
