@@ -25,6 +25,7 @@ dbutils.widgets.text("workload_type", "GPU_MEDIUM", "Workload Type for endpoints
 # rc-foundry (RFD3) + biopython. torch/CUDA + mlflow are preinstalled on the
 # serverless GPU AI runtime (Python 3.12); do NOT reinstall them.
 # MAGIC %pip install -r requirements.txt
+# MAGIC %pip install "mlflow>=3.12" "databricks-sdk>=0.150.0"
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
@@ -278,6 +279,13 @@ with mlflow.start_run(run_name="rfdiffusion_inpainting", experiment_id=experimen
         input_example=input_example,
         signature=signature,
         conda_env="rfd_env.yml",
-        registered_model_name=f"{CATALOG}.{SCHEMA}.rfdiffusion_inpainting",
     )
     print("logged:", model_info.model_uri)
+
+# Express: register with env_pack (snapshots this serverless-GPU env for serving). Only the registration
+# changes — 02_import_model_gwb (import_model_from_uc + deploy_model) is unchanged.
+from mlflow.utils.env_pack import EnvPackConfig
+mlflow.register_model(
+    model_uri=model_info.model_uri, name=f"{CATALOG}.{SCHEMA}.rfdiffusion_inpainting",
+    env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False),
+)
