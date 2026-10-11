@@ -61,9 +61,9 @@ schema = dbutils.widgets.get("schema")
 # MAGIC     pytorch-lightning==2.5.5 \
 # MAGIC     sentencepiece==0.2.0 \
 # MAGIC     biopython==1.84 \
-# MAGIC     mlflow==2.22.0 \
+# MAGIC     mlflow>=3.12 \
 # MAGIC     cloudpickle==2.0.0 \
-# MAGIC     databricks-sdk==0.50.0 \
+# MAGIC     databricks-sdk>=0.150.0 \
 # MAGIC     databricks-sql-connector==4.0.2
 
 # COMMAND ----------
@@ -282,7 +282,14 @@ with mlflow.start_run(run_name=f"register-{model_name}") as run:
         conda_env=conda_env,
         signature=example_signature,
         input_example=example_input,
-        registered_model_name=uc_model_name,
+    )
+
+    # Express: register with env_pack (snapshots this serverless-GPU env for serving). Only the
+    # registration changes — import_model_from_uc + deploy_model below are unchanged.
+    from mlflow.utils.env_pack import EnvPackConfig
+    mlflow.register_model(
+        model_uri=logged.model_uri, name=uc_model_name,
+        env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False),
     )
 
     print(f"Registered as {uc_model_name}")
