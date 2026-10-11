@@ -17,6 +17,7 @@
 # COMMAND ----------
 
 # MAGIC %pip install -r ../requirements.txt
+# MAGIC %pip install "mlflow>=3.12" "databricks-sdk>=0.150.0"
 # MAGIC %restart_python
 
 # COMMAND ----------
@@ -419,7 +420,7 @@ os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"
 with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experiment_id) as run:
     registered_model_name = f"{catalog}.{schema}.{model_name}"
 
-    mlflow.pyfunc.log_model(
+    model_info = mlflow.pyfunc.log_model(
         "scgpt_perturbation",
         python_model=PerturbationModelWrapper(
             special_tokens=["<pad>", "<cls>", "<eoc>"]
@@ -433,7 +434,14 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
         pip_requirements="../requirements.txt",
         signature=signature,
         input_example=input_data,
-        registered_model_name=registered_model_name,
+    )
+
+    # Express: register with env_pack (snapshots this serverless-GPU env for serving). Only the
+    # registration changes — 04_import_perturbation_gwb (import + deploy_model) is unchanged.
+    from mlflow.utils.env_pack import EnvPackConfig
+    mlflow.register_model(
+        model_uri=model_info.model_uri, name=registered_model_name,
+        env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False),
     )
 
     print(f"Model registered as {registered_model_name}")

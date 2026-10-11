@@ -7,6 +7,7 @@
 # DBTITLE 1,[gwb] pip install from requirements list
 # MAGIC %cat ../requirements.txt
 # MAGIC %pip install -r ../requirements.txt
+# MAGIC %pip install "mlflow>=3.12" "databricks-sdk>=0.150.0"
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
@@ -577,7 +578,7 @@ os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"
 with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experiment_id) as run:
     registered_model_name = f"{catalog}.{schema}.{model_name}"
 
-    mlflow.pyfunc.log_model(
+    model_info = mlflow.pyfunc.log_model(
         "scgpt",
         python_model=TransformerModelWrapper(
             special_tokens=["<pad>", "<cls>", "<eoc>"]
@@ -617,7 +618,14 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
         #: provide input_example using tuple (input_data, params).
         input_example=(input_data, params), #: try tuple first, then change to dict. # Including an input example while logging a model offers dual benefits. Firstly, it aids in inferring the model's signature. Secondly, and just as importantly, it validates the model's requirements. This input example is utilized to execute a prediction using the model that is about to be logged, thereby enhancing the accuracy in identifying model requirement dependencies. It is highly recommended to always include an input example along with your models when you log them. # .to_dict(orient='split')
         # We offer support for input_example with params by using tuple to combine model inputs and params. See examples below:(input_data, params)
-        registered_model_name=registered_model_name,
+    )
+
+    # Express: register with env_pack (snapshots this serverless-GPU env for serving). Only the
+    # registration changes — 02_import_model_gwb (import + deploy_model) is unchanged.
+    from mlflow.utils.env_pack import EnvPackConfig
+    mlflow.register_model(
+        model_uri=model_info.model_uri, name=registered_model_name,
+        env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False),
     )
 
 
