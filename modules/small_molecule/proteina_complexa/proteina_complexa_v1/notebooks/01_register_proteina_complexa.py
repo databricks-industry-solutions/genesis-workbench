@@ -39,7 +39,7 @@ schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
-# MAGIC %pip install -q databricks-sdk>=0.50.0 databricks-sql-connector>=4.0.2 mlflow>=2.15
+# MAGIC %pip install -q databricks-sdk>=0.150.0 databricks-sql-connector>=4.0.2 mlflow>=3.12
 # MAGIC %pip install -q \
 # MAGIC     --find-links https://data.pyg.org/whl/torch-2.7.0+cu126.html \
 # MAGIC     torch==2.7.1 \
@@ -144,11 +144,14 @@ subprocess.check_call([
     "--find-links", "https://data.pyg.org/whl/torch-2.7.0+cu126.html",
     "torch==2.7.1", "torch_geometric==2.7.0",
     "torch_scatter==2.1.2", "torch_sparse==0.6.18", "torch_cluster==1.6.3",
-    "atomworks", "jax", "colabdesign", "jaxtyping", "loguru",
-    "biopandas", "biopython", "cpdb-protein", "deepdiff", "dm-tree",
-    "h5py", "mdtraj", "ml-collections", "modin", "multipledispatch",
-    "plotly", "prody", "pydantic", "python-dotenv", "rich", "rich-click",
-    "seaborn", "wandb", "wget", "xarray", "toolz",
+    # Pin to the conda_env versions below (the proven-good serving env). env_pack
+    # snapshots THIS kernel, so unpinned installs let the latest atomworks (which
+    # dropped AtomSelectionStack) break proteinfoundation's import at serving.
+    "atomworks==1.0.3", "jax==0.9.2", "colabdesign==1.1.1", "jaxtyping==0.3.9", "loguru==0.7.3",
+    "biopandas==0.5.1", "biopython==1.87", "cpdb-protein==0.2.1", "deepdiff==9.0.0", "dm-tree==0.1.10",
+    "h5py==3.16.0", "mdtraj==1.11.1.post1", "ml-collections==1.1.0", "modin==0.37.1", "multipledispatch==1.0.0",
+    "plotly==6.7.0", "prody==2.6.1", "pydantic==2.12.5", "python-dotenv==1.2.2", "rich==14.3.4", "rich-click==1.9.7",
+    "seaborn==0.13.2", "wandb==0.25.1", "wget==3.2", "xarray==2026.2.0", "toolz==1.1.0",
     # openbabel-wheel removed (GPL-2.0). Nothing in the GWB-side wrapper
     # imports openbabel. If Proteina-Complexa's runtime needs OB for some
     # ligand format we don't exercise, re-add narrowly with the license
@@ -928,6 +931,10 @@ os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"
 
 # COMMAND ----------
 
+# Express: register each variant with env_pack (snapshots this serverless-GPU env for serving). Only the
+# registration changes — the deploy loop below (import_model_from_uc + deploy_model) is unchanged.
+from mlflow.utils.env_pack import EnvPackConfig
+
 registered_models = {}
 
 for variant_key, model_info in MODELS.items():
@@ -964,7 +971,11 @@ for variant_key, model_info in MODELS.items():
             conda_env=conda_env,
             signature=model_signature,
             input_example=_variant_input_examples[variant_key],
-            registered_model_name=uc_model_name,
+        )  # Express: log WITHOUT registered_model_name; register separately with env_pack below
+
+        mlflow.register_model(
+            model_uri=model_info_logged.model_uri, name=uc_model_name,
+            env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False),
         )
 
         registered_models[mlflow_name] = {

@@ -64,6 +64,15 @@ registered*. So: register the version with `env_pack`, and the unchanged `deploy
 
 ## Gotchas (learned)
 
+- **Register-install pins must match the model's `conda_env`/requirements.** env_pack snapshots the REGISTER
+  KERNEL, not the model's declared `conda_env`. If the register install leaves deps UNPINNED while the model
+  declares a pinned `conda_env` (the env standard serving used), env_pack captures the *latest* versions →
+  version-drift `ImportError` at serving. Real case: proteina_complexa installed `atomworks` unpinned →
+  latest dropped `AtomSelectionStack` → `from proteinfoundation…` failed at model load; the conda_env pinned
+  `atomworks==1.0.3`. Fix: pin the register install to the conda_env versions so env_pack reproduces the
+  proven env. (Models whose register install == their `pip_requirements`/requirements.txt file, e.g. teddy,
+  don't drift.) Serving model-load errors are UI-only (CLI logs key to the active config, absent for a failed
+  pending deploy); the service log's `DATABRICKS_MODEL_LOAD_DIAGNOSTIC_V1` line gives the exact failing import.
 - `code_path` → `code_paths` under mlflow 3.x (TypeError).
 - `env_pack` registration MUST run on serverless GPU for a GPU endpoint (parity) — the install-cell torch is
   what gets packaged.
