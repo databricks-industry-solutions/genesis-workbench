@@ -60,7 +60,7 @@ _r = subprocess.run([
     "pip", "install", "--find-links", _pyg_url,
     "torch-geometric==2.7.0", "torch-scatter==2.1.2",
     "torch-sparse==0.6.18", "torch-cluster==1.6.3",
-    "databricks-sdk==0.50.0", "databricks-sql-connector==4.0.3", "mlflow==2.22.0",
+    "databricks-sdk>=0.150.0", "mlflow>=3.12",
     "pyyaml==6.0.2", "scipy==1.13.1", "networkx==3.3", "biopython==1.84",
     "rdkit==2024.3.5", "e3nn==0.5.1", "spyrmsd==0.8.0", "pandas==2.2.2",
     "biopandas==0.5.1", "prody==2.6.1", "fair-esm==2.0.0", "cloudpickle==3.0.0",
@@ -1063,7 +1063,12 @@ print(f"Example ESM payload: {len(example_esm_embeddings)} chains, {len(example_
 
 # COMMAND ----------
 
+# Express serving: log WITHOUT registered_model_name, then register SEPARATELY with env_pack (snapshots this
+# serverless-GPU env verbatim for serving). Only the registration changes — 02 (deploy_model) is unchanged.
+from mlflow.utils.env_pack import EnvPackConfig
+
 esm_model_name = f"{model_name}_esm_embeddings"
+esm_uc_name = f"{catalog}.{schema}.{esm_model_name}"
 
 with mlflow.start_run(run_name=esm_model_name, experiment_id=experiment.experiment_id):
     mlflow.log_params({"model": "ESM2 Embeddings for DiffDock", "runtime": "DBR 13.3 LTS ML GPU"})
@@ -1072,13 +1077,16 @@ with mlflow.start_run(run_name=esm_model_name, experiment_id=experiment.experime
         artifact_path="model",
         python_model=ESMEmbeddingsModel(),
         artifacts={"esm_model_dir": ESM_SAVE_DIR},
-        pip_requirements=esm_pip_requirements,
+        pip_requirements=["mlflow", "cloudpickle", "pandas", "numpy"],  # minimal: env_pack defines the serving env
         signature=esm_signature,
         input_example=pd.DataFrame([{"protein_pdb": example_pdb}]),
-        registered_model_name=f"{catalog}.{schema}.{esm_model_name}",
     )
 
-print(f"Registered ESM: {catalog}.{schema}.{esm_model_name}")
+esm_model_version = mlflow.register_model(
+    model_uri=esm_model_info.model_uri, name=esm_uc_name,
+    env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False),
+).version
+print(f"Registered ESM (Express env_pack): {esm_uc_name} v{esm_model_version}")
 
 # COMMAND ----------
 
@@ -1120,6 +1128,7 @@ if cache_count == 0:
 
 # COMMAND ----------
 
+scoring_uc_name = f"{catalog}.{schema}.{model_name}"
 with mlflow.start_run(run_name=model_name, experiment_id=experiment.experiment_id):
     mlflow.log_params({
         "model": "DiffDock Scoring (no ESM)",
@@ -1138,11 +1147,8 @@ with mlflow.start_run(run_name=model_name, experiment_id=experiment.experiment_i
             "confidence_model_dir": CONFIDENCE_MODEL_DIR,
             "cache_dir": DIFFDOCK_CACHE_DIR,
         },
-        code_path=code_items,
-        pip_requirements=[
-            f"--find-links {pyg_whl_url}",
-            f"--extra-index-url https://download.pytorch.org/whl/{cuda_tag}",
-        ] + scoring_pip_requirements,
+        code_paths=code_items,  # mlflow 3.x renamed code_path -> code_paths
+        pip_requirements=["mlflow", "cloudpickle", "pandas", "numpy"],  # minimal: env_pack defines the serving env
         signature=scoring_signature,
         input_example=pd.DataFrame([{
             "protein_pdb": example_pdb,
@@ -1150,9 +1156,12 @@ with mlflow.start_run(run_name=model_name, experiment_id=experiment.experiment_i
             "samples_per_complex": 5,
             "esm_embeddings_b64": example_esm_b64_json,
         }]),
-        registered_model_name=f"{catalog}.{schema}.{model_name}",
     )
 
-print(f"Registered DiffDock Scoring: {catalog}.{schema}.{model_name}")
+scoring_model_version = mlflow.register_model(
+    model_uri=scoring_model_info.model_uri, name=scoring_uc_name,
+    env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False),
+).version
+print(f"Registered DiffDock Scoring (Express env_pack): {scoring_uc_name} v{scoring_model_version}")
 print(f"ESM URI: {esm_model_info.model_uri}")
 print(f"Scoring URI: {scoring_model_info.model_uri}")
