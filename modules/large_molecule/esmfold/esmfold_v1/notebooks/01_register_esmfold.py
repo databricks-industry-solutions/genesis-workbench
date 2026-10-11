@@ -21,7 +21,7 @@ schema = dbutils.widgets.get("schema")
 #requirements for genesis workbench library
 #On serverless GPU (AI runtime) torch/CUDA is preinstalled, but transformers/
 #accelerate are not — install them here (mirrors the esm2_embeddings notebook).
-%pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 transformers==4.41.2 accelerate==0.31.0 hf_transfer==0.1.9
+%pip install databricks-sdk>=0.150.0 databricks-sql-connector==4.0.3 transformers==4.41.2 accelerate==0.31.0 hf_transfer==0.1.9 mlflow>=3.12
 #requirements for current library
 #%pip install -r ../requirements.txt
 
@@ -250,23 +250,18 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
         artifacts={
             "model": flat_model_path,
         },
-        pip_requirements=[
-            "--extra-index-url https://download.pytorch.org/whl/cu121",
-            # mlflow/cloudpickle MUST match the logging runtime (serverless GPU:
-            # mlflow 2.22.0, cloudpickle 3.0.0) or the serving container fails to
-            # parse/unpickle the model ("Phase: mlflow_parse ... AttributeError").
-            "mlflow==2.22.0",
-            "cloudpickle==3.0.0",
-            "transformers==4.41.2",
-            "torch==2.3.1+cu121",
-            "torchvision==0.18.1+cu121",
-            "accelerate==0.31.0",
-            "setuptools<82"
-        ],
+        pip_requirements=["mlflow", "cloudpickle", "pandas", "numpy"],  # minimal: env_pack defines the serving env
         input_example=test_input,
         signature=signature,
-        registered_model_name=f"{catalog}.{schema}.{model_name}",
     )
+
+# Express: register with env_pack (snapshots this serverless-GPU env for serving). Only the registration
+# changes — import_model_from_uc + deploy_model below are unchanged.
+from mlflow.utils.env_pack import EnvPackConfig
+mlflow.register_model(
+    model_uri=model_info.model_uri, name=f"{catalog}.{schema}.{model_name}",
+    env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False),
+)
 
 # COMMAND ----------
 
