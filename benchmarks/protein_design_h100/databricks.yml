@@ -1,0 +1,76 @@
+# Standalone DABs bundle for the 3-way protein-design speed/memory benchmark.
+# Deploy + run with the workshop profile:
+#   databricks bundle deploy -t dev -p workshop
+#   databricks bundle run    -t dev -p workshop protein_design_benchmark
+#
+# The 3 model tasks each take a dedicated 1x H100 on serverless client '6' (CUDA 13) and run in
+# parallel; the aggregate task (CPU) runs after all three finish (run_if ALL_DONE) and renders the
+# plots. H100 serverless capacity on this workshop is intermittent, hence max_retries on each.
+bundle:
+  name: protein_design_benchmark
+
+targets:
+  dev:
+    mode: development
+    default: true
+
+resources:
+  jobs:
+    protein_design_benchmark:
+      name: protein_design_benchmark
+
+      # Job parameters -> notebook widgets. Bump max_samples to 1000 for the full run (note:
+      # rfdiffusion at ~15 s/sample makes 1000 ~= hours; start small to validate the rig).
+      parameters:
+        - name: out_dir
+          default: /Volumes/main/genesis_workbench/rfd4_proteina/benchmark_results
+        - name: max_samples
+          default: "50"
+
+      tasks:
+        - task_key: bench_rfd4
+          max_retries: 2
+          disable_auto_optimization: true
+          environment_key: gpu6
+          compute:
+            hardware_accelerator: GPU_1xH100
+          notebook_task:
+            notebook_path: ./nb_rfd4.py
+
+        - task_key: bench_rfdiffusion
+          max_retries: 2
+          disable_auto_optimization: true
+          environment_key: gpu6
+          compute:
+            hardware_accelerator: GPU_1xH100
+          notebook_task:
+            notebook_path: ./nb_rfdiffusion.py
+
+        - task_key: bench_proteina
+          max_retries: 2
+          disable_auto_optimization: true
+          environment_key: gpu6
+          compute:
+            hardware_accelerator: GPU_1xH100
+          notebook_task:
+            notebook_path: ./nb_proteina.py
+
+        - task_key: aggregate
+          depends_on:
+            - task_key: bench_rfd4
+            - task_key: bench_rfdiffusion
+            - task_key: bench_proteina
+          run_if: ALL_DONE            # render whatever finished, even if a model task failed
+          environment_key: cpu
+          notebook_task:
+            notebook_path: ./nb_aggregate.py
+
+      # gpu6 = client '6' (AI Runtime v6, CUDA 13) attached to the H100 tasks — rfd4's native runtime,
+      # and (via driver forward-compat) the CUDA-12 torch of the other two. cpu = lightweight for aggregate.
+      environments:
+        - environment_key: gpu6
+          spec:
+            client: '6'
+        - environment_key: cpu
+          spec:
+            client: '4'
