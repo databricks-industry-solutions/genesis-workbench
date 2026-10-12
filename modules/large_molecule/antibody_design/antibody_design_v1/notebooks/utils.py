@@ -121,11 +121,30 @@ def call_proteinmpnn(pdb_str: str,
 def call_boltz(boltz_input: str, dev_user_prefix: Optional[str] = None,
                timeout_seconds: int = 900) -> Dict[str, Any]:
     """boltz_input e.g. 'protein_A:<antigen>;protein_B:<vhh>' for a complex.
-    Returns dict: { pdb, ipTM?, iLDDT?, ... }."""
+    Returns the dbboltz FLAT result dict for the first diffusion sample:
+    { pdb, confidence_score, ptm, iptm, ligand_iptm, protein_iptm } — note the keys
+    are lowercase and the confidence values are STRINGS (7-decimal). Use `boltz_iptm`
+    to pull the interface pTM."""
     payload = [{"input": boltz_input, "msa": "no_msa", "use_msa_server": "True"}]
     resp = _query("boltz", payload, dev_user_prefix=dev_user_prefix, timeout_seconds=timeout_seconds)
     pred = resp.predictions[0] if resp.predictions else {}
     return {"pdb": pred} if isinstance(pred, str) else pred
+
+
+def boltz_iptm(out: Dict[str, Any]) -> float:
+    """Interface pTM (binding confidence) from a Boltz result. The dbboltz pyfunc emits
+    a flat dict with lowercase, STRING-valued keys ('iptm','protein_iptm','ptm',
+    'confidence_score','ligand_iptm'); prefer iptm → protein_iptm → confidence_score.
+    Returns 0.0 if none parse. (The old `out.get("ipTM", out.get("iLDDT", 0.0))` matched
+    NO key — wrong case/name — so the binding axis was silently 0 for every candidate.)"""
+    for k in ("iptm", "protein_iptm", "confidence_score", "ptm"):
+        v = out.get(k)
+        if v not in (None, ""):
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                continue
+    return 0.0
 
 
 def call_netsolp(sequences: List[str], dev_user_prefix: Optional[str] = None) -> List[float]:
@@ -356,8 +375,9 @@ def number_vhh(sequence: str) -> Dict[str, Any]:
     """Number a designed sequence as a VHH with anarcii and return
     {"is_vhh": bool, "cdr_positions": [1-based ints], "scheme": "imgt"}.
 
-    Best-effort: anarcii ships with the rfproteina install. If it isn't
-    importable, or the sequence doesn't number as an antibody V-domain, we
+    Best-effort: anarcii is installed explicitly by the orchestrator's install
+    cell (it is NOT an rfproteina dependency — do not assume it is present). If it
+    isn't importable, or the sequence doesn't number as an antibody V-domain, we
     return is_vhh=False with an empty CDR list and the caller redesigns the
     whole variable region instead of just the CDRs.
     """
@@ -483,11 +503,27 @@ def _chain_res_range(pdb_str: str, chain: str):
     return (min(ids), max(ids)) if ids else None
 
 
-def _structure_to_pdb_and_seq(sample: Dict[str, Any]) -> tuple:
-    """biotite AtomArray → (pdb_string, sequence). Mirrors nb01."""
+def _structure_to_pdb_and_seq(sample: Dict[str, Any], exclude_chain: Optional[str] = None) -> tuple:
+    """biotite AtomArray → (pdb_string, sequence). Mirrors nb01.
+
+    For the binder/VHH path the RFD4 output is a TWO-chain complex — the designed
+    binder PLUS the preserved antigen chain (verified on an H100 run: designed chain
+    'B', antigen chain 'A'). Pass `exclude_chain=<antigen_chain>` to drop the antigen
+    and keep ONLY the designed binder, then relabel it to 'A' so everything downstream
+    (anarcii numbering, ProteinMPNN `fixed_positions={"A": ...}`, Boltz `protein_B`,
+    developability scorers, the viewer) operates on the isolated VHH — NOT the
+    VHH+antigen fusion. (Omitting this made the whole complex the "designed sequence",
+    which silently broke is_vhh, Boltz binding, and every per-sequence score.) Relies on
+    RFD4 preserving the input antigen's chain id; falls back to the full array if the
+    exclude would drop everything."""
     import io
     import numpy as _np
     aa = sample["generated_atom_array"]
+    if exclude_chain is not None:
+        keep = aa.chain_id != exclude_chain
+        if keep.any() and not keep.all():
+            aa = aa[keep]
+            aa.set_annotation("chain_id", _np.full(aa.array_length(), "A"))
     seq = ""
     try:
         from biotite.structure import to_sequence
@@ -565,6 +601,9 @@ def generate_vhh(ctx: Dict[str, Any], antigen_pdb_str: str, epitope_residues: Li
         with torch.no_grad():
             outs = model.predict_step(batch, 0)
     for i, out in enumerate(outs):
-        pdb_str, seq = _structure_to_pdb_and_seq(out)
+        # Keep ONLY the designed binder chain — the RFD4 output also carries the
+        # preserved antigen chain, and scoring the VHH+antigen fusion silently broke
+        # is_vhh / Boltz / developability. Drop the antigen chain here.
+        pdb_str, seq = _structure_to_pdb_and_seq(out, exclude_chain=antigen_chain)
         rows.append({"sample_id": i, "designed_pdb": pdb_str, "designed_sequence": seq})
     return pd.DataFrame(rows)

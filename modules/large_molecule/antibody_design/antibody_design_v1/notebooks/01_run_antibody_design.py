@@ -94,6 +94,16 @@ if _r.returncode != 0:
         _err = _err.replace(gh_token, "<redacted>")
     hint = "" if gh_token else f" (no token at {git_token_scope}/{git_token_key}; set a PAT if the repo is still private)"
     raise RuntimeError(f"uv install failed rc={_r.returncode}{hint}; stderr tail:\n{_err[-3000:]}")
+# anarcii (antibody numbering) — number_vhh uses it to recognise a VHH framework/CDRs and
+# gate the ProteinMPNN framework redesign. It is NOT a rfproteina dependency, so install it
+# explicitly. Separate call (no --torch-backend) so it reuses the torch we just installed.
+# Best-effort: number_vhh degrades gracefully if it's absent, so a failure here only means
+# designs won't be numbered (is_vhh=False) rather than killing the whole run.
+_a = subprocess.run(["uv", "pip", "install", "--python", sys.executable, "--break-system-packages", "anarcii"],
+                    capture_output=True, text=True)
+if _a.returncode != 0:
+    print(f"[anarcii] install failed rc={_a.returncode} (VHH numbering + ProteinMPNN framework "
+          f"redesign will be skipped); stderr tail:\n{(_a.stderr or '')[-1500:]}")
 dbutils.library.restartPython()
 
 # COMMAND ----------
@@ -198,7 +208,7 @@ importlib.reload(ab_utils)
 from utils import (
     PredictorAxis, compose_rewards, half_life_anchor_threshold, half_life_anchor_rewards,
     make_strategy, number_vhh, load_rfd4, generate_vhh,
-    call_esmfold, call_proteinmpnn, call_boltz,
+    call_esmfold, call_proteinmpnn, call_boltz, boltz_iptm,
     call_netsolp, call_pltnum, call_deepstabp, call_mhcflurry, call_hlaiipred,
     warmup_developability_endpoints, _extract_mean_plddt_from_pdb,
     liability_weighted_count, liability_detail,
@@ -298,7 +308,7 @@ def score_iteration(seqs: List[str], pdbs: List[str], plddts: List[float],
             boltz_in = f"protein_A:{antigen_seq};protein_B:{seq}"
             try:
                 out = call_boltz(boltz_in, dev_user_prefix=dev_user_prefix, timeout_seconds=1200)
-                boltz_scores.append(float(out.get("ipTM", out.get("iLDDT", 0.0))))
+                boltz_scores.append(boltz_iptm(out))  # iptm (lowercase, string) — see boltz_iptm
             except Exception as e:
                 print(f"Boltz failed for one candidate: {e}")
                 boltz_scores.append(0.0)
