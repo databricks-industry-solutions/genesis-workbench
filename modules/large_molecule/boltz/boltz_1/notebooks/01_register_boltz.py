@@ -37,7 +37,7 @@ print("dbboltz staged to /tmp/dbboltz from", _dbboltz_ws)
 
 # COMMAND ----------
 
-# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0
+# MAGIC %pip install databricks-sdk>=0.150.0 databricks-sql-connector==4.0.3 mlflow>=3.12
 # MAGIC # dbboltz pulls boltz==2.2.1 (+ numpy<2.0, hydra-core, pytorch-lightning, rdkit …).
 # MAGIC # On the serverless GPU AI runtime torch 2.7.1+cu126 is preinstalled and satisfies
 # MAGIC # boltz's torch>=2.2, so torch is NOT reinstalled. Boltz-2 has its own attention
@@ -58,6 +58,8 @@ print(gwb_library_path)
 # COMMAND ----------
 
 # MAGIC %pip install {gwb_library_path} --force-reinstall
+# MAGIC # Reinstall LAST so dbboltz/gwb-lib can't downgrade it — env_pack (register_model) needs mlflow>=3.12.
+# MAGIC %pip install "mlflow>=3.12" "databricks-sdk>=0.150.0"
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
@@ -250,8 +252,15 @@ with mlflow.start_run(run_name=f"{MODEL_NAME}", experiment_id=experiment.experim
         input_example=[model_input],
         signature=signature,
         conda_env="conda_env.yml",
-        registered_model_name=registered_model_name
     )
+
+# Express: register with env_pack (snapshots this serverless-GPU env for serving). Only the
+# registration changes — deploy_model below is unchanged.
+from mlflow.utils.env_pack import EnvPackConfig
+mlflow.register_model(
+    model_uri=model_info.model_uri, name=registered_model_name,
+    env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False),
+)
 
 # COMMAND ----------
 
