@@ -39,7 +39,7 @@ schema = dbutils.widgets.get("schema")
 # COMMAND ----------
 
 # MAGIC %pip install -q rdkit==2025.3.6 descriptastorus==2.8.0 scikit-learn==1.5.2 tqdm==4.67.1
-# MAGIC %pip install -q mlflow[databricks]==2.22.0 databricks-sdk==0.50.0 databricks-sql-connector==4.0.3
+# MAGIC %pip install -q mlflow[databricks]>=3.12 databricks-sdk>=0.150.0 databricks-sql-connector==4.0.3
 
 # COMMAND ----------
 
@@ -283,15 +283,16 @@ with mlflow.start_run(run_name=f"register_{model_name}"):
         code_paths=[f"{LOCAL_SRC}/kermt", f"{LOCAL_SRC}/task"],
         signature=signature,
         input_example=pd.DataFrame({"smiles": _sample}),
-        pip_requirements=[
-            # pandas 1.5.3 has no cp312 wheel; the model is logged on py3.12 (serverless)
-            # and served on py3.12, so the serving-container build needs a cp312 pandas.
-            "torch==2.3.1", "rdkit==2025.3.6", "descriptastorus==2.8.0",
-            "scikit-learn==1.5.2", "numpy==1.26.4", "pandas==2.2.3", "tqdm==4.67.1",
-            "mlflow==2.22.0",
-        ],
-        registered_model_name=f"{catalog}.{schema}.{model_name}",
+        pip_requirements=["mlflow", "cloudpickle", "pandas", "numpy"],  # minimal: env_pack defines the serving env
     )
+
+# Express: register with env_pack (snapshots this serverless-GPU env for serving). Only the
+# registration changes — deploy_model below is unchanged.
+from mlflow.utils.env_pack import EnvPackConfig
+mlflow.register_model(
+    model_uri=model_info.model_uri, name=f"{catalog}.{schema}.{model_name}",
+    env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False),
+)
 print("registered:", model_info.model_uri)
 
 # COMMAND ----------
