@@ -52,16 +52,20 @@ deploy, no rebuild, no force-install, serving env == register env).
   serves as Express.
 - **Migrated** (all serving via env_pack, validated READY on A10/H100): diffdock (+esm_embeddings),
   esm2_embeddings, esmfold, proteinmpnn, rfdiffusion, scgpt (+perturbation), proteina_complexa (binder/
-  ligand/ame), teddy, deepstabp, boltz, kermt, pltnum, chemprop (bbbp/clintox/admet). rfd4_proteina was
+  ligand/ame), teddy, deepstabp, boltz, kermt, chemprop (bbbp/clintox/admet). rfd4_proteina was
   already Express (the reference).
 - **Gotchas fixed en route** (now in the playbook + troubleshooting skill): `code_path`→`code_paths`
   (mlflow 3.x); env-drift — pin the register install to the model's `conda_env` so env_pack reproduces the
   proven env (proteina's unpinned `atomworks` captured the latest, which dropped `AtomSelectionStack`);
   a later install downgrading the mlflow bump → reinstall `mlflow>=3.12` LAST before restart (boltz's
   `dbboltz[gpu]`); failed-pending-deploy service logs are UI-only (`DATABRICKS_MODEL_LOAD_DIAGNOSTIC_V1`).
-- **Left on standard serving (NOT eligible):** scimilarity (py3.10 lock) + genmol (py3.11 lock — pinned
-  pandas/transformers have no py3.12 wheels, and serverless GPU is py3.12). The CPU-only endpoints
-  (netsolp/mhcflurry/hlaiipred) are eligible but out of scope for this GPU-focused pass.
+- **Left on standard serving (NOT eligible):** scimilarity (py3.10 lock); genmol (py3.11 lock — pinned
+  pandas/transformers have no py3.12 wheels, and serverless GPU is py3.12); **pltnum** (the register
+  notebook never runs the model and declares its serving env as a `conda_env` pinned to python=3.11 /
+  pandas==1.5.3 / numpy==1.26.4, which have no cp312 wheels — so env_pack would snapshot the py3.12
+  kernel's pandas 2.x / numpy 2.x and silently change the serving runtime, i.e. more than a
+  registration-only change; left as-is). The CPU-only endpoints (netsolp/mhcflurry/hlaiipred) are
+  eligible but out of scope for this GPU-focused pass.
 
 ## vaccine_immunogen (2026-10-10) — Vaccine Immunogen Design batch workflow on RFD4-Proteina (in-process H100)
 

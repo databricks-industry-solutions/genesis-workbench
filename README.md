@@ -202,6 +202,8 @@ We are adding a script to build your own Databricks compatible container for NVI
 
 NVIDIA GPUs and cudatoolkit may be used in multiple places so you should consider the NVIDIA EULA(link) when using code in this package.
 
+> **Note on `mlflow` / `databricks-sdk` versions:** models migrated to Express serving (`env_pack`) — diffdock, esm2_embeddings, esmfold, proteinmpnn, rfdiffusion, scgpt, proteina_complexa, teddy, deepstabp, boltz, kermt, chemprop, rfd4_proteina — register and serve with **`mlflow>=3.12`** + **`databricks-sdk>=0.150.0`**. Where a row below still shows an older `mlflow` / `databricks-sdk` pin for one of these modules, that reflects its pre-migration standard-serving environment.
+
 Module | Package | License | Source
 -------- | ------- | ------- | --------
 core | fastapi==0.115.5 | MIT | https://github.com/tiangolo/fastapi
@@ -440,3 +442,61 @@ BioNeMo | pynvml | BSD-3 | https://github.com/gpuopenanalytics/pynvml
 Parabricks | see BioNeMo (same docker base dependencies) | |
 ESM2 Embeddings | torch==2.3.1 | BSD-3 | https://github.com/pytorch/pytorch
 ESM2 Embeddings | transformers==4.41.2 | Apache2.0 | https://github.com/huggingface/transformers
+RFD4-Proteina | rfd4-proteina (pip-installed at runtime from the NVIDIA-BioNeMo RFD4-Proteina repo) | MIT | https://github.com/NVIDIA-BioNeMo/RFD4-Proteina
+RFD4-Proteina | torch==2.14.1+cu132 | BSD-3 | https://github.com/pytorch/pytorch
+RFD4-Proteina | biotite==1.6.0 | BSD-3 | https://github.com/biotite-dev/biotite
+RFD4-Proteina | mlflow>=3.12 | Apache2.0 | https://github.com/mlflow/mlflow
+RFD4-Proteina | databricks-sdk>=0.150.0 | Apache2.0 | https://pypi.org/project/databricks-sdk/
+RFD4-Proteina | cloudpickle | BSD-3 | https://github.com/cloudpipe/cloudpickle
+RFD4-Proteina | numpy | BSD-3 | https://github.com/numpy/numpy
+RFD4-Proteina | pandas | BSD-3 | https://github.com/pandas-dev/pandas
+RFD4-Proteina | MODEL WEIGHTS (flow + autoencoder checkpoints; served on H100 via Express env_pack) | MIT | https://rfd4-proteina-public-e04a.cwobject.com
+KERMT | kermt (NVIDIA-BioNeMo/KERMT, GROVERbase) | Apache2.0 | https://github.com/NVIDIA-BioNeMo/KERMT
+KERMT | rdkit==2025.3.6 | BSD-3 | https://github.com/rdkit/rdkit
+KERMT | descriptastorus==2.8.0 | MIT | https://github.com/bp-kelley/descriptastorus
+KERMT | scikit-learn==1.5.2 | BSD-3 | https://github.com/scikit-learn/scikit-learn
+KERMT | tqdm==4.67.1 | MPL-2.0/MIT | https://github.com/tqdm/tqdm
+KERMT | torch (unpinned; serving runtime 2.7.1) | BSD-3 | https://github.com/pytorch/pytorch
+KERMT | numpy (unpinned) | BSD-3 | https://github.com/numpy/numpy
+KERMT | pandas (unpinned) | BSD-3 | https://github.com/pandas-dev/pandas
+KERMT | mlflow[databricks]>=3.12 | Apache2.0 | https://github.com/mlflow/mlflow
+KERMT | databricks-sdk>=0.150.0 | Apache2.0 | https://pypi.org/project/databricks-sdk/
+KERMT | databricks-sql-connector==4.0.3 | Apache2.0 | https://github.com/databricks/databricks-sql-python
+KERMT | MODEL WEIGHTS (fine-tuned ADMET checkpoint in a UC volume) | Apache2.0 | https://github.com/NVIDIA-BioNeMo/KERMT
+TEDDY | teddy (Merck TEDDY-G) | Apache2.0 | https://huggingface.co/Merck/TEDDY
+TEDDY | torch==2.7.1 | BSD-3 | https://github.com/pytorch/pytorch
+TEDDY | transformers==4.44.2 | Apache2.0 | https://github.com/huggingface/transformers
+TEDDY | huggingface_hub==0.25.2 | Apache2.0 | https://github.com/huggingface/huggingface_hub
+TEDDY | hf_transfer==0.1.9 | Apache2.0 | https://github.com/huggingface/hf_transfer
+TEDDY | safetensors==0.4.5 | Apache2.0 | https://github.com/huggingface/safetensors
+TEDDY | anndata==0.10.9 | BSD-3 | https://github.com/scverse/anndata
+TEDDY | scanpy==1.10.3 | BSD-3 | https://github.com/scverse/scanpy
+TEDDY | pandas==2.2.3 | BSD-3 | https://github.com/pandas-dev/pandas
+TEDDY | scipy==1.13.1 | BSD-3 | https://github.com/scipy/scipy
+TEDDY | scikit-learn==1.5.2 | BSD-3 | https://github.com/scikit-learn/scikit-learn
+TEDDY | tqdm==4.66.5 | MPL-2.0/MIT | https://github.com/tqdm/tqdm
+TEDDY | pyyaml==6.0.2 | MIT | https://github.com/yaml/pyyaml
+TEDDY | cloudpickle==3.0.0 | BSD-3 | https://github.com/cloudpipe/cloudpickle
+TEDDY | mlflow>=3.12 | Apache2.0 | https://github.com/mlflow/mlflow
+TEDDY | databricks-sdk>=0.150.0 | Apache2.0 | https://pypi.org/project/databricks-sdk/
+TEDDY | MODEL WEIGHTS (TEDDY-G 70M/160M/400M; pre-staged to a UC volume) | Apache2.0 | https://huggingface.co/Merck/TEDDY
+GenMol | genmol (NVIDIA-Digital-Bio) | Apache2.0 | https://github.com/NVIDIA-Digital-Bio/GenMol
+GenMol | torch==2.6.0 | BSD-3 | https://github.com/pytorch/pytorch
+GenMol | transformers==4.52.4 | Apache2.0 | https://github.com/huggingface/transformers
+GenMol | pandas==2.1.0 | BSD-3 | https://github.com/pandas-dev/pandas
+GenMol | rdkit==2025.3.6 | BSD-3 | https://github.com/rdkit/rdkit
+GenMol | sentry-sdk<2.0.0 | BSD-3 | https://github.com/getsentry/sentry-python
+GenMol | setuptools<80 | MIT | https://github.com/pypa/setuptools
+GenMol | mlflow[databricks]==2.22.0 | Apache2.0 | https://github.com/mlflow/mlflow
+GenMol | databricks-sdk==0.50.0 | Apache2.0 | https://pypi.org/project/databricks-sdk/
+GenMol | databricks-sql-connector==4.0.3 | Apache2.0 | https://github.com/databricks/databricks-sql-python
+GenMol | MODEL WEIGHTS (NV-GenMol-89M-v2) | NVIDIA Open Model License | https://huggingface.co/nvidia/NV-GenMol-89M-v2
+Antibody Design | batch workflow on RFD4-Proteina — reuses the esmfold / proteinmpnn / boltz / netsolp / deepstabp / mhcflurry / hlaiipred serving endpoints listed above | |
+Antibody Design | rfd4-proteina (in-process on H100) | MIT | https://github.com/NVIDIA-BioNeMo/RFD4-Proteina
+Antibody Design | anarcii (VHH / antibody numbering) | BSD-3 | https://github.com/oxpig/ANARCII
+Antibody Design | biotite==1.6.0 | BSD-3 | https://github.com/biotite-dev/biotite
+Antibody Design | torch==2.14.1+cu132 | BSD-3 | https://github.com/pytorch/pytorch
+Vaccine Immunogen | batch workflow on RFD4-Proteina motif-scaffolding — reuses existing serving endpoints as above | |
+Vaccine Immunogen | rfd4-proteina (in-process on H100) | MIT | https://github.com/NVIDIA-BioNeMo/RFD4-Proteina
+Vaccine Immunogen | biotite==1.6.0 | BSD-3 | https://github.com/biotite-dev/biotite
+Vaccine Immunogen | torch==2.14.1+cu132 | BSD-3 | https://github.com/pytorch/pytorch

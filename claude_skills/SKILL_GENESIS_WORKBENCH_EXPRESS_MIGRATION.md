@@ -103,12 +103,10 @@ registered*. So: register the version with `env_pack`, and the unchanged `deploy
 **Migrated + deployed + verified READY** (Express via this playbook): `rfd4_proteina` (reference),
 `diffdock` (+`diffdock_esm_embeddings`), `esm2_embeddings`, `esmfold`, `proteinmpnn`,
 `rfdiffusion_inpainting`, `scgpt` (+`scgpt_perturbation`), `teddy`, `deepstabp_v1`, `proteina_complexa`
-(×3: `proteina_complexa`, `proteina_complexa_ame`, `proteina_complexa_ligand`), `boltz`, `kermt_admet`.
-
-**Prepared, pending deploy**: `chemprop_*` (×3: `chemprop_bbbp` / `01`, `chemprop_clintox` / `02`,
-`chemprop_admet` / `03`) — register notebooks edited (registration-only); deploy = delete the 3 endpoints
-then `./deploy.sh ... --only-submodule chemprop/chemprop_v2` (one `register_chemprop` job, 3 GPU_1xA10
-tasks). Clean migrate (full inference stack on py3.12, no py3.11 `conda_env`).
+(×3: `proteina_complexa`, `proteina_complexa_ame`, `proteina_complexa_ligand`), `boltz`, `kermt_admet`,
+`chemprop_*` (×3: `chemprop_bbbp` / `01`, `chemprop_clintox` / `02`, `chemprop_admet` / `03`; one
+`register_chemprop` job, 3 GPU_1xA10 tasks — clean migrate: full inference stack on py3.12, no py3.11
+`conda_env`). **The GPU Express-migration pass is complete** — every GPU-eligible endpoint is migrated.
 
 **NOT eligible — leave on standard serving**:
 - `scimilarity` (`scimilarity_get_embedding`, `scimilarity_gene_order`) — py3.10-locked.
