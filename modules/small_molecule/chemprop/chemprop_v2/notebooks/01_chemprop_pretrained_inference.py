@@ -36,7 +36,7 @@ schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
-# MAGIC %pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3
+# MAGIC %pip install databricks-sdk>=0.150.0 databricks-sql-connector==4.0.3 mlflow>=3.12
 # MAGIC %pip install chemprop==2.2.3 rdkit==2025.3.6 torch==2.7.1 torchvision==0.22.1 lightning==2.6.1
 
 # COMMAND ----------
@@ -335,19 +335,18 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
         artifacts={
             "checkpoint": checkpoint_path,
         },
-        pip_requirements=[
-            "chemprop==2.2.3",
-            "rdkit==2025.3.6",
-            "torch==2.7.1",
-            "torchvision==0.22.1",
-            "lightning==2.6.1",
-            "numpy",
-            "pandas",
-        ],
+        pip_requirements=["mlflow", "cloudpickle", "pandas", "numpy"],  # minimal: env_pack defines the serving env
         input_example=test_smiles,
         signature=signature,
-        registered_model_name=f"{catalog}.{schema}.{model_name}",
     )
+
+# Express: register with env_pack (snapshots this serverless-GPU env for serving). Only the
+# registration changes — deploy_model below is unchanged.
+from mlflow.utils.env_pack import EnvPackConfig
+mlflow.register_model(
+    model_uri=model_info.model_uri, name=f"{catalog}.{schema}.{model_name}",
+    env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False),
+)
 
 # COMMAND ----------
 
