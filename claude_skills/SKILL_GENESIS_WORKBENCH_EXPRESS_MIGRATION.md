@@ -84,14 +84,38 @@ registered*. So: register the version with `env_pack`, and the unchanged `deploy
 - `install_dependencies=False` is essential for binary/git/cuda-tagged wheels.
 - CPU register jobs on serverless `client: '2'` need a bump to `'3'`+ to be Express-eligible.
 - Delete the live endpoint before redeploying for a clean create.
+- **The "model never runs at register + a py3.11 `conda_env`" trap (NOT Express-eligible).** Some
+  register notebooks deliberately **don't exercise the model** — they only build an `input_example` and
+  log the pyfunc, declaring the real serving env as an explicit `conda_env` pinned to an OLDER python
+  (e.g. `python=3.11`) with wheels that have **no cp312 build** (`pandas==1.5.3`, `numpy==1.26.4`). On
+  the py3.12 serverless register kernel those exact wheels can't be installed, so the install cell leaves
+  numpy/pandas unpinned → the kernel resolves pandas 2.x / numpy 2.x. Standard serving rebuilt the py3.11
+  `conda_env` so the model ran against the pinned old versions; **env_pack would instead snapshot the
+  py3.12 kernel (pandas 2.x / numpy 2.x) and silently change the serving runtime** — more than "only the
+  registration step changes," and the py3.12 env was never validated for inference. Treat these like the
+  python-version locks: **leave on standard serving** (real case: `pltnum_v1` — its notebook says "this
+  notebook never runs the model … the serving env is the explicit `conda_env` below (python=3.11)").
+  Contrast `chemprop_*`, which install the full inference stack (chemprop/rdkit/torch/lightning) on the
+  py3.12 kernel with no separate py3.11 `conda_env` → the register env IS the serving env → clean migrate.
 
 ## Status / scope
 
-- **rfd4_proteina**: already Express (reference).
-- **diffdock** (both `diffdock` + `diffdock_esm_embeddings`): migrated via this playbook (validating).
-- Remaining Express-eligible (apply this playbook, deploy one at a time): **HIGH** proteina_complexa
-  (×3: `proteina_complexa`, `proteina_complexa_ame`, `proteina_complexa_ligand`); **MEDIUM** esm2_embeddings,
-  esmfold, proteinmpnn, rfdiffusion_inpainting, scgpt (+`scgpt_perturbation`), teddy, deepstabp_v1; **LOW**
-  (optional, CPU ones need the client bump) boltz, chemprop_*, genmol, hlaiipred_v1, kermt_admet, mhcflurry_v2,
-  netsolp_v1, pltnum_v1.
-- **NOT eligible**: scimilarity (`scimilarity_get_embedding`, `scimilarity_gene_order`) — py3.10-locked.
+**Migrated + deployed + verified READY** (Express via this playbook): `rfd4_proteina` (reference),
+`diffdock` (+`diffdock_esm_embeddings`), `esm2_embeddings`, `esmfold`, `proteinmpnn`,
+`rfdiffusion_inpainting`, `scgpt` (+`scgpt_perturbation`), `teddy`, `deepstabp_v1`, `proteina_complexa`
+(×3: `proteina_complexa`, `proteina_complexa_ame`, `proteina_complexa_ligand`), `boltz`, `kermt_admet`.
+
+**Prepared, pending deploy**: `chemprop_*` (×3: `chemprop_bbbp` / `01`, `chemprop_clintox` / `02`,
+`chemprop_admet` / `03`) — register notebooks edited (registration-only); deploy = delete the 3 endpoints
+then `./deploy.sh ... --only-submodule chemprop/chemprop_v2` (one `register_chemprop` job, 3 GPU_1xA10
+tasks). Clean migrate (full inference stack on py3.12, no py3.11 `conda_env`).
+
+**NOT eligible — leave on standard serving**:
+- `scimilarity` (`scimilarity_get_embedding`, `scimilarity_gene_order`) — py3.10-locked.
+- `genmol` — py3.11-locked (pinned deps with no py3.12 wheels), and registers on CPU / serves on GPU.
+- `pltnum_v1` — the "model never runs at register + py3.11 `conda_env` (pandas 1.5.3 / numpy 1.26.4, no
+  cp312 wheel)" trap (see Gotchas). env_pack would change the serving runtime to py3.12 / pandas 2.x,
+  unvalidated → leave on standard serving.
+
+**CPU-only, Express-eligible but out of the current GPU-migration scope** (register `client: '4'`,
+no bump needed): `hlaiipred_v1`, `mhcflurry_v2`, `netsolp_v1`.
