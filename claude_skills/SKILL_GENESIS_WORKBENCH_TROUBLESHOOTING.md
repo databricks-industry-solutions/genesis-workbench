@@ -101,6 +101,24 @@ w.serving_endpoints.create_and_wait(..., ServedEntityInput(workload_type=Serving
 `+cu132`, nvcc source builds) — the default `True` re-resolves them from an index and fails with
 `No matching distribution`. Express deploys in ~6 min (vs 30-38 min for a standard build). GPU_XLARGE =
 1× H100, us-west-2 + account-team enrolled, no scale-to-zero.
+
+**Migrating an EXISTING model's serving to Express** — see the playbook
+`SKILL_GENESIS_WORKBENCH_EXPRESS_MIGRATION.md` (registration-only; keep `deploy_model`). Serving model-LOAD
+failures you'll hit + fixes:
+- `ImportError: cannot import name X from <pkg>` at model load (env drift): env_pack snapshots the REGISTER
+  kernel, so if the register install leaves deps unpinned while the model's `conda_env` pins them, the LATEST
+  versions get captured and break the import (real case: proteina's unpinned `atomworks` → latest dropped
+  `AtomSelectionStack`). Fix: pin the register install to the `conda_env` versions.
+- `No module named 'mlflow.utils.env_pack'` at `register_model`: a package installed AFTER the `mlflow>=3.12`
+  bump downgraded it (real case: boltz's `dbboltz[gpu]`). Fix: reinstall `mlflow>=3.12` as the LAST `%pip`
+  before `restartPython()`.
+- The service log for a FAILED **pending** deploy is UI-only — CLI `serving-endpoints logs`/`build-logs` key
+  to the ACTIVE config (absent for a never-started deploy) and return "Served entity … does not exist with
+  config version 0". Read the UI service log's `DATABRICKS_MODEL_LOAD_DIAGNOSTIC_V1` line for the exact import.
+- Python-version lock (scimilarity py3.10, genmol py3.11 — pinned deps with no py3.12 wheels): Express can't
+  reproduce it from the serverless-v3+ (py3.12) runtime → leave on standard serving.
+- Compute parity: a model that registers on CPU but serves on GPU (e.g. genmol) can't go Express without
+  moving its register task to serverless GPU (CPU-packaged deps fail to start a GPU endpoint).
 **Gotcha:** the GWB `import_model_from_uc` step runs after a `restartPython()` to the GWB lib (mlflow
 2.22/sdk 0.50) — put it in its own cell, wrap it non-fatal (the endpoint is already live), and do NOT
 reference pre-restart variables (e.g. `endpoint_name`) in post-restart cells → `NameError`. With

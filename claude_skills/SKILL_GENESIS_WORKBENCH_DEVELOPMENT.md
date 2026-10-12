@@ -292,6 +292,17 @@ result = wait_for_job_run_completion(run_id, timeout=3600)
 
 #### Serving a torch > 2.7.1 / CUDA-13 model via Express deployments
 
+> **Express is now the standard GPU-serving path across GWB** (not just torch>2.7.1). To MIGRATE an existing
+> model's serving to Express, follow the playbook
+> [`SKILL_GENESIS_WORKBENCH_EXPRESS_MIGRATION.md`](SKILL_GENESIS_WORKBENCH_EXPRESS_MIGRATION.md): the change is
+> **registration-only** — bump `mlflow>=3.12` + `databricks-sdk>=0.150`, `log_model` WITHOUT
+> `registered_model_name`, then `register_model(env_pack=EnvPackConfig(install_dependencies=False))`.
+> `deploy_model` / `02_import_model_gwb` / `model_deployments` / endpoint resolution stay UNTOUCHED
+> (`deploy_model_endpoint` just serves whatever UC version you registered — an env-packed version serves as
+> Express). Migrated: diffdock, esm2_embeddings, esmfold, proteinmpnn, rfdiffusion, scgpt, proteina_complexa,
+> teddy, deepstabp, boltz, kermt, pltnum, chemprop. NOT eligible: **scimilarity (py3.10)** + **genmol
+> (py3.11)** — a Python-version lock the serverless-v3+ (py3.12) runtime can't match → leave on standard serving.
+
 The standard `deploy_model()` path above uses Databricks' STANDARD GPU Model Serving, which rebuilds the
 container at deploy time on a **torch 2.7.1+cu118 (CUDA 11.8)** base and runs a hardcoded post-step that
 **force-reinstalls torch 2.7.1** over any pin. So a model that needs torch > 2.7.1 or CUDA > 11.8 (e.g.

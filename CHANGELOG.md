@@ -34,6 +34,35 @@ cluster-start time) and hardens deploy-time sample-data staging.
   + S3 realities; troubleshooting skill gains recipes for the S3 mirror, serverless `%sh`/`/local_disk0` and
   `LOCAL_RELATION_SIZE_LIMIT_EXCEEDED`, and the unreliable `fs ls` size on UC Volumes.
 
+## express_serving_migration (2026-10-11) — migrate GPU serving endpoints to Express deployments (env_pack)
+
+Migrates the module serving endpoints off Databricks' STANDARD GPU Model Serving (which rebuilds the
+container at deploy time on a torch-2.7.1+cu118 base and force-reinstalls torch) onto **Express deployments**
+(`env_pack`), which snapshot the serverless-GPU register env and restore it verbatim at serving (~6 min
+deploy, no rebuild, no force-install, serving env == register env).
+
+### What changed and why
+
+- **Registration-only change per model** (full playbook: `claude_skills/SKILL_GENESIS_WORKBENCH_EXPRESS_MIGRATION.md`):
+  in each register notebook bump `mlflow>=3.12` + `databricks-sdk>=0.150`, `log_model` WITHOUT
+  `registered_model_name` (+ `code_path`→`code_paths` for mlflow 3.x), then a separate
+  `register_model(env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False))`.
+  `deploy_model` / `02_import_model_gwb` / `model_deployments` / endpoint resolution are UNTOUCHED —
+  `deploy_model_endpoint` just creates a serving endpoint for the UC version, and an env-packed version
+  serves as Express.
+- **Migrated** (all serving via env_pack, validated READY on A10/H100): diffdock (+esm_embeddings),
+  esm2_embeddings, esmfold, proteinmpnn, rfdiffusion, scgpt (+perturbation), proteina_complexa (binder/
+  ligand/ame), teddy, deepstabp, boltz, kermt, pltnum, chemprop (bbbp/clintox/admet). rfd4_proteina was
+  already Express (the reference).
+- **Gotchas fixed en route** (now in the playbook + troubleshooting skill): `code_path`→`code_paths`
+  (mlflow 3.x); env-drift — pin the register install to the model's `conda_env` so env_pack reproduces the
+  proven env (proteina's unpinned `atomworks` captured the latest, which dropped `AtomSelectionStack`);
+  a later install downgrading the mlflow bump → reinstall `mlflow>=3.12` LAST before restart (boltz's
+  `dbboltz[gpu]`); failed-pending-deploy service logs are UI-only (`DATABRICKS_MODEL_LOAD_DIAGNOSTIC_V1`).
+- **Left on standard serving (NOT eligible):** scimilarity (py3.10 lock) + genmol (py3.11 lock — pinned
+  pandas/transformers have no py3.12 wheels, and serverless GPU is py3.12). The CPU-only endpoints
+  (netsolp/mhcflurry/hlaiipred) are eligible but out of scope for this GPU-focused pass.
+
 ## vaccine_immunogen (2026-10-10) — Vaccine Immunogen Design batch workflow on RFD4-Proteina (in-process H100)
 
 Adds a new `large_molecule/vaccine_immunogen/vaccine_immunogen_v1` batch workflow + UI tab (Large Molecule

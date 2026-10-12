@@ -73,6 +73,11 @@ registered*. So: register the version with `env_pack`, and the unchanged `deploy
   proven env. (Models whose register install == their `pip_requirements`/requirements.txt file, e.g. teddy,
   don't drift.) Serving model-load errors are UI-only (CLI logs key to the active config, absent for a failed
   pending deploy); the service log's `DATABRICKS_MODEL_LOAD_DIAGNOSTIC_V1` line gives the exact failing import.
+- **A later install can downgrade the mlflow bump.** If the notebook installs a package AFTER the
+  `mlflow>=3.12` bump that pulls an older mlflow (e.g. boltz's `dbboltz[gpu]`), the register kernel ends up on
+  mlflow < 3.12 → `ModuleNotFoundError: No module named 'mlflow.utils.env_pack'` at `register_model`. Fix:
+  reinstall `mlflow>=3.12` (+ `databricks-sdk>=0.150`) as the LAST `%pip` before `restartPython()`. (GWB-lib
+  installs are safe — the lib pins no mlflow.)
 - `code_path` → `code_paths` under mlflow 3.x (TypeError).
 - `env_pack` registration MUST run on serverless GPU for a GPU endpoint (parity) — the install-cell torch is
   what gets packaged.
