@@ -505,12 +505,6 @@ function VaccineResultBody({ runId }: { runId: string }) {
 
   return (
     <div className="space-y-3 text-sm">
-      <div>
-        <div className="text-xs font-medium text-muted-foreground">Run</div>
-        <div>{status.data?.run_name || runId}</div>
-        <div className="text-xs text-muted-foreground">Stage: {status.data?.job_status || '…'}</div>
-      </div>
-
       {status.data?.job_status !== 'complete' && (
         <p className="text-xs text-muted-foreground">
           This run is still in progress — top candidates appear here once it reaches{' '}
