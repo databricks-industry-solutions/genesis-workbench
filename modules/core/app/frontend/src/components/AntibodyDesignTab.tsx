@@ -24,6 +24,7 @@ function parseResidues(csv: string): number[] {
 const WEIGHT_AXES: { key: string; label: string; help: string }[] = [
   { key: 'boltz', label: 'Binding — Boltz ipTM', help: 'Antigen–VHH interface confidence from co-folding the complex. The primary binding signal.' },
   { key: 'plddt', label: 'Fold confidence — ESMFold pLDDT', help: 'Mean pLDDT of the designed VHH structure.' },
+  { key: 'self_consistency', label: 'Self-consistency — scRMSD', help: 'Cα RMSD between the RFD4 design and ESMFold’s refold of its sequence (lower = more designable / self-consistent).' },
   { key: 'solubility', label: 'Solubility — NetSolP', help: 'Predicted solubility of the VHH sequence.' },
   { key: 'half_life', label: 'Half-life — PLTNUM', help: 'Anchored against the reference antibodies below (pre-normalised).' },
   { key: 'thermostab', label: 'Thermostability — DeepSTABp Tm', help: 'Predicted melting temperature.' },
@@ -49,6 +50,7 @@ export function AntibodyDesignTab() {
   const [numIterations, setNumIterations] = useState(6)
   const [runMpnn, setRunMpnn] = useState(true)
   const [cofold, setCofold] = useState(true)
+  const [frameworkConditioning, setFrameworkConditioning] = useState(true)
   const [experiment, setExperiment] = useState('gwb_antibody_design')
   const [runName, setRunName] = useState(`vhh_${ts()}`)
   const [weights, setWeights] = useState<Record<string, number>>({})
@@ -101,6 +103,7 @@ export function AntibodyDesignTab() {
       strategy,
       run_proteinmpnn: runMpnn,
       cofold_antigen: cofold,
+      framework_conditioning: frameworkConditioning,
       convergence_threshold: convEnabled ? convThreshold : -1,
       convergence_window: convWindow,
       target_reward: targetEnabled ? targetReward : null,
@@ -176,22 +179,28 @@ export function AntibodyDesignTab() {
               Design loop
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <label className="block">
-                <span className="mb-1 block text-muted-foreground">VHH length min</span>
-                <input
-                  type="number" min={80} max={160} value={lenMin}
-                  onChange={(e) => setLenMin(parseInt(e.target.value || '110'))}
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-muted-foreground">VHH length max</span>
-                <input
-                  type="number" min={80} max={160} value={lenMax}
-                  onChange={(e) => setLenMax(parseInt(e.target.value || '130'))}
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                />
-              </label>
+              {/* VHH length only applies to raw de-novo generation; framework conditioning sets
+                  length from the fixed scaffold + CDR windows, so hide these when it's on. */}
+              {!frameworkConditioning && (
+                <>
+                  <label className="block">
+                    <span className="mb-1 block text-muted-foreground">VHH length min</span>
+                    <input
+                      type="number" min={80} max={160} value={lenMin}
+                      onChange={(e) => setLenMin(parseInt(e.target.value || '110'))}
+                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-muted-foreground">VHH length max</span>
+                    <input
+                      type="number" min={80} max={160} value={lenMax}
+                      onChange={(e) => setLenMax(parseInt(e.target.value || '130'))}
+                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                    />
+                  </label>
+                </>
+              )}
               <label className="block">
                 <span className="mb-1 block text-muted-foreground">K (candidates / iter)</span>
                 <input
@@ -209,6 +218,19 @@ export function AntibodyDesignTab() {
                 />
               </label>
             </div>
+            <label className="mt-2 flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={frameworkConditioning}
+                onChange={(e) => setFrameworkConditioning(e.target.checked)}
+              />
+              <span>Framework conditioning — design CDRs on a real humanized VHH (h-NbBCII10)</span>
+            </label>
+            <p className="ml-6 mt-1 text-[11px] text-muted-foreground">
+              {frameworkConditioning
+                ? 'Produces genuine nanobody folds: the model docks a real framework to the epitope and designs only the CDR loops. Length is set by the scaffold (the length fields above are hidden).'
+                : 'Off = raw de-novo binder generation (length-controlled via the fields above); may not fold as a canonical antibody.'}
+            </p>
             <label className="mt-2 flex items-center gap-2">
               <input type="checkbox" checked={runMpnn} onChange={(e) => setRunMpnn(e.target.checked)} />
               <span>ProteinMPNN framework redesign (fix CDRs)</span>

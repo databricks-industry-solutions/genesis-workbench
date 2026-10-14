@@ -46,6 +46,7 @@ class AntibodyDesignStartRequest(BaseModel):
     strategy: str = Field("resample", pattern=r"^(resample|noop)$")
     run_proteinmpnn: bool = True
     cofold_antigen: bool = True
+    framework_conditioning: bool = True
     convergence_threshold: Optional[float] = 0.01
     convergence_window: int = 2
     target_reward: Optional[float] = None
@@ -92,6 +93,7 @@ def antibody_design_start(
             strategy=payload.strategy,
             run_proteinmpnn=payload.run_proteinmpnn,
             cofold_antigen=payload.cofold_antigen,
+            framework_conditioning=payload.framework_conditioning,
             convergence_threshold=payload.convergence_threshold,
             convergence_window=payload.convergence_window,
             target_reward=payload.target_reward,

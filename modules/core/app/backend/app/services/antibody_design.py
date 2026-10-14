@@ -35,6 +35,7 @@ ORCHESTRATOR_VOLUME_DIR_NAME = "antibody_design"
 DEFAULT_AXIS_WEIGHTS: dict[str, float] = {
     "plddt":      1.3,
     "boltz":      2.0,
+    "self_consistency": 1.5,  # Cα scRMSD, design vs ESMFold refold (lower = more designable)
     "solubility": 1.0,
     "half_life":  1.0,
     "thermostab": 1.0,
@@ -112,6 +113,7 @@ def start_antibody_design_job(
     strategy: str = "resample",
     run_proteinmpnn: bool = True,
     cofold_antigen: bool = True,
+    framework_conditioning: bool = True,
     convergence_threshold: Optional[float] = 0.01,
     convergence_window: int = 2,
     target_reward: Optional[float] = None,
@@ -164,6 +166,7 @@ def start_antibody_design_job(
                     "resampling_temperature": str(resampling_temperature),
                     "strategy": strategy,
                     "cofold_antigen": str(cofold_antigen).lower(),
+                    "framework_conditioning": str(framework_conditioning).lower(),
                     "references_json": json.dumps(references or []),
                     "half_life_margin": str(half_life_margin),
                     "weights_json": json.dumps({**DEFAULT_AXIS_WEIGHTS, **(weights or {})}),

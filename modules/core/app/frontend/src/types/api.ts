@@ -745,6 +745,7 @@ export type AntibodyDesignStartRequest = {
   strategy: 'resample' | 'noop'
   run_proteinmpnn: boolean
   cofold_antigen: boolean
+  framework_conditioning: boolean
   convergence_threshold: number | null
   convergence_window: number
   target_reward: number | null
