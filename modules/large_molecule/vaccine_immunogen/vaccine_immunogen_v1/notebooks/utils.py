@@ -525,8 +525,12 @@ def _motif_scaffold_condition_spec(motif_cif_path: str, motif_chain: str,
     contig = f"{pre}, {motif_chain}{lo}-{hi}, {post}"
     motif_sel = f"res_id>={lo} and res_id<={hi}"
     conditions: Dict[str, Any] = {
-        "C_CRD": {True: [{"select": motif_sel}]},  # fix the epitope backbone coordinates
-        "C_SEQ": {True: [{"select": motif_sel}]},  # fix the epitope sequence
+        # Fix the epitope motif in space — ALL atoms of the motif residues (not just backbone), so the
+        # full antigenic surface (side chains included) is presented in the designed scaffold. This is
+        # the canonical motif-scaffolding recipe: a motif carries BOTH coordinate (C_CRD) and sequence
+        # (C_SEQ) conditioning while the model designs the surrounding scaffold.
+        "C_CRD": {True: [{"select": motif_sel}]},
+        "C_SEQ": {True: [{"select": motif_sel}]},  # keep the epitope sequence verbatim
     }
     spec = {"immunogen": {"input": motif_cif_path, "contig": contig, "conditions": conditions}}
     spec_path = os.path.join(tmpdir, "immunogen_spec.json")

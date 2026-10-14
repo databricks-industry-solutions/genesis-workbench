@@ -365,6 +365,11 @@ try:
         _active_run_id = run.info.run_id
         mlflow.log_params({
             "format": "immunogen",
+            # Persist WHAT the workflow does + WHICH epitope it scaffolds (stdout is unreachable on the
+            # job): a glance at the run then confirms it ran motif scaffolding on the intended epitope.
+            "scaffold_task": "indexed motif scaffolding — C_CRD+C_SEQ fix the epitope motif; "
+                             "RFD4 generates the flanking scaffold",
+            "motif_sequence": motif_seq,
             "scaffold_length_min": scaffold_length_min,
             "scaffold_length_max": scaffold_length_max,
             "num_samples": num_samples,
@@ -440,6 +445,17 @@ try:
             iter_max = float(max(rewards)); iter_mean = float(np.mean(rewards))
             mlflow.log_metric("iter_max_reward", iter_max, step=it + 1)
             mlflow.log_metric("iter_mean_reward", iter_mean, step=it + 1)
+            # Motif-scaffolding health, glanceable at run level: the fraction of this iteration's
+            # candidates that actually present the epitope (motif located verbatim — the signal that
+            # C_SEQ held and ProteinMPNN kept it fixed), and the best epitope-presentation fidelity
+            # (min motif_rmsd, vs the paper's ≤2 Å scaffolding pass criterion). A rate near 0 or an
+            # RMSD well above 2 Å means scaffolding degraded even if the loop still "completed".
+            mlflow.log_metric("iter_epitope_presented_rate",
+                              sum(1 for p in motif_positions if p) / max(1, len(seqs)), step=it + 1)
+            _mrmsd = [v for v in per_axis.get("motif_rmsd", [])
+                      if isinstance(v, float) and not math.isnan(v)]
+            if _mrmsd:
+                mlflow.log_metric("iter_min_motif_rmsd", float(min(_mrmsd)), step=it + 1)
             mlflow.set_tag("job_status", f"iter_{it+1}_complete")
             iter_max_history.append(iter_max)
 
