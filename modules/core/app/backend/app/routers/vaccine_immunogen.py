@@ -19,7 +19,8 @@ from pydantic import BaseModel, Field
 from app.auth import CurrentUserDep
 from app.routers.large_molecule import _build_user_info
 from app.services import vaccine_immunogen as vi_pipeline
-from app.services.molstar import molstar_html_singlebody
+from app.services.molstar import molstar_html_colored, molstar_html_singlebody
+from app.services.vaccine_coloring import COLOR_MODES, compute_coloring
 
 router = APIRouter(prefix="/api/vaccine_immunogen", tags=["vaccine_immunogen"])
 
@@ -39,6 +40,7 @@ class VaccineImmunogenStartRequest(BaseModel):
     resampling_temperature: float = Field(0.1, ge=0.01, le=1.0)
     strategy: str = Field("resample", pattern=r"^(resample|noop)$")
     run_proteinmpnn: bool = True
+    motif_placement: str = Field("indexed", pattern=r"^(indexed|unindexed)$")
     convergence_threshold: Optional[float] = 0.01
     convergence_window: int = 2
     target_reward: Optional[float] = None
@@ -82,6 +84,7 @@ def vaccine_immunogen_start(
             resampling_temperature=payload.resampling_temperature,
             strategy=payload.strategy,
             run_proteinmpnn=payload.run_proteinmpnn,
+            motif_placement=payload.motif_placement,
             convergence_threshold=payload.convergence_threshold,
             convergence_window=payload.convergence_window,
             target_reward=payload.target_reward,
@@ -181,6 +184,9 @@ class VaccineCandidate(BaseModel):
     candidate_id: str
     pdb: str
     viewer_html: str
+    # Precomputed 1-based positions of the fixed epitope motif in the designed sequence (from the run),
+    # or None for runs generated before the precompute shipped — the motif-vs-scaffold color mode uses it.
+    motif_positions: Optional[list[int]] = None
 
 
 class VaccineTopKResponse(BaseModel):
@@ -195,14 +201,51 @@ def vaccine_immunogen_top_k(
     if not user.email:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "User email missing from headers")
     pdbs = vi_pipeline.load_top_k_pdbs(run_id)
+    motif_map = vi_pipeline.load_motif_positions(run_id)  # {candidate_id: [1-based positions]} (may be empty)
     candidates = [
         VaccineCandidate(
             candidate_id=cid, pdb=pdb,
             viewer_html=molstar_html_singlebody(pdb, name=cid, with_iframe=False),
+            motif_positions=motif_map.get(cid),
         )
         for cid, pdb in pdbs.items()
     ]
     return VaccineTopKResponse(candidates=candidates)
+
+
+# ─── Structure recoloring (on-demand "Color by") ──────────────────────────────
+
+
+class VaccineColorRequest(BaseModel):
+    pdb: str
+    color_by: str = "plddt"
+    # Precomputed 1-based motif positions (from the run's artifact, passed back by the frontend) — the
+    # only input the motif-vs-scaffold mode needs. The viewer never calls a serving endpoint.
+    motif_positions: Optional[list[int]] = None
+
+
+class VaccineColorResponse(BaseModel):
+    viewer_html: str
+
+
+@router.post("/color_structure", response_model=VaccineColorResponse)
+def vaccine_immunogen_color_structure(
+    user: CurrentUserDep,
+    payload: VaccineColorRequest,
+) -> VaccineColorResponse:
+    """Recolor an already-loaded immunogen structure by a chosen scheme (the result dialog's 'Color by'
+    dropdown). Stateless and ENDPOINT-FREE — the frontend posts the PDB it already has; we compute
+    per-residue values locally (motif-vs-scaffold from the precomputed positions / pLDDT from the
+    ESMFold B-factor / sequence liabilities). Unknown modes fall back to pLDDT."""
+    if not user.email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "User email missing from headers")
+    if payload.color_by not in COLOR_MODES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unknown color_by '{payload.color_by}'")
+    res_values, theme, with_surface = compute_coloring(
+        payload.pdb, payload.color_by, payload.motif_positions)
+    html = molstar_html_colored(payload.pdb, res_values=res_values, theme=theme,
+                                with_surface=with_surface, with_iframe=False)
+    return VaccineColorResponse(viewer_html=html)
 
 
 # ─── Defaults ────────────────────────────────────────────────────────────────

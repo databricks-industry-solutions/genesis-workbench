@@ -114,6 +114,7 @@ def start_vaccine_immunogen_job(
     resampling_temperature: float = 0.1,
     strategy: str = "resample",
     run_proteinmpnn: bool = True,
+    motif_placement: str = "indexed",
     convergence_threshold: Optional[float] = 0.01,
     convergence_window: int = 2,
     target_reward: Optional[float] = None,
@@ -163,6 +164,7 @@ def start_vaccine_immunogen_job(
                     "num_samples": str(num_samples),
                     "num_iterations": str(num_iterations),
                     "run_proteinmpnn": str(run_proteinmpnn).lower(),
+                    "motif_placement": motif_placement,
                     "resampling_temperature": str(resampling_temperature),
                     "strategy": strategy,
                     "weights_json": json.dumps({**DEFAULT_AXIS_WEIGHTS, **(weights or {})}),
@@ -233,6 +235,22 @@ def load_top_k_pdbs(run_id: str) -> dict[str, str]:
     except Exception as e:
         logger.info("topK PDBs not yet available for run %s: %s", run_id, e)
     return out
+
+
+def load_motif_positions(run_id: str) -> dict[str, list[int]]:
+    """Load the precomputed per-candidate epitope-motif positions (results/motif_positions.json),
+    keyed by candidate_id → the 1-based positions of the located motif in the designed sequence. Empty
+    for runs generated before the precompute shipped — the viewer then simply colors the whole
+    structure as scaffold in the motif mode (never calls an endpoint)."""
+    client = MlflowClient()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            local = client.download_artifacts(run_id, "results/motif_positions.json", dst_path=tmp)
+            with open(local) as f:
+                return json.load(f)
+    except Exception as e:  # noqa: BLE001
+        logger.info("motif positions not available for run %s: %s", run_id, e)
+        return {}
 
 
 # ─── Search past runs (returns the shared DBRunRow contract so the frontend's

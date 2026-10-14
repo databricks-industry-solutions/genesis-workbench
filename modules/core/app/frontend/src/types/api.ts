@@ -813,6 +813,7 @@ export type VaccineImmunogenStartRequest = {
   resampling_temperature: number
   strategy: 'resample' | 'noop'
   run_proteinmpnn: boolean
+  motif_placement: 'indexed' | 'unindexed'
   convergence_threshold: number | null
   convergence_window: number
   target_reward: number | null
@@ -841,9 +842,25 @@ export type VaccineImmunogenStatusResponse = {
   trajectory: Record<string, number | string | null>[]
 }
 
-export type VaccineCandidate = { candidate_id: string; pdb: string; viewer_html: string }
+export type VaccineCandidate = {
+  candidate_id: string
+  pdb: string
+  viewer_html: string
+  // Precomputed 1-based positions of the fixed epitope motif in the designed sequence (from the run),
+  // or null for runs generated before the precompute shipped — the motif-vs-scaffold color mode uses it.
+  motif_positions?: number[] | null
+}
 
 export type VaccineTopKResponse = { candidates: VaccineCandidate[] }
+
+export type VaccineColorRequest = {
+  pdb: string
+  color_by: string
+  // Precomputed motif positions from the run's artifact, passed back by the frontend for the motif mode.
+  motif_positions?: number[] | null
+}
+
+export type VaccineColorResponse = { viewer_html: string }
 
 export type VaccineImmunogenDefaultsResponse = {
   default_weights: Record<string, number>

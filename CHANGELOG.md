@@ -34,6 +34,31 @@ cluster-start time) and hardens deploy-time sample-data staging.
   + S3 realities; troubleshooting skill gains recipes for the S3 mirror, serverless `%sh`/`/local_disk0` and
   `LOCAL_RELATION_SIZE_LIMIT_EXCEEDED`, and the unreliable `fs ls` size on UC Volumes.
 
+## vaccine_immunogen (2026-10-14) — result-dialog "Color by" viewer + unindexed motif placement + input robustness
+
+Brings the Vaccine Immunogen result dialog up to parity with Antibody Design (an on-demand structure
+re-coloring viewer) and adds an opt-in free-placement motif-scaffolding mode plus defensive input handling.
+
+### What changed and why
+
+- **Result-dialog "Color by" viewer.** The vaccine dialog now re-colors the selected immunogen on demand
+  (previously a single static view). Three single-chain modes: **Epitope motif / scaffold**, **Confidence
+  (pLDDT)**, **Sequence liabilities** — deliberately NO chain/epitope-paratope (single chain) and NO MHC-II
+  burden (a vaccine is *meant* to be immunogenic). New `services/vaccine_coloring.py` (reuses the antibody
+  per-residue encoders), `POST /api/vaccine_immunogen/color_structure`, and the frontend dropdown + legend.
+  Coloring is CPU-side — the viewer calls no serving endpoint. The orchestrator now writes
+  `results/motif_positions.json` (per-candidate 1-based motif positions) to drive the motif mode (mirrors the
+  antibody `results/mhc_burden.json` precompute); runs made before this show the whole chain as scaffold.
+- **Unindexed motif placement (`motif_placement` toggle, default `indexed`).** *Unindexed* makes the epitope
+  a free-placement internal-coordinate group (`C_CRDGRP`) so RFD4 docks it itself — the same verified-green
+  mechanism as the antibody framework-conditioning path (paper §S6.1.2); the group is backbone-restricted
+  (`MaterializeInternalCoords` needs finite coords) with `C_SEQ` pinning identity. *Indexed* (the proven
+  `C_CRD`-pinned path) stays the default. Wired through orchestrator widget → service `job_parameters` →
+  router `StartRequest` → UI control, and logged as the MLflow `scaffold_task` / `motif_placement` params.
+- **Uploaded-epitope robustness.** `strip_nonfinite_atoms` drops atoms with non-finite coordinates and
+  `validate_motif_backbone` requires a complete finite backbone (N/CA/C) for every motif residue before
+  generation — fail fast with a clear message instead of a cryptic mid-run conditioning error.
+
 ## express_serving_migration (2026-10-11) — migrate GPU serving endpoints to Express deployments (env_pack)
 
 Migrates the module serving endpoints off Databricks' STANDARD GPU Model Serving (which rebuilds the

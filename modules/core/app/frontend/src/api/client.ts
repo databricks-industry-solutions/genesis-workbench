@@ -52,6 +52,8 @@ import type {
   VaccineImmunogenStartResponse,
   VaccineImmunogenStatusResponse,
   VaccineTopKResponse,
+  VaccineColorRequest,
+  VaccineColorResponse,
   EnzymeDefaultsResponse,
   EnzymeOptimizationStartRequest,
   EnzymeOptimizationStartResponse,
@@ -491,6 +493,11 @@ export const api = {
     request<VaccineTopKResponse>(
       `/api/vaccine_immunogen/top_k?run_id=${encodeURIComponent(run_id)}`,
     ),
+  vaccineImmunogenColorStructure: (body: VaccineColorRequest) =>
+    request<VaccineColorResponse>('/api/vaccine_immunogen/color_structure', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 
   // ─── Genomics ────────────────────────────────────────────────────
 

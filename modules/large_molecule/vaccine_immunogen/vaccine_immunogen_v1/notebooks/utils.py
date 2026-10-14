@@ -507,31 +507,42 @@ def _flank_segments(length_min: int, length_max: int, motif_len: int) -> Tuple[s
 
 def _motif_scaffold_condition_spec(motif_cif_path: str, motif_chain: str,
                                    motif_range: Tuple[int, int],
-                                   length_min: int, length_max: int, tmpdir: str) -> str:
-    """Build the RFD4 condition_spec JSON for epitope motif-scaffolding and return
-    its path.
+                                   length_min: int, length_max: int, tmpdir: str,
+                                   placement: str = "indexed") -> str:
+    """Build the RFD4 condition_spec JSON for epitope motif-scaffolding and return its path.
 
-    The designed chain is ONE continuous chain: a flexible flank, the preserved
-    epitope motif segment, and another flexible flank. The motif residues are held
-    FIXED in both coordinates (`C_CRD`) and sequence (`C_SEQ`); the flanks are
-    generated de novo. No chain break (`/0`) and no hotspots (`C_HOT`) — those are
-    the binder/antibody path. Syntax follows the proven recipe (see
-    [[gwb-rfd4-proteina-inference-recipe]]): a preserved contig segment is
-    `<chain><start>-<end>`, and conditions use atomworks `res_id` selects.
+    The designed chain is ONE continuous chain: a flexible flank, the preserved epitope motif segment,
+    and another flexible flank. The motif SEQUENCE is always held fixed (`C_SEQ`), the flanks are
+    generated de novo, and there is no chain break (`/0`) or hotspots (`C_HOT`) — those are the
+    binder/antibody path. Syntax follows the proven recipe (see [[gwb-rfd4-proteina-inference-recipe]]):
+    a preserved contig segment is `<chain><start>-<end>`, and conditions use atomworks `res_id` selects.
+
+    `placement` selects how the motif's COORDINATES are conditioned:
+      - "indexed" (default): `C_CRD` pins ALL motif atoms (side chains included) → the full antigenic
+        surface is presented exactly as supplied, at the fixed contig position. The proven GPU-green path.
+      - "unindexed": the motif is a free-placement internal-coordinate GROUP (`C_CRDGRP` id 1) — the model
+        CHOOSES the motif's 3D placement within the scaffold (paper §S6.1.2) rather than pinning absolute
+        coordinates, which often improves presentation. This is the SAME verified mechanism the antibody
+        framework-conditioning path uses. `MaterializeInternalCoords` requires every atom in the group to
+        have finite coords, and the atomworks PDB->CIF round-trip re-adds NaN placeholders for masked
+        side-chain/terminal atoms, so the group is restricted to backbone (N/CA/C/O, always finite); `C_SEQ`
+        still pins the epitope identity, so the side chains repack to the native sequence.
     """
     import json as _json
     lo, hi = motif_range
     pre, post = _flank_segments(length_min, length_max, hi - lo + 1)
     contig = f"{pre}, {motif_chain}{lo}-{hi}, {post}"
     motif_sel = f"res_id>={lo} and res_id<={hi}"
-    conditions: Dict[str, Any] = {
-        # Fix the epitope motif in space — ALL atoms of the motif residues (not just backbone), so the
-        # full antigenic surface (side chains included) is presented in the designed scaffold. This is
-        # the canonical motif-scaffolding recipe: a motif carries BOTH coordinate (C_CRD) and sequence
-        # (C_SEQ) conditioning while the model designs the surrounding scaffold.
-        "C_CRD": {True: [{"select": motif_sel}]},
-        "C_SEQ": {True: [{"select": motif_sel}]},  # keep the epitope sequence verbatim
-    }
+    if placement == "unindexed":
+        conditions: Dict[str, Any] = {
+            "C_CRDGRP": {1: [{"select": f"({motif_sel}) and is_protein_backbone"}]},
+            "C_SEQ": {True: [{"select": motif_sel}]},  # keep the epitope sequence verbatim
+        }
+    else:
+        conditions = {
+            "C_CRD": {True: [{"select": motif_sel}]},
+            "C_SEQ": {True: [{"select": motif_sel}]},  # keep the epitope sequence verbatim
+        }
     spec = {"immunogen": {"input": motif_cif_path, "contig": contig, "conditions": conditions}}
     spec_path = os.path.join(tmpdir, "immunogen_spec.json")
     with open(spec_path, "w") as f:
@@ -568,6 +579,48 @@ def _structure_to_pdb_and_seq(sample: Dict[str, Any]) -> Tuple[str, str]:
         return buf.getvalue(), seq
 
 
+def _atom_coords_finite(line: str) -> bool:
+    """True if a PDB ATOM/HETATM line has finite x/y/z (columns 31-54)."""
+    try:
+        return all(math.isfinite(float(line[a:b])) for a, b in ((30, 38), (38, 46), (46, 54)))
+    except (ValueError, IndexError):
+        return False
+
+
+def strip_nonfinite_atoms(pdb_str: str) -> str:
+    """Drop ATOM/HETATM lines whose coordinates are non-finite (NaN/inf). User-uploaded epitope PDBs
+    occasionally carry masked/placeholder coordinates; a non-finite atom caught by the C_CRD motif
+    select would poison the coordinate conditioning. Non-coordinate lines pass through untouched."""
+    kept = [ln for ln in pdb_str.splitlines()
+            if ln[:6].strip() not in ("ATOM", "HETATM") or _atom_coords_finite(ln)]
+    return "\n".join(kept) + ("\n" if pdb_str.endswith("\n") else "")
+
+
+def validate_motif_backbone(pdb_str: str, chain: str, lo: int, hi: int) -> None:
+    """Ensure every motif residue in [lo, hi] on `chain` has a complete, finite backbone (N, CA, C). The
+    epitope motif is held FIXED via C_CRD on ALL its atoms, so a missing or non-finite backbone atom makes
+    the coordinate conditioning unusable — fail fast with a clear message rather than let RFD4 error
+    cryptically mid-run. Missing side-chain atoms are tolerated (C_CRD simply fixes the finite subset)."""
+    have: Dict[int, set] = {}
+    for ln in pdb_str.splitlines():
+        if ln[:4] != "ATOM" or len(ln) < 54 or ln[21] != chain:
+            continue
+        name = ln[12:16].strip()
+        if name not in ("N", "CA", "C") or not _atom_coords_finite(ln):
+            continue
+        try:
+            rid = int(ln[22:26])
+        except ValueError:
+            continue
+        have.setdefault(rid, set()).add(name)
+    missing = [rid for rid in range(lo, hi + 1) if have.get(rid, set()) != {"N", "CA", "C"}]
+    if missing:
+        raise RuntimeError(
+            f"Epitope motif residues {missing} on chain '{chain}' lack a complete finite backbone "
+            f"(N/CA/C) — the motif cannot be coordinate-fixed. Provide a complete motif structure."
+        )
+
+
 def _pdb_to_cif(pdb_path: str, cif_path: str) -> None:
     """RFD4's condition_spec `input` must be CIF/BinaryCIF — it rejects PDB. Convert
     the motif PDB → CIF. Prefer atomworks (the model's own parser, preserves
@@ -593,10 +646,12 @@ def _pdb_to_cif(pdb_path: str, cif_path: str) -> None:
 
 def generate_scaffold(ctx: Dict[str, Any], motif_pdb_str: str, motif_chain: str,
                       motif_range: Tuple[int, int], length_min: int, length_max: int,
-                      num_samples: int) -> pd.DataFrame:
+                      num_samples: int, placement: str = "indexed") -> pd.DataFrame:
     """Generate `num_samples` scaffold candidates presenting the epitope motif.
     Returns a DataFrame with columns `designed_pdb`, `designed_sequence`,
-    `sample_id` — the same contract the loop expects."""
+    `sample_id` — the same contract the loop expects. `placement` is forwarded to
+    `_motif_scaffold_condition_spec` (indexed = fixed C_CRD position; unindexed =
+    free-placement C_CRDGRP motif group)."""
     from rfproteina.generate import get_contig_or_design_problem_dataset
     from rfproteina.datapipes.collate import collate_batch
     model, transform, torch = ctx["model"], ctx["transform"], ctx["torch"]
@@ -609,7 +664,7 @@ def generate_scaffold(ctx: Dict[str, Any], motif_pdb_str: str, motif_chain: str,
         motif_cif = os.path.join(tmp, "motif.cif")
         _pdb_to_cif(motif_pdb, motif_cif)
         spec_path = _motif_scaffold_condition_spec(motif_cif, motif_chain, motif_range,
-                                                   length_min, length_max, tmp)
+                                                   length_min, length_max, tmp, placement=placement)
         ds = get_contig_or_design_problem_dataset(spec_path, num_replicates=int(num_samples),
                                                   transform=transform)
         batch = collate_batch([ds[i] for i in range(len(ds))],

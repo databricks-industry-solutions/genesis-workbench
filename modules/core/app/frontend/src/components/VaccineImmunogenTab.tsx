@@ -49,6 +49,7 @@ export function VaccineImmunogenTab() {
   const [numSamples, setNumSamples] = useState(8)
   const [numIterations, setNumIterations] = useState(6)
   const [runMpnn, setRunMpnn] = useState(true)
+  const [motifPlacement, setMotifPlacement] = useState<'indexed' | 'unindexed'>('indexed')
   const [experiment, setExperiment] = useState('gwb_vaccine_immunogen')
   const [runName, setRunName] = useState(`immunogen_${ts()}`)
   const [weights, setWeights] = useState<Record<string, number>>({})
@@ -91,6 +92,7 @@ export function VaccineImmunogenTab() {
       resampling_temperature: resampleTemp,
       strategy,
       run_proteinmpnn: runMpnn,
+      motif_placement: motifPlacement,
       convergence_threshold: convEnabled ? convThreshold : -1,
       convergence_window: convWindow,
       target_reward: targetEnabled ? targetReward : null,
@@ -206,8 +208,20 @@ export function VaccineImmunogenTab() {
               <input type="checkbox" checked={runMpnn} onChange={(e) => setRunMpnn(e.target.checked)} />
               <span>ProteinMPNN scaffold redesign (fix the epitope)</span>
             </label>
+            <label className="mt-2 block">
+              <span className="mb-1 block text-muted-foreground">Motif placement</span>
+              <select
+                value={motifPlacement}
+                onChange={(e) => setMotifPlacement(e.target.value as 'indexed' | 'unindexed')}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              >
+                <option value="indexed">Indexed — fix the epitope at a set position (default)</option>
+                <option value="unindexed">Unindexed — let the model place the epitope</option>
+              </select>
+            </label>
             <p className="mt-1 text-[11px] text-muted-foreground">
               The total scaffold length includes the grafted epitope; it must exceed the motif length.
+              Unindexed placement lets RFD4 dock the epitope itself (often better presentation).
             </p>
           </div>
 
@@ -418,6 +432,15 @@ const _AXIS_LABELS: [string, string][] = [
   ['liability_detail', 'Liability sites'],
 ]
 
+// Legend for each "Color by" mode: [swatch hex, label], matching the Mol* themes the viewer uses — the
+// blue→white→red "uncertainty" ramp for coded categories and the AlphaFold pLDDT palette. Rendered inline
+// next to the dropdown so the colors are self-explanatory.
+const COLOR_LEGENDS: Record<string, [string, string][]> = {
+  motif: [['#c0392b', 'Epitope motif'], ['#4e79c7', 'Scaffold']],
+  plddt: [['#0053d6', '≥90'], ['#65cbf3', '70–90'], ['#ffdb13', '50–70'], ['#ff7d45', '<50']],
+  liability: [['#c0392b', 'Liability'], ['#4e79c7', 'Clean']],
+}
+
 function VaccineResultBody({ runId }: { runId: string }) {
   const status = useQuery({
     queryKey: ['vaccine_immunogen', 'status', runId],
@@ -440,6 +463,34 @@ function VaccineResultBody({ runId }: { runId: string }) {
     const rows = status.data?.trajectory ?? []
     return rows.find((r) => String(r.candidate_id) === String(selected?.candidate_id))
   }, [status.data, selected])
+
+  // ─── "Color by" — recolor the selected immunogen on demand. The immunogen is a single chain, so the
+  //     modes are motif-vs-scaffold (needs the run's precomputed motif positions), ESMFold confidence
+  //     (pLDDT), and sequence liabilities. Endpoint-free: we post the PDB we already have. ─────────────
+  const hasMotif = !!(selected?.motif_positions && selected.motif_positions.length)
+  const motifOpt: [string, string][] = hasMotif ? [['motif', 'Epitope motif / scaffold']] : []
+  const colorOptions: [string, string][] = [
+    ...motifOpt,
+    ['plddt', 'Confidence (pLDDT)'],
+    ['liability', 'Sequence liabilities'],
+  ]
+  const [colorBy, setColorBy] = useState<string>('plddt')
+  useEffect(() => {
+    setColorBy(hasMotif ? 'motif' : 'plddt')  // reset on candidate change; prefer the epitope view
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.candidate_id])
+  const colored = useQuery({
+    queryKey: ['vaccine_immunogen', 'color', selected?.candidate_id, colorBy],
+    queryFn: () =>
+      api.vaccineImmunogenColorStructure({
+        pdb: selected!.pdb,
+        color_by: colorBy,
+        // Motif mode reads the run's precomputed positions — no serving call.
+        motif_positions: colorBy === 'motif' ? selected!.motif_positions ?? null : null,
+      }),
+    enabled: !!selected?.pdb,
+  })
+  const viewerHtml = colored.data?.viewer_html ?? selected?.viewer_html
 
   const download = () => {
     if (!selected) return
@@ -500,7 +551,32 @@ function VaccineResultBody({ runId }: { runId: string }) {
             </div>
           )}
 
-          {selected && <MolstarViewer viewerHtml={selected.viewer_html} height={420} />}
+          {selected && (
+            <>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="text-xs text-muted-foreground">Color by</span>
+                <select
+                  value={colorBy}
+                  onChange={(e) => setColorBy(e.target.value)}
+                  className="rounded-md border border-border bg-background px-2 py-1 text-xs"
+                >
+                  {colorOptions.map(([k, label]) => (
+                    <option key={k} value={k}>{label}</option>
+                  ))}
+                </select>
+                {/* Inline legend for the active mode — swatch + label, one after another. */}
+                {(COLOR_LEGENDS[colorBy] ?? []).map(([hex, label]) => (
+                  <span key={label} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                    <span className="inline-block h-2.5 w-2.5 rounded-sm border border-border"
+                          style={{ backgroundColor: hex }} />
+                    {label}
+                  </span>
+                ))}
+                {colored.isFetching && <span className="text-[11px] text-muted-foreground">recoloring…</span>}
+              </div>
+              <MolstarViewer viewerHtml={viewerHtml} height={420} />
+            </>
+          )}
         </>
       )}
     </div>

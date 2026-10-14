@@ -55,6 +55,8 @@ dbutils.widgets.text("scaffold_length_max", "120", "Total designed-scaffold leng
 dbutils.widgets.text("num_samples", "8", "K — candidates per iteration")
 dbutils.widgets.text("num_iterations", "6", "N — iteration ceiling (convergence usually exits earlier)")
 dbutils.widgets.text("run_proteinmpnn", "true", "ProteinMPNN-redesign the scaffold (fix the epitope) per candidate")
+dbutils.widgets.text("motif_placement", "indexed",
+                     "Motif placement: indexed (fixed position; C_CRD pins all motif atoms) | unindexed (model docks the motif; C_CRDGRP free-placement group)")
 dbutils.widgets.text("resampling_temperature", "0.1", "Resampling softmax temperature")
 dbutils.widgets.text("strategy", "resample", "Strategy: resample | noop")
 dbutils.widgets.text("dev_user_prefix", "", "Dev user prefix (matches DEV_USER_PREFIX)")
@@ -141,6 +143,7 @@ scaffold_length_max = int(g("scaffold_length_max"))
 num_samples = int(g("num_samples"))
 num_iterations = int(g("num_iterations"))
 run_proteinmpnn_flag = g("run_proteinmpnn").lower() in ("true", "1", "yes")
+motif_placement = g("motif_placement") or "indexed"
 resampling_temperature = float(g("resampling_temperature"))
 strategy_name = g("strategy")
 dev_user_prefix = g("dev_user_prefix")
@@ -200,6 +203,7 @@ from utils import (
     warmup_developability_endpoints, _extract_mean_plddt_from_pdb,
     _chain_res_range, motif_sequence, locate_motif_in_sequence, motif_backbone_rmsd_located,
     liability_weighted_count, liability_detail,
+    strip_nonfinite_atoms, validate_motif_backbone,
 )
 
 # COMMAND ----------
@@ -220,6 +224,9 @@ mlflow.set_tracking_uri("databricks")
 # DBTITLE 1,Read the epitope motif PDB the app wrote to the cache volume + resolve the motif range
 with open(motif_pdb_path, "r") as f:
     motif_pdb_str = f.read()
+# Robustness for user-uploaded epitope PDBs: drop any atom with non-finite coordinates before it can be
+# caught by the C_CRD motif select (the demo epitope is clean; this guards arbitrary uploads).
+motif_pdb_str = strip_nonfinite_atoms(motif_pdb_str)
 print(f"Loaded epitope motif PDB ({len(motif_pdb_str)} chars) from {motif_pdb_path}")
 
 # Motif range for the contig: min/max of the given residues, else the whole chain.
@@ -233,6 +240,9 @@ else:
 motif_seq = motif_sequence(motif_pdb_str, motif_chain, motif_lo, motif_hi)
 print(f"motif range: {motif_chain}{motif_lo}-{motif_hi}  ({motif_hi - motif_lo + 1} residues)")
 print(f"motif sequence: {motif_seq}")
+# Every motif residue is coordinate-fixed (C_CRD) in the condition_spec, so it must have a complete,
+# finite backbone — fail fast with a clear message if the uploaded epitope is incomplete.
+validate_motif_backbone(motif_pdb_str, motif_chain, motif_lo, motif_hi)
 if scaffold_length_min <= (motif_hi - motif_lo + 1):
     raise RuntimeError(
         f"scaffold_length_min ({scaffold_length_min}) must exceed the motif length "
@@ -307,7 +317,8 @@ def generate_and_validate(num: int) -> Dict[str, List]:
     epitope → ESMFold. Returns dict of parallel lists (incl. the located motif
     positions in each FINAL sequence, for the motif-RMSD axis)."""
     gen_df = generate_scaffold(rfd4_ctx, motif_pdb_str, motif_chain,
-                               (motif_lo, motif_hi), scaffold_length_min, scaffold_length_max, num)
+                               (motif_lo, motif_hi), scaffold_length_min, scaffold_length_max, num,
+                               placement=motif_placement)
     seqs = list(gen_df["designed_sequence"])
     pdbs = list(gen_df["designed_pdb"])
 
@@ -367,8 +378,12 @@ try:
             "format": "immunogen",
             # Persist WHAT the workflow does + WHICH epitope it scaffolds (stdout is unreachable on the
             # job): a glance at the run then confirms it ran motif scaffolding on the intended epitope.
-            "scaffold_task": "indexed motif scaffolding — C_CRD+C_SEQ fix the epitope motif; "
-                             "RFD4 generates the flanking scaffold",
+            "scaffold_task": (f"{motif_placement} motif scaffolding — "
+                              + ("C_CRDGRP free-placement motif group (the model docks the epitope) + C_SEQ"
+                                 if motif_placement == "unindexed"
+                                 else "C_CRD+C_SEQ fix the epitope motif at a fixed position")
+                              + "; RFD4 generates the flanking scaffold"),
+            "motif_placement": motif_placement,
             "motif_sequence": motif_seq,
             "scaffold_length_min": scaffold_length_min,
             "scaffold_length_max": scaffold_length_max,
@@ -427,7 +442,11 @@ try:
                 # Human-readable liability breakdown for the result dialog (string → not a metric).
                 row["liability_detail"] = liability_detail(seqs[k])
                 trajectory_rows.append(row)
-                all_candidates.append({**row, "designed_pdb": pdbs[k]})
+                # Keep the located motif positions off the CSV row (a list column), but carry them on
+                # the candidate so the final motif_positions.json can drive the viewer's motif-vs-scaffold
+                # color mode.
+                all_candidates.append({**row, "designed_pdb": pdbs[k],
+                                       "motif_positions": motif_positions[k]})
 
                 for ak, av in row.items():
                     if ak in ("iteration", "candidate_id", "designed_sequence", "epitope_presented"):
@@ -497,6 +516,13 @@ try:
                     with open(os.path.join(topk_dir, r["candidate_id"] + ".pdb"), "w") as f:
                         f.write(r["designed_pdb"])
             mlflow.log_artifacts(topk_dir, artifact_path="results/topK_pdbs")
+            # Per-candidate epitope-motif positions (1-based, in the designed sequence) for the result
+            # dialog's motif-vs-scaffold color mode — precomputed here so the viewer never calls an
+            # endpoint (mirrors the antibody MHC-II burden precompute → results/mhc_burden.json). Empty
+            # for a candidate whose motif wasn't located verbatim.
+            motif_pos_map = {r["candidate_id"]: [int(p) for p in (r.get("motif_positions") or [])]
+                             for r in all_candidates}
+            mlflow.log_dict(motif_pos_map, "results/motif_positions.json")
 
         mlflow.set_tag("job_status", "complete")
         print(f"\nDone. MLflow run id: {run.info.run_id}")

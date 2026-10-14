@@ -58,6 +58,12 @@ for epitope-focused vaccine design").
   (`iter_max_reward`, `iter_mean_reward`).
 - **`results/reward_trajectory.csv`** — every candidate with its composite reward + per-axis scores.
 - **`results/topK_pdbs/*.pdb`** — the top-ranked immunogen scaffolds (shown in the result dialog + downloadable).
+- **Result-dialog structure viewer — "Color by".** Each top candidate renders in a Mol* viewer with a
+  color-by selector: **Epitope motif / scaffold** (the fixed epitope vs the designed flanks, from the
+  precomputed `results/motif_positions.json`), **Confidence (pLDDT)** (ESMFold per-residue B-factor), and
+  **Sequence liabilities**. Coloring is computed CPU-side in the app backend — the viewer calls no serving
+  endpoint. (`results/motif_positions.json` is written at generation; runs made before it shipped simply
+  show the whole chain as scaffold.)
 - Reward axes: **epitope-presentation fidelity** (motif backbone RMSD of the folded design vs. the input
   epitope — the headline axis, minimized), scaffold fold confidence (ESMFold pLDDT), solubility (NetSolP),
   Tm (DeepSTABp), a rule-based **sequence-liability scan** (manufacturability — a weighted motif count,
@@ -72,7 +78,7 @@ for epitope-focused vaccine design").
 ```
 Epitope motif PDB + motif residues
   ↓
-RFD4-Proteina (in-process, H100) → K scaffolds (motif-scaffolding condition_spec: C_CRD + C_SEQ on the motif)
+RFD4-Proteina (in-process, H100) → K scaffolds (motif-scaffolding condition_spec; placement: indexed C_CRD or unindexed C_CRDGRP, + C_SEQ on the motif)
   ↓
 [optional] ProteinMPNN → redesign the SCAFFOLD (fix the epitope) → ESMFold re-fold
   ↓
@@ -88,7 +94,8 @@ Ranked shortlist + top-K PDBs
 - `modules/large_molecule/vaccine_immunogen/vaccine_immunogen_v1/notebooks/01_run_vaccine_immunogen.py` — orchestrator loop
 - `modules/large_molecule/vaccine_immunogen/vaccine_immunogen_v1/notebooks/utils.py` — RFD4 in-process motif-scaffolding generator, sequence-located motif-RMSD, endpoint helpers, reward composer
 - `modules/core/app/backend/app/services/vaccine_immunogen.py` — dispatcher + search + result loaders
-- `modules/core/app/backend/app/routers/vaccine_immunogen.py` — `/api/vaccine_immunogen/*`
+- `modules/core/app/backend/app/routers/vaccine_immunogen.py` — `/api/vaccine_immunogen/*` (incl. `/color_structure`)
+- `modules/core/app/backend/app/services/vaccine_coloring.py` — per-residue coloring for the result-dialog viewer (motif / pLDDT / liabilities; reuses the antibody encoders)
 - `modules/core/app/frontend/src/components/VaccineImmunogenTab.tsx` — the UI tab
 
 ### Underlying models / endpoints
@@ -103,11 +110,18 @@ Ranked shortlist + top-K PDBs
 
 ## Limitations and known issues
 
-- **The motif-scaffolding condition_spec is first-draft.** The epitope is centered with symmetric flexible
-  flanks (`utils._flank_segments`). A terminal placement (0-length flank) or a **discontinuous**
-  (multi-segment) epitope is a future refinement — a discontinuous epitope is currently preserved as a
-  single contiguous range (min→max residue). Expect a deploy-time iteration or two on the conditioning,
-  same caveat as the antibody_design + RFD4 register notebooks.
+- **Motif placement is selectable (`motif_placement`).** *Indexed* (default) centers the epitope with
+  symmetric flexible flanks (`utils._flank_segments`) and pins it with `C_CRD` (all motif atoms → the full
+  antigenic surface at a fixed position) — the proven GPU-green path. *Unindexed* makes the motif a
+  free-placement internal-coordinate group (`C_CRDGRP`, the same mechanism as the antibody
+  framework-conditioning path) so the model docks the epitope itself — often better presentation; the group
+  is restricted to backbone atoms (`MaterializeInternalCoords` needs finite coords) while `C_SEQ` still pins
+  the epitope identity so side chains repack. A terminal placement (0-length flank) or a **discontinuous**
+  (multi-segment) epitope is still a future refinement — a discontinuous epitope is currently preserved as a
+  single contiguous range (min→max residue).
+- **Uploaded epitope PDBs are sanitized.** Atoms with non-finite coordinates are dropped, and every motif
+  residue must have a complete finite backbone (N/CA/C) before generation — the orchestrator fails fast with
+  a clear message rather than letting the `C_CRD`/`C_CRDGRP` conditioning error cryptically mid-run.
 - Motif RMSD is computed only when the epitope sequence is found verbatim in the folded design (it is held
   fixed by `C_SEQ` and the ProteinMPNN fix); candidates where it isn't located score the axis as skipped
   (NaN) rather than crashing the iteration, and are flagged `epitope_presented=false` in the trajectory.
