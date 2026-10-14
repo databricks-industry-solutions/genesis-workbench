@@ -12,7 +12,10 @@ resources:
       # stack), so it needs the same compute as the RFD4 register/finetune jobs.
       tasks:
         - task_key: run_loop
-          max_retries: 0
+          # H100 serverless compute-start can exceed the 900s window and fail INTERNAL_ERROR
+          # (same transient issue the register/finetune jobs hit) — auto-retry so one dispatch
+          # makes several provisioning attempts instead of needing a manual re-run.
+          max_retries: 2
           disable_auto_optimization: true
           retry_on_timeout: false
           environment_key: gpu_env

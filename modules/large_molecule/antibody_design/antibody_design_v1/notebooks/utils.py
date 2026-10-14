@@ -271,6 +271,28 @@ def compose_rewards(per_axis_scores: Dict[str, List[float]],
     return (composite / total_weight).tolist() if total_weight > 0 else composite.tolist()
 
 
+def self_consistency_rmsd(design_pdb: str, refold_pdb: str) -> float:
+    """Cα self-consistency RMSD between a designed structure and an independent refold of its
+    sequence (RFD4-Proteina's designability signal; lower = the sequence folds back to the design).
+    Both are the same chain/length, so Cα correspond by residue order; Kabsch-superposed. Returns
+    NaN if either is unparseable/too short."""
+    def _ca(pdb: str) -> np.ndarray:
+        xs = [(float(ln[30:38]), float(ln[38:46]), float(ln[46:54]))
+              for ln in pdb.splitlines()
+              if ln.startswith("ATOM") and ln[12:16].strip() == "CA"]
+        return np.asarray(xs, dtype=float)
+    A, B = _ca(design_pdb or ""), _ca(refold_pdb or "")
+    n = min(len(A), len(B))
+    if n < 4:
+        return float("nan")
+    A = A[:n] - A[:n].mean(0)
+    B = B[:n] - B[:n].mean(0)
+    U, _S, Vt = np.linalg.svd(A.T @ B)
+    d = np.sign(np.linalg.det(Vt.T @ U.T))
+    R = Vt.T @ np.diag([1.0, 1.0, d]) @ U.T
+    return float(np.sqrt((((R @ A.T).T - B) ** 2).sum(1).mean()))
+
+
 def half_life_anchor_threshold(reference_pltnum_scores: List[float], margin: float = 0.05) -> float:
     if not reference_pltnum_scores:
         return -math.inf
@@ -478,7 +500,10 @@ def _vhh_condition_spec(antigen_cif_path: str, epitope_residues: List[int],
     contig = f"{int(length_min)}-{int(length_max)}, /0, {antigen_chain}{lo}-{hi}"
     whole_antigen = f"res_id>={lo} and res_id<={hi}"
     conditions: Dict[str, Any] = {
-        "C_CRD": {True: [{"select": whole_antigen}]},  # keep the antigen backbone coords as context
+        # Co-generate the antigen SIDE CHAINS (RFD4-Proteina: fixing target side chains hurts binder
+        # success vs letting them adapt); fix only the backbone coords as context. C_SEQ still preserves
+        # the antigen sequence, so only the rotamers are free to co-generate at the interface.
+        "C_CRD": {True: [{"select": f"({whole_antigen}) and is_protein_backbone"}]},
         "C_SEQ": {True: [{"select": whole_antigen}]},  # keep the antigen sequence
     }
     if epitope_residues:
@@ -605,5 +630,9 @@ def generate_vhh(ctx: Dict[str, Any], antigen_pdb_str: str, epitope_residues: Li
         # preserved antigen chain, and scoring the VHH+antigen fusion silently broke
         # is_vhh / Boltz / developability. Drop the antigen chain here.
         pdb_str, seq = _structure_to_pdb_and_seq(out, exclude_chain=antigen_chain)
-        rows.append({"sample_id": i, "designed_pdb": pdb_str, "designed_sequence": seq})
+        # Also keep the FULL RFD4 complex (antigen chain A + designed VHH chain B) so the
+        # binding pose/epitope is persisted — downstream scoring still uses the isolated VHH.
+        complex_pdb, _ = _structure_to_pdb_and_seq(out, exclude_chain=None)
+        rows.append({"sample_id": i, "designed_pdb": pdb_str, "designed_sequence": seq,
+                     "complex_pdb": complex_pdb})
     return pd.DataFrame(rows)

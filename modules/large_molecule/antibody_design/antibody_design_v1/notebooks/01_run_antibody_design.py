@@ -58,7 +58,7 @@ dbutils.widgets.text("references_json", "[]", "Reference antibody JSON list (anc
 dbutils.widgets.text("half_life_margin", "0.05", "Half-life anchor margin")
 dbutils.widgets.text(
     "weights_json",
-    '{"plddt":1.3,"boltz":2.0,"solubility":1.0,"half_life":1.0,"thermostab":1.0,"immuno":1.5}',
+    '{"plddt":1.3,"boltz":2.0,"self_consistency":1.5,"solubility":1.0,"half_life":1.0,"thermostab":1.0,"immuno":1.5}',
     "Per-axis weights JSON",
 )
 
@@ -207,6 +207,7 @@ import utils as ab_utils
 importlib.reload(ab_utils)
 from utils import (
     PredictorAxis, compose_rewards, half_life_anchor_threshold, half_life_anchor_rewards,
+    self_consistency_rmsd,
     make_strategy, number_vhh, load_rfd4, generate_vhh,
     call_esmfold, call_proteinmpnn, call_boltz, boltz_iptm,
     call_netsolp, call_pltnum, call_deepstabp, call_mhcflurry, call_hlaiipred,
@@ -263,6 +264,9 @@ AXES = [
     PredictorAxis("immuno",     weights.get("immuno", 0.0), lower_is_better=True),
     PredictorAxis("immuno_mhc2", weights.get("immuno_mhc2", 0.0), lower_is_better=True),
     PredictorAxis("liability",  weights.get("liability", 0.0), lower_is_better=True),
+    # Self-consistency / designability (RFD4-Proteina core finding): Cα scRMSD between the RFD4
+    # design and the ESMFold refold of its sequence — lower = sequence folds back to the design.
+    PredictorAxis("self_consistency", weights.get("self_consistency", 0.0), lower_is_better=True),
 ]
 print("Enabled axes:", [a.name for a in AXES if a.enabled])
 
@@ -292,7 +296,7 @@ print(warmup_developability_endpoints(dev_user_prefix=dev_user_prefix))
 
 # DBTITLE 1,Per-batch scoring across all enabled axes
 def score_iteration(seqs: List[str], pdbs: List[str], plddts: List[float],
-                    anchor: float) -> Dict[str, List[float]]:
+                    anchor: float, rfd4_pdbs=None) -> Dict[str, List[float]]:
     K = len(seqs)
     scores: Dict[str, List[float]] = {}
 
@@ -330,6 +334,13 @@ def score_iteration(seqs: List[str], pdbs: List[str], plddts: List[float],
         raw = call_pltnum(seqs, dev_user_prefix=dev_user_prefix)
         scores["half_life"] = ([0.5] * K if math.isinf(anchor)
                                else half_life_anchor_rewards(raw, anchor, beta=0.05))
+    # Self-consistency / designability: Cα scRMSD(RFD4 design, ESMFold refold); lower is better.
+    if any(a.name == "self_consistency" and a.enabled for a in AXES) and rfd4_pdbs:
+        scores["self_consistency"] = [
+            self_consistency_rmsd(rfd4_pdbs[k], pdbs[k])
+            if (k < len(rfd4_pdbs) and rfd4_pdbs[k] and pdbs[k]) else float("nan")
+            for k in range(K)
+        ]
     return scores
 
 # COMMAND ----------
@@ -341,7 +352,10 @@ def generate_and_validate(num: int) -> Dict[str, List]:
     gen_df = generate_vhh(rfd4_ctx, antigen_pdb_str, epitope_residues, antigen_chain,
                           vhh_length_min, vhh_length_max, num)
     seqs = list(gen_df["designed_sequence"])
-    pdbs = list(gen_df["designed_pdb"])
+    pdbs = list(gen_df["designed_pdb"])                      # RFD4 VHH-alone (reused for ProteinMPNN below)
+    rfd4_vhh_pdbs = list(gen_df["designed_pdb"])             # persist the raw RFD4 VHH structure
+    complex_pdbs = (list(gen_df["complex_pdb"]) if "complex_pdb" in gen_df
+                    else [""] * len(seqs))                   # persist the RFD4 antigen+VHH complex pose
     is_vhh_flags = []
 
     if run_proteinmpnn_flag:
@@ -379,7 +393,8 @@ def generate_and_validate(num: int) -> Dict[str, List]:
             print(f"  ESMFold failed: {e}")
             folded_pdbs.append(pdbs[len(folded_pdbs)] if len(folded_pdbs) < len(pdbs) else "")
             plddts.append(0.0)
-    return {"seqs": seqs, "pdbs": folded_pdbs, "plddts": plddts, "is_vhh": is_vhh_flags}
+    return {"seqs": seqs, "pdbs": folded_pdbs, "plddts": plddts, "is_vhh": is_vhh_flags,
+            "rfd4_vhh_pdbs": rfd4_vhh_pdbs, "complex_pdbs": complex_pdbs}
 
 # COMMAND ----------
 
@@ -438,9 +453,11 @@ try:
             mlflow.set_tag("job_status", f"iter_{it+1}_generating")
             batch = generate_and_validate(gen_num)
             seqs, pdbs, plddts, is_vhh = batch["seqs"], batch["pdbs"], batch["plddts"], batch["is_vhh"]
+            complex_pdbs = batch.get("complex_pdbs", [""] * len(seqs))      # RFD4 antigen+VHH complex
+            rfd4_vhh_pdbs = batch.get("rfd4_vhh_pdbs", [""] * len(seqs))    # raw RFD4 VHH structure
 
             mlflow.set_tag("job_status", f"iter_{it+1}_scoring")
-            per_axis = score_iteration(seqs, pdbs, plddts, anchor_threshold)
+            per_axis = score_iteration(seqs, pdbs, plddts, anchor_threshold, rfd4_vhh_pdbs)
             rewards = compose_rewards(per_axis, AXES)
 
             for k in range(len(seqs)):
@@ -458,7 +475,9 @@ try:
                 # Human-readable liability breakdown for the result dialog (string → not a metric).
                 row["liability_detail"] = liability_detail(seqs[k])
                 trajectory_rows.append(row)
-                all_candidates.append({**row, "designed_pdb": pdbs[k]})
+                all_candidates.append({**row, "designed_pdb": pdbs[k],
+                                       "complex_pdb": complex_pdbs[k] if k < len(complex_pdbs) else "",
+                                       "rfd4_vhh_pdb": rfd4_vhh_pdbs[k] if k < len(rfd4_vhh_pdbs) else ""})
 
                 for ak, av in row.items():
                     if ak in ("iteration", "candidate_id", "designed_sequence", "is_vhh"):
@@ -466,10 +485,17 @@ try:
                     if isinstance(av, (int, float)) and av is not None and not math.isnan(av):
                         mlflow.log_metric(f"{cand_id}/{ak}", float(av), step=it + 1)
 
-                if pdbs[k]:
-                    with tempfile.NamedTemporaryFile("w", suffix=".pdb", delete=False) as f:
-                        f.write(pdbs[k]); pdb_local = f.name
-                    mlflow.log_artifact(pdb_local, artifact_path=f"pdbs/iter_{it+1}")
+                # Persist ALL structures for this candidate (clean names): the ESMFold monomer,
+                # the raw RFD4 VHH, and the RFD4 antigen+VHH complex (binding pose/epitope).
+                _cdir = tempfile.mkdtemp()
+                for _tag, _content in (("esmfold", pdbs[k]),
+                                       ("rfd4", rfd4_vhh_pdbs[k] if k < len(rfd4_vhh_pdbs) else ""),
+                                       ("complex", complex_pdbs[k] if k < len(complex_pdbs) else "")):
+                    if _content:
+                        _p = os.path.join(_cdir, f"{cand_id}_{_tag}.pdb")
+                        with open(_p, "w") as f:
+                            f.write(_content)
+                        mlflow.log_artifact(_p, artifact_path=f"pdbs/iter_{it+1}")
 
             parents = [{**c, "designed_pdb": pdbs[i]}
                        for i, c in enumerate(trajectory_rows[-len(seqs):])]
@@ -504,18 +530,39 @@ try:
             mlflow.set_tag("stop_reason", "n_ceiling")
             mlflow.log_metric("iterations_completed", num_iterations)
 
-        # Final artifacts: ranked CSV + top-K PDBs.
+        # Final artifacts: ranked CSV + designed-sequence FASTA + inputs + top-K structures.
         traj_df = pd.DataFrame(trajectory_rows).sort_values("composite_reward", ascending=False)
         with tempfile.TemporaryDirectory() as tmp:
             csv_path = os.path.join(tmp, "reward_trajectory.csv")
             traj_df.to_csv(csv_path, index=False)
             mlflow.log_artifact(csv_path, artifact_path="results")
+
+            # Designed sequences (all candidates), reward-ranked, as FASTA.
+            fasta_path = os.path.join(tmp, "designed_sequences.fasta")
+            with open(fasta_path, "w") as f:
+                for r in sorted(all_candidates, key=lambda r: r["composite_reward"], reverse=True):
+                    if r.get("designed_sequence"):
+                        f.write(f">{r['candidate_id']} reward={r['composite_reward']:.4f} "
+                                f"is_vhh={r.get('is_vhh')}\n{r['designed_sequence']}\n")
+            mlflow.log_artifact(fasta_path, artifact_path="results")
+
+            # Inputs (reproducibility): antigen structure + epitope residues.
+            in_dir = os.path.join(tmp, "inputs"); os.makedirs(in_dir, exist_ok=True)
+            with open(os.path.join(in_dir, "antigen.pdb"), "w") as f:
+                f.write(antigen_pdb_str)
+            with open(os.path.join(in_dir, "epitope_residues.txt"), "w") as f:
+                f.write(",".join(str(e) for e in epitope_residues))
+            mlflow.log_artifacts(in_dir, artifact_path="inputs")
+
+            # Top-K structures: ESMFold monomer, raw RFD4 VHH, and the RFD4 antigen+VHH complex.
             topk = sorted(all_candidates, key=lambda r: r["composite_reward"], reverse=True)[:max(num_samples, 8)]
             topk_dir = os.path.join(tmp, "topK_pdbs"); os.makedirs(topk_dir, exist_ok=True)
             for r in topk:
-                if r.get("designed_pdb"):
-                    with open(os.path.join(topk_dir, r["candidate_id"] + ".pdb"), "w") as f:
-                        f.write(r["designed_pdb"])
+                cid = r["candidate_id"]
+                for _tag, _key in (("esmfold", "designed_pdb"), ("rfd4", "rfd4_vhh_pdb"), ("complex", "complex_pdb")):
+                    if r.get(_key):
+                        with open(os.path.join(topk_dir, f"{cid}_{_tag}.pdb"), "w") as f:
+                            f.write(r[_key])
             mlflow.log_artifacts(topk_dir, artifact_path="results/topK_pdbs")
 
         mlflow.set_tag("job_status", "complete")
