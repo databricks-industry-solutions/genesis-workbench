@@ -19,7 +19,8 @@ from pydantic import BaseModel, Field
 from app.auth import CurrentUserDep
 from app.routers.large_molecule import _build_user_info
 from app.services import antibody_design as ab_pipeline
-from app.services.molstar import molstar_html_complex, molstar_html_singlebody
+from app.services.antibody_coloring import COLOR_MODES, compute_coloring
+from app.services.molstar import molstar_html_colored, molstar_html_complex, molstar_html_singlebody
 
 router = APIRouter(prefix="/api/antibody_design", tags=["antibody_design"])
 
@@ -223,6 +224,39 @@ def antibody_design_top_k(
         for cid, pdb in pdbs.items()
     ]
     return AntibodyTopKResponse(candidates=candidates)
+
+
+# ─── Structure recoloring (on-demand "Color by") ──────────────────────────────
+
+
+class AntibodyColorRequest(BaseModel):
+    pdb: str
+    color_by: str = "chain"
+    antigen_chain: str = "A"
+
+
+class AntibodyColorResponse(BaseModel):
+    viewer_html: str
+
+
+@router.post("/color_structure", response_model=AntibodyColorResponse)
+def antibody_design_color_structure(
+    user: CurrentUserDep,
+    payload: AntibodyColorRequest,
+) -> AntibodyColorResponse:
+    """Recolor an already-loaded candidate structure by a chosen scheme (the result dialog's
+    'Color by' dropdown). Stateless — the frontend posts the PDB it already has; we compute the
+    per-residue values (interface geometry / framework-fragment location / pLDDT / liabilities) and
+    return a fresh viewer. Unknown modes fall back to the by-chain view."""
+    if not user.email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "User email missing from headers")
+    if payload.color_by not in COLOR_MODES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unknown color_by '{payload.color_by}'")
+    res_values, theme, with_surface = compute_coloring(
+        payload.pdb, payload.color_by, payload.antigen_chain)
+    html = molstar_html_colored(payload.pdb, res_values=res_values, theme=theme,
+                                with_surface=with_surface, with_iframe=False)
+    return AntibodyColorResponse(viewer_html=html)
 
 
 # ─── Defaults ────────────────────────────────────────────────────────────────

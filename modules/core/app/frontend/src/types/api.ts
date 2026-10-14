@@ -778,6 +778,10 @@ export type AntibodyCandidate = { candidate_id: string; pdb: string; viewer_html
 
 export type AntibodyTopKResponse = { candidates: AntibodyCandidate[] }
 
+export type AntibodyColorRequest = { pdb: string; color_by: string; antigen_chain: string }
+
+export type AntibodyColorResponse = { viewer_html: string }
+
 export type AntibodyDefaultsResponse = {
   default_weights: Record<string, number>
   antigen_pdb: string

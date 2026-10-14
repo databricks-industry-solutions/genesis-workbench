@@ -507,6 +507,30 @@ function AntibodyResultBody({ runId }: { runId: string }) {
     return rows.find((r) => base(String(r.candidate_id)) === want)
   }, [status.data, selected])
 
+  // ─── "Color by" — recolor the selected structure on demand. Options adapt to the structure:
+  //     the complex (antibody+antigen) supports interface/region views; the single-chain VHH
+  //     (ESMFold/RFD4) supports per-residue quality views. ─────────────────────────────────────
+  const isComplexView = (selected?.candidate_id ?? '').includes('complex')
+  const colorOptions: [string, string][] = isComplexView
+    ? [['chain', 'By chain (antibody vs antigen)'],
+       ['epitope_paratope', 'Epitope / paratope'],
+       ['cdr_fr', 'CDR / framework']]
+    : [['plddt', 'Confidence (pLDDT)'],
+       ['cdr_fr', 'CDR / framework'],
+       ['liability', 'Sequence liabilities']]
+  const [colorBy, setColorBy] = useState<string>('chain')
+  useEffect(() => {
+    setColorBy(isComplexView ? 'chain' : 'plddt')  // reset to the structure's default when it changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.candidate_id])
+  const colored = useQuery({
+    queryKey: ['antibody_design', 'color', selected?.candidate_id, colorBy],
+    queryFn: () =>
+      api.antibodyDesignColorStructure({ pdb: selected!.pdb, color_by: colorBy, antigen_chain: 'A' }),
+    enabled: !!selected?.pdb,
+  })
+  const viewerHtml = colored.data?.viewer_html ?? selected?.viewer_html
+
   const download = () => {
     if (!selected) return
     const blob = new Blob([selected.pdb], { type: 'chemical/x-pdb' })
@@ -566,7 +590,24 @@ function AntibodyResultBody({ runId }: { runId: string }) {
             </div>
           )}
 
-          {selected && <MolstarViewer viewerHtml={selected.viewer_html} height={420} />}
+          {selected && (
+            <>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Color by</span>
+                <select
+                  value={colorBy}
+                  onChange={(e) => setColorBy(e.target.value)}
+                  className="rounded-md border border-border bg-background px-2 py-1 text-xs"
+                >
+                  {colorOptions.map(([k, label]) => (
+                    <option key={k} value={k}>{label}</option>
+                  ))}
+                </select>
+                {colored.isFetching && <span className="text-[11px] text-muted-foreground">recoloring…</span>}
+              </div>
+              <MolstarViewer viewerHtml={viewerHtml} height={420} />
+            </>
+          )}
         </>
       )}
     </div>

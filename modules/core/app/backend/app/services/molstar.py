@@ -208,8 +208,91 @@ def molstar_html_complex(pdb: str, name: Optional[str] = None, with_iframe: Opti
     if with_iframe:
         return html_as_iframe(html_str)
     return html_str
-    
 
 
+def _pdb_to_mmcif_bfactor(pdb_str: str, res_values: Optional[dict] = None,
+                          default_value: float = 0.0) -> str:
+    """Minimal mmCIF (one `_atom_site` loop) from a PDB string, writing a per-residue value into
+    `B_iso_or_equiv`. `res_values` maps (chain, resid) -> float; residues not listed get
+    `default_value`. mmCIF is used deliberately (NOT PDB): rcsb-molstar only exposes B-factor to its
+    color themes when the structure is loaded as mmCIF. All ATOM records are kept (so cartoon AND
+    surface render); HETATM/waters are dropped."""
+    rv = res_values or {}
+    out = ["data_s", "#", "loop_",
+           "_atom_site.group_PDB", "_atom_site.id", "_atom_site.type_symbol", "_atom_site.label_atom_id",
+           "_atom_site.label_comp_id", "_atom_site.label_asym_id", "_atom_site.label_seq_id",
+           "_atom_site.Cartn_x", "_atom_site.Cartn_y", "_atom_site.Cartn_z", "_atom_site.occupancy",
+           "_atom_site.B_iso_or_equiv", "_atom_site.auth_seq_id", "_atom_site.auth_asym_id",
+           "_atom_site.pdbx_PDB_model_num"]
+    serial = 0
+    for ln in pdb_str.splitlines():
+        if ln[:4] != "ATOM" or len(ln) < 54:
+            continue
+        atom_name = ln[12:16].strip()
+        comp = ln[17:20].strip() or "UNK"
+        chain = ln[21]
+        try:
+            rid = int(ln[22:26]); x = float(ln[30:38]); y = float(ln[38:46]); z = float(ln[46:54])
+        except ValueError:
+            continue
+        occ = ln[54:60].strip() or "1.00"
+        elem = (ln[76:78].strip() or atom_name[:1]) or "C"
+        b = rv.get((chain, rid), default_value)
+        serial += 1
+        out.append(f"ATOM {serial} {elem} {atom_name} {comp} {chain} {rid} "
+                   f"{x:.3f} {y:.3f} {z:.3f} {occ} {b:.2f} {rid} {chain} 1")
+    out.append("#")
+    return "\n".join(out) + "\n"
 
+
+def molstar_html_colored(pdb_str: str, res_values: Optional[dict] = None, theme: str = "uncertainty",
+                         with_surface: bool = False, with_iframe: bool = True) -> str:
+    """Render a structure colored by a Mol* theme that reads a per-residue value from `B_iso_or_equiv`.
+
+    Encodes `res_values` ((chain, resid) -> float) into the B-factor and loads as mmCIF (required so
+    rcsb-molstar exposes the B-factor to the color themes — a plain PDB load does NOT). `theme`:
+    - "plddt-confidence" — AlphaFold/ESMFold pLDDT palette (expects 0-100 in B-factor),
+    - "uncertainty"      — continuous ramp; use it for coded categories (e.g. epitope/paratope,
+                           CDR/framework) where distinct codes map to distinct ramp colors,
+    - "chain-id"         — ignores B-factor, one color per chain (the complex "by chain" view).
+    `with_surface` overlays a semi-transparent molecular surface (for complexes). The representation
+    build is wrapped so any Mol* API drift degrades to the loaded structure, never a blank viewer.
+    (Mechanism verified in-browser for pLDDT, epitope/paratope, and chain modes.)"""
+    cif_b64 = base64.b64encode(_pdb_to_mmcif_bfactor(pdb_str, res_values).encode()).decode()
+    surf_js = ("""
+                        for (const s of cur.structures) { for (const c of s.components) {
+                            await plugin.builders.structure.representation.addRepresentation(
+                                c.cell, { type: "molecular-surface", typeParams: { alpha: 0.4 }, color: "__THEME__" });
+                        } }""" if with_surface else "")
+    js = ("""
+                (async function() {
+                    const viewer = new rcsbMolstar.Viewer("viewer", {layoutShowLog: false, backgroundColor: 0x1e1e1e});
+                    await viewer.loadStructureFromData(atob("__CIF_B64__"), "mmcif", false);
+                    try {
+                        await new Promise(function(r){ setTimeout(r, 500); });
+                        const plugin = viewer.plugin;
+                        const cur = plugin.managers.structure.hierarchy.current;
+                        for (const s of cur.structures) {
+                            await plugin.managers.structure.component.updateRepresentationsTheme(
+                                s.components, { color: "__THEME__" });
+                        }__SURF__
+                    } catch (e) { console.log("coloring skipped, default kept:", e && e.message); }
+                })();
+    """.replace("__CIF_B64__", cif_b64).replace("__SURF__", surf_js).replace("__THEME__", theme))
+    html_str = ("""
+    <!DOCTYPE html>
+    <html>
+        <head>
+            <script src="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.js"></script>
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.css">
+            """ + MOLSTAR_DARK_CSS + """
+        </head>
+        <body>
+            <div id="viewer" style="width: 100%; height: 500px;"></div>
+            <script>""" + js + """</script>
+        </body>
+    </html>""")
+    if with_iframe:
+        return html_as_iframe(html_str)
+    return html_str
 

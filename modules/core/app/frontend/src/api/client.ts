@@ -45,6 +45,8 @@ import type {
   AntibodyDesignStartResponse,
   AntibodyStatusResponse,
   AntibodyTopKResponse,
+  AntibodyColorRequest,
+  AntibodyColorResponse,
   VaccineImmunogenDefaultsResponse,
   VaccineImmunogenStartRequest,
   VaccineImmunogenStartResponse,
@@ -463,6 +465,11 @@ export const api = {
     request<AntibodyTopKResponse>(
       `/api/antibody_design/top_k?run_id=${encodeURIComponent(run_id)}`,
     ),
+  antibodyDesignColorStructure: (body: AntibodyColorRequest) =>
+    request<AntibodyColorResponse>('/api/antibody_design/color_structure', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 
   // Vaccine Immunogen Design (VHH) — RFD4-Proteina in-process motif-scaffolding loop
   vaccineImmunogenDefaults: () =>
