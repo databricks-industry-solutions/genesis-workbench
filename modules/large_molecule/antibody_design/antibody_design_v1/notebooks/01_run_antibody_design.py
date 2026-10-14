@@ -50,6 +50,9 @@ dbutils.widgets.text("vhh_length_max", "130", "VHH length max")
 dbutils.widgets.text("num_samples", "8", "K — candidates per iteration")
 dbutils.widgets.text("num_iterations", "6", "N — iteration ceiling (convergence usually exits earlier)")
 dbutils.widgets.text("run_proteinmpnn", "true", "ProteinMPNN-redesign the framework (fix CDRs) per candidate")
+dbutils.widgets.text("framework_conditioning", "true", "Generate on a real VHH framework (design only CDRs) — native RFD4 antibody task")
+dbutils.widgets.text("graft_framework", "false", "Downstream QC: CDR-graft onto a VHH framework if a design isn't antibody-like")
+dbutils.widgets.text("framework_vhh_sequence", "", "Acceptor VHH framework sequence (blank = built-in humanized default)")
 dbutils.widgets.text("resampling_temperature", "0.1", "Resampling softmax temperature")
 dbutils.widgets.text("strategy", "resample", "Strategy: resample | noop")
 dbutils.widgets.text("dev_user_prefix", "", "Dev user prefix (matches DEV_USER_PREFIX)")
@@ -149,6 +152,10 @@ vhh_length_max = int(g("vhh_length_max"))
 num_samples = int(g("num_samples"))
 num_iterations = int(g("num_iterations"))
 run_proteinmpnn_flag = g("run_proteinmpnn").lower() in ("true", "1", "yes")
+framework_conditioning_flag = g("framework_conditioning").lower() in ("true", "1", "yes")
+graft_framework_flag = g("graft_framework").lower() in ("true", "1", "yes")
+_fw = g("framework_vhh_sequence").strip()
+acceptor_framework = _fw if _fw else None   # None → utils' built-in humanized default
 resampling_temperature = float(g("resampling_temperature"))
 strategy_name = g("strategy")
 dev_user_prefix = g("dev_user_prefix")
@@ -208,7 +215,8 @@ importlib.reload(ab_utils)
 from utils import (
     PredictorAxis, compose_rewards, half_life_anchor_threshold, half_life_anchor_rewards,
     self_consistency_rmsd,
-    make_strategy, number_vhh, load_rfd4, generate_vhh,
+    make_strategy, number_vhh, graft_cdrs_onto_framework,
+    build_framework_ctx, default_framework_ctx, CANONICAL_VHH_FRAMEWORK, load_rfd4, generate_vhh,
     call_esmfold, call_proteinmpnn, call_boltz, boltz_iptm,
     call_netsolp, call_pltnum, call_deepstabp, call_mhcflurry, call_hlaiipred,
     warmup_developability_endpoints, _extract_mean_plddt_from_pdb,
@@ -294,9 +302,32 @@ print(warmup_developability_endpoints(dev_user_prefix=dev_user_prefix))
 
 # COMMAND ----------
 
+# DBTITLE 1,Framework-conditioning context (real VHH framework, prepared once)
+# Native RFD4 "Antibody/TCR framework conditioning": design CDR loops onto a REAL VHH framework, which
+# the model docks to the antigen via internal-coordinate conditioning. Default = the h-NbBCII10
+# universal humanized scaffold extracted straight from RFD4's own nanobody benchmark (real coords + FR
+# partition known by construction; no ESMFold, no anarcii — this is what makes conditioning actually
+# engage, vs. the earlier hand-built acceptor that failed to fold/number and fell back every run).
+# A user-supplied `framework_vhh_sequence` instead folds+numbers that custom acceptor (best-effort).
+framework_ctx = None
+if framework_conditioning_flag:
+    try:
+        if acceptor_framework:
+            _fw_fold = call_esmfold(acceptor_framework, dev_user_prefix=dev_user_prefix)
+            framework_ctx = build_framework_ctx(acceptor_framework, _fw_fold["pdb"])
+        else:
+            framework_ctx = default_framework_ctx()
+    except Exception as _e:  # noqa: BLE001
+        print(f"[framework] could not prepare the framework ({type(_e).__name__}: {str(_e)[:160]}); "
+              "falling back to de-novo binder generation")
+        framework_ctx = None
+    print(f"[framework] framework_conditioning={'ON' if framework_ctx else 'OFF (fallback de-novo)'}")
+
+# COMMAND ----------
+
 # DBTITLE 1,Per-batch scoring across all enabled axes
 def score_iteration(seqs: List[str], pdbs: List[str], plddts: List[float],
-                    anchor: float, rfd4_pdbs=None) -> Dict[str, List[float]]:
+                    anchor: float, rfd4_pdbs=None, sc_refold_pdbs=None) -> Dict[str, List[float]]:
     K = len(seqs)
     scores: Dict[str, List[float]] = {}
 
@@ -334,11 +365,15 @@ def score_iteration(seqs: List[str], pdbs: List[str], plddts: List[float],
         raw = call_pltnum(seqs, dev_user_prefix=dev_user_prefix)
         scores["half_life"] = ([0.5] * K if math.isinf(anchor)
                                else half_life_anchor_rewards(raw, anchor, beta=0.05))
-    # Self-consistency / designability: Cα scRMSD(RFD4 design, ESMFold refold); lower is better.
+    # Self-consistency / designability: Cα scRMSD(RFD4 design, ESMFold refold of the DE-NOVO
+    # sequence); lower is better. When grafting, the de-novo refold (sc_refold_pdbs) is the
+    # residue-aligned comparison to the RFD4 structure — the grafted structure has a different
+    # framework, so it isn't aligned; fall back to pdbs for the de-novo (non-graft) path.
     if any(a.name == "self_consistency" and a.enabled for a in AXES) and rfd4_pdbs:
+        refolds = sc_refold_pdbs if sc_refold_pdbs is not None else pdbs
         scores["self_consistency"] = [
-            self_consistency_rmsd(rfd4_pdbs[k], pdbs[k])
-            if (k < len(rfd4_pdbs) and rfd4_pdbs[k] and pdbs[k]) else float("nan")
+            self_consistency_rmsd(rfd4_pdbs[k], refolds[k])
+            if (k < len(rfd4_pdbs) and k < len(refolds) and rfd4_pdbs[k] and refolds[k]) else float("nan")
             for k in range(K)
         ]
     return scores
@@ -346,55 +381,101 @@ def score_iteration(seqs: List[str], pdbs: List[str], plddts: List[float],
 # COMMAND ----------
 
 # DBTITLE 1,Generate + validate one batch of VHH candidates
-def generate_and_validate(num: int) -> Dict[str, List]:
-    """RFD4 generate → anarcii number → (optional) ProteinMPNN framework redesign
-    fixing the CDRs → ESMFold. Returns dict of parallel lists."""
-    gen_df = generate_vhh(rfd4_ctx, antigen_pdb_str, epitope_residues, antigen_chain,
-                          vhh_length_min, vhh_length_max, num)
-    seqs = list(gen_df["designed_sequence"])
-    pdbs = list(gen_df["designed_pdb"])                      # RFD4 VHH-alone (reused for ProteinMPNN below)
-    rfd4_vhh_pdbs = list(gen_df["designed_pdb"])             # persist the raw RFD4 VHH structure
-    complex_pdbs = (list(gen_df["complex_pdb"]) if "complex_pdb" in gen_df
-                    else [""] * len(seqs))                   # persist the RFD4 antigen+VHH complex pose
-    is_vhh_flags = []
+def _esmfold_or_empty(seq: str):
+    """ESMFold a sequence → (pdb, mean_plddt); ("", 0.0) on empty/failure."""
+    if not seq:
+        return "", 0.0
+    try:
+        out = call_esmfold(seq, dev_user_prefix=dev_user_prefix)
+        return out["pdb"], out["mean_plddt"]
+    except Exception as e:  # noqa: BLE001
+        print(f"  ESMFold failed: {e}")
+        return "", 0.0
 
-    if run_proteinmpnn_flag:
+
+def generate_and_validate(num: int) -> Dict[str, List]:
+    """RFD4 generate (framework-conditioned when `framework_ctx` is set → real antibody folds;
+    else de-novo binder) → hard VHH gate (anarcii) → optional CDR-graft / ProteinMPNN framework
+    redesign QC → ESMFold. Returns dict of parallel lists over the SURVIVING candidates (the gate
+    can shrink the batch)."""
+    gen_df = generate_vhh(rfd4_ctx, antigen_pdb_str, epitope_residues, antigen_chain,
+                          vhh_length_min, vhh_length_max, num, framework_ctx=framework_ctx)
+    seqs = list(gen_df["designed_sequence"])
+    rfd4_vhh_pdbs = list(gen_df["designed_pdb"])             # raw RFD4 VHH structure (persisted)
+    complex_pdbs = (list(gen_df["complex_pdb"]) if "complex_pdb" in gen_df
+                    else [""] * len(seqs))                   # RFD4 antigen+VHH complex pose (persisted)
+
+    # ---- Hard VHH gate: keep only designs anarcii numbers as a V-domain --------------
+    # A design with no cleanly-numberable CDRs can't be grafted and isn't antibody-like, so
+    # drop it. If EVERY design is gated out, fall back to keeping them all with a loud warning
+    # rather than failing the iteration.
+    vhh_info = [number_vhh(s) if s else {"is_vhh": False, "cdr_positions": []} for s in seqs]
+    keep = [bool(info["is_vhh"]) for info in vhh_info]
+    if not any(keep):
+        print(f"  ⚠️ VHH gate: 0/{len(seqs)} designs numbered as a VHH — keeping all (gate off this batch)")
+        keep = [True] * len(seqs)
+    elif sum(1 for k in keep if not k):
+        print(f"  VHH gate: dropped {sum(1 for k in keep if not k)}/{len(seqs)} non-antibody designs")
+
+    def _f(lst):
+        return [x for x, k in zip(lst, keep) if k]
+    seqs, rfd4_vhh_pdbs, complex_pdbs, vhh_info = _f(seqs), _f(rfd4_vhh_pdbs), _f(complex_pdbs), _f(vhh_info)
+    denovo_seqs = list(seqs)                                 # pre-graft sequences (for self-consistency)
+    is_vhh_flags = [True] * len(seqs)
+
+    # ---- Make each design a REAL antibody --------------------------------------------
+    if graft_framework_flag:
+        grafted = [graft_cdrs_onto_framework(s, acceptor_framework) if acceptor_framework
+                   else graft_cdrs_onto_framework(s) for s in seqs]
+        gkeep = [gs is not None for gs in grafted]
+        if not any(gkeep):
+            print("  ⚠️ graft: no design could be grafted — keeping ungrafted RFD4 sequences")
+        else:
+            if sum(1 for k in gkeep if not k):
+                print(f"  graft: dropped {sum(1 for k in gkeep if not k)} design(s) with no graftable CDRs")
+            def _g(lst):
+                return [x for x, k in zip(lst, gkeep) if k]
+            seqs = [gs for gs in grafted if gs is not None]
+            denovo_seqs, rfd4_vhh_pdbs, complex_pdbs = _g(denovo_seqs), _g(rfd4_vhh_pdbs), _g(complex_pdbs)
+            is_vhh_flags = [True] * len(seqs)
+            print(f"  grafted {len(seqs)} design(s) onto the humanized VHH framework")
+    elif run_proteinmpnn_flag:
+        # De-novo path: ProteinMPNN re-picks the FRAMEWORK while fixing the RFD4 CDRs.
         new_seqs = []
-        for seq, pdb in zip(seqs, pdbs):
-            info = number_vhh(seq) if seq else {"is_vhh": False, "cdr_positions": []}
-            is_vhh_flags.append(bool(info["is_vhh"]))
-            # Preserve the binding CDRs RFD4 designed; let ProteinMPNN re-pick the
-            # FRAMEWORK (fix CDR positions). Only when anarcii actually found CDRs
-            # — otherwise keep the RFD4 sequence as-is (don't risk destroying binding).
+        for seq, info, pdb in zip(seqs, vhh_info, rfd4_vhh_pdbs):
             if info["is_vhh"] and info["cdr_positions"] and pdb:
                 try:
-                    redesigned = call_proteinmpnn(
-                        pdb, fixed_positions={"A": info["cdr_positions"]},
-                        dev_user_prefix=dev_user_prefix)
+                    redesigned = call_proteinmpnn(pdb, fixed_positions={"A": info["cdr_positions"]},
+                                                  dev_user_prefix=dev_user_prefix)
                     new_seqs.append(redesigned[0] if redesigned else seq)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     print(f"  ⚠️ ProteinMPNN framework redesign failed: {e}; keeping RFD4 sequence")
                     new_seqs.append(seq)
             else:
                 new_seqs.append(seq)
         seqs = new_seqs
-    else:
-        is_vhh_flags = [bool(number_vhh(s)["is_vhh"]) if s else False for s in seqs]
+        denovo_seqs = list(seqs)
 
-    # ESMFold each (possibly redesigned) sequence for a clean structure + pLDDT.
+    # ---- ESMFold the DELIVERABLE sequence (grafted / redesigned / de-novo) -----------
     folded_pdbs, plddts = [], []
     for s in seqs:
-        if not s:
-            folded_pdbs.append(""); plddts.append(0.0); continue
-        try:
-            out = call_esmfold(s, dev_user_prefix=dev_user_prefix)
-            folded_pdbs.append(out["pdb"]); plddts.append(out["mean_plddt"])
-        except Exception as e:
-            print(f"  ESMFold failed: {e}")
-            folded_pdbs.append(pdbs[len(folded_pdbs)] if len(folded_pdbs) < len(pdbs) else "")
-            plddts.append(0.0)
+        pdb, pl = _esmfold_or_empty(s)
+        folded_pdbs.append(pdb); plddts.append(pl)
+
+    # ---- Self-consistency refold target ----------------------------------------------
+    # scRMSD compares the RFD4 structure to the refold of the DESIGN sequence. When grafting,
+    # that design is the DE-NOVO sequence (residue-aligned to the RFD4 structure), so fold it
+    # separately (only if the self_consistency axis is on — else skip the extra ESMFold calls);
+    # without grafting the de-novo sequence IS what we already folded.
+    _sc_on = any(a.name == "self_consistency" and a.enabled for a in AXES)
+    if graft_framework_flag:
+        sc_refold_pdbs = [_esmfold_or_empty(s)[0] for s in denovo_seqs] if _sc_on else [""] * len(seqs)
+    else:
+        sc_refold_pdbs = folded_pdbs
+
     return {"seqs": seqs, "pdbs": folded_pdbs, "plddts": plddts, "is_vhh": is_vhh_flags,
-            "rfd4_vhh_pdbs": rfd4_vhh_pdbs, "complex_pdbs": complex_pdbs}
+            "rfd4_vhh_pdbs": rfd4_vhh_pdbs, "complex_pdbs": complex_pdbs,
+            "sc_refold_pdbs": sc_refold_pdbs, "denovo_seqs": denovo_seqs}
 
 # COMMAND ----------
 
@@ -428,6 +509,12 @@ try:
             "weights": weights_json,
             "n_references": len(references),
             "anchor_threshold": (None if math.isinf(anchor_threshold) else anchor_threshold),
+            # Persist framework-conditioning status (stdout is unreachable on the job): whether it
+            # engaged and which real VHH scaffold was used, so a glance at the run tells us if the
+            # outputs came from framework conditioning vs. the de-novo fallback.
+            "framework_conditioning_requested": framework_conditioning_flag,
+            "framework_conditioning_active": framework_ctx is not None,
+            "framework_scaffold": (framework_ctx.get("source") if framework_ctx else "none (de-novo)"),
         })
         mlflow.set_tag("origin", "genesis_workbench")
         mlflow.set_tag("feature", "antibody_design")
@@ -455,9 +542,14 @@ try:
             seqs, pdbs, plddts, is_vhh = batch["seqs"], batch["pdbs"], batch["plddts"], batch["is_vhh"]
             complex_pdbs = batch.get("complex_pdbs", [""] * len(seqs))      # RFD4 antigen+VHH complex
             rfd4_vhh_pdbs = batch.get("rfd4_vhh_pdbs", [""] * len(seqs))    # raw RFD4 VHH structure
+            sc_refold_pdbs = batch.get("sc_refold_pdbs", pdbs)             # de-novo refold (self-consistency)
+            denovo_seqs = batch.get("denovo_seqs", seqs)                   # pre-graft RFD4 sequence
+            if not seqs:
+                print(f"  iter {it+1}: no candidates survived the VHH gate/graft — skipping")
+                continue
 
             mlflow.set_tag("job_status", f"iter_{it+1}_scoring")
-            per_axis = score_iteration(seqs, pdbs, plddts, anchor_threshold, rfd4_vhh_pdbs)
+            per_axis = score_iteration(seqs, pdbs, plddts, anchor_threshold, rfd4_vhh_pdbs, sc_refold_pdbs)
             rewards = compose_rewards(per_axis, AXES)
 
             for k in range(len(seqs)):
@@ -465,7 +557,10 @@ try:
                 row = {
                     "iteration": it + 1,
                     "candidate_id": cand_id,
-                    "designed_sequence": seqs[k],
+                    "designed_sequence": seqs[k],                                  # deliverable (grafted when enabled)
+                    "denovo_sequence": denovo_seqs[k] if k < len(denovo_seqs) else seqs[k],  # pre-graft RFD4 design
+                    "framework_conditioned": bool(framework_ctx is not None),      # generated on a real VHH framework
+                    "grafted": bool(graft_framework_flag),
                     "is_vhh": bool(is_vhh[k]) if k < len(is_vhh) else False,
                     "composite_reward": float(rewards[k]),
                 }
@@ -480,7 +575,8 @@ try:
                                        "rfd4_vhh_pdb": rfd4_vhh_pdbs[k] if k < len(rfd4_vhh_pdbs) else ""})
 
                 for ak, av in row.items():
-                    if ak in ("iteration", "candidate_id", "designed_sequence", "is_vhh"):
+                    if ak in ("iteration", "candidate_id", "designed_sequence",
+                              "denovo_sequence", "grafted", "framework_conditioned", "is_vhh"):
                         continue
                     if isinstance(av, (int, float)) and av is not None and not math.isnan(av):
                         mlflow.log_metric(f"{cand_id}/{ak}", float(av), step=it + 1)

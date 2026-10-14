@@ -33,7 +33,7 @@ import os
 import re
 import tempfile
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -439,6 +439,110 @@ def number_vhh(sequence: str) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# CDR grafting — transplant RFD4-designed CDR loops onto a real VHH framework
+#
+# RFD4 has no fold/secondary-structure conditioning and C_SEQ can't pin residues on
+# freshly-designed backbone (verified against the rfproteina condition_spec), so there is
+# no way to MAKE the de-novo chain adopt an Ig fold at generation time. Instead we keep
+# RFD4's de-novo design (which reliably finds the right epitope) and graft its CDR loops
+# onto a canonical humanized VHH framework, so every deliverable carries a genuine antibody
+# framework. The grafted sequence is then re-folded (ESMFold) and re-scored (binding via
+# Boltz co-fold), so a graft that loses binding is caught, not hidden.
+# ---------------------------------------------------------------------------
+
+# IMGT region boundaries (1-based IMGT numbers), full FR/CDR partition of a V-domain.
+_IMGT_REGION_RANGES = [
+    ("FR1", 1, 26), ("CDR1", 27, 38), ("FR2", 39, 55), ("CDR2", 56, 65),
+    ("FR3", 66, 104), ("CDR3", 105, 117), ("FR4", 118, 128),
+]
+
+# Humanized universal VHH acceptor framework (the CDR-graft QC scaffold). FR1/FR2/FR3/FR4 are the
+# REAL h-NbBCII10 universal humanized nanobody framework (the scaffold in RFD4's own nanobody
+# benchmark — see `_extract_benchmark_framework`), carrying the camelid WFRQ FR2 hallmark that keeps a
+# single VH domain soluble without a light chain. The CDR stretches here are placeholders — REPLACED by
+# the donor's CDRs at graft time; only the FR residues are used. Overridable via the
+# `framework_vhh_sequence` widget. The acceptor is IMGT-numbered at runtime (same scheme as the donor),
+# so the exact concatenation boundaries need not be perfect — anarcii re-partitions it. NOTE: the main
+# framework-conditioning path no longer uses this sequence — it extracts the real scaffold STRUCTURE
+# directly (`default_framework_ctx`); this constant only backs the optional CDR-graft QC step.
+CANONICAL_VHH_FRAMEWORK = (
+    "QVQLVESGGGLVQPGGSLRLSC"                   # FR1 (real h-NbBCII10)
+    "GRTFSSYA"                                 # CDR1 (placeholder)
+    "WFRQAPGQGLEAVA"                           # FR2 (real h-NbBCII10, WFRQ hallmark)
+    "AISWSGGST"                                # CDR2 (placeholder)
+    "YADSVKGRFTISRDNSKNTLYLQMNSLRAEDTAVYYC"    # FR3 (real h-NbBCII10)
+    "AADYGSSWYDY"                              # CDR3 (placeholder)
+    "WGQGTLVTVS"                               # FR4 (real h-NbBCII10)
+)
+
+_ACCEPTOR_REGIONS_CACHE: Dict[str, Optional[Dict[str, str]]] = {}
+
+
+def _number_regions(sequence: str) -> Optional[Dict[str, str]]:
+    """IMGT-number `sequence` with anarcii and partition it into the seven V-domain regions
+    {FR1,CDR1,FR2,CDR2,FR3,CDR3,FR4} as amino-acid substrings. Returns None if anarcii is
+    unavailable, the sequence doesn't number as a V-domain, or no CDR residues are found.
+    Shared by the CDR-graft for both the donor (RFD4 design) and the acceptor framework."""
+    try:
+        from anarcii import Anarcii
+    except Exception as e:  # noqa: BLE001
+        print(f"[anarcii] not importable ({type(e).__name__}: {str(e)[:80]}); cannot number for graft")
+        return None
+    try:
+        model = Anarcii(seq_type="antibody", mode="accuracy", scheme="imgt", verbose=False)
+        numbered = model.number([("seq", sequence)])
+        rec = numbered[0] if isinstance(numbered, (list, tuple)) else numbered
+        numbering = rec.get("numbering") if isinstance(rec, dict) else getattr(rec, "numbering", None)
+        if not numbering:
+            return None
+        regions = {name: "" for name, _lo, _hi in _IMGT_REGION_RANGES}
+        for entry in numbering:
+            try:
+                (imgt_num, _ins), aa = entry
+            except Exception:  # noqa: BLE001
+                continue
+            if aa == "-":
+                continue
+            n = int(imgt_num)
+            for name, lo, hi in _IMGT_REGION_RANGES:
+                if lo <= n <= hi:
+                    regions[name] += aa
+                    break
+        if not (regions["CDR1"] or regions["CDR2"] or regions["CDR3"]):
+            return None
+        return regions
+    except Exception as e:  # noqa: BLE001
+        print(f"[anarcii] region numbering failed ({type(e).__name__}: {str(e)[:120]})")
+        return None
+
+
+def graft_cdrs_onto_framework(donor_sequence: str,
+                              acceptor_sequence: str = CANONICAL_VHH_FRAMEWORK) -> Optional[str]:
+    """CDR-graft: transplant the donor design's IMGT CDR1/CDR2/CDR3 onto the acceptor VHH
+    framework (FR1-FR4), returning a sequence guaranteed to carry a real Ig framework.
+
+    Returns None (a hard VHH gate) when the donor can't be numbered as a V-domain — such a
+    design has no cleanly-extractable CDR loops to graft — or when CDR3 (the dominant binding
+    loop) is missing, or when the acceptor framework itself doesn't number into FR1-FR4.
+    A donor CDR1/CDR2 that anarcii can't resolve falls back to the acceptor's own loop."""
+    donor = _number_regions(donor_sequence)
+    if donor is None:
+        return None
+    if acceptor_sequence not in _ACCEPTOR_REGIONS_CACHE:
+        _ACCEPTOR_REGIONS_CACHE[acceptor_sequence] = _number_regions(acceptor_sequence)
+    acc = _ACCEPTOR_REGIONS_CACHE[acceptor_sequence]
+    if acc is None or not all(acc.get(fr) for fr in ("FR1", "FR2", "FR3", "FR4")):
+        print("[graft] acceptor framework did not number into FR1-FR4; cannot graft")
+        return None
+    cdr3 = donor.get("CDR3")
+    if not cdr3:
+        return None
+    cdr1 = donor.get("CDR1") or acc.get("CDR1", "")
+    cdr2 = donor.get("CDR2") or acc.get("CDR2", "")
+    return acc["FR1"] + cdr1 + acc["FR2"] + cdr2 + acc["FR3"] + cdr3 + acc["FR4"]
+
+
+# ---------------------------------------------------------------------------
 # RFD4-Proteina in-process VHH generator
 #
 # Loads RFD4 once (the nb01 load_ckpt_n_configure_inference path) and generates
@@ -513,6 +617,300 @@ def _vhh_condition_spec(antigen_cif_path: str, epitope_residues: List[int],
     with open(spec_path, "w") as f:
         f.write(_json.dumps(spec))
     return spec_path
+
+
+# ---------------------------------------------------------------------------
+# Framework-conditioned antibody design (the RFD4-Proteina native "Antibody/TCR
+# framework conditioning" task — Table S4 of the paper).
+#
+# The de-novo binder spec above (_vhh_condition_spec) asks RFD4 for a generic
+# epitope binder; it reliably finds the epitope but produces non-antibody folds
+# (helical bundles / receptor Ig-like domains), which is why outputs "don't look
+# like a regular antibody". The fix is to invoke the model's framework-conditioning
+# task: give a REAL VHH framework as a free-placement INTERNAL-coordinate motif
+# (C_CRDGRP id ≥1 → the model chooses the framework↔antigen dock itself, no manual
+# docking — paper §S6.1.2), pin its sequence (C_SEQ), design ONLY the CDR loops, keep
+# the antigen + epitope hotspots, and (optionally) request the immunoglobulin fold
+# (C_CATH "2.60.40"). Verified against the rfproteina source (src/rfproteina/
+# conditions.py + docs/workflow/condition-spec.md at the pinned release).
+# ---------------------------------------------------------------------------
+
+# CDR design windows (min_len, max_len) RFD4 designs between the fixed FRs — nanobody IMGT CDR
+# length ranges (CDR3 long/variable); the model picks a length in-range per sample. In the framework
+# path the designed VHH length is therefore FR(83) + these windows, NOT the de-novo length widget.
+_DEFAULT_CDR_WINDOWS: Dict[str, Tuple[int, int]] = {"CDR1": (5, 8), "CDR2": (3, 8), "CDR3": (7, 18)}
+
+# FR-only fragment sequence of the real h-NbBCII10 universal humanized nanobody scaffold (the
+# framework in RFD4's own nanobody benchmark); used only as a post-extraction sanity log.
+_H_NBBCII10_FR_SEQ = ("QVQLVESGGGLVQPGGSLRLSC" "WFRQAPGQGLEAVA"
+                      "YADSVKGRFTISRDNSKNTLYLQMNSLRAEDTAVYYC" "WGQGTLVTVS")
+
+_THREE_TO_ONE = {
+    "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C", "GLN": "Q", "GLU": "E",
+    "GLY": "G", "HIS": "H", "ILE": "I", "LEU": "L", "LYS": "K", "MET": "M", "PHE": "F",
+    "PRO": "P", "SER": "S", "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
+}
+
+
+def _extract_benchmark_framework(nanobody_dir: Optional[str] = None
+                                 ) -> Tuple[str, Dict[str, Tuple[int, int]], str]:
+    """Extract the REAL h-NbBCII10 VHH framework from RFD4-Proteina's own nanobody-design benchmark,
+    which ships inside the installed rfproteina package (pyproject force-includes data/benchmarks →
+    rfproteina/data; `load_rfd4` already reads monomer-short.cif the same way).
+
+    Reads a `*h-NbBCII10*cdr123*.cif.zst` condition CIF (every one carries the identical scaffold as
+    chain H; the three CDRs are single design placeholders with no coordinates), keeps the framework
+    residues (those with a Cα), relabels them to chain 'F' renumbered 1..N, and derives the four FR
+    spans from the CDR numbering-gaps. Returns (pdb_str, fr_spans {FR->(lo,hi)}, fr_sequence). NO
+    ESMFold and NO anarcii — the coordinates and the FR/CDR partition are known by construction, which
+    is why this replaces the hand-built acceptor that failed to fold/number (so framework conditioning
+    kept silently falling back to de-novo)."""
+    import glob
+    import io
+    import zstandard
+    if nanobody_dir is None:
+        import rfproteina
+        nanobody_dir = os.path.join(os.path.dirname(rfproteina.__file__),
+                                    "data", "benchmarks", "nanobody")
+    cands = sorted(glob.glob(os.path.join(nanobody_dir, "*h-NbBCII10*cdr123*.cif.zst")))
+    if not cands:
+        raise FileNotFoundError(f"no h-NbBCII10 benchmark CIF under {nanobody_dir}")
+    buf = io.BytesIO()
+    with open(cands[0], "rb") as fh:
+        zstandard.ZstdDecompressor().copy_stream(fh, buf)   # stream: frames carry no content size
+    lines = buf.getvalue().decode("utf-8", "replace").splitlines()
+    cols: List[str] = []
+    data_start = None
+    for i, ln in enumerate(lines):
+        if ln.startswith("_atom_site."):
+            cols.append(ln.strip().replace("_atom_site.", ""))
+        elif cols:
+            data_start = i
+            break
+    ix = {c: k for k, c in enumerate(cols)}
+    byres: Dict[int, list] = {}
+    for ln in lines[data_start:]:
+        s = ln.strip()
+        if s.startswith("ATOM") or s.startswith("HETATM"):
+            r = ln.split()
+            if len(r) == len(cols) and r[ix["auth_asym_id"]] == "H":
+                byres.setdefault(int(r[ix["auth_seq_id"]]), []).append(r)
+        elif s:
+            break  # end of the _atom_site loop
+    fw_ids = [rid for rid in sorted(byres)
+              if any(a[ix["label_atom_id"]] == "CA" for a in byres[rid])]
+    if not fw_ids:
+        raise ValueError("benchmark chain H had no framework (Cα) residues")
+
+    def _finite(*vals: str) -> bool:
+        try:
+            return all(math.isfinite(float(v)) for v in vals)
+        except ValueError:
+            return False
+
+    out: List[str] = []
+    serial = 0
+    seq = ""
+    for new, rid in enumerate(fw_ids, start=1):
+        comp = byres[rid][0][ix["label_comp_id"]]
+        seq += _THREE_TO_ONE.get(comp, "X")
+        for a in byres[rid]:
+            an = a[ix["label_atom_id"]]
+            if an == "UNK":
+                continue
+            x, y, z = a[ix["Cartn_x"]], a[ix["Cartn_y"]], a[ix["Cartn_z"]]
+            if not _finite(x, y, z):
+                continue   # drop masked/terminal atoms with no coordinates
+            serial += 1
+            name = an if len(an) >= 4 else (" " + an)
+            out.append(f"ATOM  {serial:>5} {name:<4} {comp:>3} F{new:>4}    "
+                       f"{float(x):8.3f}{float(y):8.3f}{float(z):8.3f}  1.00  0.00          "
+                       f"{a[ix['type_symbol']]:>2}")
+    out.append("TER")
+    # FR spans in the renumbered 1..N frame: split at the CDR numbering-gaps in the source ids.
+    blocks: List[List[int]] = [[1]]
+    for k in range(1, len(fw_ids)):
+        (blocks[-1].append(k + 1) if fw_ids[k] - fw_ids[k - 1] == 1 else blocks.append([k + 1]))
+    if len(blocks) != 4:
+        raise ValueError(f"expected 4 framework (FR) blocks from the benchmark scaffold, got {len(blocks)}")
+    fr_spans = {name: (blk[0], blk[-1]) for name, blk in zip(("FR1", "FR2", "FR3", "FR4"), blocks)}
+    if seq != _H_NBBCII10_FR_SEQ:
+        print(f"[framework] note: extracted scaffold FR sequence differs from the recorded h-NbBCII10 "
+              f"({len(seq)} aa) — using it as-is")
+    return "\n".join(out) + "\n", fr_spans, seq
+
+
+def _keep_fr_residues(pdb_str: str, fr_seq_ranges: List[Tuple[int, int]]
+                      ) -> Tuple[str, Dict[str, Tuple[int, int]]]:
+    """Keep ONLY the framework residues of a folded VHH PDB (drop the CDR residues), relabel the
+    survivors to chain 'F' renumbered 1..M, and return (pdb_str, fr_spans {FR->(lo,hi)}) in the new
+    frame. `fr_seq_ranges` are 1-based (lo, hi) sequence positions of FR1..FR4 (== residue order in
+    the fold). Mirrors the benchmark's FR-only framework motif so the custom-framework path feeds RFD4
+    the same shape as the default path."""
+    keep = set()
+    for lo, hi in fr_seq_ranges:
+        keep.update(range(lo, hi + 1))
+    out: List[str] = []
+    cur_key = None
+    src_id = 0
+    remap: Dict[int, int] = {}
+    for ln in pdb_str.splitlines():
+        if ln[:4] != "ATOM" or len(ln) < 27:
+            continue
+        key = (ln[22:26], ln[26])
+        if key != cur_key:
+            cur_key = key
+            src_id += 1
+            if src_id in keep:
+                remap[src_id] = len(remap) + 1
+        if src_id in keep:
+            out.append(ln[:21] + "F" + f"{remap[src_id]:>4}" + " " + ln[27:])
+    out.append("TER")
+    spans: Dict[str, Tuple[int, int]] = {}
+    pos = 0
+    for name, (lo, hi) in zip(("FR1", "FR2", "FR3", "FR4"), fr_seq_ranges):
+        length = hi - lo + 1
+        spans[name] = (pos + 1, pos + length)
+        pos += length
+    return "\n".join(out) + "\n", spans
+
+
+def _relabel_renumber_pdb(pdb_str: str, new_chain: str = "F") -> Tuple[str, int]:
+    """Rewrite protein ATOM records to chain `new_chain` with residues renumbered 1..N in order
+    (dropping HETATM/water/insertion codes). Returns (pdb_text, n_residues). Pure text — keeps the
+    framework CIF numbering aligned with the FR spans carried in the framework context."""
+    out: List[str] = []
+    cur = None
+    newid = 0
+    for ln in pdb_str.splitlines():
+        if ln[:4] != "ATOM" or len(ln) < 27:
+            continue
+        key = (ln[22:26], ln[26])  # resSeq + iCode
+        if key != cur:
+            cur = key
+            newid += 1
+        out.append(ln[:21] + new_chain + f"{newid:>4}" + " " + ln[27:])
+    out.append("TER")
+    return "\n".join(out) + "\n", newid
+
+
+def _combine_framework_antigen_cif(framework_pdb_str: str, antigen_pdb_str: str,
+                                   antigen_chain: str, tmpdir: str) -> str:
+    """Build a single multi-chain CIF (the condition_spec `input` must be one file): framework as
+    chain 'F' renumbered 1..N, plus the antigen chain verbatim (original numbering, so epitope
+    residue ids stay valid). Returns the CIF path."""
+    fw_text, _ = _relabel_renumber_pdb(framework_pdb_str, "F")
+    ag_lines = [ln for ln in antigen_pdb_str.splitlines()
+                if ln[:4] == "ATOM" and len(ln) > 21 and ln[21] == antigen_chain]
+    combined = fw_text + "\n".join(ag_lines) + "\nTER\nEND\n"
+    combined_pdb = os.path.join(tmpdir, "framework_antigen.pdb")
+    with open(combined_pdb, "w") as f:
+        f.write(combined)
+    cif_path = os.path.join(tmpdir, "framework_antigen.cif")
+    _pdb_to_cif(combined_pdb, cif_path)
+    return cif_path
+
+
+def _framework_condition_spec(combined_cif: str, fr_spans: Dict[str, Tuple[int, int]],
+                              cdr_windows: Dict[str, Tuple[int, int]],
+                              epitope_residues: List[int], antigen_chain: str, antigen_res_range,
+                              tmpdir: str, add_cath: bool = False) -> str:
+    """Build the framework-conditioning condition_spec: fixed FR segments (chain F) interleaved with
+    designed CDR windows → one antibody chain, then the antigen chain. Framework = internal-coordinate
+    motif (C_CRDGRP 1, free placement — the model docks it) + fixed sequence (C_SEQ); antigen backbone
+    fixed (C_CRD) with epitope hotspots (C_HOT, chain-qualified). `fr_spans` are (lo, hi) residue ids
+    on chain F; `cdr_windows` are (min_len, max_len) design lengths for each loop between them.
+
+    `add_cath` is OFF by default to mirror the validated nanobody benchmark exactly — that task uses
+    only internal-coord + sequence + hotspot conditioning (verified in the benchmark condition CIF's
+    mask columns), and the FR internal-coord motif already pins the immunoglobulin fold. C_CATH is not
+    part of that benchmark, so adding it is an untested condition whose failure would silently drop the
+    run back to de-novo; leave it opt-in."""
+    import json as _json
+    alo, ahi = antigen_res_range if antigen_res_range else (1, 1)
+    parts: List[str] = []
+    fr_ranges: List[Tuple[int, int]] = []
+    for fr, cdr in (("FR1", "CDR1"), ("FR2", "CDR2"), ("FR3", "CDR3")):
+        lo, hi = fr_spans[fr]
+        parts.append(f"F{lo}-{hi}")                   # fixed framework segment (internal-coord motif)
+        fr_ranges.append((lo, hi))
+        clo, chi = cdr_windows[cdr]
+        parts.append(f"{int(clo)}-{int(chi)}")        # designed CDR loop (fresh length window)
+    lo, hi = fr_spans["FR4"]
+    parts.append(f"F{lo}-{hi}")
+    fr_ranges.append((lo, hi))
+    contig = ", ".join(parts) + f", /0, {antigen_chain}{alo}-{ahi}"
+    fr_sel = "sel('F/*/[" + ", ".join(f"{lo}-{hi}" for lo, hi in fr_ranges) + "]')"
+    conditions: Dict[str, Any] = {
+        # Framework as a free-placement internal-coordinate motif — the model docks it to the antigen.
+        # Restrict the group to BACKBONE atoms: MaterializeInternalCoords requires every atom in a
+        # coordinate group to have finite coords, but the atomworks PDB->CIF round-trip completes each
+        # residue to its full template, re-adding NaN placeholders for the side-chain/terminal atoms the
+        # benchmark leaves masked (OXT, etc.). A residue-level select would pull those NaN atoms into the
+        # group and raise "needs finite live coordinates"; backbone N/CA/C/O are always present + finite
+        # and fully define the framework fold (C_SEQ still pins identity so side chains are repacked).
+        "C_CRDGRP": {1: [{"select": f"{fr_sel} and is_protein_backbone"}]},
+        # Fix sequence identity for BOTH the humanized framework and the known antigen.
+        "C_SEQ": {True: [{"select": fr_sel}, {"select": f"sel('{antigen_chain}')"}]},
+        # Antigen backbone fixed (sidechains repack) — same convention as the PPI/binder spec.
+        "C_CRD": {True: [{"select": f"sel('{antigen_chain}') and is_protein_backbone"}]},
+    }
+    if epitope_residues:
+        conditions["C_HOT"] = {True: [{"select": f"sel('{antigen_chain}/*/{int(r)}')"}
+                                      for r in epitope_residues]}
+    if add_cath:
+        conditions["C_CATH"] = {"2.60.40": [{"select": fr_sel}]}     # immunoglobulin topology
+    spec = {"antibody": {"input": combined_cif, "contig": contig, "conditions": conditions}}
+    spec_path = os.path.join(tmpdir, "framework_spec.json")
+    with open(spec_path, "w") as f:
+        f.write(_json.dumps(spec))
+    return spec_path
+
+
+def default_framework_ctx() -> Optional[Dict[str, Any]]:
+    """Default framework context: the REAL h-NbBCII10 scaffold extracted from the installed rfproteina
+    nanobody benchmark (no ESMFold, no anarcii — coords + FR partition are known by construction).
+    Returns None (→ caller falls back to de-novo) only if the benchmark can't be read."""
+    try:
+        pdb_str, fr_spans, seq = _extract_benchmark_framework()
+    except Exception as e:  # noqa: BLE001
+        print(f"[framework] could not load the h-NbBCII10 benchmark scaffold "
+              f"({type(e).__name__}: {str(e)[:160]}); framework conditioning disabled (de-novo fallback)")
+        return None
+    print(f"[framework] real h-NbBCII10 scaffold loaded ({len(seq)} aa); "
+          + ", ".join(f"{r}={fr_spans[r][0]}-{fr_spans[r][1]}" for r in ("FR1", "FR2", "FR3", "FR4")))
+    return {"seq": seq, "pdb": pdb_str, "fr_spans": fr_spans,
+            "cdr_windows": dict(_DEFAULT_CDR_WINDOWS), "source": "h-NbBCII10 (rfproteina benchmark)"}
+
+
+def build_framework_ctx(framework_seq: str, framework_pdb_str: str) -> Optional[Dict[str, Any]]:
+    """Framework context for a USER-SUPPLIED acceptor sequence: IMGT-number it (anarcii), keep ONLY its
+    FR residues from the folded structure (drop the acceptor's own CDRs — RFD4 designs fresh ones), and
+    return the same ctx shape as `default_framework_ctx`. Returns None (→ de-novo fallback) if the
+    acceptor can't be numbered into FR1-FR4 + CDR3. The default path uses `default_framework_ctx` and
+    does NOT depend on this (so anarcii is only needed when a custom framework is supplied)."""
+    regions = _number_regions(framework_seq)
+    if regions is None or not all(regions.get(fr) for fr in ("FR1", "FR2", "FR3", "FR4")) \
+            or not regions.get("CDR3"):
+        print("[framework] acceptor sequence did not number into FR1-FR4 + CDR3; "
+              "framework conditioning disabled (falling back to de-novo)")
+        return None
+    order = ["FR1", "CDR1", "FR2", "CDR2", "FR3", "CDR3", "FR4"]
+    vdom = "".join(regions.get(r, "") for r in order)
+    start = framework_seq.find(vdom)
+    pos = start if start >= 0 else 0
+    seq_ranges: Dict[str, Tuple[int, int]] = {}
+    for r in order:
+        length = len(regions.get(r, ""))
+        seq_ranges[r] = (pos + 1, pos + length)
+        pos += length
+    fr_seq_ranges = [seq_ranges[fr] for fr in ("FR1", "FR2", "FR3", "FR4")]
+    fr_pdb, fr_spans = _keep_fr_residues(framework_pdb_str, fr_seq_ranges)
+    fr_seq = "".join(regions[fr] for fr in ("FR1", "FR2", "FR3", "FR4"))
+    print("[framework] custom acceptor numbered; FR spans: "
+          + ", ".join(f"{r}={fr_spans[r][0]}-{fr_spans[r][1]}" for r in ("FR1", "FR2", "FR3", "FR4")))
+    return {"seq": fr_seq, "pdb": fr_pdb, "fr_spans": fr_spans,
+            "cdr_windows": dict(_DEFAULT_CDR_WINDOWS), "source": "custom (anarcii-numbered)"}
 
 
 def _chain_res_range(pdb_str: str, chain: str):
@@ -599,10 +997,15 @@ def _pdb_to_cif(pdb_path: str, cif_path: str) -> None:
 
 def generate_vhh(ctx: Dict[str, Any], antigen_pdb_str: str, epitope_residues: List[int],
                  antigen_chain: str, length_min: int, length_max: int,
-                 num_samples: int) -> pd.DataFrame:
+                 num_samples: int, framework_ctx: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
     """Generate `num_samples` VHH candidates against the antigen epitope.
     Returns a DataFrame with columns `designed_pdb`, `designed_sequence`,
-    `sample_id` — the same contract the enzyme loop expects from `call_ame`."""
+    `sample_id` — the same contract the enzyme loop expects from `call_ame`.
+
+    When `framework_ctx` is given (from `build_framework_ctx`), uses the native
+    FRAMEWORK-CONDITIONING task (keep a real VHH framework, design only the CDR loops →
+    genuine antibody folds); otherwise falls back to the de-novo binder spec. Any failure
+    in the framework path degrades to de-novo rather than killing the run."""
     from rfproteina.generate import get_contig_or_design_problem_dataset
     from rfproteina.datapipes.collate import collate_batch
     model, transform, torch = ctx["model"], ctx["transform"], ctx["torch"]
@@ -611,12 +1014,27 @@ def generate_vhh(ctx: Dict[str, Any], antigen_pdb_str: str, epitope_residues: Li
         antigen_pdb = os.path.join(tmp, "antigen.pdb")
         with open(antigen_pdb, "w") as f:
             f.write(antigen_pdb_str)
-        # RFD4's condition_spec `input` must be CIF/BinaryCIF, not PDB — convert the antigen first.
-        antigen_cif = os.path.join(tmp, "antigen.cif")
-        _pdb_to_cif(antigen_pdb, antigen_cif)
         res_range = _chain_res_range(antigen_pdb_str, antigen_chain)
-        spec_path = _vhh_condition_spec(antigen_cif, epitope_residues, antigen_chain,
-                                        res_range, length_min, length_max, tmp)
+        spec_path = None
+        if framework_ctx is not None:
+            try:
+                combined_cif = _combine_framework_antigen_cif(
+                    framework_ctx["pdb"], antigen_pdb_str, antigen_chain, tmp)
+                spec_path = _framework_condition_spec(
+                    combined_cif, framework_ctx["fr_spans"], framework_ctx["cdr_windows"],
+                    epitope_residues, antigen_chain, res_range, tmp)
+                print(f"[framework] using framework-conditioning condition_spec "
+                      f"(scaffold: {framework_ctx.get('source', '?')})")
+            except Exception as e:  # noqa: BLE001
+                print(f"[framework] spec build failed ({type(e).__name__}: {str(e)[:160]}); "
+                      "falling back to de-novo binder generation")
+                spec_path = None
+        if spec_path is None:
+            # De-novo binder spec: antigen context + epitope hotspots, fresh VHH-length chain.
+            antigen_cif = os.path.join(tmp, "antigen.cif")
+            _pdb_to_cif(antigen_pdb, antigen_cif)
+            spec_path = _vhh_condition_spec(antigen_cif, epitope_residues, antigen_chain,
+                                            res_range, length_min, length_max, tmp)
         ds = get_contig_or_design_problem_dataset(spec_path, num_replicates=int(num_samples),
                                                   transform=transform)
         batch = collate_batch([ds[i] for i in range(len(ds))],
