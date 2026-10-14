@@ -517,32 +517,34 @@ def _motif_scaffold_condition_spec(motif_cif_path: str, motif_chain: str,
     binder/antibody path. Syntax follows the proven recipe (see [[gwb-rfd4-proteina-inference-recipe]]):
     a preserved contig segment is `<chain><start>-<end>`, and conditions use atomworks `res_id` selects.
 
-    `placement` selects how the motif's COORDINATES are conditioned:
-      - "indexed" (default): `C_CRD` pins ALL motif atoms (side chains included) → the full antigenic
-        surface is presented exactly as supplied, at the fixed contig position. The proven GPU-green path.
-      - "unindexed": the motif is a free-placement internal-coordinate GROUP (`C_CRDGRP` id 1) — the model
-        CHOOSES the motif's 3D placement within the scaffold (paper §S6.1.2) rather than pinning absolute
-        coordinates, which often improves presentation. This is the SAME verified mechanism the antibody
-        framework-conditioning path uses. `MaterializeInternalCoords` requires every atom in the group to
-        have finite coords, and the atomworks PDB->CIF round-trip re-adds NaN placeholders for masked
-        side-chain/terminal atoms, so the group is restricted to backbone (N/CA/C/O, always finite); `C_SEQ`
-        still pins the epitope identity, so the side chains repack to the native sequence.
+    `placement` controls the motif's INDEXING — whether its SEQUENCE POSITION in the designed chain is
+    fixed. (Verified against the rfproteina source + the RFD4-Proteina paper §S6.1.1 "indexing/unindexing"
+    and the `motif_unindexed` benchmark; indexing is a SEPARATE conditioning axis from the coordinate
+    type.) Both placements pin the motif's coordinates and sequence (`C_CRD` + `C_SEQ` on all motif atoms →
+    the full antigenic surface); they differ only in whether the motif's chain position is fixed:
+      - "indexed" (default): the motif stays at its fixed contig position (`<pre>, A<lo>-<hi>, <post>`).
+        The proven GPU-green path.
+      - "unindexed": add `C_IDX:false` (grouped) on the motif so the MODEL CHOOSES where the epitope sits
+        in the chain (the canonical unindexed motif-scaffolding task — often better presentation). The
+        contig still preserves the motif segment (unselected atoms are dropped); `C_IDX:false` frees only
+        its placement, and the single index group preserves the motif residues' relative offsets. NOTE:
+        this is NOT `C_CRDGRP` — that is the distinct "indexed internal-coordinate" variant (free 3D dock
+        at a fixed sequence position, as in the antibody framework path), a different axis.
     """
     import json as _json
     lo, hi = motif_range
     pre, post = _flank_segments(length_min, length_max, hi - lo + 1)
     contig = f"{pre}, {motif_chain}{lo}-{hi}, {post}"
     motif_sel = f"res_id>={lo} and res_id<={hi}"
+    # Pin the epitope's atoms (full antigenic surface, side chains included) + keep its sequence verbatim.
+    conditions: Dict[str, Any] = {
+        "C_CRD": {True: [{"select": motif_sel}]},
+        "C_SEQ": {True: [{"select": motif_sel}]},
+    }
     if placement == "unindexed":
-        conditions: Dict[str, Any] = {
-            "C_CRDGRP": {1: [{"select": f"({motif_sel}) and is_protein_backbone"}]},
-            "C_SEQ": {True: [{"select": motif_sel}]},  # keep the epitope sequence verbatim
-        }
-    else:
-        conditions = {
-            "C_CRD": {True: [{"select": motif_sel}]},
-            "C_SEQ": {True: [{"select": motif_sel}]},  # keep the epitope sequence verbatim
-        }
+        # Free the motif's SEQUENCE POSITION — the model places the epitope within the scaffold. C_IDX:false
+        # requires a `group:` label; one group preserves the motif residues' relative offsets.
+        conditions["C_IDX"] = {False: [{"select": motif_sel, "group": "epitope"}]}
     spec = {"immunogen": {"input": motif_cif_path, "contig": contig, "conditions": conditions}}
     spec_path = os.path.join(tmpdir, "immunogen_spec.json")
     with open(spec_path, "w") as f:

@@ -49,12 +49,18 @@ re-coloring viewer) and adds an opt-in free-placement motif-scaffolding mode plu
   Coloring is CPU-side — the viewer calls no serving endpoint. The orchestrator now writes
   `results/motif_positions.json` (per-candidate 1-based motif positions) to drive the motif mode (mirrors the
   antibody `results/mhc_burden.json` precompute); runs made before this show the whole chain as scaffold.
-- **Unindexed motif placement (`motif_placement` toggle, default `indexed`).** *Unindexed* makes the epitope
-  a free-placement internal-coordinate group (`C_CRDGRP`) so RFD4 docks it itself — the same verified-green
-  mechanism as the antibody framework-conditioning path (paper §S6.1.2); the group is backbone-restricted
-  (`MaterializeInternalCoords` needs finite coords) with `C_SEQ` pinning identity. *Indexed* (the proven
-  `C_CRD`-pinned path) stays the default. Wired through orchestrator widget → service `job_parameters` →
-  router `StartRequest` → UI control, and logged as the MLflow `scaffold_task` / `motif_placement` params.
+- **Unindexed motif placement (`motif_placement` toggle, default `indexed`).** *Unindexed* adds `C_IDX:false`
+  (grouped) on the motif so the model **chooses where the epitope sits in the chain** — the canonical
+  unindexed motif-scaffolding task (RFD4-Proteína paper §S6.1.1 "indexing/unindexing" + the rfproteina
+  `motif_unindexed` benchmark). Both modes keep `C_CRD` + `C_SEQ` on all motif atoms (full antigenic
+  surface); indexing is a *separate* conditioning axis from the coordinate type — **not** `C_CRDGRP` (that
+  is the distinct free-3D-dock internal-coordinate variant). *Indexed* (fixed chain position) stays the
+  default. Wired through orchestrator widget → service `job_parameters` → router `StartRequest` → UI control,
+  and logged as the MLflow `scaffold_task` / `motif_placement` params. (Supersedes the initial `C_CRDGRP`
+  approach, which was verified against the paper to be the *indexed internal-coordinate* variant, not
+  unindexing.) GPU-validated green: an unindexed H100 smoke run ran to SUCCESS with the model placing the
+  epitope at distinct chain positions per design (e.g. residues 62–85 vs 51–74) and sub-/near-2 Å motif
+  RMSD (0.54 / 1.51 Å).
 - **Uploaded-epitope robustness.** `strip_nonfinite_atoms` drops atoms with non-finite coordinates and
   `validate_motif_backbone` requires a complete finite backbone (N/CA/C) for every motif residue before
   generation — fail fast with a clear message instead of a cryptic mid-run conditioning error.

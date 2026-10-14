@@ -78,7 +78,7 @@ for epitope-focused vaccine design").
 ```
 Epitope motif PDB + motif residues
   ↓
-RFD4-Proteina (in-process, H100) → K scaffolds (motif-scaffolding condition_spec; placement: indexed C_CRD or unindexed C_CRDGRP, + C_SEQ on the motif)
+RFD4-Proteina (in-process, H100) → K scaffolds (motif-scaffolding condition_spec: C_CRD + C_SEQ on the motif; placement indexed, or unindexed via C_IDX)
   ↓
 [optional] ProteinMPNN → redesign the SCAFFOLD (fix the epitope) → ESMFold re-fold
   ↓
@@ -110,15 +110,16 @@ Ranked shortlist + top-K PDBs
 
 ## Limitations and known issues
 
-- **Motif placement is selectable (`motif_placement`).** *Indexed* (default) centers the epitope with
-  symmetric flexible flanks (`utils._flank_segments`) and pins it with `C_CRD` (all motif atoms → the full
-  antigenic surface at a fixed position) — the proven GPU-green path. *Unindexed* makes the motif a
-  free-placement internal-coordinate group (`C_CRDGRP`, the same mechanism as the antibody
-  framework-conditioning path) so the model docks the epitope itself — often better presentation; the group
-  is restricted to backbone atoms (`MaterializeInternalCoords` needs finite coords) while `C_SEQ` still pins
-  the epitope identity so side chains repack. A terminal placement (0-length flank) or a **discontinuous**
-  (multi-segment) epitope is still a future refinement — a discontinuous epitope is currently preserved as a
-  single contiguous range (min→max residue).
+- **Motif placement is selectable (`motif_placement`).** Both modes pin the epitope's coordinates and
+  sequence (`C_CRD` + `C_SEQ` on all motif atoms → the full antigenic surface). *Indexed* (default) keeps
+  the epitope at a fixed chain position (symmetric flexible flanks via `utils._flank_segments`) — the proven
+  GPU-green path. *Unindexed* adds `C_IDX:false` on the motif so the model **chooses where the epitope sits
+  in the chain** (the canonical unindexed motif-scaffolding task, RFD4-Proteína paper §S6.1.1 + the
+  `motif_unindexed` benchmark; often better presentation). Indexing is a *separate* conditioning axis from
+  the coordinate type — this is **not** `C_CRDGRP` (that is the distinct free-3D-dock internal-coordinate
+  variant). A terminal placement (0-length flank) or a **discontinuous** (multi-segment) epitope is still a
+  future refinement — a discontinuous epitope is currently preserved as a single contiguous range
+  (min→max residue).
 - **Uploaded epitope PDBs are sanitized.** Atoms with non-finite coordinates are dropped, and every motif
   residue must have a complete finite backbone (N/CA/C) before generation — the orchestrator fails fast with
   a clear message rather than letting the `C_CRD`/`C_CRDGRP` conditioning error cryptically mid-run.

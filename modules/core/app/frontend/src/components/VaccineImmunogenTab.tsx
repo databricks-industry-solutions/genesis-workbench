@@ -221,7 +221,7 @@ export function VaccineImmunogenTab() {
             </label>
             <p className="mt-1 text-[11px] text-muted-foreground">
               The total scaffold length includes the grafted epitope; it must exceed the motif length.
-              Unindexed placement lets RFD4 dock the epitope itself (often better presentation).
+              Unindexed lets RFD4 choose where the epitope sits in the chain (often better presentation).
             </p>
           </div>
 

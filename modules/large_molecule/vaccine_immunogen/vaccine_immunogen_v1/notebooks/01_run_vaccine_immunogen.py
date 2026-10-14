@@ -56,7 +56,7 @@ dbutils.widgets.text("num_samples", "8", "K — candidates per iteration")
 dbutils.widgets.text("num_iterations", "6", "N — iteration ceiling (convergence usually exits earlier)")
 dbutils.widgets.text("run_proteinmpnn", "true", "ProteinMPNN-redesign the scaffold (fix the epitope) per candidate")
 dbutils.widgets.text("motif_placement", "indexed",
-                     "Motif placement: indexed (fixed position; C_CRD pins all motif atoms) | unindexed (model docks the motif; C_CRDGRP free-placement group)")
+                     "Motif placement: indexed (fixed chain position) | unindexed (model chooses the epitope's chain position; C_IDX:false)")
 dbutils.widgets.text("resampling_temperature", "0.1", "Resampling softmax temperature")
 dbutils.widgets.text("strategy", "resample", "Strategy: resample | noop")
 dbutils.widgets.text("dev_user_prefix", "", "Dev user prefix (matches DEV_USER_PREFIX)")
@@ -378,10 +378,10 @@ try:
             "format": "immunogen",
             # Persist WHAT the workflow does + WHICH epitope it scaffolds (stdout is unreachable on the
             # job): a glance at the run then confirms it ran motif scaffolding on the intended epitope.
-            "scaffold_task": (f"{motif_placement} motif scaffolding — "
-                              + ("C_CRDGRP free-placement motif group (the model docks the epitope) + C_SEQ"
+            "scaffold_task": (f"{motif_placement} motif scaffolding — C_CRD+C_SEQ fix the epitope"
+                              + ("; C_IDX:false frees its chain position (the model places it)"
                                  if motif_placement == "unindexed"
-                                 else "C_CRD+C_SEQ fix the epitope motif at a fixed position")
+                                 else " at a fixed chain position")
                               + "; RFD4 generates the flanking scaffold"),
             "motif_placement": motif_placement,
             "motif_sequence": motif_seq,
