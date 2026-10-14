@@ -774,11 +774,21 @@ export type AntibodyStatusResponse = {
   trajectory: Record<string, number | string | null>[]
 }
 
-export type AntibodyCandidate = { candidate_id: string; pdb: string; viewer_html: string }
+export type AntibodyCandidate = {
+  candidate_id: string
+  pdb: string
+  viewer_html: string
+  mhc_burden?: number[] | null  // precomputed per-residue MHC-II burden (null for pre-precompute runs)
+}
 
 export type AntibodyTopKResponse = { candidates: AntibodyCandidate[] }
 
-export type AntibodyColorRequest = { pdb: string; color_by: string; antigen_chain: string }
+export type AntibodyColorRequest = {
+  pdb: string
+  color_by: string
+  antigen_chain: string
+  mhc_burden?: number[] | null
+}
 
 export type AntibodyColorResponse = { viewer_html: string }
 

@@ -239,6 +239,21 @@ def load_top_k_pdbs(run_id: str) -> dict[str, str]:
     return out
 
 
+def load_mhc_burden(run_id: str) -> dict[str, list[float]]:
+    """Load the precomputed per-residue MHC-II burden map (results/mhc_burden.json), keyed by base
+    candidate_id (iter{N}_cand{M}) → one 0-1 value per VHH residue. Empty for runs generated before the
+    precompute shipped — the viewer then simply hides the MHC-II color mode (never calls the endpoint)."""
+    client = MlflowClient()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            local = client.download_artifacts(run_id, "results/mhc_burden.json", dst_path=tmp)
+            with open(local) as f:
+                return json.load(f)
+    except Exception as e:  # noqa: BLE001
+        logger.info("MHC burden not available for run %s: %s", run_id, e)
+        return {}
+
+
 # ─── Search past runs (returns the shared DBRunRow contract so the frontend's
 #     RunSearchSection consumes it directly — same shape as the KERMT search) ───
 

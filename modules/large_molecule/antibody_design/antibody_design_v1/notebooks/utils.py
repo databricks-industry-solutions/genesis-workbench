@@ -194,6 +194,36 @@ def call_hlaiipred(sequences: List[str], alleles: Optional[str] = None,
     return [float(v) for v in pd.DataFrame(resp.predictions)["predicted_immuno_burden"]]
 
 
+def mhc_burden_per_residue(sequence: str, dev_user_prefix: Optional[str] = None,
+                           k: int = 15) -> List[float]:
+    """Per-residue MHC-II presentation burden (anti-drug-antibody proxy) for a VHH sequence.
+
+    Slides a k-mer window over the sequence, scores each window's presentation with HLAIIPred (warm
+    here at generation time), and gives each residue the mean presentation of the windows covering it.
+    Returns len(sequence) floats in [0, 1] (empty if shorter than k or scoring fails). Precomputed at
+    generation and persisted to the MLflow run so the viewer can project it onto the structure with NO
+    serving dependency — the endpoint is only ever hit during generation, never from the UI."""
+    seq = (sequence or "").upper()
+    if len(seq) < k:
+        return []
+    windows = [seq[i:i + k] for i in range(len(seq) - k + 1)]
+    try:
+        payload = [{"sequence": w, "alleles": _DEFAULT_MHC2_ALLELES} for w in windows]
+        df = pd.DataFrame(_query("hlaiipred", payload, dev_user_prefix=dev_user_prefix).predictions)
+        col = "max_presentation_score" if "max_presentation_score" in df.columns else "predicted_immuno_burden"
+        scores = [float(v) for v in df[col]]
+    except Exception as e:  # noqa: BLE001
+        print(f"[mhc] per-residue burden skipped ({type(e).__name__}: {str(e)[:120]})")
+        return []
+    nwin = len(scores)
+    out: List[float] = []
+    for i in range(len(seq)):
+        lo, hi = max(0, i - k + 1), min(i, nwin - 1)
+        cover = scores[lo:hi + 1] if hi >= lo else []
+        out.append(sum(cover) / len(cover) if cover else 0.0)
+    return out
+
+
 def warmup_developability_endpoints(dev_user_prefix: Optional[str] = None,
                                     sample_seq: str = "QVQLVESGGGLVQAGGSLRLSCAASG") -> Dict[str, str]:
     """One dummy call per developability endpoint so the first scoring round

@@ -22,11 +22,9 @@ from app.services import antibody_design as ab_pipeline
 from app.services.antibody_coloring import (
     COLOR_MODES,
     compute_coloring,
-    mhc_burden_values,
-    mhc_windows,
+    mhc_burden_values_from_array,
 )
 from app.services.molstar import molstar_html_colored, molstar_html_complex, molstar_html_singlebody
-from app.services.protein import hit_hlaiipred_windows
 
 router = APIRouter(prefix="/api/antibody_design", tags=["antibody_design"])
 
@@ -196,10 +194,22 @@ def antibody_design_status(
     )
 
 
+def _base_candidate_id(cid: str) -> str:
+    """Strip the view suffix (…_complex / _rfd4 / _esmfold) to the base candidate id the trajectory
+    and the MHC-burden map are keyed by."""
+    for suffix in ("_complex", "_rfd4", "_esmfold"):
+        if cid.endswith(suffix):
+            return cid[: -len(suffix)]
+    return cid
+
+
 class AntibodyCandidate(BaseModel):
     candidate_id: str
     pdb: str
     viewer_html: str
+    # Precomputed per-residue MHC-II burden (0-1, one per VHH residue) from the run, or None for runs
+    # generated before the precompute shipped — the viewer offers the MHC-II color mode only when set.
+    mhc_burden: Optional[list[float]] = None
 
 
 class AntibodyTopKResponse(BaseModel):
@@ -214,6 +224,7 @@ def antibody_design_top_k(
     if not user.email:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "User email missing from headers")
     pdbs = ab_pipeline.load_top_k_pdbs(run_id)
+    mhc = ab_pipeline.load_mhc_burden(run_id)  # {base_candidate_id: [per-residue burden]} (may be empty)
     candidates = [
         AntibodyCandidate(
             candidate_id=cid, pdb=pdb,
@@ -226,6 +237,7 @@ def antibody_design_top_k(
                 if "complex" in cid
                 else molstar_html_singlebody(pdb, name=cid, with_iframe=False)
             ),
+            mhc_burden=mhc.get(_base_candidate_id(cid)),
         )
         for cid, pdb in pdbs.items()
     ]
@@ -239,6 +251,9 @@ class AntibodyColorRequest(BaseModel):
     pdb: str
     color_by: str = "chain"
     antigen_chain: str = "A"
+    # Precomputed per-residue MHC-II burden (from the run's artifact, passed back by the frontend) —
+    # the ONLY input the MHC-II mode needs. The viewer never calls a serving endpoint.
+    mhc_burden: Optional[list[float]] = None
 
 
 class AntibodyColorResponse(BaseModel):
@@ -251,30 +266,23 @@ def antibody_design_color_structure(
     payload: AntibodyColorRequest,
 ) -> AntibodyColorResponse:
     """Recolor an already-loaded candidate structure by a chosen scheme (the result dialog's
-    'Color by' dropdown). Stateless — the frontend posts the PDB it already has; we compute the
-    per-residue values (interface geometry / framework-fragment location / pLDDT / liabilities) and
-    return a fresh viewer. Unknown modes fall back to the by-chain view."""
+    'Color by' dropdown). Stateless and ENDPOINT-FREE — the frontend posts the PDB it already has; we
+    compute per-residue values locally (interface geometry / framework-fragment location / pLDDT /
+    liabilities), and for the MHC-II mode we map the precomputed burden the frontend passes from the
+    run artifact. Unknown modes fall back to the by-chain view."""
     if not user.email:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "User email missing from headers")
     if payload.color_by not in COLOR_MODES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unknown color_by '{payload.color_by}'")
 
-    # MHC-II immunogenicity (ADA) burden is the one mode that needs an ML endpoint: slide 15-mers
-    # over the VHH, batch-query HLAIIPred for each window's presentation, aggregate to a per-residue
-    # burden. (Cold HLAIIPred endpoints can take a while — the frontend shows a "recoloring…" state.)
-    if payload.color_by == "mhc_burden":
-        windows, vhh_chain, resids = mhc_windows(payload.pdb, payload.antigen_chain)
-        if windows:
-            try:
-                scores = hit_hlaiipred_windows(WorkspaceClient(), windows)
-            except Exception as e:  # noqa: BLE001
-                raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
-                                    f"Immunogenicity endpoint unavailable: {str(e)[:200]}")
-            res_values = mhc_burden_values(vhh_chain, resids, scores)
-            html = molstar_html_colored(payload.pdb, res_values=res_values, theme="uncertainty",
-                                        with_surface=False, with_iframe=False)
-            return AntibodyColorResponse(viewer_html=html)
-        # chain too short to window → fall through to the by-chain view
+    # MHC-II immunogenicity (ADA): purely a read of the per-residue burden precomputed at generation
+    # time (while HLAIIPred was warm) and stored in the run — no serving call from the viewer.
+    if payload.color_by == "mhc_burden" and payload.mhc_burden:
+        res_values = mhc_burden_values_from_array(
+            payload.pdb, payload.antigen_chain, payload.mhc_burden)
+        html = molstar_html_colored(payload.pdb, res_values=res_values, theme="uncertainty",
+                                    with_surface=False, with_iframe=False)
+        return AntibodyColorResponse(viewer_html=html)
 
     res_values, theme, with_surface = compute_coloring(
         payload.pdb, payload.color_by, payload.antigen_chain)

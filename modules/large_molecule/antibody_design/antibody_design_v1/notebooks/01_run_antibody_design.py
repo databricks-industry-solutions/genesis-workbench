@@ -219,6 +219,7 @@ from utils import (
     build_framework_ctx, default_framework_ctx, CANONICAL_VHH_FRAMEWORK, load_rfd4, generate_vhh,
     call_esmfold, call_proteinmpnn, call_boltz, boltz_iptm,
     call_netsolp, call_pltnum, call_deepstabp, call_mhcflurry, call_hlaiipred,
+    mhc_burden_per_residue,
     warmup_developability_endpoints, _extract_mean_plddt_from_pdb,
     liability_weighted_count, liability_detail,
 )
@@ -641,6 +642,20 @@ try:
                         f.write(f">{r['candidate_id']} reward={r['composite_reward']:.4f} "
                                 f"is_vhh={r.get('is_vhh')}\n{r['designed_sequence']}\n")
             mlflow.log_artifact(fasta_path, artifact_path="results")
+
+            # Per-residue MHC-II immunogenicity (ADA) burden for EVERY generated candidate, computed
+            # here while HLAIIPred is warm and persisted as a run artifact. The viewer reads this to
+            # project immunogenicity onto the structure with NO serving dependency (keyed by the base
+            # candidate_id; the array is one value per VHH residue, in sequence order).
+            mhc_burden_map: Dict[str, List[float]] = {}
+            for r in all_candidates:
+                seq = r.get("designed_sequence")
+                if seq:
+                    burden = mhc_burden_per_residue(seq, dev_user_prefix=dev_user_prefix)
+                    if burden:
+                        mhc_burden_map[r["candidate_id"]] = [round(x, 4) for x in burden]
+            if mhc_burden_map:
+                mlflow.log_dict(mhc_burden_map, "results/mhc_burden.json")
 
             # Inputs (reproducibility): antigen structure + epitope residues.
             in_dir = os.path.join(tmp, "inputs"); os.makedirs(in_dir, exist_ok=True)

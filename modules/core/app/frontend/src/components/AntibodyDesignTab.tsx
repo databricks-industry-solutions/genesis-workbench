@@ -522,24 +522,44 @@ function AntibodyResultBody({ runId }: { runId: string }) {
   // ─── "Color by" — recolor the selected structure on demand. Options adapt to the structure:
   //     the complex (antibody+antigen) supports interface/region views; the single-chain VHH
   //     (ESMFold/RFD4) supports per-residue quality views. ─────────────────────────────────────
-  const isComplexView = (selected?.candidate_id ?? '').includes('complex')
+  const cid = selected?.candidate_id ?? ''
+  const isComplexView = cid.includes('complex')
+  const isEsmfoldView = cid.includes('esmfold')
+  // Options adapt to the structure. pLDDT is ONLY offered for the ESMFold view: ESMFold is a
+  // structure predictor and writes a real per-residue pLDDT into the B-factor, whereas the raw RFD4
+  // backbone (a generative model) has no confidence metric — coloring it by pLDDT would read as
+  // uniformly "low" (zeroed B-factor), which is misleading, so it's excluded there.
+  // MHC-II burden is precomputed at generation and read from the run — offer it only when the run
+  // actually carries that data (older runs predate the precompute; viewer never calls an endpoint).
+  const mhcOpt: [string, string][] =
+    selected?.mhc_burden && selected.mhc_burden.length ? [['mhc_burden', 'Immunogenicity (MHC-II)']] : []
   const colorOptions: [string, string][] = isComplexView
     ? [['chain', 'By chain (antibody vs antigen)'],
        ['epitope_paratope', 'Epitope / paratope'],
        ['cdr_fr', 'CDR / framework']]
-    : [['plddt', 'Confidence (pLDDT)'],
-       ['cdr_fr', 'CDR / framework'],
-       ['liability', 'Sequence liabilities'],
-       ['mhc_burden', 'Immunogenicity (MHC-II)']]
+    : isEsmfoldView
+      ? [['plddt', 'Confidence (pLDDT)'],
+         ['cdr_fr', 'CDR / framework'],
+         ['liability', 'Sequence liabilities'],
+         ...mhcOpt]
+      : [['cdr_fr', 'CDR / framework'],              // raw RFD4 backbone — no confidence metric
+         ['liability', 'Sequence liabilities'],
+         ...mhcOpt]
   const [colorBy, setColorBy] = useState<string>('chain')
   useEffect(() => {
-    setColorBy(isComplexView ? 'chain' : 'plddt')  // reset to the structure's default when it changes
+    setColorBy(isComplexView ? 'chain' : isEsmfoldView ? 'plddt' : 'cdr_fr')  // reset on candidate change
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.candidate_id])
   const colored = useQuery({
     queryKey: ['antibody_design', 'color', selected?.candidate_id, colorBy],
     queryFn: () =>
-      api.antibodyDesignColorStructure({ pdb: selected!.pdb, color_by: colorBy, antigen_chain: 'A' }),
+      api.antibodyDesignColorStructure({
+        pdb: selected!.pdb,
+        color_by: colorBy,
+        antigen_chain: 'A',
+        // MHC-II mode reads the run's precomputed per-residue burden — no serving call.
+        mhc_burden: colorBy === 'mhc_burden' ? selected!.mhc_burden ?? null : null,
+      }),
     enabled: !!selected?.pdb,
   })
   const viewerHtml = colored.data?.viewer_html ?? selected?.viewer_html
