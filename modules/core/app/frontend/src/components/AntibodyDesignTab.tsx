@@ -479,6 +479,17 @@ const _AXIS_LABELS: [string, string][] = [
   ['liability_detail', 'Liability sites'],
 ]
 
+// Legend for each "Color by" mode: [swatch hex, label], matching the Mol* themes the viewer uses —
+// the blue→white→red "uncertainty" ramp for coded categories, the AlphaFold pLDDT palette, and the
+// chain-id colors. Rendered inline next to the dropdown so the colors are self-explanatory.
+const COLOR_LEGENDS: Record<string, [string, string][]> = {
+  chain: [['#16a085', 'Antibody'], ['#e67e22', 'Antigen']],
+  epitope_paratope: [['#c0392b', 'Epitope'], ['#e8e8e8', 'Paratope'], ['#4e79c7', 'Other']],
+  cdr_fr: [['#e8e8e8', 'CDR1'], ['#e39a9a', 'CDR2'], ['#c0392b', 'CDR3'], ['#4e79c7', 'Framework']],
+  plddt: [['#0053d6', '≥90'], ['#65cbf3', '70–90'], ['#ffdb13', '50–70'], ['#ff7d45', '<50']],
+  liability: [['#c0392b', 'Liability'], ['#4e79c7', 'Clean']],
+}
+
 function AntibodyResultBody({ runId }: { runId: string }) {
   const status = useQuery({
     queryKey: ['antibody_design', 'status', runId],
@@ -544,12 +555,6 @@ function AntibodyResultBody({ runId }: { runId: string }) {
 
   return (
     <div className="space-y-3 text-sm">
-      <div>
-        <div className="text-xs font-medium text-muted-foreground">Run</div>
-        <div>{status.data?.run_name || runId}</div>
-        <div className="text-xs text-muted-foreground">Stage: {status.data?.job_status || '…'}</div>
-      </div>
-
       {status.data?.job_status !== 'complete' && (
         <p className="text-xs text-muted-foreground">
           This run is still in progress — top candidates appear here once it reaches{' '}
@@ -592,7 +597,7 @@ function AntibodyResultBody({ runId }: { runId: string }) {
 
           {selected && (
             <>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span className="text-xs text-muted-foreground">Color by</span>
                 <select
                   value={colorBy}
@@ -603,6 +608,14 @@ function AntibodyResultBody({ runId }: { runId: string }) {
                     <option key={k} value={k}>{label}</option>
                   ))}
                 </select>
+                {/* Inline legend for the active mode — swatch + label, one after another. */}
+                {(COLOR_LEGENDS[colorBy] ?? []).map(([hex, label]) => (
+                  <span key={label} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                    <span className="inline-block h-2.5 w-2.5 rounded-sm border border-border"
+                          style={{ backgroundColor: hex }} />
+                    {label}
+                  </span>
+                ))}
                 {colored.isFetching && <span className="text-[11px] text-muted-foreground">recoloring…</span>}
               </div>
               <MolstarViewer viewerHtml={viewerHtml} height={420} />
