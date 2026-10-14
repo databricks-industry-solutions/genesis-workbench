@@ -152,6 +152,62 @@ def molstar_html_multibody(pdbs : Union[str, List[str]], names: Optional[Union[s
         return html_as_iframe(html_str)
     else:
         return html_str
+
+
+def molstar_html_complex(pdb: str, name: Optional[str] = None, with_iframe: Optional[bool] = True) -> str:
+    """Render a multi-chain COMPLEX so it reads as a bound complex rather than two separate
+    cartoons. Each chain gets a distinct color (Mol* `chain-id` theme) and a semi-transparent
+    molecular surface is drawn over the cartoon, so a small interface — e.g. a nanobody's three
+    CDR loops packed against an antigen epitope — visibly makes contact instead of looking like
+    two detached blobs. `name` is accepted for signature parity with the single/multi helpers.
+
+    Robustness: `loadStructureFromData` already applies a default (cartoon) preset, and the
+    custom cartoon+surface build runs inside a try/catch — so if the representation API ever
+    changes shape, the viewer degrades to the default preset instead of going blank. The JS uses
+    double quotes only, so it survives both the React `srcDoc` and the single-quoted `srcdoc`
+    iframe wrappers; the base64 is injected via replace() to avoid f-string brace escaping.
+    (Representation recipe verified in-browser against an antibody-antigen complex.)"""
+    logging.info('doing complex-aware molstar')
+    pdb_base64 = base64.b64encode(pdb.encode()).decode()
+    js = """
+                (async function() {
+                    const viewer = new rcsbMolstar.Viewer("viewer", {layoutShowLog: false, backgroundColor: 0x1e1e1e});
+                    await viewer.loadStructureFromData(atob("__PDB_B64__"), "pdb", false);
+                    // loadStructureFromData already draws a chain-id-colored cartoon. Overlay a
+                    // semi-transparent molecular surface per chain so a small interface (e.g. a
+                    // nanobody's three CDR loops against an antigen) reads as contact rather than two
+                    // detached ribbons. Use the high-level structure-hierarchy manager (the raw
+                    // state-tree walk fails because the Structure node is nested, not a root child),
+                    // wrapped so any Mol* API drift degrades to the plain cartoon, never a blank viewer.
+                    try {
+                        await new Promise(function(r){ setTimeout(r, 400); });
+                        const plugin = viewer.plugin;
+                        const current = plugin.managers.structure.hierarchy.current;
+                        for (const s of current.structures) {
+                            for (const c of s.components) {
+                                await plugin.builders.structure.representation.addRepresentation(
+                                    c.cell, { type: "molecular-surface", typeParams: { alpha: 0.4 }, color: "chain-id" });
+                            }
+                        }
+                    } catch (e) { console.log("surface overlay skipped, cartoon kept:", e && e.message); }
+                })();
+    """.replace("__PDB_B64__", pdb_base64)
+    html_str = ("""
+    <!DOCTYPE html>
+    <html>
+        <head>
+            <script src="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.js"></script>
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.css">
+            """ + MOLSTAR_DARK_CSS + """
+        </head>
+        <body>
+            <div id="viewer" style="width: 100%; height: 500px;"></div>
+            <script>""" + js + """</script>
+        </body>
+    </html>""")
+    if with_iframe:
+        return html_as_iframe(html_str)
+    return html_str
     
 
 

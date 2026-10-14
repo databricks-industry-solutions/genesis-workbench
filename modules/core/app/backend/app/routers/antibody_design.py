@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from app.auth import CurrentUserDep
 from app.routers.large_molecule import _build_user_info
 from app.services import antibody_design as ab_pipeline
-from app.services.molstar import molstar_html_singlebody
+from app.services.molstar import molstar_html_complex, molstar_html_singlebody
 
 router = APIRouter(prefix="/api/antibody_design", tags=["antibody_design"])
 
@@ -208,7 +208,15 @@ def antibody_design_top_k(
     candidates = [
         AntibodyCandidate(
             candidate_id=cid, pdb=pdb,
-            viewer_html=molstar_html_singlebody(pdb, name=cid, with_iframe=False),
+            # The `*_complex` structures are the VHH docked to the antigen (two chains) — render them
+            # as a bound complex (chain-distinct colors + semi-transparent surface) so the interface
+            # reads as contact, not two detached cartoons. The single-chain `*_rfd4`/`*_esmfold` VHH
+            # structures keep the plain single-body viewer.
+            viewer_html=(
+                molstar_html_complex(pdb, name=cid, with_iframe=False)
+                if "complex" in cid
+                else molstar_html_singlebody(pdb, name=cid, with_iframe=False)
+            ),
         )
         for cid, pdb in pdbs.items()
     ]
