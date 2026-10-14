@@ -488,6 +488,7 @@ const COLOR_LEGENDS: Record<string, [string, string][]> = {
   cdr_fr: [['#e8e8e8', 'CDR1'], ['#e39a9a', 'CDR2'], ['#c0392b', 'CDR3'], ['#4e79c7', 'Framework']],
   plddt: [['#0053d6', '≥90'], ['#65cbf3', '70–90'], ['#ffdb13', '50–70'], ['#ff7d45', '<50']],
   liability: [['#c0392b', 'Liability'], ['#4e79c7', 'Clean']],
+  mhc_burden: [['#c0392b', 'High ADA risk'], ['#e8e8e8', 'Mod.'], ['#4e79c7', 'Low']],
 }
 
 function AntibodyResultBody({ runId }: { runId: string }) {
@@ -528,7 +529,8 @@ function AntibodyResultBody({ runId }: { runId: string }) {
        ['cdr_fr', 'CDR / framework']]
     : [['plddt', 'Confidence (pLDDT)'],
        ['cdr_fr', 'CDR / framework'],
-       ['liability', 'Sequence liabilities']]
+       ['liability', 'Sequence liabilities'],
+       ['mhc_burden', 'Immunogenicity (MHC-II)']]
   const [colorBy, setColorBy] = useState<string>('chain')
   useEffect(() => {
     setColorBy(isComplexView ? 'chain' : 'plddt')  // reset to the structure's default when it changes

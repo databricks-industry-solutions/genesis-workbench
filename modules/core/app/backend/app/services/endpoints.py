@@ -24,6 +24,7 @@ DISPLAY_TO_UC: dict[str, str] = {
     "PLTNUM Half-Life Stability": "pltnum_v1",
     "DeepSTABp Tm": "deepstabp_v1",
     "MHCflurry Immunogenicity": "mhcflurry_v2",
+    "HLAIIPred": "hlaiipred_v1",
     "Chemprop BBBP": "chemprop_bbbp",
     "Chemprop ClinTox": "chemprop_clintox",
     "Chemprop ADMET": "chemprop_admet",

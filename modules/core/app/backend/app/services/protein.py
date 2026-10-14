@@ -69,3 +69,23 @@ def hit_boltz(
             return entry["pdb"]
         return entry
     raise RuntimeError(f"Boltz returned unexpected payload: {result!r}")
+
+
+def hit_hlaiipred_windows(w: WorkspaceClient, windows: list[str]) -> list[float]:
+    """Query HLAIIPred (MHC-II presentation) for a batch of equal-length peptide windows and return
+    each window's `max_presentation_score`. Used to build a per-residue immunogenicity (ADA) burden
+    heat map: the caller slides a fixed-width window over the sequence, so each query row is one
+    window and its score is that window's presentation. Uses the model's default DRB1 allele panel."""
+    endpoint_name = get_endpoint_name("HLAIIPred")
+    logger.info("Hitting HLAIIPred endpoint: %s (%d windows)", endpoint_name, len(windows))
+    response = w.serving_endpoints.query(
+        name=endpoint_name, inputs=[{"sequence": win} for win in windows]
+    )
+    preds = response.predictions
+    # predictions may be a dict-of-columns or a list-of-rows depending on the serving wrapper.
+    if isinstance(preds, dict) and "max_presentation_score" in preds:
+        return [float(v) for v in preds["max_presentation_score"]]
+    if isinstance(preds, list):
+        return [float(r.get("max_presentation_score", 0.0)) if isinstance(r, dict) else float(r)
+                for r in preds]
+    raise RuntimeError(f"HLAIIPred returned unexpected payload: {preds!r}")

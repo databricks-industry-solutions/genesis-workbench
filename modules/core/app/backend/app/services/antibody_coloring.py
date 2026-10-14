@@ -173,7 +173,43 @@ COLOR_MODES = {
     "cdr_fr": "CDR / framework",
     "plddt": "Confidence (pLDDT)",
     "liability": "Sequence liabilities",
+    "mhc_burden": "Immunogenicity (MHC-II)",
 }
+
+_MHC_WINDOW = 15  # HLAIIPred's peptide window width (15-mer core)
+
+
+def mhc_windows(pdb_str: str, antigen_chain: str = "A", k: int = _MHC_WINDOW
+                ) -> Tuple[List[str], str, List[int]]:
+    """Slide a k-mer window over the VHH chain's sequence for an MHC-II presentation scan. Returns
+    (windows, vhh_chain, resids): the k-mer window strings, the resolved VHH chain id, and the chain's
+    residue ids in order. Empty windows list if the chain is shorter than k (caller should fall back)."""
+    vhh, _ag = _resolve_chains(pdb_str, antigen_chain)
+    res = _ca_residues(pdb_str, vhh)
+    seq = "".join(aa for _, aa in res)
+    resids = [rid for rid, _ in res]
+    if len(seq) < k:
+        return [], vhh, resids
+    windows = [seq[i:i + k] for i in range(0, len(seq) - k + 1)]
+    return windows, vhh, resids
+
+
+def mhc_burden_values(vhh_chain: str, resids: List[int], window_scores: List[float],
+                      k: int = _MHC_WINDOW) -> Dict[Tuple[str, int], float]:
+    """Aggregate per-window MHC-II presentation scores into a per-residue burden: each residue gets the
+    mean score of the windows covering it, scaled to 0-100 for the ramp (high = strong presenter / ADA
+    risk → red; low → blue). Residues not covered by any scored window stay neutral."""
+    values: Dict[Tuple[str, int], float] = {(vhh_chain, rid): _C_NEUTRAL for rid in resids}
+    n = len(resids)
+    nwin = len(window_scores)
+    for i in range(n):
+        lo = max(0, i - k + 1)
+        hi = min(i, nwin - 1)
+        covering = [window_scores[j] for j in range(lo, hi + 1)] if hi >= lo else []
+        if covering:
+            score = sum(covering) / len(covering)          # mean presentation over covering windows
+            values[(vhh_chain, resids[i])] = max(0.0, min(100.0, score * 100.0))
+    return values
 
 
 def compute_coloring(pdb_str: str, color_by: str, antigen_chain: str = "A"

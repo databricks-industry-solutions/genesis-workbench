@@ -19,8 +19,14 @@ from pydantic import BaseModel, Field
 from app.auth import CurrentUserDep
 from app.routers.large_molecule import _build_user_info
 from app.services import antibody_design as ab_pipeline
-from app.services.antibody_coloring import COLOR_MODES, compute_coloring
+from app.services.antibody_coloring import (
+    COLOR_MODES,
+    compute_coloring,
+    mhc_burden_values,
+    mhc_windows,
+)
 from app.services.molstar import molstar_html_colored, molstar_html_complex, molstar_html_singlebody
+from app.services.protein import hit_hlaiipred_windows
 
 router = APIRouter(prefix="/api/antibody_design", tags=["antibody_design"])
 
@@ -252,6 +258,24 @@ def antibody_design_color_structure(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "User email missing from headers")
     if payload.color_by not in COLOR_MODES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unknown color_by '{payload.color_by}'")
+
+    # MHC-II immunogenicity (ADA) burden is the one mode that needs an ML endpoint: slide 15-mers
+    # over the VHH, batch-query HLAIIPred for each window's presentation, aggregate to a per-residue
+    # burden. (Cold HLAIIPred endpoints can take a while — the frontend shows a "recoloring…" state.)
+    if payload.color_by == "mhc_burden":
+        windows, vhh_chain, resids = mhc_windows(payload.pdb, payload.antigen_chain)
+        if windows:
+            try:
+                scores = hit_hlaiipred_windows(WorkspaceClient(), windows)
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
+                                    f"Immunogenicity endpoint unavailable: {str(e)[:200]}")
+            res_values = mhc_burden_values(vhh_chain, resids, scores)
+            html = molstar_html_colored(payload.pdb, res_values=res_values, theme="uncertainty",
+                                        with_surface=False, with_iframe=False)
+            return AntibodyColorResponse(viewer_html=html)
+        # chain too short to window → fall through to the by-chain view
+
     res_values, theme, with_surface = compute_coloring(
         payload.pdb, payload.color_by, payload.antigen_chain)
     html = molstar_html_colored(payload.pdb, res_values=res_values, theme=theme,
