@@ -447,6 +447,7 @@ const _AXIS_LABELS: [string, string][] = [
   ['composite_reward', 'Composite reward'],
   ['boltz', 'Binding (ipTM)'],
   ['plddt', 'Fold pLDDT'],
+  ['self_consistency', 'Self-consistency (scRMSD)'],
   ['solubility', 'Solubility'],
   ['half_life', 'Half-life'],
   ['thermostab', 'Tm'],
@@ -476,7 +477,12 @@ function AntibodyResultBody({ runId }: { runId: string }) {
   )
   const trajRow = useMemo(() => {
     const rows = status.data?.trajectory ?? []
-    return rows.find((r) => String(r.candidate_id) === String(selected?.candidate_id))
+    // Top-K candidate ids carry a view suffix (…_complex / _rfd4 / _esmfold, one PDB per view),
+    // but the reward trajectory keys the base candidate (iter{N}_cand{M}). Strip the suffix so the
+    // per-axis scores match the selected view (any of a candidate's views shows that candidate's row).
+    const base = (id: string) => id.replace(/_(complex|rfd4|esmfold)$/, '')
+    const want = base(String(selected?.candidate_id ?? ''))
+    return rows.find((r) => base(String(r.candidate_id)) === want)
   }, [status.data, selected])
 
   const download = () => {
