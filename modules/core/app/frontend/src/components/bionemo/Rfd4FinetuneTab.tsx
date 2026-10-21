@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 
 import { api } from '@/api/client'
+import { DispatchSuccess } from '@/components/DispatchSuccess'
 import { RunSearchSection } from '@/components/RunSearchSection'
 import type { DBRunRow } from '@/types/api'
 
@@ -103,14 +104,18 @@ export function Rfd4FinetuneTab() {
 
           <label className="block text-xs">
             <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
-              Training data dir (UC volume; parquet manifest + CIFs)
+              Training data dir — blank = bundled tutorial dataset
             </span>
             <input
               value={trainData}
               onChange={(e) => setTrainData(e.target.value)}
-              placeholder="/Volumes/…/rfd4_proteina/ft_data"
+              placeholder="blank → staged tutorial dataset  ·  or /Volumes/…/your_ft_data (parquet manifest + CIFs)"
               className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
             />
+            <span className="mt-1 block text-[10px] text-muted-foreground">
+              Leave blank to fine-tune on the staged tutorial set (tiny PLINDER subset). Or point at your
+              own UC-Volume dir with a parquet manifest + CIFs.
+            </span>
           </label>
 
           <label className="block text-xs">
@@ -179,13 +184,11 @@ export function Rfd4FinetuneTab() {
           </button>
 
           {start.data && (
-            <p className="text-[11px] text-muted-foreground">
-              ✓ Job dispatched (run {start.data.job_run_id}).{' '}
-              <a href={start.data.run_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
-                View job run ↗
-              </a>{' '}
-              — track progress in Search Past Runs below.
-            </p>
+            <DispatchSuccess
+              jobRunId={start.data.job_run_id}
+              runUrl={start.data.run_url}
+              runName={runName}
+            />
           )}
           {start.error && (
             <p className="text-[11px] text-destructive">{String(start.error)}</p>

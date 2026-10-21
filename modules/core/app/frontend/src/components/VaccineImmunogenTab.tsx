@@ -255,7 +255,7 @@ export function VaccineImmunogenTab() {
             {start.isPending ? 'Dispatching…' : 'Design immunogens'}
           </button>
 
-          {start.data && <DispatchSuccess jobRunId={start.data.job_run_id} runUrl={start.data.run_url} />}
+          {start.data && <DispatchSuccess jobRunId={start.data.job_run_id} runUrl={start.data.run_url} runName={runName} />}
           {start.error && (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
               {String(start.error)}

@@ -43,6 +43,14 @@ async def lifespan(_: FastAPI):
         logger.info("Genesis Workbench lib initialized")
     except Exception as e:
         logger.warning("Lib initialization failed at startup: %s. Endpoints that need it will fail.", e)
+    # Pre-warm the Vortex node catalog so the first load is instant instead of re-running the
+    # deployment/job-availability queries on every request (cached for the app's lifetime).
+    try:
+        from app.services.ai_canvas import build_catalog
+        n = len(build_catalog())
+        logger.info("Vortex catalog pre-warmed at startup (%d nodes)", n)
+    except Exception as e:
+        logger.warning("Vortex catalog pre-warm failed: %s. Will lazy-load on first request.", e)
     yield
 
 

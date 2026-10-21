@@ -332,7 +332,7 @@ export function GuidedMoleculeOptimizationTab() {
             {start.isPending ? 'Starting…' : 'Start optimization'}
           </button>
           {start.data && (
-            <DispatchSuccess jobRunId={start.data.job_run_id} runUrl={start.data.run_url} />
+            <DispatchSuccess jobRunId={start.data.job_run_id} runUrl={start.data.run_url} runName={runName} />
           )}
           {start.error && (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
