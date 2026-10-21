@@ -1,6 +1,6 @@
 # Genesis Workbench — Changelog
 
-## Unreleased (branch `feature/serverless-gpu-jobs`) — serverless migration + genomics/single-cell deploy fixes + RFD4-Proteina public-release refresh
+## v3.0.0 (2026-10-21) — RFD4-Proteina design suite (de-novo · antibody · vaccine) · serverless GPU + Express serving · Boltz-2 affinity
 
 Migrates module jobs off classic clusters to **serverless** (to bypass the workshop's EC2 GPU quota=0 and cut
 cluster-start time), hardens deploy-time sample-data staging, and refreshes all RFD4-Proteina references for the public release.
