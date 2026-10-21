@@ -10,40 +10,25 @@ resources:
       tasks:
         - task_key: download_reference_genome
           max_retries: 0
+          # Classic cluster (NOT serverless): 01_download_reference_genome.py uses %sh +
+          # /local_disk0 (neither exists on serverless) and pulls the ~13 GB reference
+          # FASTA + BWA index + sample VCF. The big files now come from the fast AWS S3
+          # mirror; i3.4xlarge has ample local NVMe for the /local_disk0 staging.
           job_cluster_key: gwas_setup_cluster
+          timeout_seconds: 5400
           notebook_task:
             notebook_path: ../notebooks/01_download_reference_genome.py
             source: WORKSPACE
 
         - task_key: initialize
           disable_auto_optimization: true
+          job_cluster_key: gwas_setup_cluster
           depends_on:
             - task_key: download_reference_genome
           notebook_task:
             notebook_path: ../notebooks/initialize.py
           max_retries: 0
-          timeout_seconds: 600
-
-      environments:
-        - environment_key: default
-          spec:
-            client: '4'
-
-      parameters:
-        - name: catalog
-          default: ${var.core_catalog_name}
-        - name: schema
-          default: ${var.core_schema_name}
-        - name: sql_warehouse_id
-          default: ${var.sql_warehouse_id}
-        - name: parabricks_alignment_job_id
-          default: ${resources.jobs.parabricks_alignment.id}
-        - name: gwas_analysis_job_id
-          default: ${resources.jobs.gwas_analysis.id}
-        - name: user_email
-          default: ${var.current_user}
-        - name: databricks_app_names
-          default: genesis-workbench:mcp-genesis-workbench
+          timeout_seconds: 1800
 
       job_clusters:
         - job_cluster_key: gwas_setup_cluster
@@ -62,5 +47,21 @@ resources:
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD
             num_workers: 0
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: parabricks_alignment_job_id
+          default: ${resources.jobs.parabricks_alignment.id}
+        - name: gwas_analysis_job_id
+          default: ${resources.jobs.gwas_analysis.id}
+        - name: user_email
+          default: ${var.current_user}
+        - name: databricks_app_names
+          default: genesis-workbench:mcp-genesis-workbench
 
       tags: ${var.common_resource_tags}

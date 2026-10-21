@@ -67,7 +67,7 @@ Stage 5: Ranking & Return
 
 1. **Download sequences** (`01_download_sequences.py`): UniRef90 FASTA (~40GB)
 2. **Create Delta tables** (`02_create_delta_tables.py`): Parse FASTA into `sequence_db` table
-3. **Batch embed** (`03_batch_embed_sequences.py`): Compute ESM-2 embeddings for all sequences using GPU Spark UDF
+3. **Batch embed** (`03_batch_embed_sequences_ray.py`): Compute ESM-2 embeddings for all sequences via Ray across A10 serverless-GPU workers (single-A10 `03_batch_embed_sequences_sgc.py` fallback)
 4. **Create vector index** (`04_create_vector_index.py`): Build Databricks Vector Search Delta Sync index
 
 ### Key Files

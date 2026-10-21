@@ -3,8 +3,9 @@
 # MAGIC # Batch Embed Protein Sequences with ESM-2 — Serverless GPU + Ray Data
 # MAGIC
 # MAGIC Ray Data variant of `03_batch_embed_sequences_sgc.py`. Uses
-# MAGIC `serverless_gpu.ray.ray_launch` to bring up a Ray cluster across 8 A10 SGC nodes,
-# MAGIC then `ray.data.read_parquet → map_batches(EmbedActor) → write_parquet` to
+# MAGIC `serverless_gpu.ray.ray_launch` to bring up a Ray cluster across `num_gpu_workers`
+# MAGIC A10 serverless-GPU nodes (default 4), then
+# MAGIC `ray.data.read_parquet → map_batches(EmbedActor) → write_parquet` to
 # MAGIC distribute work without manual hash sharding.
 # MAGIC
 # MAGIC Compared to `_sgc.py`:
@@ -31,7 +32,10 @@
 # COMMAND ----------
 
 # DBTITLE 1,Install dependencies
-# MAGIC %pip install -q torch==2.3.1 transformers==4.41.2 pyarrow==15.0.2
+# torch/CUDA are preinstalled on the serverless GPU AI runtime (don't pin torch —
+# a reinstall risks a cuDNN mismatch). hf_transfer is required because the runtime
+# sets HF_HUB_ENABLE_HF_TRANSFER=1 (same as _sgc.py); ray[data] drives the fan-out.
+# MAGIC %pip install -q transformers==4.41.2 pyarrow==15.0.2 hf_transfer==0.1.9 "ray[data]"
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
@@ -42,20 +46,31 @@
 # COMMAND ----------
 
 # DBTITLE 1,Read widget values
+# num_gpu_workers + max_sequences are job parameters so a run can be tuned without
+# editing the notebook (default: 4 A10 Ray workers over the 1M-sequence corpus).
+dbutils.widgets.text("num_gpu_workers", "4", "Serverless-GPU A10 Ray workers")
+dbutils.widgets.text("max_sequences", "1000000", "Max sequences to embed")
+# Blank = production target `{catalog}.{schema}.sequence_embeddings`. Set to a scratch
+# table name to validate a bounded run without touching the live VS source table.
+dbutils.widgets.text("target_table", "", "Target table override (blank = sequence_embeddings)")
+
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 volume_name = dbutils.widgets.get("volume_name")
+num_gpu_workers = dbutils.widgets.get("num_gpu_workers")
+max_sequences = dbutils.widgets.get("max_sequences")
+_target_override = dbutils.widgets.get("target_table").strip()
 
 # COMMAND ----------
 
 # DBTITLE 1,Configuration
-NUM_WORKERS = 8                            # 8 A10 single-GPU SGC nodes
-MAX_SEQUENCES = 1_000_000
+NUM_WORKERS = int(num_gpu_workers)         # serverless-GPU A10 Ray workers (default 4)
+MAX_SEQUENCES = int(max_sequences)
 BATCH_SIZE = 32
 ESM2_MODEL = "facebook/esm2_t33_650M_UR50D"
 
 SOURCE_TABLE = f"{catalog}.{schema}.sequence_db"
-TARGET_TABLE = f"{catalog}.{schema}.sequence_embeddings"
+TARGET_TABLE = _target_override or f"{catalog}.{schema}.sequence_embeddings"
 # Stage paths on a UC Volume — both ends of the Ray run use these because UC
 # Volumes are FUSE-accessible from non-Spark clients (Ray, pyarrow).
 # Spark fills the input stage; Ray writes parquet to the output stage in

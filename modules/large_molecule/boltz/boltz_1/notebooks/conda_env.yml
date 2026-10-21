@@ -13,6 +13,18 @@ dependencies:
     - --extra-index-url https://download.pytorch.org/whl/cu121
     - torch==2.3.1+cu121
     - torchvision==0.18.1+cu121
-    - mlflow==2.15.1
-    - cloudpickle==2.2.1
-    - /model/artifacts/dbboltz
+    # mlflow/cloudpickle MUST match the logging runtime (serverless GPU: mlflow
+    # 2.22.0, cloudpickle 3.0.0) or the serving container fails to parse/unpickle
+    # the model ("Phase: mlflow_parse ... AttributeError"). See esmfold notes.
+    - mlflow==2.22.0
+    - cloudpickle==3.0.0
+    # boltz + its only extra runtime imports (rdkit -> Chem, absl -> logging).
+    # The dbboltz package itself ships via mlflow `code_paths` (see the notebook),
+    # NOT a `- /model/artifacts/dbboltz` pip line: that absolute path does NOT exist
+    # during the serving image build (the build runs with the model at ./model, and
+    # modern pip rejects the missing path) — it broke the container build outright.
+    # boltz==2.2.1 transitively pulls numpy<2.0, pandas, scipy, numba, rdkit, … .
+    - boltz==2.2.1
+    - rdkit
+    - absl-py
+    - setuptools<82

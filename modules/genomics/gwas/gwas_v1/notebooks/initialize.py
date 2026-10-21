@@ -7,7 +7,7 @@ dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("parabricks_alignment_job_id", "1234", "Parabricks Alignment Job ID")
 dbutils.widgets.text("gwas_analysis_job_id", "1234", "GWAS Analysis Job ID")
 dbutils.widgets.text("user_email", "a@b.com", "Email of the user running the deploy")
-dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
+dbutils.widgets.text("sql_warehouse_id", "", "SQL Warehouse Id")
 dbutils.widgets.text("databricks_app_names", "genesis-workbench:mcp-genesis-workbench", "Databricks App Names (colon/comma-separated, UI + MCP)")
 
 catalog = dbutils.widgets.get("catalog")
@@ -70,7 +70,7 @@ query = f"""
             ('parabricks_alignment_job_id', '{parabricks_alignment_job_id}', 'genomics'),
             ('gwas_analysis_job_id', '{gwas_analysis_job_id}', 'genomics'),
             ('gwas_reference_genome_path', '{ref_genome_path}', 'genomics'),
-            ('gwas_sample_vcf_path', '/Volumes/{catalog}/{schema}/gwas_data/sample_vcf/ALL.chr6.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz', 'genomics'),
+            ('gwas_sample_vcf_path', '/Volumes/{catalog}/{schema}/gwas_data/sample_vcf/ALL.chr6.phase3_shapeit2_mvncall_integrated_v3plus_nounphased.rsID.genotypes.GRCh38_dbSNP_no_SVs.vcf.gz', 'genomics'),
             ('gwas_sample_phenotype_path', '/Volumes/{catalog}/{schema}/gwas_data/sample_phenotype/breast_cancer_phenotype.tsv', 'genomics')
         AS src(key, value, module)
     ) AS source
@@ -118,6 +118,52 @@ if os.path.exists(source_phenotype):
     print(f"Copied breast cancer phenotype data to {dest}")
 else:
     print(f"Phenotype file not found at {source_phenotype}, skipping")
+
+# COMMAND ----------
+
+# Download sample FASTQ files from 1000 Genomes for the Variant Calling demo so the
+# gwas module is self-contained. The app's Variant Calling tab prefills these paths, but
+# previously ONLY the variant_annotation module staged them — deploying gwas on its own
+# left those defaults pointing at missing files. HTTPS (not FTP): serverless egress does
+# not reliably allow FTP. curl with retries + stall detection pulls the ~3.6 GB reliably;
+# on failure the partial file is removed so a re-run doesn't treat a truncated download as
+# complete. Idempotent: existing files are skipped (a no-op if variant_annotation already
+# staged them).
+import subprocess
+
+sample_fastq_dir = f"/Volumes/{catalog}/{schema}/gwas_data/sample_fastq"
+os.makedirs(sample_fastq_dir, exist_ok=True)
+
+# AWS Open Data S3 mirror of 1000 Genomes — fast/reliable from AWS; EBI HTTPS timed out.
+fastq_base_url = "https://1000genomes.s3.amazonaws.com/phase3/data/HG00096/sequence_read"
+fastq_files = {
+    "sample_1.fq.gz": f"{fastq_base_url}/SRR062634_1.filt.fastq.gz",
+    "sample_2.fq.gz": f"{fastq_base_url}/SRR062634_2.filt.fastq.gz",
+}
+
+for dest_name, url in fastq_files.items():
+    dest_path = os.path.join(sample_fastq_dir, dest_name)
+    # Only skip a fully-sized file; a prior run's timeout can leave a 0-byte/partial
+    # that an existence-only guard would wrongly treat as complete. These are multi-GB.
+    if os.path.exists(dest_path) and os.path.getsize(dest_path) > 1_000_000:
+        print(f"{dest_name} already exists ({os.path.getsize(dest_path)} bytes), skipping")
+        continue
+    if os.path.exists(dest_path):
+        print(f"Removing partial {dest_name} ({os.path.getsize(dest_path)} bytes) and re-downloading")
+        os.remove(dest_path)
+    print(f"Downloading {dest_name} from {url} ...")
+    try:
+        subprocess.run(
+            ["curl", "-L", "--fail", "--retry", "5", "--retry-delay", "10",
+             "--connect-timeout", "30", "--speed-limit", "10000", "--speed-time", "60",
+             "-o", dest_path, url],
+            check=True,
+        )
+    except Exception:
+        if os.path.exists(dest_path):
+            os.remove(dest_path)  # don't leave a partial a re-run would treat as complete
+        raise
+    print(f"Downloaded {dest_name}")
 
 # COMMAND ----------
 

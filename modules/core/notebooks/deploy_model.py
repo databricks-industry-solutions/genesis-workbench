@@ -38,7 +38,7 @@ sample_params_as_json = """
 
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "genesis_schema", "Schema")
-dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
+dbutils.widgets.text("sql_warehouse_id", "", "SQL Warehouse Id")
 dbutils.widgets.text("gwb_model_id", str(gwb_model_id), "Model Id")
 dbutils.widgets.text("deployment_name", "my_finetuned_deployment", "Deployment Name")
 dbutils.widgets.text("deployment_description", "description", "Deployment Description")

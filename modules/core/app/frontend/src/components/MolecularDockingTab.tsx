@@ -5,11 +5,13 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { api } from '@/api/client'
 import { ClipboardPaste } from '@/components/ClipboardPaste'
 import { DataTable } from '@/components/DataTable'
+import { DruglikenessPanel, MetricsStrip } from '@/components/DockingMetrics'
 import { MolstarViewer } from '@/components/MolstarViewer'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
 import { useSseMutation } from '@/hooks/useSseMutation'
 import type { DockingPose, MolecularDockingResponse } from '@/types/api'
 import { StructurePicker } from '@/components/StructurePicker'
+import { cn } from '@/lib/utils'
 
 function ts(): string {
   const d = new Date()
@@ -31,6 +33,7 @@ export function MolecularDockingTab() {
   const [experiment, setExperiment] = useState('gwb_molecular_docking')
   const [runName, setRunName] = useState(`molecular_docking_${ts()}`)
   const [selectedRank, setSelectedRank] = useState<number | null>(null)
+  const [dockView, setDockView] = useState<'overlay' | 'hydrophobicity'>('hydrophobicity')
 
   // Seed the form once the example payload loads.
   useEffect(() => {
@@ -138,7 +141,7 @@ export function MolecularDockingTab() {
             <input
               value={smiles}
               onChange={(e) => setSmiles(e.target.value)}
-              placeholder="COc(cc1)ccc1C#N"
+              placeholder="CC1=C(C=C(C=C1)NC(=O)C2=CC=C(C=C2)CN3CCN(CC3)C)NC4=NC=CC(=N4)C5=CN=CC=C5"
               className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
             />
           </label>
@@ -284,7 +287,53 @@ export function MolecularDockingTab() {
                 </div>
               ) : null}
 
-              <MolstarViewer viewerHtml={selectedPose?.viewer_html ?? null} height={520} />
+              {selectedPose?.viewer_html_hydrophobicity ? (
+                <div className="mb-2 flex flex-wrap items-center gap-1">
+                  <span className="mr-1 text-xs uppercase tracking-wide text-muted-foreground">View</span>
+                  {(
+                    [
+                      ['hydrophobicity', 'Hydrophobicity surface'],
+                      ['overlay', 'Cartoon + pose'],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setDockView(id)}
+                      className={cn(
+                        'rounded-md border px-3 py-2 text-xs transition-colors',
+                        dockView === id
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border text-muted-foreground hover:bg-accent',
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              <MolstarViewer
+                viewerHtml={
+                  (dockView === 'hydrophobicity'
+                    ? (selectedPose?.viewer_html_hydrophobicity ?? selectedPose?.viewer_html)
+                    : selectedPose?.viewer_html) ?? null
+                }
+                height={520}
+              />
+
+              {selectedPose && !selectedPose.error && (
+                <MetricsStrip
+                  items={[
+                    { label: 'Dock conf.', value: selectedPose.confidence != null ? selectedPose.confidence.toFixed(3) : '', title: 'DiffDock pose confidence' },
+                    { label: 'Contacts', value: selectedPose.contact_count != null ? String(selectedPose.contact_count) : '', title: 'Heavy-atom target–ligand contacts within 4 Å' },
+                    { label: 'Site residues', value: selectedPose.n_site_residues != null ? String(selectedPose.n_site_residues) : '', title: 'Binding-site residues within 5 Å of the ligand' },
+                    { label: 'Buried area', value: selectedPose.buried_area != null ? `${selectedPose.buried_area} Å²` : '', title: 'Ligand SASA buried in this pose (higher = more enclosed)' },
+                  ]}
+                />
+              )}
+
+              <DruglikenessPanel dl={dock.data.ligand_druglikeness} />
 
               <details className="rounded-md border border-border">
                 <summary className="cursor-pointer px-4 py-2 text-sm">

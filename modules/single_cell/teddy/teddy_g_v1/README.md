@@ -53,37 +53,38 @@ To pin a specific HuggingFace revision (recommended for reproducibility):
 
 | # | Task | Cluster | Notebook | Description |
 |---|---|---|---|---|
-| 1 | `register_teddy_task` | T4 GPU | `01_register_teddy.py` | Downloads HF snapshot, wraps encoder in MLflow PyFunc, registers in UC. |
-| 2 | `import_teddy_model_task` | serverless | `02_import_model_gwb.py` | Imports model into GWB, deploys `gwb_teddy_endpoint` (**GPU_MEDIUM / A10** — 400M won't fit T4). |
+| 1 | `register_teddy_task` | GPU (serverless) | `01_register_teddy.py` | Downloads HF snapshot, wraps encoder in MLflow PyFunc, registers in UC. |
+| 2 | `import_teddy_model_task` | serverless | `02_import_model_gwb.py` | Imports model into GWB, deploys `gwb_teddy_endpoint` (**GPU_MEDIUM / A10**). |
 | 3 | `extract_gene_mapping_task` | serverless | `06_extract_gene_mapping.py` | Pulls HGNC→ENSG mapping from CELLxGENE Census var; writes JSON to Volume. |
-| 4 | `reembed_reference_task` | **8× A10 multinode** | `03_reembed_reference.py` | **Heavy.** Pulls ~2M Census cells, embeds with bf16+batch=48 via `mapInPandas`, writes `teddy_cells` Delta. |
-| 5 | `create_vs_index_task` | serverless | `04_create_teddy_vs_index.py` | Creates `gwb_teddy_vs_endpoint` + `teddy_cell_index` (Delta Sync) — or syncs existing. |
+| 4 | `stage_reference_task` | GPU (serverless) | `03a_stage_reference.py` | **Network-bound.** Fetches ~2M Census cells and precomputes the TEDDY top-k gene **token IDs** (GPU `torch.topk`), writing resumable chunked parquet to the cache Volume. |
+| 5 | `reembed_reference_task` | **Ray on serverless GPU** | `03b_embed_reference_ray.py` | **GPU-bound.** Reads the staged tokens (no Census), runs the TEDDY forward at bf16+batch=48 across Ray A10 workers, writes `teddy_cells` Delta. |
+| 6 | `create_vs_index_task` | serverless | `04_create_teddy_vs_index.py` | Creates `gwb_teddy_vs_endpoint` + `teddy_cell_index` (Delta Sync) — or syncs existing. |
 
-Tasks 1, 3 run in parallel; 2, 4 fan out after 1; 5 depends on 4.
+Tasks 2, 3, 4 fan out after 1; 5 depends on 4; 6 depends on 5.
 
 After the DAG succeeds, the **TEDDY Annotation** workflow under the GWB app's UMAP tab is fully live.
 
-### Reembed cluster shape (task #4)
+### Reembed configuration (tasks #4–#5)
 
-The 2 M-cell reference embed runs on a **multi-node** GPU cluster, not the single-node A10 used in earlier revisions:
+The 2 M-cell reference embed runs on **serverless GPU via Ray**, split into a network-bound STAGE (03a) and a GPU-bound EMBED (03b) so the A10s never idle on Census I/O:
 
-- **8 workers × 1× A10 (g5.16xlarge or per-cloud equivalent) + A10 driver.**
-- **On-demand for all 8 workers + driver**, no spot fallback (the bundle declares `availability: ON_DEMAND` per cloud target). A10 spot reclamation rate at multi-hour run length is too high.
-- `spark.task.resource.gpu.amount=1` pins exactly one Spark task per GPU — no CUDA-context contention.
-- Inside the UDF: each Spark worker loads TEDDY-G 400M once (per process), opens its own CELLxGENE Census handle, fetches X for its partition via `cellxgene_census.get_anndata(obs_coords=...)`, embeds at batch=48 with bf16 autocast, yields embeddings. GPU-side `torch.topk` over the 60,530-gene matrix (CPU topk was a bottleneck).
-- **Partitioning:** `repartitionByRange("soma_joinid", 40)` — 40 partitions of ~50 k cells, sorted by Census joinid so each partition reads a contiguous joinid range from TileDB-SOMA on S3 (sequential reads, not random point reads). This is the critical perf knob — see the CHANGELOG for the 256-partition bug it fixed.
-- Wall-clock on the validated 8-A10 build: **~3 h 15 min for 2 M cells** (the full DAG end-to-end is ~5 h including endpoint deploy + VS index initial sync).
+- **STAGE (`03a_stage_reference.py`)** — opens CELLxGENE Census, builds a deterministic stratified obs sample, and across Ray A10 workers fetches X via `cellxgene_census.get_anndata(obs_coords=...)` and precomputes the TEDDY input (top-k gene **token IDs** via GPU `torch.topk` over the 60,530-gene matrix). Writes one resumable `chunk_<ts>/` parquet sub-dir per run — an interrupted stage never loses progress. Batches are sorted by `soma_joinid` so each Ray batch reads a contiguous joinid range from TileDB-SOMA on S3 (sequential reads, not random point reads — the critical perf knob).
+- **EMBED (`03b_embed_reference_ray.py`)** — Ray reads the LOCAL staged tokens (no Census), runs the pure TEDDY forward at bf16 + batch=48 across the A10 workers, mean-pools, and promotes the parquet output into the managed `teddy_cells` Delta via CTAS. With the network fetch gone this phase is GPU-bound → scales ~linearly with workers.
+- **Ray workers × GPU_1xA10 serverless** — default **4** (`--var=num_gpu_workers=N`); serverless GPU bypasses the EC2 GPU vCPU quota (critical where GPU quota = 0).
+- **Reading the chunked stage with Spark** needs `.option("recursiveFileLookup","true")` — the per-run `chunk_<ts>/` sub-dirs are not `key=value` partitions, so Spark's default parquet reader misses them (`UNABLE_TO_INFER_SCHEMA`). Ray's `read_parquet` recurses on its own.
+- Wall-clock on the validated 4-worker serverless build: **stage ~30 min + a fast GPU embed for 2 M cells** — well under the old single-notebook ~5.5 h bottleneck (the full DAG end-to-end also includes endpoint deploy + VS index initial sync).
 
 ### Cost transparency
 
 Defaults:
-- 8 × A10 g5.16xlarge worker nodes + 1 driver, on-demand, for ~3-4 hours.
+- 4 × serverless GPU (GPU_1xA10) Ray workers, for ~1-2 hours (stage ~30 min + embed).
 - One-time cost per workspace (the post-deploy idempotency check makes re-deploys a no-op when the reference is already built — see below).
 
 Override via:
 - `--var=teddy_reembed_target_n_cells=500000` for a quick install (~30-45 min)
 - `--var=teddy_reembed_per_stratum_cap=10000` for a more balanced (but smaller) sample
 - `--var=teddy_reembed_census_version=<lts-tag>` to pin a different Census release
+- `--var=num_gpu_workers=8` to scale up Ray workers for faster embedding (default 4)
 - `--var=teddy_model_size=70M` if you accept the immune cell-type collapse (NOT recommended, see Variants section)
 
 ### Idempotency — re-deploys are no-ops when the reference is complete

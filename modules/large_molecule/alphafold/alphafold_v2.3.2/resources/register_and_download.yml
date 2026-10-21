@@ -15,10 +15,10 @@ resources:
 
         - task_key: register_run_job
           max_retries: 0
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/register_alphafold_job.py
             source: WORKSPACE
-          job_cluster_key: download_common_files_cluster
           health:
             rules:
               - metric: RUN_DURATION_SECONDS
@@ -29,10 +29,10 @@ resources:
           max_retries: 0
           depends_on:
             - task_key: register_run_job
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/download_common_files.py
             source: WORKSPACE
-          job_cluster_key: download_common_files_cluster
           health:
             rules:
               - metric: RUN_DURATION_SECONDS
@@ -41,10 +41,10 @@ resources:
 
         - task_key: download_mgnifyPLUS
           max_retries: 0
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/download_mgnify_smallbfd_pdb70_pdbseqres.py
             source: WORKSPACE
-          job_cluster_key: download_mgnifyPLUS_cluster
           health:
             rules:
               - metric: RUN_DURATION_SECONDS
@@ -53,10 +53,10 @@ resources:
           
         - task_key: download_params
           max_retries: 0
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/download_params.py
             source: WORKSPACE
-          job_cluster_key: download_params_cluster
           timeout_seconds: 7200
           health:
             rules:
@@ -66,10 +66,10 @@ resources:
           
         - task_key: download_uniprot
           max_retries: 0
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/download_uniprot.py
             source: WORKSPACE
-          job_cluster_key: download_uniprot_cluster
           timeout_seconds: 21600
           health:
             rules:
@@ -79,10 +79,10 @@ resources:
           
         - task_key: download_unirefs
           max_retries: 0
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/download_uniref90_uniref30.py
             source: WORKSPACE
-          job_cluster_key: download_unirefs_cluster
           timeout_seconds: 36000
           health:
             rules:
@@ -92,10 +92,10 @@ resources:
           
         - task_key: pdb_mmcif
           max_retries: 0
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/download_pdb_mmcif.py
             source: WORKSPACE
-          job_cluster_key: pdb_mmcif_cluster
           health:
             rules:
               - metric: RUN_DURATION_SECONDS
@@ -113,117 +113,17 @@ resources:
           default: alphafold
         - name: user_email
           default: ${var.current_user}
-        - name: sql_warehouse_id 
+        - name: sql_warehouse_id
           default: ${var.sql_warehouse_id}
         - name: run_alphafold_job_id
           default: ${resources.jobs.alphafold.id}
         - name: databricks_app_names
           default: genesis-workbench:mcp-genesis-workbench
 
-              
-      job_clusters:
-
-        - job_cluster_key: download_common_files_cluster
-          new_cluster:
-            cluster_name: ""
-            spark_version: 15.4.x-scala2.12
-            spark_conf:
-              spark.master: local[*, 4]
-              spark.databricks.cluster.profile: singleNode
-            node_type_id: ${var.cpu_node_type}
-            driver_node_type_id: ${var.cpu_node_type}
-            custom_tags:
-              ResourceClass: SingleNode
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            runtime_engine: STANDARD
-            num_workers: 0
-            # On-demand avoids spot preemption during multi-hour model downloads
-
-        - job_cluster_key: download_params_cluster
-          new_cluster:
-            cluster_name: ""
-            spark_version: 15.4.x-scala2.12
-            spark_conf:
-              spark.master: local[*, 4]
-              spark.databricks.cluster.profile: singleNode
-            node_type_id: ${var.cpu_node_type}
-            driver_node_type_id: ${var.cpu_node_type}
-            custom_tags:
-              ResourceClass: SingleNode
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            runtime_engine: STANDARD
-            num_workers: 0
-            cluster_log_conf:
-              dbfs:
-                destination: dbfs:/cluster-logs/alphafold-downloads
-
-        - job_cluster_key: download_unirefs_cluster
-          new_cluster:
-            cluster_name: ""
-            spark_version: 15.4.x-scala2.12
-            spark_conf:
-              spark.master: local[*, 4]
-              spark.databricks.cluster.profile: singleNode
-            node_type_id: ${var.cpu_node_type}
-            driver_node_type_id: ${var.cpu_node_type}
-            custom_tags:
-              ResourceClass: SingleNode
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            runtime_engine: STANDARD
-            num_workers: 0
-
-        - job_cluster_key: download_mgnifyPLUS_cluster
-          new_cluster:
-            cluster_name: ""
-            spark_version: 15.4.x-scala2.12
-            spark_conf:
-              spark.master: local[*, 4]
-              spark.databricks.cluster.profile: singleNode
-            node_type_id: ${var.cpu_node_type}
-            driver_node_type_id: ${var.cpu_node_type}
-            custom_tags:
-              ResourceClass: SingleNode
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            runtime_engine: STANDARD
-            num_workers: 0
-
-        - job_cluster_key: download_uniprot_cluster
-          new_cluster:
-            cluster_name: ""
-            spark_version: 15.4.x-scala2.12
-            spark_conf:
-              spark.master: local[*, 4]
-              spark.databricks.cluster.profile: singleNode
-            node_type_id: ${var.cpu_node_type}
-            driver_node_type_id: ${var.cpu_node_type}
-            custom_tags:
-              ResourceClass: SingleNode
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            runtime_engine: STANDARD
-            num_workers: 0
-
-        - job_cluster_key: pdb_mmcif_cluster
-          new_cluster:
-            spark_version: 15.4.x-scala2.12
-            spark_conf:
-              spark.master: local[*, 4]
-              spark.databricks.cluster.profile: singleNode
-            node_type_id: ${var.cpu_node_type}
-            driver_node_type_id: ${var.cpu_node_type}
-            custom_tags:
-              ResourceClass: SingleNode
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            runtime_engine: STANDARD
-            num_workers: 0
-            cluster_log_conf:
-              dbfs:
-                destination: dbfs:/cluster-logs/alphafold-downloads
+      environments:
+        - environment_key: default
+          spec:
+            client: '4'
 
       tags: ${var.common_resource_tags}
 

@@ -1,194 +1,164 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # Run only the featurization process of Alphafold v2.3.2
-# MAGIC
-# MAGIC - This notebook sets up the environment for running Alphafold v2.3.2.
-# MAGIC - It installs Miniconda and creates a conda environment from a YAML file.
-# MAGIC - This is not normally recommended for distributed workloads, but since we will distribute via Workflows and each job runs on 8-16 cores max, single worker is reasonable here 
-# MAGIC - The notebook clones the Alphafold repository and checks out version 2.3.2.
-# MAGIC   - We use a (Databricks) modified version of the alphafold run script that can run either featurization or folding inpdendently
-# MAGIC   - this is essential for splitting CPU and GPU tasks for efficiency
-# MAGIC - It includes a Python script to handle protein sequences and prepare input files.
-# MAGIC - The script determines if the input is a monomer or multimer and writes the appropriate FASTA file.
-# MAGIC - Environment variables are set for the FASTA file and mode.
-# MAGIC - The output directory is created if it does not exist.
+# MAGIC # AlphaFold featurize — serverless CPU (pyhmmer MSA, no conda)
+# MAGIC Builds the AlphaFold input features on **serverless CPU** with `pyhmmer`
+# MAGIC (pip-only; bundles HMMER's jackhmmer) instead of the classic
+# MAGIC Miniconda/`conda env`/binary-jackhmmer bootstrap. Runs the reduced-DBs MSA
+# MAGIC (jackhmmer over uniref90 + mgnify + small_bfd), builds a template-free feature
+# MAGIC dict (paired with the template-free fold models), and pickles it to the same
+# MAGIC Volume path the fold step + GWB app expect:
+# MAGIC `/Volumes/{catalog}/{schema}/{model_volume}/results/{run_id}/{run_id}/features.pkl`.
 
 # COMMAND ----------
 
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("schema", "genesis_schema", "Schema")
+dbutils.widgets.text("schema", "genesis_workbench", "Schema")
 dbutils.widgets.text("model_volume", "alphafold", "Volume")
 dbutils.widgets.text("run_id", "b3c99d3b49ba4893aa402a4342a70cd1", "Run Id")
-dbutils.widgets.text("protein_sequence", "QVQLVESGGGLVQAGGSLRLACIASGRTFHSYVMAWFRQAPGKEREFVAAISWSSTPTYYGESVKGRFTISRDNAKNTVYLQMNRLKPEDTAVYFCAADRGESYYYTRPTEYEFWGQGTQVTVSS", "Protein Sequence")
+dbutils.widgets.text("protein_sequence", "MTYKLILNGKTLKGETTTEAVDAATAEKVFKQYANDNGVDGEWTYDDATKTFTVTE", "Protein Sequence")
 dbutils.widgets.text("user_email", "a@b.com", "User Email")
+# Per-DB cap on target sequences scanned (bounds RAM/time on serverless CPU).
+# Read in blocks; a larger cap = deeper MSA. "0" = scan the whole DB.
+dbutils.widgets.text("max_msa_seqs", "2000000", "Max MSA target seqs per DB")
+
+# COMMAND ----------
+
+# pyhmmer bundles HMMER (jackhmmer) as a pip wheel — no conda/apt. biopython is
+# needed for the AF data-pipeline import (SCOPData shimmed below). No jax/tf here.
+# MAGIC %pip install -q pyhmmer==0.12.3 biopython absl-py ml-collections dm-tree
+# MAGIC dbutils.library.restartPython()
+
+# COMMAND ----------
+
+import io, os, sys, subprocess, tempfile, time, pickle
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
 VOLUME = dbutils.widgets.get("model_volume")
 RUN_ID = dbutils.widgets.get("run_id")
-PROTEIN_SEQUENCE = dbutils.widgets.get("protein_sequence")
+PROTEIN_SEQUENCE = dbutils.widgets.get("protein_sequence").strip()
 USER_EMAIL = dbutils.widgets.get("user_email")
+MAX_MSA_SEQS = int(dbutils.widgets.get("max_msa_seqs"))
 
+BASEDIR = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/datasets"
+# results/{run_id}/{run_id}/ — matches the GWB app's ranked_0.pdb pull path.
+OUTDIR = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/results/{RUN_ID}/{RUN_ID}"
+os.makedirs(OUTDIR, exist_ok=True)
 
-# COMMAND ----------
-
-# DBTITLE 1,prepare conda and dependencies
-# MAGIC %sh
-# MAGIC
-# MAGIC mkdir -p /miniconda3
-# MAGIC wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /miniconda3/miniconda.sh
-# MAGIC bash /miniconda3/miniconda.sh -b -u -p /miniconda3
-# MAGIC
-# MAGIC cat > /miniconda3/.condarc <<EOF
-# MAGIC channels:
-# MAGIC   - conda-forge
-# MAGIC   - bioconda
-# MAGIC   - nodefaults
-# MAGIC channel_priority: strict
-# MAGIC EOF
-# MAGIC
-# MAGIC rm -rf /miniconda3/miniconda.sh
-# MAGIC
-# MAGIC source /miniconda3/bin/activate
-# MAGIC
-# MAGIC conda env create -f ../envs/alphafold_env.yml 
-# MAGIC
-# MAGIC mkdir -p /alphafold
-# MAGIC cd /alphafold
-# MAGIC git clone https://github.com/google-deepmind/alphafold.git
-# MAGIC cd alphafold
-# MAGIC git checkout v2.3.2
-# MAGIC cd /
-# MAGIC
-# MAGIC conda activate alphafold_env
-# MAGIC pip install --no-deps /alphafold/alphafold
+# reduced_dbs MSA sources (same as the classic pipeline)
+DBS = [
+    ("uniref90", f"{BASEDIR}/uniref90/uniref90.fasta"),
+    ("mgnify", f"{BASEDIR}/mgnify/mgy_clusters_2022_05.fa"),
+    ("small_bfd", f"{BASEDIR}/small_bfd/bfd-first_non_consensus_sequences.fasta"),
+]
+print("run_id:", RUN_ID, "| seq len:", len(PROTEIN_SEQUENCE), "| out:", OUTDIR)
 
 # COMMAND ----------
 
-from datetime import datetime
-
-# Get the current datetime object
-now = datetime.now()
-
-# Format the datetime object into the desired string format
-# %Y for 4-digit year
-# %m for 2-digit month (with leading zero)
-# %d for 2-digit day (with leading zero)
-# %H for 2-digit hour (24-hour format, with leading zero)
-# %M for 2-digit minute (with leading zero)
-# %S for 2-digit second (with leading zero)
-formatted_datetime = now.strftime("%Y%m%d_%H%M%S")
-
-# Print the result
-print(formatted_datetime)
+# MAGIC %md
+# MAGIC ### AlphaFold source + Biopython SCOPData shim
+# MAGIC AF-2.3.2 isn't on PyPI → clone it. Biopython ≥1.80 removed `Bio.Data.SCOPData`
+# MAGIC (which AF imports); the 3→1 residue map now lives in `Bio.Data.PDBData`.
 
 # COMMAND ----------
 
-# DBTITLE 1,prepare input files
-import os
-from datetime import datetime
+import types, Bio.Data
+try:
+    from Bio.Data import SCOPData  # noqa: F401  (old biopython)
+except ImportError:
+    from Bio.Data import PDBData
+    _shim = types.ModuleType("Bio.Data.SCOPData")
+    _shim.protein_letters_3to1 = dict(PDBData.protein_letters_3to1_extended)
+    sys.modules["Bio.Data.SCOPData"] = _shim
+    Bio.Data.SCOPData = _shim
 
-def write_monomer(f,protein):
-    f.writelines(['>protein\n',protein])
+_af = tempfile.mkdtemp(prefix="af2_")
+_repo = os.path.join(_af, "alphafold")
+subprocess.run(["git", "clone", "--depth", "1", "--branch", "v2.3.2",
+                "https://github.com/google-deepmind/alphafold.git", _repo],
+               check=True, capture_output=True, text=True)
+sys.path.insert(0, _repo)
 
-def write_multimer(f,protein):
-    for i,p in enumerate(protein.split(':')):
-        f.write('>chain_{}\n'.format(i))
-        f.write(p+'\n')
-
-def write(f,protein,mode):
-    if mode=='monomer':
-        write_monomer(f,protein)
-    elif mode=='multimer':
-        write_multimer(f,protein)
-    else:
-        raise ValueError('no mode {} is avaliable, only monomer or multimer'.format(mode))
-
-mode = 'multimer' if ':' in PROTEIN_SEQUENCE else 'monomer'
-
-tmpdir = '/local_disk0/'
-tmp_file = os.path.join(tmpdir,RUN_ID+'.fasta') 
-with open(tmp_file,'w') as f:
-    write(f,PROTEIN_SEQUENCE,mode)
-
-# Where databases etc are stored
-BASEDIR=f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/datasets"
-
-# Get the current datetime object
-now = datetime.now()
-formatted_datetime = now.strftime("%Y%m%d_%H%M%S")
-#Where results are stored
-OUTDIR = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/results/{RUN_ID}"
-
-if not os.path.exists(OUTDIR):
-    os.makedirs(OUTDIR)
-
-os.environ['BASEDIR'] = BASEDIR
-os.environ['OUTDIR'] = OUTDIR
-
-os.environ['AF_FASTA_FILE'] = tmp_file
-os.environ['AF_MODE'] = mode
-
-print(os.environ['BASEDIR'])
-print(os.environ['OUTDIR'])
-print(os.environ['AF_MODE'])
-print(os.environ['AF_FASTA_FILE'])
+import pyhmmer
+from alphafold.data import pipeline, parsers
 
 # COMMAND ----------
 
-# DBTITLE 1,run alphafold - featurize
-# MAGIC %sh
-# MAGIC set -euo pipefail
-# MAGIC
-# MAGIC FLAGS="--data_dir=${BASEDIR}\
-# MAGIC   --fasta_paths=${AF_FASTA_FILE}\
-# MAGIC   --output_dir=${OUTDIR}\
-# MAGIC   --db_preset=reduced_dbs\
-# MAGIC   --model_preset="${AF_MODE}"\
-# MAGIC   --uniref90_database_path="${BASEDIR}/uniref90/uniref90.fasta"\
-# MAGIC   --mgnify_database_path="${BASEDIR}/mgnify/mgy_clusters_2022_05.fa"\
-# MAGIC   --small_bfd_database_path="${BASEDIR}/small_bfd/bfd-first_non_consensus_sequences.fasta"\
-# MAGIC   --template_mmcif_dir="${BASEDIR}/pdb_mmcif/mmcif_files/"\
-# MAGIC   --max_template_date=2020-05-14\
-# MAGIC   --obsolete_pdbs_path="${BASEDIR}/pdb_mmcif/obsolete.dat"\
-# MAGIC   --nouse_gpu_relax\
-# MAGIC   --only_featurize\
-# MAGIC   --nofold_from_precalculated_features"
-# MAGIC
-# MAGIC if [ "${AF_MODE}" == "multimer" ]; then
-# MAGIC   FLAGS="${FLAGS} --uniprot_database_path=${BASEDIR}/uniprot/uniprot.fasta"
-# MAGIC   FLAGS="${FLAGS} --pdb_seqres_database_path=${BASEDIR}/pdb_seqres/pdb_seqres.txt"
-# MAGIC fi
-# MAGIC if [ "${AF_MODE}" == "monomer" ]; then
-# MAGIC   FLAGS="${FLAGS} --pdb70_database_path=${BASEDIR}/pdb70/pdb70"
-# MAGIC fi
-# MAGIC echo $FLAGS
-# MAGIC
-# MAGIC source /miniconda3/bin/activate
-# MAGIC conda activate alphafold_env
-# MAGIC
-# MAGIC echo ""
-# MAGIC echo "===Running alphafold"
-# MAGIC python ../scripts/run_alphafold_split.py ${FLAGS}
-# MAGIC echo ""
-# MAGIC echo "===Run complete, Copying results"
-# MAGIC
-# MAGIC cp ${AF_FASTA_FILE} "${OUTDIR}/$(basename "$AF_FASTA_FILE" .fasta)/"
+# MAGIC %md
+# MAGIC ### MSA search (pyhmmer jackhmmer, 1 iteration) over each DB
 
 # COMMAND ----------
 
-import os
+_ALPHABET = pyhmmer.easel.Alphabet.amino()
+
+
+def jackhmmer_msa(query_seq: str, db_path: str, cap: int):
+    """Single-iteration jackhmmer of query vs a DB (capped) -> AF parsers.Msa."""
+    q = pyhmmer.easel.TextSequence(name=b"query", sequence=query_seq).digitize(_ALPHABET)
+    block = pyhmmer.easel.DigitalSequenceBlock(_ALPHABET)
+    n = 0
+    with pyhmmer.easel.SequenceFile(db_path, digital=True, alphabet=_ALPHABET) as sf:
+        for s in sf:
+            block.append(s)
+            n += 1
+            if cap and n >= cap:
+                break
+    for res in pyhmmer.hmmer.jackhmmer([q], block, max_iterations=1, cpus=os.cpu_count()):
+        bio = io.BytesIO()
+        res.msa.write(bio, "stockholm")
+        return parsers.parse_stockholm(bio.getvalue().decode()), n
+    return parsers.Msa(sequences=[query_seq], deletion_matrix=[[0] * len(query_seq)],
+                       descriptions=["query"]), n
+
+
+msas = []
+for name, path in DBS:
+    t0 = time.time()
+    msa, scanned = jackhmmer_msa(PROTEIN_SEQUENCE, path, MAX_MSA_SEQS)
+    msas.append(msa)
+    print(f"{name}: scanned {scanned:,} | MSA rows {len(msa.sequences):,} | {time.time()-t0:.0f}s")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Build + pickle the (template-free) feature dict
+
+# COMMAND ----------
+
+L = len(PROTEIN_SEQUENCE)
+feature_dict = {
+    **pipeline.make_sequence_features(PROTEIN_SEQUENCE, RUN_ID, L),
+    **pipeline.make_msa_features(msas),
+}
+print("total MSA rows:", int(feature_dict["num_alignments"][0]))
+
+features_path = os.path.join(OUTDIR, "features.pkl")
+with open(features_path, "wb") as f:
+    pickle.dump(feature_dict, f, protocol=4)
+print("wrote", features_path)
+
+# also drop the fasta next to it (parity with the classic pipeline)
+with open(os.path.join(OUTDIR, f"{RUN_ID}.fasta"), "w") as f:
+    f.write(f">{RUN_ID}\n{PROTEIN_SEQUENCE}\n")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Mark featurize complete (GWB progress tag)
+
+# COMMAND ----------
+
 import mlflow
 
-# COMMAND ----------
-
-with mlflow.start_run(run_id=RUN_ID) as run:
-  mlflow.log_param("protein_sequence", PROTEIN_SEQUENCE)
-  mlflow.log_param("mode", mode)  
-  mlflow.log_param("results_path", OUTDIR)
-  mlflow.log_param("fasta_file", os.path.basename(os.environ['AF_FASTA_FILE']))
-  mlflow.set_tag("job_status","featurize_complete")
-
-# COMMAND ----------
-
-
+# Best-effort progress tag (RUN_ID is a real MLflow run when dispatched by the GWB
+# app; a direct/manual run may not have one — don't fail featurize over tagging).
+try:
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+    with mlflow.start_run(run_id=RUN_ID):
+        mlflow.log_param("mode", "monomer")
+        mlflow.log_param("results_path", OUTDIR)
+        mlflow.set_tag("job_status", "featurize_complete")
+    print("featurize_complete")
+except Exception as e:
+    print(f"WARN: could not set featurize_complete tag on run {RUN_ID}: {e}")

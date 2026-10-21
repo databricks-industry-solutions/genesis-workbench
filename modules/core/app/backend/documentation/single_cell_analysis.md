@@ -20,8 +20,8 @@ Single Cell Analysis provides end-to-end processing of single-cell RNA sequencin
 
 1. Navigate to **Single Cell Studies > Raw Single Cell Processing** tab
 2. Select processing mode: **Scanpy** (CPU) or **rapids-singlecell (part of scverse)** (GPU)
-3. Enter the h5ad file path on a UC Volume
-4. Configure gene name mapping (column name or species reference)
+3. Enter the h5ad file path on a UC Volume. A curated demo dataset (`raw_h5ad/hgsoc_demo_15k.h5ad`, MSK SPECTRUM ovarian HGSOC, ~15k cells) is pre-staged during deploy and **prefilled by default**.
+4. Configure gene name mapping (column name or species reference). For the HGSOC demo, use gene-name column `feature_name` (prefilled).
 5. Set filtering parameters:
    - Minimum genes per cell
    - Minimum cells per gene
@@ -53,7 +53,7 @@ Single Cell Analysis provides end-to-end processing of single-cell RNA sequencin
 
 | Field | Description | Example |
 |-------|-------------|---------|
-| h5ad file | AnnData format single-cell data | `/Volumes/.../my_data.h5ad` |
+| h5ad file | AnnData format single-cell data (defaults to the pre-staged HGSOC demo) | `/Volumes/<cat>/<schema>/raw_h5ad/hgsoc_demo_15k.h5ad` |
 | Processing mode | Scanpy (CPU) or RAPIDS (GPU) | Scanpy |
 | Min genes/cell | QC filter | 200 |
 | Min cells/gene | QC filter | 3 |

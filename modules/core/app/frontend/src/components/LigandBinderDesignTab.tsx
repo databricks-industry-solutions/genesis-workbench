@@ -3,6 +3,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 
 import { ClipboardPaste } from '@/components/ClipboardPaste'
 import { DataTable } from '@/components/DataTable'
+import { DruglikenessPanel, MetricsStrip } from '@/components/DockingMetrics'
 import { MaterialIcon } from '@/components/MaterialIcon'
 import { MolstarViewer } from '@/components/MolstarViewer'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
@@ -13,7 +14,9 @@ import { cn } from '@/lib/utils'
 
 type InputMode = 'smiles' | 'pdb'
 
-const EXAMPLE_SMILES = 'COc(cc1)ccc1C#N'
+// Demo default: fentanyl (PubChem CID 3345) — design a de-novo protein binder / biosensor
+// for a notable small molecule (opioid detection). Valid SMILES; the user can replace it.
+const EXAMPLE_SMILES = 'CCC(=O)N(C1CCN(CC1)CCC2=CC=CC=C2)C3=CC=CC=C3'
 const EXAMPLE_LIGAND_PDB = `HETATM    1  C1  LIG A   1       0.000   0.000   0.000  1.00  0.00           C
 HETATM    2  C2  LIG A   1       1.394   0.000   0.000  1.00  0.00           C
 HETATM    3  C3  LIG A   1       2.091   1.209   0.000  1.00  0.00           C
@@ -33,6 +36,7 @@ function ts(): string {
 }
 
 type ViewChoice =
+  | 'hydrophobicity'
   | 'ca_backbone'
   | 'esmfold'
   | 'ca_plus_dock'
@@ -47,11 +51,12 @@ export function LigandBinderDesignTab() {
   const [numSamples, setNumSamples] = useState(2)
   const [validateEsmfold, setValidateEsmfold] = useState(true)
   const [validateDiffdock, setValidateDiffdock] = useState(true)
+  const [validateBoltzAffinity, setValidateBoltzAffinity] = useState(false)
   const [experiment, setExperiment] = useState('gwb_ligand_binder_design')
   const [runName, setRunName] = useState(`ligand_binder_${ts()}`)
 
   const [selectedIdx, setSelectedIdx] = useState(0)
-  const [viewChoice, setViewChoice] = useState<ViewChoice>('esmfold_plus_dock')
+  const [viewChoice, setViewChoice] = useState<ViewChoice>('hydrophobicity')
 
   const design = useSseMutation<
     {
@@ -62,6 +67,7 @@ export function LigandBinderDesignTab() {
       num_samples: number
       validate_esmfold: boolean
       validate_diffdock: boolean
+      validate_boltz_affinity: boolean
       mlflow_experiment: string
       mlflow_run_name: string
     },
@@ -78,8 +84,9 @@ export function LigandBinderDesignTab() {
     runName.trim() &&
     lenMin <= lenMax &&
     (inputMode === 'smiles' ? smiles.trim().length > 0 : ligandPdb.trim().length > 0) &&
-    // DiffDock validation needs a SMILES regardless of input mode.
-    (!validateDiffdock || smiles.trim().length > 0)
+    // DiffDock + Boltz-2 affinity validation need a SMILES regardless of input mode.
+    (!validateDiffdock || smiles.trim().length > 0) &&
+    (!validateBoltzAffinity || smiles.trim().length > 0)
 
   const runDesign = () =>
     design.start({
@@ -90,6 +97,7 @@ export function LigandBinderDesignTab() {
       num_samples: numSamples,
       validate_esmfold: validateEsmfold,
       validate_diffdock: validateDiffdock,
+      validate_boltz_affinity: validateBoltzAffinity,
       mlflow_experiment: experiment,
       mlflow_run_name: runName,
     })
@@ -102,6 +110,7 @@ export function LigandBinderDesignTab() {
   const availableViews = useMemo<ViewChoice[]>(() => {
     if (!selectedDesign) return []
     const v: ViewChoice[] = []
+    if (selectedDesign.viewer_html_hydrophobicity) v.push('hydrophobicity')
     if (selectedDesign.viewer_html_ca_backbone) v.push('ca_backbone')
     if (selectedDesign.viewer_html_esmfold) v.push('esmfold')
     if (selectedDesign.viewer_html_ca_plus_dock) v.push('ca_plus_dock')
@@ -114,6 +123,7 @@ export function LigandBinderDesignTab() {
     if (!availableViews.length) return
     if (availableViews.includes(viewChoice)) return
     const preferred: ViewChoice[] = [
+      'hydrophobicity',
       'esmfold_plus_dock',
       'ca_plus_dock',
       'esmfold',
@@ -125,6 +135,8 @@ export function LigandBinderDesignTab() {
   const viewerHtml = useMemo<string | null>(() => {
     if (!selectedDesign) return null
     switch (viewChoice) {
+      case 'hydrophobicity':
+        return selectedDesign.viewer_html_hydrophobicity
       case 'esmfold_plus_dock':
         return selectedDesign.viewer_html_esmfold_plus_dock
       case 'ca_plus_dock':
@@ -167,6 +179,21 @@ export function LigandBinderDesignTab() {
           ctx.row.original.dock_confidence != null
             ? ctx.row.original.dock_confidence.toFixed(4)
             : <span className="text-muted-foreground">—</span>,
+      },
+      {
+        id: 'boltz_affinity',
+        header: 'Affinity (Boltz-2)',
+        cell: (ctx) => {
+          const v = ctx.row.original.boltz_affinity_value
+          const p = ctx.row.original.boltz_affinity_prob
+          if (v == null) return <span className="text-muted-foreground">—</span>
+          return (
+            <span title="Predicted binding affinity (log-IC50-style, lower = stronger) · P(binder)">
+              {v.toFixed(2)}
+              {p != null ? <span className="text-muted-foreground"> · {(p * 100).toFixed(0)}%</span> : null}
+            </span>
+          )
+        },
       },
       {
         id: 'clip',
@@ -243,7 +270,7 @@ export function LigandBinderDesignTab() {
                 aria-label="Ligand SMILES"
                 value={smiles}
                 onChange={(e) => setSmiles(e.target.value)}
-                placeholder="COc(cc1)ccc1C#N"
+                placeholder="CCC(=O)N(C1CCN(CC1)CCC2=CC=CC=C2)C3=CC=CC=C3"
                 className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
               />
             </div>
@@ -267,7 +294,7 @@ export function LigandBinderDesignTab() {
                 <input
                   value={smiles}
                   onChange={(e) => setSmiles(e.target.value)}
-                  placeholder="COc(cc1)ccc1C#N"
+                  placeholder="CCC(=O)N(C1CCN(CC1)CCC2=CC=CC=C2)C3=CC=CC=C3"
                   className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
                 />
               </label>
@@ -335,6 +362,14 @@ export function LigandBinderDesignTab() {
             />
             <span>Validate ligand binding with DiffDock</span>
           </label>
+          <label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={validateBoltzAffinity}
+              onChange={(e) => setValidateBoltzAffinity(e.target.checked)}
+            />
+            <span>Score binding affinity with Boltz-2 (needs SMILES; adds GPU time)</span>
+          </label>
 
           <div className="rounded-md border border-border bg-card p-3 text-xs">
             <div className="mb-2 font-medium uppercase tracking-wide text-muted-foreground">
@@ -388,6 +423,7 @@ export function LigandBinderDesignTab() {
                 { label: 'Generating protein binders (Proteina-Complexa-Ligand)', pctEnd: 35 },
                 { label: 'Validating designs (ESMFold)', pctEnd: 60 },
                 { label: 'Docking ligand back to designs (DiffDock)', pctEnd: 90 },
+                { label: 'Scoring affinity (Boltz-2)', pctEnd: 98 },
                 { label: 'Building viewers + logging', pctEnd: 100 },
               ]}
             />
@@ -442,6 +478,7 @@ export function LigandBinderDesignTab() {
                   <div className="flex flex-wrap gap-1">
                     {(
                       [
+                        ['hydrophobicity', 'Hydrophobicity surface'],
                         ['esmfold_plus_dock', 'Full + docked ligand'],
                         ['ca_plus_dock', 'CA + docked ligand'],
                         ['esmfold', 'Full protein'],
@@ -480,6 +517,22 @@ export function LigandBinderDesignTab() {
               </div>
 
               <MolstarViewer viewerHtml={viewerHtml} height={520} />
+
+              {selectedDesign && (
+                <MetricsStrip
+                  items={[
+                    { label: 'Mean pLDDT', value: selectedDesign.mean_plddt != null ? String(selectedDesign.mean_plddt) : '', title: 'Mean Cα pLDDT of the ESMFold-folded binder (higher = more confident fold)' },
+                    { label: 'Contacts', value: selectedDesign.contact_count != null ? String(selectedDesign.contact_count) : '', title: 'Heavy-atom protein–ligand contacts within 4 Å' },
+                    { label: 'Site residues', value: selectedDesign.n_site_residues != null ? String(selectedDesign.n_site_residues) : '', title: 'Binding-site residues within 5 Å of the ligand' },
+                    { label: 'Buried area', value: selectedDesign.buried_area != null ? `${selectedDesign.buried_area} Å²` : '', title: 'Ligand SASA buried on binding (higher = more enclosed)' },
+                    { label: 'Affinity (Boltz-2)', value: selectedDesign.boltz_affinity_value != null ? selectedDesign.boltz_affinity_value.toFixed(2) : '', title: 'Boltz-2 predicted binding affinity (log-IC50-style, lower = stronger)' },
+                    { label: 'P(binder)', value: selectedDesign.boltz_affinity_prob != null ? `${(selectedDesign.boltz_affinity_prob * 100).toFixed(0)}%` : '', title: 'Boltz-2 probability the ligand binds' },
+                    { label: 'Dock conf.', value: selectedDesign.dock_confidence != null ? selectedDesign.dock_confidence.toFixed(3) : '', title: 'DiffDock pose confidence' },
+                  ]}
+                />
+              )}
+
+              <DruglikenessPanel dl={design.data.ligand_druglikeness} />
 
               {selectedDesign && (
                 <div>

@@ -33,9 +33,27 @@ import type {
   KermtDispatchResponse,
   KermtFinetuneRequest,
   KermtWeight,
+  Rfd4Defaults,
+  Rfd4DispatchResponse,
+  Rfd4FinetuneRequest,
+  Rfd4Weight,
   GenomicsDefaultsResponse,
   DockingExampleResponse,
   DocsResponse,
+  AntibodyDefaultsResponse,
+  AntibodyDesignStartRequest,
+  AntibodyDesignStartResponse,
+  AntibodyStatusResponse,
+  AntibodyTopKResponse,
+  AntibodyColorRequest,
+  AntibodyColorResponse,
+  VaccineImmunogenDefaultsResponse,
+  VaccineImmunogenStartRequest,
+  VaccineImmunogenStartResponse,
+  VaccineImmunogenStatusResponse,
+  VaccineTopKResponse,
+  VaccineColorRequest,
+  VaccineColorResponse,
   EnzymeDefaultsResponse,
   EnzymeOptimizationStartRequest,
   EnzymeOptimizationStartResponse,
@@ -429,6 +447,58 @@ export const api = {
       { method: 'POST' },
     ),
 
+  // Antibody Design (VHH) — RFD4-Proteina in-process reward-weighted loop
+  antibodyDesignDefaults: () =>
+    request<AntibodyDefaultsResponse>('/api/antibody_design/defaults'),
+  antibodyDesignStart: (body: AntibodyDesignStartRequest) =>
+    request<AntibodyDesignStartResponse>('/api/antibody_design/start', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  antibodyDesignSearch: (by: 'run_name' | 'experiment_name', text: string) =>
+    request<DBSearchResponse>(
+      `/api/antibody_design/search?by=${by}&text=${encodeURIComponent(text)}`,
+    ),
+  antibodyDesignStatus: (run_id: string) =>
+    request<AntibodyStatusResponse>(
+      `/api/antibody_design/status?run_id=${encodeURIComponent(run_id)}`,
+    ),
+  antibodyDesignTopK: (run_id: string) =>
+    request<AntibodyTopKResponse>(
+      `/api/antibody_design/top_k?run_id=${encodeURIComponent(run_id)}`,
+    ),
+  antibodyDesignColorStructure: (body: AntibodyColorRequest) =>
+    request<AntibodyColorResponse>('/api/antibody_design/color_structure', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  // Vaccine Immunogen Design (VHH) — RFD4-Proteina in-process motif-scaffolding loop
+  vaccineImmunogenDefaults: () =>
+    request<VaccineImmunogenDefaultsResponse>('/api/vaccine_immunogen/defaults'),
+  vaccineImmunogenStart: (body: VaccineImmunogenStartRequest) =>
+    request<VaccineImmunogenStartResponse>('/api/vaccine_immunogen/start', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  vaccineImmunogenSearch: (by: 'run_name' | 'experiment_name', text: string) =>
+    request<DBSearchResponse>(
+      `/api/vaccine_immunogen/search?by=${by}&text=${encodeURIComponent(text)}`,
+    ),
+  vaccineImmunogenStatus: (run_id: string) =>
+    request<VaccineImmunogenStatusResponse>(
+      `/api/vaccine_immunogen/status?run_id=${encodeURIComponent(run_id)}`,
+    ),
+  vaccineImmunogenTopK: (run_id: string) =>
+    request<VaccineTopKResponse>(
+      `/api/vaccine_immunogen/top_k?run_id=${encodeURIComponent(run_id)}`,
+    ),
+  vaccineImmunogenColorStructure: (body: VaccineColorRequest) =>
+    request<VaccineColorResponse>('/api/vaccine_immunogen/color_structure', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
   // ─── Genomics ────────────────────────────────────────────────────
 
   variantCallingStart: (body: VariantCallingStartRequest) =>
@@ -539,6 +609,24 @@ export const api = {
     ),
   kermtDeploy: (body: { ft_id: string; model_name?: string; workload_type?: string }) =>
     request<KermtDispatchResponse>('/api/kermt/deploy', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  // RFD4-Proteina (fine-tune + deploy a protein-design model)
+  rfd4Defaults: () => request<Rfd4Defaults>('/api/rfd4/defaults'),
+  rfd4Weights: () => request<{ weights: Rfd4Weight[] }>('/api/rfd4/weights'),
+  rfd4Finetune: (body: Rfd4FinetuneRequest) =>
+    request<Rfd4DispatchResponse>('/api/rfd4/finetune', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  rfd4FinetuneSearch: (by: 'run_name' | 'experiment_name', text: string) =>
+    request<DBSearchResponse>(
+      `/api/rfd4/finetune/search?by=${by}&text=${encodeURIComponent(text)}`,
+    ),
+  rfd4Deploy: (body: { ft_id: string; model_name?: string; workload_type?: string }) =>
+    request<Rfd4DispatchResponse>('/api/rfd4/deploy', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

@@ -10,10 +10,9 @@
 # MAGIC protein–ligand complexes. It includes a score model (reverse diffusion) and a
 # MAGIC confidence model to rank predicted poses.
 # MAGIC
-# MAGIC **Cluster requirements:**
-# MAGIC - Runtime: **DBR 13.3 LTS ML GPU**
-# MAGIC - Node type: GPU instance (e.g., `g5.2xlarge` / A10G)
-# MAGIC - Single node is sufficient
+# MAGIC **Compute:**
+# MAGIC - Runtime: **Serverless GPU (AI Runtime, Python 3.12)**
+# MAGIC - Hardware: GPU_1xA10
 
 # COMMAND ----------
 
@@ -36,26 +35,67 @@ schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
-# MAGIC %pip install -q databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 mlflow==2.22.0
-# MAGIC %pip install -q pyyaml==6.0.1 scipy==1.7.3 networkx==2.6.3 biopython==1.79 rdkit-pypi==2022.03.5 e3nn==0.5.1 spyrmsd==0.5.2 pandas==1.5.3 biopandas==0.4.1 prody==2.6.1 fair-esm==2.0.0
+# MAGIC %md
+# MAGIC **Serverless GPU port.** The workshop AWS account's EC2 GPU vCPU quota is 0, so
+# MAGIC this runs on serverless GPU (torch 2.7.x / cu126 / py3.12) instead of DBR 13.3 LTS
+# MAGIC ML (torch 1.13 / cu117 / py3.10). The DiffDock dependency stack is uplifted to the
+# MAGIC serverless torch + PyG cu126 ABI. We keep the RUNTIME torch (do NOT downgrade —
+# MAGIC pinning torch==2.7.0 unwires libcudnn.so.9 on serverless) and pull PyG cu126 wheels
+# MAGIC built for the live torch version (data.pyg.org publishes per-release; the torch-2.7.1
+# MAGIC index carries torch_scatter 2.1.2 / torch_sparse 0.6.18 / torch_cluster 1.6.3).
+
+# COMMAND ----------
+
+# Keep the RUNTIME torch (do NOT pin/downgrade — torch==2.7.0 unwires libcudnn.so.9 on
+# serverless). Build the PyG find-links URL from the live torch version so
+# torch_scatter/sparse/cluster match its C++ ABI exactly. Use a subprocess pip (NOT %pip)
+# to bypass the serverless pipConstraints.txt; capture output so any resolution error is
+# surfaced in the exception (not just cell stdout, which get-run-output doesn't return).
+import torch, subprocess
+_tv = torch.__version__                                   # e.g. "2.7.1+cu126"
+_base, _cu = _tv.split("+")[0], (_tv.split("+")[1] if "+" in _tv else "cu126")
+_pyg_url = f"https://data.pyg.org/whl/torch-{_base}+{_cu}.html"
+print(f"runtime torch={_tv}  PyG index={_pyg_url}")
+_r = subprocess.run([
+    "pip", "install", "--find-links", _pyg_url,
+    "torch-geometric==2.7.0", "torch-scatter==2.1.2",
+    "torch-sparse==0.6.18", "torch-cluster==1.6.3",
+    "databricks-sdk>=0.150.0", "mlflow>=3.12",
+    "pyyaml==6.0.2", "scipy==1.13.1", "networkx==3.3", "biopython==1.84",
+    "rdkit==2024.3.5", "e3nn==0.5.1", "spyrmsd==0.8.0", "pandas==2.2.2",
+    "biopandas==0.5.1", "prody==2.6.1", "fair-esm==2.0.0", "cloudpickle==3.0.0",
+], capture_output=True, text=True)
+print((_r.stdout or "")[-4000:])
+if _r.returncode != 0:
+    # Surface the real resolution error in the exception (not just cell stdout),
+    # so a failed serverless run reports it in the task error.
+    raise RuntimeError(f"pip install failed (exit {_r.returncode}):\n{(_r.stderr or '')[-4000:]}")
+
+# COMMAND ----------
+
+dbutils.library.restartPython()
 
 # COMMAND ----------
 
 import torch, subprocess, sys
 
-torch_ver = torch.__version__.split("+")[0]
-cuda_tag = torch.__version__.split("+")[1] if "+" in torch.__version__ else "cu117"
-pyg_url = f"https://data.pyg.org/whl/torch-{torch_ver}+{cuda_tag}.html"
-print(f"PyTorch: {torch.__version__}, PyG wheel index: {pyg_url}")
+# Sanity-check the uplifted stack: runtime torch (2.7.x+cu126) with matching PyG C++ extensions.
+print(f"PyTorch: {torch.__version__}")
+from torch_scatter import scatter          # noqa: F401  (fails loudly on ABI mismatch)
+from torch_cluster import radius_graph     # noqa: F401
+import torch_geometric
+print(f"PyG: {torch_geometric.__version__}")
 
-for pkg in ["torch-scatter==2.1.1", "torch-sparse==0.6.17", "torch-cluster==1.6.1"]:
-    subprocess.check_call([
-        sys.executable, "-m", "pip", "install", pkg,
-        "-f", pyg_url, "--quiet",
-    ])
-subprocess.check_call([
-    sys.executable, "-m", "pip", "install", "torch-geometric==2.2.0", "--quiet",
-])
+# torch>=2.6 flipped torch.load's default to weights_only=True, which rejects DiffDock's
+# v1.1.3 checkpoints (they pickle an argparse.Namespace + other non-tensor objects). These
+# are the official DiffDock release weights (trusted), so default torch.load back to
+# weights_only=False for this kernel — covers both the notebook loads and DiffDock's
+# internal torch.load calls (utils.get_model, so3/torus caches, etc.).
+_orig_torch_load = torch.load
+def _torch_load_full(*args, **kwargs):
+    kwargs.setdefault("weights_only", False)
+    return _orig_torch_load(*args, **kwargs)
+torch.load = _torch_load_full
 
 # COMMAND ----------
 
@@ -78,7 +118,9 @@ print(f"Cache dir: {cache_dir}")
 cache_full_path = f"/Volumes/{catalog}/{schema}/{cache_dir}"
 print(f"Cache full path: {cache_full_path}")
 
-WORK_DIR = "/local_disk0/diffdock"
+# Serverless GPU has no writable /local_disk0 (that's a classic-cluster path); use /tmp,
+# which is node-local and writable, for the DiffDock clone + ~5 GB weights + staging.
+WORK_DIR = "/tmp/diffdock"
 DIFFDOCK_DIR = os.path.join(WORK_DIR, "DiffDock")
 os.makedirs(WORK_DIR, exist_ok=True)
 
@@ -414,6 +456,18 @@ class ESMEmbeddingsModel(mlflow.pyfunc.PythonModel):
     def load_context(self, context):
         import torch, esm as esm_module
 
+        # torch>=2.6 defaults torch.load to weights_only=True; fair-esm's
+        # load_model_and_alphabet_local() torch.loads a checkpoint with non-tensor
+        # objects (argparse.Namespace) → UnpicklingError. Trusted ESM2 release weights →
+        # default torch.load back to weights_only=False for this serving process.
+        if not getattr(torch.load, "_gwb_full_load", False):
+            _orig = torch.load
+            def _full_load(*a, **k):
+                k.setdefault("weights_only", False)
+                return _orig(*a, **k)
+            _full_load._gwb_full_load = True
+            torch.load = _full_load
+
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         esm_dir = context.artifacts.get("esm_model_dir")
         if esm_dir:
@@ -501,6 +555,20 @@ class DiffDockScoringModel(mlflow.pyfunc.PythonModel):
         self._context = context
         self.repo_dir = context.artifacts["repo_dir"]
         self._add_code_paths(context)
+
+        # torch>=2.6 defaults torch.load to weights_only=True, which rejects DiffDock's
+        # v1.1.3 checkpoints (argparse.Namespace + non-tensor objects). Trusted release
+        # weights → default back to weights_only=False for this serving process (covers
+        # the loads below and DiffDock's internal torch.load calls).
+        import torch as _t
+        if not getattr(_t.load, "_gwb_full_load", False):
+            _orig = _t.load
+            def _full_load(*a, **k):
+                k.setdefault("weights_only", False)
+                return _orig(*a, **k)
+            _full_load._gwb_full_load = True
+            _t.load = _full_load
+
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         logger.warning(f"[DIFFDOCK load_context] Device: {self.device} ({time.time()-t0:.1f}s)")
 
@@ -834,36 +902,36 @@ torch_base = torch_version.split("+")[0]
 cuda_tag = torch_version.split("+")[1] if "+" in torch_version else "cu117"
 pyg_whl_url = f"https://data.pyg.org/whl/torch-{torch_base}+{cuda_tag}.html"
 
-# ESM endpoint only needs these
+# ESM endpoint only needs these. Uplifted to the serverless GPU ABI (torch 2.7.0).
 esm_pip_requirements = [
     f"torch=={torch_base}",
     "fair-esm==2.0.0",
-    "biopython==1.79",
-    "pandas==1.5.3",
-    "cloudpickle==2.0.0",
+    "biopython==1.84",
+    "pandas==2.2.2",
+    "cloudpickle==3.0.0",
 ]
 
-# DiffDock scoring endpoint needs PyG + chemistry libs
-# fair-esm needed because DiffDock code imports it at module level (aa_model.py)
-# Pin to versions with pre-built wheels on PyG index for pt113cu117
+# DiffDock scoring endpoint needs PyG + chemistry libs.
+# fair-esm needed because DiffDock code imports it at module level (aa_model.py).
+# Pins match the register-time install: torch 2.7.0 + PyG cu126 wheels.
 scoring_pip_requirements = [
     f"torch=={torch_version}",
-    "torch-geometric==2.2.0",
-    "torch-scatter==2.1.1",
-    "torch-sparse==0.6.17",
-    "torch-cluster==1.6.1",
-    "pyyaml==6.0.1",
-    "scipy==1.7.3",
-    "networkx==2.6.3",
-    "biopython==1.79",
-    "rdkit-pypi==2022.03.5",
+    "torch-geometric==2.7.0",
+    "torch-scatter==2.1.2",
+    "torch-sparse==0.6.18",
+    "torch-cluster==1.6.3",
+    "pyyaml==6.0.2",
+    "scipy==1.13.1",
+    "networkx==3.3",
+    "biopython==1.84",
+    "rdkit==2024.3.5",
     "e3nn==0.5.1",
-    "spyrmsd==0.5.2",
-    "pandas==1.5.3",
-    "biopandas==0.4.1",
+    "spyrmsd==0.8.0",
+    "pandas==2.2.2",
+    "biopandas==0.5.1",
     "prody==2.6.1",
     "fair-esm==2.0.0",
-    "cloudpickle==2.0.0",
+    "cloudpickle==3.0.0",
 ]
 
 # COMMAND ----------
@@ -995,7 +1063,12 @@ print(f"Example ESM payload: {len(example_esm_embeddings)} chains, {len(example_
 
 # COMMAND ----------
 
+# Express serving: log WITHOUT registered_model_name, then register SEPARATELY with env_pack (snapshots this
+# serverless-GPU env verbatim for serving). Only the registration changes — 02 (deploy_model) is unchanged.
+from mlflow.utils.env_pack import EnvPackConfig
+
 esm_model_name = f"{model_name}_esm_embeddings"
+esm_uc_name = f"{catalog}.{schema}.{esm_model_name}"
 
 with mlflow.start_run(run_name=esm_model_name, experiment_id=experiment.experiment_id):
     mlflow.log_params({"model": "ESM2 Embeddings for DiffDock", "runtime": "DBR 13.3 LTS ML GPU"})
@@ -1004,13 +1077,16 @@ with mlflow.start_run(run_name=esm_model_name, experiment_id=experiment.experime
         artifact_path="model",
         python_model=ESMEmbeddingsModel(),
         artifacts={"esm_model_dir": ESM_SAVE_DIR},
-        pip_requirements=esm_pip_requirements,
+        pip_requirements=["mlflow", "cloudpickle", "pandas", "numpy"],  # minimal: env_pack defines the serving env
         signature=esm_signature,
         input_example=pd.DataFrame([{"protein_pdb": example_pdb}]),
-        registered_model_name=f"{catalog}.{schema}.{esm_model_name}",
     )
 
-print(f"Registered ESM: {catalog}.{schema}.{esm_model_name}")
+esm_model_version = mlflow.register_model(
+    model_uri=esm_model_info.model_uri, name=esm_uc_name,
+    env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False),
+).version
+print(f"Registered ESM (Express env_pack): {esm_uc_name} v{esm_model_version}")
 
 # COMMAND ----------
 
@@ -1052,6 +1128,7 @@ if cache_count == 0:
 
 # COMMAND ----------
 
+scoring_uc_name = f"{catalog}.{schema}.{model_name}"
 with mlflow.start_run(run_name=model_name, experiment_id=experiment.experiment_id):
     mlflow.log_params({
         "model": "DiffDock Scoring (no ESM)",
@@ -1070,11 +1147,8 @@ with mlflow.start_run(run_name=model_name, experiment_id=experiment.experiment_i
             "confidence_model_dir": CONFIDENCE_MODEL_DIR,
             "cache_dir": DIFFDOCK_CACHE_DIR,
         },
-        code_path=code_items,
-        pip_requirements=[
-            f"--find-links {pyg_whl_url}",
-            f"--extra-index-url https://download.pytorch.org/whl/{cuda_tag}",
-        ] + scoring_pip_requirements,
+        code_paths=code_items,  # mlflow 3.x renamed code_path -> code_paths
+        pip_requirements=["mlflow", "cloudpickle", "pandas", "numpy"],  # minimal: env_pack defines the serving env
         signature=scoring_signature,
         input_example=pd.DataFrame([{
             "protein_pdb": example_pdb,
@@ -1082,9 +1156,12 @@ with mlflow.start_run(run_name=model_name, experiment_id=experiment.experiment_i
             "samples_per_complex": 5,
             "esm_embeddings_b64": example_esm_b64_json,
         }]),
-        registered_model_name=f"{catalog}.{schema}.{model_name}",
     )
 
-print(f"Registered DiffDock Scoring: {catalog}.{schema}.{model_name}")
+scoring_model_version = mlflow.register_model(
+    model_uri=scoring_model_info.model_uri, name=scoring_uc_name,
+    env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False),
+).version
+print(f"Registered DiffDock Scoring (Express env_pack): {scoring_uc_name} v{scoring_model_version}")
 print(f"ESM URI: {esm_model_info.model_uri}")
 print(f"Scoring URI: {scoring_model_info.model_uri}")

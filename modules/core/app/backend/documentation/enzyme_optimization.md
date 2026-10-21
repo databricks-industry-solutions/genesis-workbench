@@ -9,7 +9,7 @@ This is meant for designing a real, useful enzyme — one that holds its catalyt
 The form has a **Generation mode** toggle that picks where the reward signal is applied:
 
 - **Fast** *(default, ~30 min, no GPU cost)* — AME runs as the deployed Model Serving endpoint. The loop scores K candidates after generation and resamples parents by reward for the next iteration's seed. **Reward signal applies between iterations only.**
-- **Accurate** *(~30-60 min, ~$22 GPU cost)* — AME loads on an A10 GPU cluster and uses Feynman-Kac steering during sampling: at intermediate denoising steps, partial structures are scored and trajectories are importance-sampled so losing branches get pruned early. **Reward signal applies during diffusion**, not just at iteration boundaries.
+- **Accurate** *(~30-60 min, ~$22 GPU cost)* — AME loads on serverless GPU and uses Feynman-Kac steering during sampling: at intermediate denoising steps, partial structures are scored and trajectories are importance-sampled so losing branches get pruned early. **Reward signal applies during diffusion**, not just at iteration boundaries.
 
 Both modes share the same scoring axes, the same UI form, the same MLflow output shape, and the same predictor endpoints. The toggle only changes how the reward signal influences generation.
 
@@ -105,7 +105,7 @@ The selection pressure shows up *between* iterations: the next round's AME draws
 
 ![Accurate flow diagram](https://raw.githubusercontent.com/databricks-industry-solutions/genesis-workbench/main/modules/core/app/images/enzyme_optimization_workflow_accurate.png)
 
-Runs as the **`run_enzyme_optimization_gwb_inprocess_ame`** Databricks job on an A10 GPU cluster. AME is **loaded into the orchestrator's own Python process** rather than called as an endpoint. This unlocks Proteina-Complexa's **Feynman-Kac steering** search algorithm, which biases the diffusion process *during* generation.
+Runs as the **`run_enzyme_optimization_gwb_inprocess_ame`** Databricks job on serverless GPU. AME is **loaded into the orchestrator's own Python process** rather than called as an endpoint. This unlocks Proteina-Complexa's **Feynman-Kac steering** search algorithm, which biases the diffusion process *during* generation.
 
 ```
 At job start (one-time):
@@ -146,7 +146,7 @@ Per iteration (Accurate):
 
 The reward signal influences AME's diffusion *during* sampling, not just selection between iterations. The hypothesis: "kill losing trajectories at step 25 instead of running them through to step 100, allocating compute to developability-promising branches."
 
-**Why it costs more:** the A10 GPU cluster runs the entire job (~$3.60/hour). FK-steering with `beam_width=4, n_branch=4, step_checkpoints=[0,25,50,75,100]` runs ~16 partial-rollout trajectories per AME call — each with 4 reward calls (one per developability endpoint).
+**Why it costs more:** serverless GPU runs the entire job (~$3.60/hour on GPU_1xA10). FK-steering with `beam_width=4, n_branch=4, step_checkpoints=[0,25,50,75,100]` runs ~16 partial-rollout trajectories per AME call — each with 4 reward calls (one per developability endpoint).
 
 **Wall-clock:** ~30-60 min for K=4, N=2 — verified at 46 min on the catalytic-triad smoke motif with all axes at weight 1.0.
 

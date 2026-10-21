@@ -36,7 +36,7 @@ Workload type and size are configurable per endpoint via job parameters (see bel
             └── 06c_create_cell_vector_index
 ```
 
-All tasks run on `14.3.x-gpu-ml-scala2.12` A10 GPU clusters (ON_DEMAND).
+All tasks run on `14.3.x-cpu-ml-scala2.12` CPU classic clusters (ON_DEMAND, py3.10 for SCimilarity compatibility).
 
 ## Job Parameters
 

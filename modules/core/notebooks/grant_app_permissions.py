@@ -19,7 +19,7 @@ dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("databricks_app_name", "genesis-workbench", "Databricks App Name (legacy single)")
 dbutils.widgets.text("databricks_app_names", "", "Databricks App Names (comma-separated, multi-app)")
-dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
+dbutils.widgets.text("sql_warehouse_id", "", "SQL Warehouse Id")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")

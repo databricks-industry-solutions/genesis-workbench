@@ -1,9 +1,9 @@
 # Databricks notebook source
 # DBTITLE 1,gwb_paramsNvariables
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog") 
-dbutils.widgets.text("schema", "dev_mmt_core_test", "Schema") #dev_mmt_core_test# gets overwritten during DAB deployment 
-dbutils.widgets.text("user_email", "may.merkletan@databricks.com", "User Id/Email")
-dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
+dbutils.widgets.text("schema", "genesis_schema", "Schema") #genesis_schema# gets overwritten during DAB deployment 
+dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
+dbutils.widgets.text("sql_warehouse_id", "", "SQL Warehouse Id")
 dbutils.widgets.text("gene_order_workload_type", "CPU", "Workload Type for gene_order")
 dbutils.widgets.text("gene_order_workload_size", "Small", "Workload Size for gene_order")
 dbutils.widgets.text("get_embedding_workload_type", "MULTIGPU_MEDIUM", "Workload Type for get_embedding")
@@ -142,8 +142,11 @@ run_id_get_embedding = deploy_model(user_email=user_email,
 
 # COMMAND ----------
 
-result1 = wait_for_job_run_completion(run_id_gene_order, timeout = 3600)
+# GetEmbedding serves on MULTIGPU_MEDIUM; the container build + GPU provisioning
+# routinely exceeds 1h, so 3600s spuriously times out this task while the underlying
+# deploy job is still succeeding. 7200s matches the teddy import/serve task.
+result1 = wait_for_job_run_completion(run_id_gene_order, timeout = 7200)
 
 # COMMAND ----------
 
-result2 = wait_for_job_run_completion(run_id_get_embedding, timeout = 3600)
+result2 = wait_for_job_run_completion(run_id_get_embedding, timeout = 7200)

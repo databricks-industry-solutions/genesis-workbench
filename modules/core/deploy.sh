@@ -168,6 +168,16 @@ if [[ ! -e ".deployed" ]]; then
 fi
 
 echo ""
+echo "▶️ Building the Transformer Engine wheel on serverless GPU -> libraries volume"
+echo "    Like the genesis_workbench wheel, TE is cached in the UC libraries volume and reused"
+echo "    by downstream GPU jobs (bionemo ESM2, esm2_embeddings, sequence_search). Unlike the"
+echo "    pure-python gwb wheel it compiles CUDA kernels, so it builds on a serverless GPU job."
+echo "🚨 First build takes ~40 min; it SELF-SKIPS if the wheel already exists. Runs in the"
+echo "    background (--no-wait) so it doesn't block the rest of the deploy."
+echo ""
+databricks bundle run --target $TARGET build_transformer_engine_job --var="$EXTRA_PARAMS" --no-wait
+
+echo ""
 echo "▶️ Publishing the node catalog (Vortex/MCP single source of truth)"
 echo "    (writes the node_catalog table from the wheel's built-in nodes)"
 echo ""
@@ -178,6 +188,17 @@ echo ""
 # CURATED_NODES, but the executor and MCP server read the node_catalog table
 # directly and would otherwise see an empty catalog until the first update.sh.
 databricks bundle run --target $TARGET publish_node_catalog_job --var="$EXTRA_PARAMS"
+
+echo ""
+echo "▶️ Ingesting reviewed human SwissProt proteins -> gene_sequences"
+echo "    The Target Resolver, human protein similarity search, and target-motif"
+echo "    lookups all read this core-owned table; sequence_search's gene companion"
+echo "    index (05/06) embeds it too. Runs on a serverless job and SELF-SKIPS when"
+echo "    the table is already populated, so re-deploys are no-ops. Runs after the"
+echo "    schema exists (initialize_core) and before the app so its gene features work."
+echo ""
+
+databricks bundle run --target $TARGET ingest_uniprot_genes_job --var="$EXTRA_PARAMS"
 
 echo ""
 echo "▶️ Deploying UI Application (genesis-workbench)"
@@ -207,6 +228,39 @@ echo ""
 # NOTE: the genesis_workbench wheel is copied to the UC Volume earlier (right
 # after `bundle deploy`) because this serverless job %pip-installs it from there.
 databricks bundle run --target $TARGET grant_app_permissions_job --var="$EXTRA_PARAMS"
+
+echo ""
+echo "▶️ Deploying Genie Code workspace skills to /.assistant/skills"
+echo "    In-notebook Databricks Assistant (Genie Code) skills for GWB — one SKILL.md per subfolder of"
+echo "    genie_code_skills/ at the repo root, plus the workspace instructions file at the root. These"
+echo "    guide notebook users to consume GWB via serving endpoints / Vector Search / batch jobs."
+echo "    Workspace-admin only — tolerant: a non-admin workspace logs a warning and skips, so the deploy"
+echo "    never fails on this. Refresh out-of-band with the loop in genie_code_skills/README.md."
+echo ""
+set +e
+GENIE_SRC="../../genie_code_skills"
+if [ -d "$GENIE_SRC" ]; then
+  for skill_dir in "$GENIE_SRC"/*/; do
+    [ -f "${skill_dir}SKILL.md" ] || continue
+    skill_name=$(basename "$skill_dir")
+    if databricks workspace mkdirs "/.assistant/skills/$skill_name" \
+       && databricks workspace import "/.assistant/skills/$skill_name/SKILL.md" \
+            --file "${skill_dir}SKILL.md" --format AUTO --overwrite; then
+      echo "  ✅ $skill_name"
+    else
+      echo "  ⚠️  skipped $skill_name (writing /.assistant needs workspace-admin rights)"
+    fi
+  done
+  if [ -f "$GENIE_SRC/.assistant_workspace_instructions.md" ]; then
+    databricks workspace import "/.assistant_workspace_instructions.md" \
+      --file "$GENIE_SRC/.assistant_workspace_instructions.md" --format AUTO --overwrite \
+      && echo "  ✅ .assistant_workspace_instructions.md" \
+      || echo "  ⚠️  skipped workspace instructions (workspace-admin rights required)"
+  fi
+else
+  echo "  (genie_code_skills/ not found at repo root — skipping)"
+fi
+set -e
 
 echo ""
 echo "▶️ Cleaning up local build artifacts"

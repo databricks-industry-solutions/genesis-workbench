@@ -70,6 +70,60 @@ content = content.replace('\u2018', "'").replace('\u2019', "'")
 
 ## Serving Endpoint Issues
 
+### Model needs torch > 2.7.1 / CUDA > 11.8 (e.g. RFD4-Proteina): ImportError at serving load
+**Symptom:** The model logs + registers fine and generates on the register node (serverless GPU, CUDA 13),
+but the serving endpoint fails to load with `ImportError: cannot import name 'has_static_value' from
+torch.fx.experimental.symbolic_shapes`, `AttributeError: module 'torch.optim' has no attribute 'Muon'`,
+or `libcue_ops.so: libnvrtc.so.13: cannot open shared object file`. The MLflow log warns "current
+2.7.1+cu118, required 2.14.1".
+**Root cause:** STANDARD GPU Model Serving builds a container at DEPLOY time on a fixed **torch 2.7.1+cu118
+(CUDA 11.8)** base, and runs a HARDCODED post-step `conda run -n mlflow-env pip install torch torchvision
+--no-index --find-links=/package-repo/pip-repo` that force-reinstalls torch 2.7.1 over whatever you
+pinned. No `pip_requirements` / `conda_env` / inline `--extra-index-url` trick can override it. So any
+model needing torch > 2.7.1 or CUDA > 11.8 cannot run on the standard serving path.
+**Fix: use Express deployments (`env_pack`)** — they PACKAGE the serverless-GPU notebook env at
+REGISTRATION and RESTORE it identically at serving (no deploy-time rebuild, no force-install), so the
+serving env == your register env. Requires `mlflow>=3.12` + `databricks-sdk>=0.150.0`, registering FROM
+serverless GPU. See `large_molecule/rfd4_proteina` `01_register_*.py` and the Development skill's
+"Serving a torch>2.7.1 / CUDA-13 model via Express" pattern. Key points:
+```python
+# register FROM serverless GPU; log WITHOUT registered_model_name, then register_model separately
+assert torch.cuda.is_available()
+mi = mlflow.pyfunc.log_model(name=model_name, python_model=..., code_paths=[...],
+                             pip_requirements=["mlflow","cloudpickle","pandas","numpy"])  # minimal: env_pack governs serving env
+from mlflow.utils.env_pack import EnvPackConfig
+mv = mlflow.register_model(model_uri=mi.model_uri, name=uc_model_name,
+        env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False))  # False: don't re-resolve git/binary/local-tagged pkgs
+w.serving_endpoints.create_and_wait(..., ServedEntityInput(workload_type=ServingModelWorkloadType("GPU_XLARGE"),
+        workload_size="Small", scale_to_zero_enabled=False), tags=[...])
+```
+`install_dependencies=False` is essential when the env has git/binary/local-tagged wheels (torch
+`+cu132`, nvcc source builds) — the default `True` re-resolves them from an index and fails with
+`No matching distribution`. Express deploys in ~6 min (vs 30-38 min for a standard build). GPU_XLARGE =
+1× H100, us-west-2 + account-team enrolled, no scale-to-zero.
+
+**Migrating an EXISTING model's serving to Express** — see the playbook
+`SKILL_GENESIS_WORKBENCH_EXPRESS_MIGRATION.md` (registration-only; keep `deploy_model`). Serving model-LOAD
+failures you'll hit + fixes:
+- `ImportError: cannot import name X from <pkg>` at model load (env drift): env_pack snapshots the REGISTER
+  kernel, so if the register install leaves deps unpinned while the model's `conda_env` pins them, the LATEST
+  versions get captured and break the import (real case: proteina's unpinned `atomworks` → latest dropped
+  `AtomSelectionStack`). Fix: pin the register install to the `conda_env` versions.
+- `No module named 'mlflow.utils.env_pack'` at `register_model`: a package installed AFTER the `mlflow>=3.12`
+  bump downgraded it (real case: boltz's `dbboltz[gpu]`). Fix: reinstall `mlflow>=3.12` as the LAST `%pip`
+  before `restartPython()`.
+- The service log for a FAILED **pending** deploy is UI-only — CLI `serving-endpoints logs`/`build-logs` key
+  to the ACTIVE config (absent for a never-started deploy) and return "Served entity … does not exist with
+  config version 0". Read the UI service log's `DATABRICKS_MODEL_LOAD_DIAGNOSTIC_V1` line for the exact import.
+- Python-version lock (scimilarity py3.10, genmol py3.11 — pinned deps with no py3.12 wheels): Express can't
+  reproduce it from the serverless-v3+ (py3.12) runtime → leave on standard serving.
+- Compute parity: a model that registers on CPU but serves on GPU (e.g. genmol) can't go Express without
+  moving its register task to serverless GPU (CPU-packaged deps fail to start a GPU endpoint).
+**Gotcha:** the GWB `import_model_from_uc` step runs after a `restartPython()` to the GWB lib (mlflow
+2.22/sdk 0.50) — put it in its own cell, wrap it non-fatal (the endpoint is already live), and do NOT
+reference pre-restart variables (e.g. `endpoint_name`) in post-restart cells → `NameError`. With
+`max_retries` on the task, such a bug becomes a wasteful full-notebook retry storm.
+
 ### SCimilarity: Request size cannot exceed 16777216 bytes
 **Symptom:** `Request size cannot exceed 16777216 bytes` when calling GetEmbedding.
 **Root cause:** Sending too many cells in a single request. Each cell has ~18K gene values at ~10 bytes/float in JSON.
@@ -183,6 +237,33 @@ databricks jobs reset --json '<updated_spec>'
 ### destroy.sh fails with "rm: .deployed: No such file"
 **Symptom:** destroy.sh exits with error if module was never deployed.
 **Fix:** Use `rm -f .deployed` (force flag) in all destroy.sh scripts.
+
+## Serverless Migration & Genomics Data
+
+### Genomics setup: download hangs/times out on `ftp.1000genomes.ebi.ac.uk`
+**Symptom:** `gwas_initial_setup_job` / `variant_annotation_initial_setup_job` times out (30–60 min) pulling the reference genome / FASTQ / VCF; files end up missing or partial. NCBI/ClinVar downloads on the same job succeed.
+**Root cause:** EBI's HTTPS is too slow from the workshop for multi-GB files (host-specific, not compute).
+**Fix:** Pull from the AWS Open Data S3 mirror instead — `https://1000genomes.s3.amazonaws.com/<path after /vol1/ftp/>`. Verified on S3: reference FASTA + `.fai` + full BWA index (`.amb/.ann/.bwt/.pac/.sa`) and the HG00096 FASTQs. For the sample chr6 VCF, the `20190312_biallelic_SNV_and_INDEL` release is **not** on that bucket, but the Phase 3 GRCh38-lifted genotypes **are** — use `release/20130502/supporting/GRCh38_positions/ALL.chr6.phase3_shapeit2_mvncall_integrated_v3plus_nounphased.rsID.genotypes.GRCh38_dbSNP_no_SVs.vcf.gz` (GRCh38 coords, same 2504 samples as `breast_cancer_phenotype.tsv`). To find any file on the mirror, list it: `https://1000genomes.s3.amazonaws.com/?list-type=2&prefix=<path>`.
+
+### Serverless job fails: `/local_disk0` missing or `%sh` unsupported
+**Symptom:** A job converted to serverless (`environment_key`) fails immediately in a `%sh` cell or on a `/local_disk0/...` path.
+**Root cause:** Serverless has no `/local_disk0` and limited shell support. `gwas 01_download_reference_genome.py` relies on both.
+**Fix:** Keep that task on a **classic single-node** `job_cluster_key` (CPU classic is not quota-blocked; only GPU is). Don't blanket-convert download/shell-heavy setup tasks to serverless.
+
+### Serverless: `LOCAL_RELATION_SIZE_LIMIT_EXCEEDED` (Spark Connect)
+**Symptom:** `CONNECT_INVALID_PLAN.LOCAL_RELATION_SIZE_LIMIT_EXCEEDED — Cached local relation size (… bytes) exceeds the limit (3221225472 bytes)`.
+**Root cause:** `spark.createDataFrame(pandas_df)` on serverless ships the frame to the service as a cached local relation, capped at 3 GiB. Classic (in-JVM) had no such cap. (Hit by scanpy `download_cellxgene` doing a whole-census `createDataFrame`.)
+**Fix:** Don't materialize a >3 GiB pandas object into Spark. Aggregate in pandas first, fetch known IDs directly, or run the task on classic. scanpy now stages the HGSOC demo h5ad directly (no census scan).
+
+### `databricks fs ls` shows 0-byte / "missing" files that actually have content
+**Symptom:** `fs ls -o json` reports `file_size: null`/0 for files on a UC Volume, or a file looks empty.
+**Root cause:** The size field is unreliable for UC Volume paths — it does **not** reflect real size. (Led to a false "FASTQ is 0-byte" diagnosis.)
+**Fix:** Verify by **content**, not size: `databricks fs cat <path> | head -c 16 | xxd` (magic bytes: `1f8b` gzip, `89484446` HDF5). An empty **directory listing** (no entries) is reliable = genuinely absent.
+
+### Single Cell tab: default demo h5ad missing
+**Symptom:** Single Cell → Run New Analysis prefills `raw_h5ad/hgsoc_demo_15k.h5ad` but the file isn't there.
+**Root cause:** `download_cellxgene` didn't complete (see the createDataFrame issue above), or the module wasn't deployed.
+**Fix:** Re-run `download_cellxgene_gwb` (stages the HGSOC demo directly), or copy `hgsoc_demo_15k.h5ad` from an existing workspace's `raw_h5ad` volume (download with one profile, upload with the target profile).
 
 ## Instructions
 

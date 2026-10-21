@@ -1,0 +1,107 @@
+variables:
+  current_user:
+    description: User deploying the bundle. Can apply to service principals as well.
+    default: ${workspace.current_user.userName}
+
+  current_working_directory:
+    description: Working directory or bundle root.
+    default: /Users/${var.current_user}/.bundle/${bundle.name}/${bundle.target}
+
+  workspace_url:
+    description: Workspace url for deployment
+
+  common_resource_tags:
+    description: Resource tags
+    default:
+      application: genesis_workbench
+      module: rfd4_proteina
+      created_by: ${workspace.current_user.short_name}
+
+  cpu_node_type:
+    description: Node type for CPU vms
+
+  t4_node_type:
+    description: Node type for T4 GPUs
+
+  a10_node_type:
+    description: Node type for A10 GPUs
+
+  gpu_small_setting:
+    description: The config setting for small gpu
+
+  gpu_medium_setting:
+    description: The config setting for medium gpu
+
+  gpu_large_setting:
+    description: The config setting for large gpu
+
+  # Serving-endpoint workload type. GPU_XLARGE = 1x H100 (us-west-2, account-team enrolled, no
+  # scale-to-zero). RFD4 is a torch-2.14 / CUDA-13 model, which the STANDARD serving path cannot run (it
+  # rebuilds on a torch-2.7.1/CUDA-11.8 base and force-reinstalls torch 2.7.1). The register notebook
+  # instead uses EXPRESS deployments (env_pack): it packages this serverless-GPU/CUDA-13 kernel at
+  # registration and restores it identically at serving — so what fixes the torch mismatch is env PARITY,
+  # not the H100 base image. H100 is used here mainly for memory headroom + CUDA-13 driver certainty;
+  # Express should also work on cheaper CUDA-13-capable tiers (GPU_LARGE=A100, GPU_MEDIUM=A10) — untested.
+  # Deployed via a CURRENT databricks-sdk (>=0.150.0) + mlflow>=3.12 installed in the kernel. Declared
+  # module-local with a default so the shared <cloud>.env (every other module's bundle) isn't touched.
+  gpu_serving_setting:
+    description: Serving-endpoint workload type (GPU_XLARGE = 1x H100; served via Express env_pack for the torch-2.14 model)
+    default: GPU_XLARGE
+
+  core_catalog_name:
+    description: primary catalog where data, models, and files are stored for this project.
+
+  core_schema_name:
+    description: The schema where core components will be installed.
+
+  sql_warehouse_id:
+    description: Id of the SQL Warehouse that will be used by the app
+
+  module_registration_experiment_name:
+    description: The experiment to which all registered modules are logged
+    default: dbx_genesis_workbench_modules
+
+  cache_dir:
+    description: The cache directory (UC volume) for RFD4-Proteina model artifacts + fine-tuned weights
+    default: rfd4_proteina
+
+  # RFD4-Proteina released WEIGHTS come from Hugging Face (the public release supersedes the early-access
+  # cwobject CDN). The flow denoiser + partial-autoencoder are a MATCHED PAIR from the 2026-10-19 release
+  # (latent dim + residue vocab changed vs early access — they cannot be mixed). Loaded via the model's
+  # `Proteina.from_pretrained(<hf_repo>, revision=<hf_revision>)` API (configs/inference.yaml hf_ckpt_*).
+  rfd4_hf_repo:
+    description: Hugging Face repo for the RFD4-Proteina released weights (matched flow + AE pair)
+    default: nvidia/RFD4-Proteina
+
+  rfd4_hf_revision:
+    description: Pinned HF Hub commit for reproducible weight loading (configs/inference.yaml hf_ckpt_revision)
+    default: a06e2509c7033b010fc43614e9fd840303588502
+
+  rfd4_flow_ckpt:
+    description: Flow (denoiser) checkpoint filename in the HF repo
+    default: rfd4-proteina-flow-release-2026-10-19.ckpt
+
+  rfd4_ae_ckpt:
+    description: Partial-autoencoder checkpoint filename in the HF repo
+    default: rfd4-proteina-ae-release-2026-10-19.ckpt
+
+  # The HF weights repo may be gated; the register/finetune/deploy jobs read a Hugging Face token from
+  # this secret (same scope that used to hold the GitHub PAT).
+  rfd4_hf_token_scope:
+    description: Databricks secret scope holding a Hugging Face token with access to the RFD4-Proteina weights
+    default: dbx_genesis_workbench
+
+  rfd4_hf_token_key:
+    description: Key in the secret scope for the Hugging Face token
+    default: hf_token
+
+  # RFD4-Proteina MODEL CODE is now a PUBLIC repo (BSD-3-Clause, RosettaCommons). The register/finetune/
+  # deploy jobs pip-install `rfd4-proteina[metrics-cuda13]` straight from this git ref — no GitHub PAT
+  # needed. Pinned to a release tag for reproducibility. Nothing is vendored into GWB.
+  rfd4_git_url:
+    description: Git host/path of the public RFD4-Proteina model repo
+    default: github.com/RosettaCommons/RFD4-Proteina.git
+
+  rfd4_git_ref:
+    description: Git ref (release tag/commit) of the RFD4-Proteina repo to install — pinned for reproducibility
+    default: v0.0.1

@@ -152,8 +152,269 @@ def molstar_html_multibody(pdbs : Union[str, List[str]], names: Optional[Union[s
         return html_as_iframe(html_str)
     else:
         return html_str
-    
 
 
+def molstar_html_complex(pdb: str, name: Optional[str] = None, with_iframe: Optional[bool] = True) -> str:
+    """Render a multi-chain COMPLEX so it reads as a bound complex rather than two separate
+    cartoons. Each chain gets a distinct color (Mol* `chain-id` theme) and a semi-transparent
+    molecular surface is drawn over the cartoon, so a small interface — e.g. a nanobody's three
+    CDR loops packed against an antigen epitope — visibly makes contact instead of looking like
+    two detached blobs. `name` is accepted for signature parity with the single/multi helpers.
 
+    Robustness: `loadStructureFromData` already applies a default (cartoon) preset, and the
+    custom cartoon+surface build runs inside a try/catch — so if the representation API ever
+    changes shape, the viewer degrades to the default preset instead of going blank. The JS uses
+    double quotes only, so it survives both the React `srcDoc` and the single-quoted `srcdoc`
+    iframe wrappers; the base64 is injected via replace() to avoid f-string brace escaping.
+    (Representation recipe verified in-browser against an antibody-antigen complex.)"""
+    logging.info('doing complex-aware molstar')
+    pdb_base64 = base64.b64encode(pdb.encode()).decode()
+    js = """
+                (async function() {
+                    const viewer = new rcsbMolstar.Viewer("viewer", {layoutShowLog: false, backgroundColor: 0x1e1e1e});
+                    await viewer.loadStructureFromData(atob("__PDB_B64__"), "pdb", false);
+                    // loadStructureFromData already draws a chain-id-colored cartoon. Overlay a
+                    // semi-transparent molecular surface per chain so a small interface (e.g. a
+                    // nanobody's three CDR loops against an antigen) reads as contact rather than two
+                    // detached ribbons. Use the high-level structure-hierarchy manager (the raw
+                    // state-tree walk fails because the Structure node is nested, not a root child),
+                    // wrapped so any Mol* API drift degrades to the plain cartoon, never a blank viewer.
+                    try {
+                        await new Promise(function(r){ setTimeout(r, 400); });
+                        const plugin = viewer.plugin;
+                        const current = plugin.managers.structure.hierarchy.current;
+                        for (const s of current.structures) {
+                            for (const c of s.components) {
+                                await plugin.builders.structure.representation.addRepresentation(
+                                    c.cell, { type: "molecular-surface", typeParams: { alpha: 0.4 }, color: "chain-id" });
+                            }
+                        }
+                    } catch (e) { console.log("surface overlay skipped, cartoon kept:", e && e.message); }
+                })();
+    """.replace("__PDB_B64__", pdb_base64)
+    html_str = ("""
+    <!DOCTYPE html>
+    <html>
+        <head>
+            <script src="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.js"></script>
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.css">
+            """ + MOLSTAR_DARK_CSS + """
+        </head>
+        <body>
+            <div id="viewer" style="width: 100%; height: 500px;"></div>
+            <script>""" + js + """</script>
+        </body>
+    </html>""")
+    if with_iframe:
+        return html_as_iframe(html_str)
+    return html_str
+
+
+_HYDROPHOBICITY_LEGEND_HTML = """
+    <div style="position:absolute; top:10px; right:10px; background:rgba(30,30,30,0.82); color:#ddd;
+         font:11px/1.3 sans-serif; padding:6px 8px; border-radius:4px; z-index:10; pointer-events:none;">
+      <div style="margin-bottom:3px;">Surface: hydrophobicity</div>
+      <div style="width:130px; height:10px; border-radius:2px;
+           background:linear-gradient(to right,#1565c0,#e0e0e0,#8d6e63);"></div>
+      <div style="display:flex; justify-content:space-between; margin-top:2px;">
+         <span>hydrophilic</span><span>hydrophobic</span></div>
+    </div>
+"""
+
+
+def molstar_html_docking_surface(protein_pdb: str, ligand_pdb: Optional[str] = None,
+                                 pocket_pdb: Optional[str] = None,
+                                 theme: str = "hydrophobicity", surface_alpha: float = 0.20,
+                                 with_iframe: bool = True) -> str:
+    """Docking-style viewer: protein cartoon + a SEMI-TRANSPARENT molecular surface colored by a
+    physicochemical property (default Mol* `hydrophobicity` theme, alpha 0.20 so the fold + ligand show
+    through), with the docked ligand drawn as ball-and-stick inside the pocket. Reproduces the
+    research-figure look (property-painted binding pocket + ligand).
+
+    When `pocket_pdb` (binding-site residues + ligand, from structure_metrics.binding_site_pocket) is
+    supplied, the binding site is loaded as a 2nd structure drawn as ball-and-stick with the computed
+    non-covalent interactions (H-bond / contact dashes) overlaid — Mol*'s `interactions` representation
+    only sees within-structure contacts, so the residues + ligand must share one structure. Falls back
+    to the ligand alone (plain ball-and-stick) when no pocket is given.
+
+    The ligand is passed as a PDB/HETATM block whose coordinates are already in the protein frame
+    (DiffDock docks into the given protein), so the overlay sits in the pocket. The camera frames the
+    WHOLE structure and widens the clipping sphere (cameraClipping radius=100, far=false) so the
+    translucent surface is never sliced against the screen — a tight ligand-focus was removed because it
+    caused that depth cutoff. Surface+coloring and the clipping tweak are each wrapped in try/catch so
+    any rcsb-molstar API/theme drift degrades to a plain cartoon+ligand, never a blank viewer; an
+    unsupported `theme` falls back to a `chain-id` surface. `theme` is any Mol* color-theme id. The
+    surface is applied ONLY to the first structure (protein), never the ligand. (Theme id + clipping
+    verified in-browser against the pinned rcsb-molstar CDN build.)"""
+    protein_b64 = base64.b64encode(protein_pdb.encode()).decode()
+    # Second structure: prefer the pocket (site residues + ligand) so we can draw interacting-residue
+    # sticks + H-bond/contact dashes; else fall back to the ligand alone (plain ball-and-stick).
+    second_pdb = pocket_pdb or ligand_pdb or ""
+    second_b64 = base64.b64encode(second_pdb.encode()).decode() if second_pdb else ""
+    load_second = (f'                    await viewer.loadStructureFromData(atob("{second_b64}"), "pdb", false);'
+                   if second_b64 else "")
+    pocket_js = ("""
+                        // Second structure = binding-site pocket (site residues + ligand): ball-and-stick
+                        // + the computed non-covalent interactions (H-bond / contact dashes), so a scientist
+                        // sees HOW the ligand is held. Each wrapped so a missing representation is skipped.
+                        if (current.structures.length > 1) {
+                            for (const c of current.structures[1].components) {
+                                try {
+                                    await plugin.builders.structure.representation.addRepresentation(
+                                        c.cell, { type: "ball-and-stick", color: "element-symbol" });
+                                } catch (e) { console.log("pocket sticks skipped:", e && e.message); }
+                                try {
+                                    await plugin.builders.structure.representation.addRepresentation(
+                                        c.cell, { type: "interactions" });
+                                } catch (e) { console.log("interactions skipped:", e && e.message); }
+                            }
+                        }
+""" if pocket_pdb else "")
+    legend = _HYDROPHOBICITY_LEGEND_HTML if theme == "hydrophobicity" else ""
+    js = ("""
+                (async function() {
+                    const viewer = new rcsbMolstar.Viewer("viewer", {layoutShowLog: false, backgroundColor: 0x1e1e1e});
+                    await viewer.loadStructureFromData(atob("__PROT_B64__"), "pdb", false);
+__LOAD_SECOND__
+                    try {
+                        await new Promise(function(r){ setTimeout(r, 450); });
+                        const plugin = viewer.plugin;
+                        const current = plugin.managers.structure.hierarchy.current;
+                        // First structure = protein: overlay a semi-transparent molecular surface colored by
+                        // the theme. An unsupported theme degrades to a chain-id surface so the pocket shape
+                        // still renders.
+                        if (current.structures.length > 0) {
+                            for (const c of current.structures[0].components) {
+                                try {
+                                    await plugin.builders.structure.representation.addRepresentation(
+                                        c.cell, { type: "molecular-surface", typeParams: { alpha: __ALPHA__ }, color: "__THEME__" });
+                                } catch (e1) {
+                                    try {
+                                        await plugin.builders.structure.representation.addRepresentation(
+                                            c.cell, { type: "molecular-surface", typeParams: { alpha: __ALPHA__ }, color: "chain-id" });
+                                    } catch (e2) { console.log("surface skipped:", e2 && e2.message); }
+                                }
+                            }
+                        }
+__POCKET_JS__
+                        // Frame the WHOLE structure (default camera after load) and widen the camera
+                        // clipping sphere so the translucent surface is never sliced against the screen.
+                        // (A tight ligand-focus was removed — it caused that depth cutoff.) radius:100
+                        // keeps the full scene; far:false disables far-plane clipping.
+                        try {
+                            plugin.canvas3d.setProps({ cameraClipping: { far: false, radius: 100, minNear: 0.1 } });
+                        } catch (e) { console.log("camera clipping tweak skipped:", e && e.message); }
+                    } catch (e) { console.log("docking surface build skipped, cartoon kept:", e && e.message); }
+                })();
+    """.replace("__PROT_B64__", protein_b64)
+        .replace("__LOAD_SECOND__", load_second)
+        .replace("__POCKET_JS__", pocket_js)
+        .replace("__ALPHA__", str(surface_alpha))
+        .replace("__THEME__", theme))
+    html_str = ("""
+    <!DOCTYPE html>
+    <html>
+        <head>
+            <script src="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.js"></script>
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.css">
+            """ + MOLSTAR_DARK_CSS + """
+        </head>
+        <body>
+            <div style="position:relative; width:100%; height:500px;">
+                <div id="viewer" style="width: 100%; height: 500px;"></div>
+                """ + legend + """
+            </div>
+            <script>""" + js + """</script>
+        </body>
+    </html>""")
+    if with_iframe:
+        return html_as_iframe(html_str)
+    return html_str
+
+
+def _pdb_to_mmcif_bfactor(pdb_str: str, res_values: Optional[dict] = None,
+                          default_value: float = 0.0) -> str:
+    """Minimal mmCIF (one `_atom_site` loop) from a PDB string, writing a per-residue value into
+    `B_iso_or_equiv`. `res_values` maps (chain, resid) -> float; residues not listed get
+    `default_value`. mmCIF is used deliberately (NOT PDB): rcsb-molstar only exposes B-factor to its
+    color themes when the structure is loaded as mmCIF. All ATOM records are kept (so cartoon AND
+    surface render); HETATM/waters are dropped."""
+    rv = res_values or {}
+    out = ["data_s", "#", "loop_",
+           "_atom_site.group_PDB", "_atom_site.id", "_atom_site.type_symbol", "_atom_site.label_atom_id",
+           "_atom_site.label_comp_id", "_atom_site.label_asym_id", "_atom_site.label_seq_id",
+           "_atom_site.Cartn_x", "_atom_site.Cartn_y", "_atom_site.Cartn_z", "_atom_site.occupancy",
+           "_atom_site.B_iso_or_equiv", "_atom_site.auth_seq_id", "_atom_site.auth_asym_id",
+           "_atom_site.pdbx_PDB_model_num"]
+    serial = 0
+    for ln in pdb_str.splitlines():
+        if ln[:4] != "ATOM" or len(ln) < 54:
+            continue
+        atom_name = ln[12:16].strip()
+        comp = ln[17:20].strip() or "UNK"
+        chain = ln[21]
+        try:
+            rid = int(ln[22:26]); x = float(ln[30:38]); y = float(ln[38:46]); z = float(ln[46:54])
+        except ValueError:
+            continue
+        occ = ln[54:60].strip() or "1.00"
+        elem = (ln[76:78].strip() or atom_name[:1]) or "C"
+        b = rv.get((chain, rid), default_value)
+        serial += 1
+        out.append(f"ATOM {serial} {elem} {atom_name} {comp} {chain} {rid} "
+                   f"{x:.3f} {y:.3f} {z:.3f} {occ} {b:.2f} {rid} {chain} 1")
+    out.append("#")
+    return "\n".join(out) + "\n"
+
+
+def molstar_html_colored(pdb_str: str, res_values: Optional[dict] = None, theme: str = "uncertainty",
+                         with_surface: bool = False, with_iframe: bool = True) -> str:
+    """Render a structure colored by a Mol* theme that reads a per-residue value from `B_iso_or_equiv`.
+
+    Encodes `res_values` ((chain, resid) -> float) into the B-factor and loads as mmCIF (required so
+    rcsb-molstar exposes the B-factor to the color themes — a plain PDB load does NOT). `theme`:
+    - "plddt-confidence" — AlphaFold/ESMFold pLDDT palette (expects 0-100 in B-factor),
+    - "uncertainty"      — continuous ramp; use it for coded categories (e.g. epitope/paratope,
+                           CDR/framework) where distinct codes map to distinct ramp colors,
+    - "chain-id"         — ignores B-factor, one color per chain (the complex "by chain" view).
+    `with_surface` overlays a semi-transparent molecular surface (for complexes). The representation
+    build is wrapped so any Mol* API drift degrades to the loaded structure, never a blank viewer.
+    (Mechanism verified in-browser for pLDDT, epitope/paratope, and chain modes.)"""
+    cif_b64 = base64.b64encode(_pdb_to_mmcif_bfactor(pdb_str, res_values).encode()).decode()
+    surf_js = ("""
+                        for (const s of cur.structures) { for (const c of s.components) {
+                            await plugin.builders.structure.representation.addRepresentation(
+                                c.cell, { type: "molecular-surface", typeParams: { alpha: 0.4 }, color: "__THEME__" });
+                        } }""" if with_surface else "")
+    js = ("""
+                (async function() {
+                    const viewer = new rcsbMolstar.Viewer("viewer", {layoutShowLog: false, backgroundColor: 0x1e1e1e});
+                    await viewer.loadStructureFromData(atob("__CIF_B64__"), "mmcif", false);
+                    try {
+                        await new Promise(function(r){ setTimeout(r, 500); });
+                        const plugin = viewer.plugin;
+                        const cur = plugin.managers.structure.hierarchy.current;
+                        for (const s of cur.structures) {
+                            await plugin.managers.structure.component.updateRepresentationsTheme(
+                                s.components, { color: "__THEME__" });
+                        }__SURF__
+                    } catch (e) { console.log("coloring skipped, default kept:", e && e.message); }
+                })();
+    """.replace("__CIF_B64__", cif_b64).replace("__SURF__", surf_js).replace("__THEME__", theme))
+    html_str = ("""
+    <!DOCTYPE html>
+    <html>
+        <head>
+            <script src="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.js"></script>
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.css">
+            """ + MOLSTAR_DARK_CSS + """
+        </head>
+        <body>
+            <div id="viewer" style="width: 100%; height: 500px;"></div>
+            <script>""" + js + """</script>
+        </body>
+    </html>""")
+    if with_iframe:
+        return html_as_iframe(html_str)
+    return html_str
 
