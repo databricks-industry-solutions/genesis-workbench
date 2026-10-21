@@ -1,3 +1,7 @@
+# BioNeMo ESM2 fine-tune — serverless GPU. Containerless: a serverless-GPU notebook_task
+# (hardware_accelerator: GPU_1xA10) that reads ESM-2 from Hugging Face and runs it on
+# Transformer Engine (no NGC container, no classic A10 cluster — both are unavailable at the
+# workshop's EC2 GPU quota=0). Deployed once; launched ON DEMAND from the UI (jobs run-now).
 resources:
   jobs:
     bionemo_esm_finetune:
@@ -9,18 +13,27 @@ resources:
 
       tasks:
         - task_key: bionemo_esm_finetune_task
-          job_cluster_key: job_cluster
+          max_retries: 0
+          disable_auto_optimization: true
+          retry_on_timeout: false
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xA10
           notebook_task:
             notebook_path: ../notebooks/bionemo_esm_finetune.py
-          max_retries: 0 
+
+      environments:
+        - environment_key: gpu_env
+          spec:
+            client: "4"
 
       parameters:
         - name: core_catalog
           default: ${var.core_catalog_name}
         - name: core_schema
           default: ${var.core_schema_name}
-        - name: sql_warehouse_id 
-          default: ${var.sql_warehouse_id}          
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
         - name: esm_variant
           default: 650M
         - name: train_data_location
@@ -28,7 +41,7 @@ resources:
         - name: validation_data_location
           default: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/bionemo/esm2/ft_data/BLAT_ECOLX_Tenaillon2013_metadata_eval.csv
         - name: should_use_lora
-          default: false
+          default: "false"
         - name: finetune_label
           default: esm_650m_ft_xyz
         - name: model_volume
@@ -36,52 +49,26 @@ resources:
         - name: task_type
           default: regression
         - name: mlp_ft_dropout
-          default: 0.25
+          default: "0.25"
         - name: mlp_hidden_size
-          default: 256
+          default: "256"
         - name: mlp_target_size
-          default: 1
+          default: "1"
         - name: experiment_name
           default: sequence_level_regression
         - name: num_steps
-          default: 50
+          default: "50"
         - name: lr
-          default: 5e-3
+          default: "5e-3"
         - name: lr_multiplier
-          default: 1e2
-        - name: scale_lr_layer
-          default: regression_head
+          default: "1e2"
         - name: micro_batch_size
-          default: 2
+          default: "2"
         - name: precision
           default: bf16-mixed
         - name: user_email
           default: a@b.com
-
-      job_clusters:
-        - job_cluster_key: job_cluster
-          new_cluster:
-            num_workers: 0
-            node_type_id: ${var.a10_node_type}
-            driver_node_type_id: ${var.a10_node_type}
-            spark_version: 15.4.x-scala2.12
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            docker_image:
-              url: ${var.bionemo_docker_image}  
-              basic_auth:
-                username: ${var.bionemo_docker_userid}
-                password: ${var.bionemo_docker_token}
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.databricks.unityCatalog.volumes.enabled: true
-              spark.master: local[*]
-            custom_tags:
-              ResourceClass: SingleNode
-            # On-demand avoids spot preemption during long-running
-            # model fine-tuning jobs on AWS
-            aws_attributes:
-              availability: ON_DEMAND
+        - name: mlflow_run_id
+          default: ""
 
       tags: ${var.common_resource_tags}

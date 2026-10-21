@@ -11,7 +11,11 @@ resources:
         # 1) Register the TEDDY model + tokenizer + HF snapshot into UC.
         - task_key: register_teddy_task
           max_retries: 0
-          job_cluster_key: job_cluster_teddy
+          disable_auto_optimization: true
+          retry_on_timeout: false
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xA10
           notebook_task:
             notebook_path: ../notebooks/01_register_teddy.py
 
@@ -34,18 +38,37 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/06_extract_gene_mapping.py
 
-        # 4) Re-embed a stratified Census subset into the reference Delta
-        # `teddy_cells`. Heavy GPU job (8× A10 multi-node, ~45-60 min for 2M
-        # cells with bf16+batch=32 via pandas_udf, soma_id-sorted partitions
-        # for sequential Census reads). The notebook is idempotent — skips
-        # if the table is already populated at the target size + dim.
-        - task_key: reembed_reference_task
+        # 4a) STAGE: fetch the Census X for a stratified subset ONCE and precompute the TEDDY
+        # top-k gene tokens to a Volume (03a). This is the network-bound part, split out so the
+        # GPU embed (4b) no longer idle-waits on per-batch get_anndata (the old ~6k cells/min
+        # bottleneck). Resumable — a re-run fetches only the soma_joinids not already tokenized,
+        # so an interrupted stage never loses progress.
+        - task_key: stage_reference_task
           max_retries: 0
+          disable_auto_optimization: true
+          retry_on_timeout: false
           depends_on:
             - task_key: "register_teddy_task"
-          job_cluster_key: job_cluster_teddy_a10_multinode
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xA10
           notebook_task:
-            notebook_path: ../notebooks/03_reembed_reference.py
+            notebook_path: ../notebooks/03a_stage_reference.py
+
+        # 4b) EMBED: Ray reads the LOCAL staged tokens (no Census) and runs a pure TEDDY forward
+        # into the reference Delta `teddy_cells`. GPU-bound → scales ~linearly with
+        # `num_gpu_workers`. Idempotent — skips if teddy_cells is already populated at target+dim.
+        - task_key: reembed_reference_task
+          max_retries: 0
+          disable_auto_optimization: true
+          retry_on_timeout: false
+          depends_on:
+            - task_key: "stage_reference_task"
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xA10
+          notebook_task:
+            notebook_path: ../notebooks/03b_embed_reference_ray.py
 
         # 5) Create/sync the Vector Search index over teddy_cells. Idempotent
         # — detects existing index and triggers sync_index() instead.
@@ -64,6 +87,9 @@ resources:
         - environment_key: default
           spec:
             client: '2'
+        - environment_key: gpu_env
+          spec:
+            client: '4'
 
       parameters:
         - name: catalog
@@ -95,44 +121,10 @@ resources:
           default: ${var.teddy_reembed_per_stratum_cap}
         - name: census_version
           default: ${var.teddy_reembed_census_version}
-
-      job_clusters:
-        - job_cluster_key: job_cluster_teddy
-          new_cluster:
-            num_workers: 0
-            node_type_id: ${var.t4_node_type}
-            driver_node_type_id: ${var.t4_node_type}
-            spark_version: '15.4.x-gpu-ml-scala2.12'
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: local[*]
-            custom_tags:
-              ResourceClass: SingleNode
-
-        # Multi-node A10 cluster for the reembed task. 4 workers × 1 A10 = 4
-        # GPUs in parallel via pandas_udf / mapInPandas — ~4× the throughput
-        # of the original single-node A10 setup. Driver does Census obs query
-        # + Spark coordination only; workers do all GPU embedding.
-        # `spark.task.resource.gpu.amount=1` pins one Spark task per GPU so
-        # we don't fight for the same CUDA context.
-        # Sized for ~320 vCPU (5 × g5.16xlarge @ 64 vCPU) to stay well under
-        # the AWS G/VT-family vCPU quota of 768 — the 8-worker sizing tipped
-        # over when other G-family clusters were running concurrently.
-        - job_cluster_key: job_cluster_teddy_a10_multinode
-          new_cluster:
-            num_workers: 4
-            node_type_id: ${var.a10_node_type}
-            driver_node_type_id: ${var.a10_node_type}
-            spark_version: '15.4.x-gpu-ml-scala2.12'
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            spark_conf:
-              spark.task.resource.gpu.amount: "1"
-            # cloud-specific availability is set per-target in databricks.yml
+        # Number of single-A10 serverless-GPU Ray workers for the reembed
+        # (serverless_gpu.ray.ray_launch provisions this many A10 nodes).
+        - name: num_gpu_workers
+          default: "4"
 
       timeout_seconds: 43200  # 12h hard cap — covers the 5-8h reembed plus
                               # mapping, register, and serving deploy overhead.

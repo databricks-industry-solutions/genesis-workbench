@@ -7,33 +7,31 @@ resources:
         on_failure:
           - ${var.current_user}
 
+      # Serverless GPU (GPU_1xA10) — the classic A10 GPU cluster can't provision at the
+      # workshop's EC2 GPU quota=0. Builds the TE wheel to the libraries Volume so downstream
+      # serverless-GPU jobs install it in seconds instead of source-building each run.
       tasks:
         - task_key: build_te_wheel
           max_retries: 0
-          job_cluster_key: gpu_cluster
+          disable_auto_optimization: true
+          retry_on_timeout: false
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xA10
           notebook_task:
             notebook_path: ../../notebooks/build_transformer_engine.py
+
+      environments:
+        - environment_key: gpu_env
+          spec:
+            client: "4"
 
       parameters:
         - name: catalog
           default: ${var.core_catalog_name}
         - name: schema
           default: ${var.core_schema_name}
-
-      job_clusters:
-        - job_cluster_key: gpu_cluster
-          new_cluster:
-            num_workers: 0
-            node_type_id: ${var.a10_node_type}
-            driver_node_type_id: ${var.a10_node_type}
-            spark_version: '15.4.x-gpu-ml-scala2.12'
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: local[*]
-            custom_tags:
-              ResourceClass: SingleNode
+        - name: te_version
+          default: ""
 
       tags: ${var.common_resource_tags}

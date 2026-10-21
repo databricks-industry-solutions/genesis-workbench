@@ -1,21 +1,31 @@
---extra-index-url https://download.pytorch.org/whl/cu118
-torch==2.3.1+cu118
-torchvision==0.18.1+cu118
+# Serverless GPU (GPU_1xA10, CUDA 13.0 driver): use the runtime's torch
+# (2.7.1+cu126) instead of pinning torch 2.3.1+cu118 — the old cu118 pin is a
+# classic-cluster artifact and reinstalling it fights the runtime. transformers
+# 4.44 runs fine on torch 2.7. numpy is NOT pinned (runtime numpy 2.x; the old
+# numpy==1.26.4 pin forces a downgrade that can break runtime compiled libs).
+# This file is also the serving pip_requirements (models-from-code), so the
+# serving container reuses the same runtime-torch stack. torch MUST be listed
+# for serving: the teddy wrapper does `import torch`, teddy/ ships as an artifact
+# (not pip), and transformers does NOT pull torch — so without this the serving
+# container loads with a missing dependency (mlflow_parse: user_dep_missing).
+# Pinned to 2.7.1 = the serverless runtime's version, so `%pip install` at
+# registration is a no-op (2.7.1+cu126 satisfies ==2.7.1) while serving installs it.
+torch==2.7.1
 transformers==4.44.2
 huggingface_hub==0.25.2
+hf_transfer==0.1.9
 safetensors==0.4.5
 anndata==0.10.9
 scanpy==1.10.3
-numpy==1.26.4
 pandas==2.2.3
 scipy==1.13.1
 scikit-learn==1.5.2
 tqdm==4.66.5
 pyyaml==6.0.2
-cloudpickle==2.2.1
+cloudpickle==3.0.0
 mlflow==2.22.0
-# teddy/ source ships via MLflow code_paths (not pip) — pyproject.toml in
+# teddy/ source ships via MLflow artifacts (not pip) — pyproject.toml in
 # the HF repo uses poetry with ~150 pinned deps that conflict with this stack.
 # Using `python_model=path_to_wrapper.py` (file-based, not cloudpickle) means
-# MLflow imports the wrapper from disk after adding code_paths to sys.path,
+# MLflow imports the wrapper from disk after adding it to sys.path,
 # so `import teddy` resolves without needing it on PyPI.

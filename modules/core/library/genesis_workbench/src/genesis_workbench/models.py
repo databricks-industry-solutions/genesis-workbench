@@ -472,6 +472,15 @@ def deploy_model_endpoint(catalog_name: str,
     #     ),
     # )
 
+    # application / created_by tags for every GWB endpoint. Defined once and applied on BOTH paths:
+    # create sets them inline; update_config_and_wait does NOT carry tags, so we (re)apply them with
+    # patch() after an update — otherwise any endpoint that goes through the update path (every redeploy
+    # of an existing endpoint, e.g. after compute reaping) ends up untagged.
+    endpoint_tags = [
+        EndpointTag(key="application", value="genesis_workbench"),
+        EndpointTag(key="created_by", value=creating_user_email),
+    ]
+
     print(f"Checking if endpoint: {endpoint_name} exists")
 
     try:
@@ -484,6 +493,8 @@ def deploy_model_endpoint(catalog_name: str,
             served_entities=served_entities,
             timeout = timedelta(minutes=360) #wait up to six hours; large/GPU models can provision past 3h
         )
+        # update_config_and_wait does not touch tags — (re)apply them so updated endpoints stay tagged
+        w.serving_endpoints.patch(name=endpoint_name, add_tags=endpoint_tags)
         # [Uncomment to enable AI Gateway inference tables on update]
         # w.serving_endpoints.put_ai_gateway(
         #     name=endpoint_name,
@@ -500,10 +511,7 @@ def deploy_model_endpoint(catalog_name: str,
             ),
             # [Uncomment to enable AI Gateway inference tables on create]
             # ai_gateway=ai_gateway_config,
-            tags=[
-                EndpointTag(key="application", value="genesis_workbench"),
-                EndpointTag(key="created_by", value=creating_user_email)
-            ],
+            tags=endpoint_tags,
             timeout = timedelta(minutes=360) #wait up to six hours. some large/GPU models take very long to provision
         )
 

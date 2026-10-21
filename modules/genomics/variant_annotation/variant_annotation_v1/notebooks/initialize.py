@@ -7,7 +7,7 @@ dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("variant_annotation_job_id", "1234", "Variant Annotation Job ID")
 dbutils.widgets.text("variant_annotation_dashboard_id", "1234", "Variant Annotation Dashboard ID")
 dbutils.widgets.text("user_email", "a@b.com", "Email of the user running the deploy")
-dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
+dbutils.widgets.text("sql_warehouse_id", "", "SQL Warehouse Id")
 dbutils.widgets.text("databricks_app_names", "genesis-workbench:mcp-genesis-workbench", "Databricks App Names (colon/comma-separated, UI + MCP)")
 
 catalog = dbutils.widgets.get("catalog")
@@ -162,7 +162,10 @@ import os
 sample_fastq_dir = f"/Volumes/{catalog}/{schema}/gwas_data/sample_fastq"
 os.makedirs(sample_fastq_dir, exist_ok=True)
 
-fastq_base_url = "https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/data/HG00096/sequence_read"
+# AWS Open Data S3 mirror of 1000 Genomes (registry.opendata.aws/1000-genomes).
+# EBI's HTTPS (ftp.1000genomes.ebi.ac.uk) is too slow from the workshop and timed out
+# on both serverless and classic; S3 is fast + reliable from AWS compute.
+fastq_base_url = "https://1000genomes.s3.amazonaws.com/phase3/data/HG00096/sequence_read"
 fastq_files = {
     "sample_1.fq.gz": f"{fastq_base_url}/SRR062634_1.filt.fastq.gz",
     "sample_2.fq.gz": f"{fastq_base_url}/SRR062634_2.filt.fastq.gz",
@@ -170,9 +173,16 @@ fastq_files = {
 
 for dest_name, url in fastq_files.items():
     dest_path = os.path.join(sample_fastq_dir, dest_name)
-    if os.path.exists(dest_path):
-        print(f"{dest_name} already exists, skipping")
+    # A prior run's timeout (SIGKILL) can leave a 0-byte / partial file that an
+    # existence-only guard would wrongly treat as complete and skip forever. These
+    # are multi-GB, so only skip a fully-sized file; otherwise drop the partial and
+    # re-download.
+    if os.path.exists(dest_path) and os.path.getsize(dest_path) > 1_000_000:
+        print(f"{dest_name} already exists ({os.path.getsize(dest_path)} bytes), skipping")
         continue
+    if os.path.exists(dest_path):
+        print(f"Removing partial {dest_name} ({os.path.getsize(dest_path)} bytes) and re-downloading")
+        os.remove(dest_path)
     print(f"Downloading {dest_name} from {url} ...")
     try:
         subprocess.run(

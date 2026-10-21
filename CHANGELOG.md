@@ -1,5 +1,294 @@
 # Genesis Workbench — Changelog
 
+## Unreleased (branch `feature/serverless-gpu-jobs`) — serverless migration + genomics/single-cell deploy fixes + RFD4-Proteina public-release refresh
+
+Migrates module jobs off classic clusters to **serverless** (to bypass the workshop's EC2 GPU quota=0 and cut
+cluster-start time), hardens deploy-time sample-data staging, and refreshes all RFD4-Proteina references for the public release.
+
+- **RFD4-Proteina public-release refresh.** Repository moved from private NVIDIA-BioNeMo to public
+  [RosettaCommons/RFD4-Proteina](https://github.com/RosettaCommons/RFD4-Proteina) (tag v0.0.1, BSD-3-Clause license).
+  Weights now served from HuggingFace `nvidia/RFD4-Proteina` instead of cwobject CDN. Dependency bumps: atomworks 3.0.4,
+  cuequivariance 0.13. Updated checkpoint filenames, model descriptions, and license/repo references throughout the
+  app, documentation, benchmarks, and deployment skills. The register/serving jobs now **bake the portable HF
+  bundle** (`config.json` + `model.safetensors`) into the model version at register time (loaded offline at
+  serving — no HF egress/token on the endpoint); the optional Hugging Face token lives in
+  `modules/large_molecule/module.env` and `deploy.sh` seeds it into the `dbx_genesis_workbench/hf_token` secret.
+  Fine-tune reworked to the v0.0.1 `rfd4-train` form (`out_dir`, `log.log_wandb=false`, and
+  `opt.dist_strategy=auto` for a single serverless H100). All three RFD4 workflows (rfd4_proteina,
+  antibody_design, vaccine_immunogen) GPU-validated green on H100.
+- **Serverless migration.** Classic CPU register/setup jobs and GPU jobs converted to serverless
+  `notebook_task` (`environment_key` + job-level `environments`); GPU jobs use `compute.hardware_accelerator:
+  GPU_1xA10`. bionemo ESM-2 re-architected **containerless** (HF + Transformer Engine); the TE wheel is built
+  once on a serverless GPU job into the `libraries` volume. kermt_v2 already serverless.
+- **kermt_v1 removed** — legacy, superseded by the serverless `kermt_v2` (identical job/bundle names; only v2
+  is deployed). Fixed the stale deploy hint in `app/services/kermt.py`.
+- **Deliberately left on classic** (do NOT convert): the **Glow** genomics jobs (attach a Spark JAR serverless
+  can't) and the **genomics setup jobs** `gwas_initial_setup_job` / `variant_annotation_initial_setup_job`
+  (their notebooks use `%sh` + `/local_disk0`, absent on serverless, and stage multi-GB reference/FASTQ data).
+  scimilarity stays classic (py3.10-locked). CPU classic is not quota-blocked; only GPU classic is.
+- **1000 Genomes downloads → AWS Open Data S3 mirror** (`1000genomes.s3.amazonaws.com`). EBI's HTTPS
+  (`ftp.1000genomes.ebi.ac.uk`) is too slow from the workshop and timed out (30–60 min) on the reference
+  genome / BWA index / FASTQ / sample VCF. The sample chr6 VCF was switched from the (un-mirrored) 2019
+  biallelic release to the Phase 3 **GRCh38-lifted** genotypes, which _are_ on the mirror
+  (`ALL.chr6.phase3_shapeit2_mvncall_integrated_v3plus_nounphased.rsID.genotypes.GRCh38_dbSNP_no_SVs.vcf.gz`):
+  GRCh38 coordinates (matching the reference genome) and the same 2504 samples as `breast_cancer_phenotype.tsv`.
+  So a **fresh deploy now stages every genomics file from S3** with no cross-workspace copy. The download raises
+  on failure instead of printing an error (setup no longer reports success with a missing VCF).
+- **scanpy Single Cell demo.** `download_cellxgene` no longer scans the whole CELLxGENE census into
+  `spark.createDataFrame` (exceeded serverless Spark Connect's 3 GiB local-relation cap); it stages the curated
+  **HGSOC demo** (`raw_h5ad/hgsoc_demo_15k.h5ad`) directly. The Single Cell UI default now points at it (with
+  `gene_name_column=feature_name`).
+- **Deploy-time sample-data staging** made self-contained + robust: gwas stages its own demo FASTQ; size-checked
+  download guards (a timeout no longer leaves a 0-byte file that a re-run skips).
+- **Skills tightened.** Deploy-wizard skill gains a targeted/iterative-deploy fast path, a hard "one module at a
+  time, never parallel" rule, post-deploy job-completion + verify-by-content checks, and the serverless-vs-classic
+  + S3 realities; troubleshooting skill gains recipes for the S3 mirror, serverless `%sh`/`/local_disk0` and
+  `LOCAL_RELATION_SIZE_LIMIT_EXCEEDED`, and the unreliable `fs ls` size on UC Volumes.
+
+## small_molecule (2026-10-21) — Boltz-2 affinity axis · rich docking/ligand-binder viewer & metrics · demo prefills · app fixes
+
+### What changed and why
+
+- **Boltz-2 affinity scoring axis.** Upgraded dbboltz to `boltz==2.2.1` (Boltz-2) and surfaced its
+  protein–small-molecule binding-affinity head. Ligand Binder Design can co-fold each designed binder with the
+  target ligand and report `affinity_pred_value` / `affinity_probability_binary` (opt-in
+  `validate_boltz_affinity`) as a second ranking axis alongside DiffDock pose confidence. (Affinity head is
+  protein–small-molecule only; the binder must be the ligand chain — not valid for protein–protein.)
+- **Rich docking / ligand-binder / motif viewer + decision metrics.** New Mol* viewer
+  (`services/molstar.py::molstar_html_docking_surface`): cartoon + a translucent **hydrophobicity surface**
+  (now the default) + pocket sticks + interaction (H-bond/contact) dashes + a camera-clipping depth fix. A
+  CPU-side metrics strip (mean pLDDT, heavy-atom contacts, Shrake-Rupley buried SASA, Boltz affinity, dock
+  confidence) and an RDKit druglikeness mini-panel (`services/structure_metrics.py`,
+  `components/DockingMetrics.tsx`).
+- **Demo prefills.** Small-molecule tabs open with valid, recognizable targets: Molecular Docking + Guided
+  Molecule Design seed **imatinib (Gleevec)** against the **ABL1 kinase** (PDB 1IEP apo pocket / its chain-A
+  sequence); Ligand Binder Design seeds **fentanyl** (de-novo binder / opioid biosensor). The docking example
+  now serves the full ABL kinase domain as an apo pocket (was a 50-residue stub) so the pose lands in the real
+  pocket. SMILES are PubChem-canonical; the sequence is from RCSB 1IEP.
+- **App fixes.** The AI-canvas (Vortex) tool catalog is cached + pre-warmed at app startup (no slow
+  first-request rebuild); dispatch success toasts are uniform across tabs (green, with the run name).
+
+## vaccine_immunogen (2026-10-14) — result-dialog "Color by" viewer + unindexed motif placement + input robustness
+
+Brings the Vaccine Immunogen result dialog up to parity with Antibody Design (an on-demand structure
+re-coloring viewer) and adds an opt-in free-placement motif-scaffolding mode plus defensive input handling.
+
+### What changed and why
+
+- **Result-dialog "Color by" viewer.** The vaccine dialog now re-colors the selected immunogen on demand
+  (previously a single static view). Three single-chain modes: **Epitope motif / scaffold**, **Confidence
+  (pLDDT)**, **Sequence liabilities** — deliberately NO chain/epitope-paratope (single chain) and NO MHC-II
+  burden (a vaccine is *meant* to be immunogenic). New `services/vaccine_coloring.py` (reuses the antibody
+  per-residue encoders), `POST /api/vaccine_immunogen/color_structure`, and the frontend dropdown + legend.
+  Coloring is CPU-side — the viewer calls no serving endpoint. The orchestrator now writes
+  `results/motif_positions.json` (per-candidate 1-based motif positions) to drive the motif mode (mirrors the
+  antibody `results/mhc_burden.json` precompute); runs made before this show the whole chain as scaffold.
+- **Unindexed motif placement (`motif_placement` toggle, default `indexed`).** *Unindexed* adds `C_IDX:false`
+  (grouped) on the motif so the model **chooses where the epitope sits in the chain** — the canonical
+  unindexed motif-scaffolding task (RFD4-Proteína paper §S6.1.1 "indexing/unindexing" + the rfproteina
+  `motif_unindexed` benchmark). Both modes keep `C_CRD` + `C_SEQ` on all motif atoms (full antigenic
+  surface); indexing is a *separate* conditioning axis from the coordinate type — **not** `C_CRDGRP` (that
+  is the distinct free-3D-dock internal-coordinate variant). *Indexed* (fixed chain position) stays the
+  default. Wired through orchestrator widget → service `job_parameters` → router `StartRequest` → UI control,
+  and logged as the MLflow `scaffold_task` / `motif_placement` params. (Supersedes the initial `C_CRDGRP`
+  approach, which was verified against the paper to be the *indexed internal-coordinate* variant, not
+  unindexing.) GPU-validated green: an unindexed H100 smoke run ran to SUCCESS with the model placing the
+  epitope at distinct chain positions per design (e.g. residues 62–85 vs 51–74) and sub-/near-2 Å motif
+  RMSD (0.54 / 1.51 Å).
+- **Uploaded-epitope robustness.** `strip_nonfinite_atoms` drops atoms with non-finite coordinates and
+  `validate_motif_backbone` requires a complete finite backbone (N/CA/C) for every motif residue before
+  generation — fail fast with a clear message instead of a cryptic mid-run conditioning error.
+
+## express_serving_migration (2026-10-11) — migrate GPU serving endpoints to Express deployments (env_pack)
+
+Migrates the module serving endpoints off Databricks' STANDARD GPU Model Serving (which rebuilds the
+container at deploy time on a torch-2.7.1+cu118 base and force-reinstalls torch) onto **Express deployments**
+(`env_pack`), which snapshot the serverless-GPU register env and restore it verbatim at serving (~6 min
+deploy, no rebuild, no force-install, serving env == register env).
+
+### What changed and why
+
+- **Registration-only change per model** (full playbook: `claude_skills/SKILL_GENESIS_WORKBENCH_EXPRESS_MIGRATION.md`):
+  in each register notebook bump `mlflow>=3.12` + `databricks-sdk>=0.150`, `log_model` WITHOUT
+  `registered_model_name` (+ `code_path`→`code_paths` for mlflow 3.x), then a separate
+  `register_model(env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False))`.
+  `deploy_model` / `02_import_model_gwb` / `model_deployments` / endpoint resolution are UNTOUCHED —
+  `deploy_model_endpoint` just creates a serving endpoint for the UC version, and an env-packed version
+  serves as Express.
+- **Migrated** (all serving via env_pack, validated READY on A10/H100): diffdock (+esm_embeddings),
+  esm2_embeddings, esmfold, proteinmpnn, rfdiffusion, scgpt (+perturbation), proteina_complexa (binder/
+  ligand/ame), teddy, deepstabp, boltz, kermt, chemprop (bbbp/clintox/admet). rfd4_proteina was
+  already Express (the reference).
+- **Gotchas fixed en route** (now in the playbook + troubleshooting skill): `code_path`→`code_paths`
+  (mlflow 3.x); env-drift — pin the register install to the model's `conda_env` so env_pack reproduces the
+  proven env (proteina's unpinned `atomworks` captured the latest, which dropped `AtomSelectionStack`);
+  a later install downgrading the mlflow bump → reinstall `mlflow>=3.12` LAST before restart (boltz's
+  `dbboltz[gpu]`); failed-pending-deploy service logs are UI-only (`DATABRICKS_MODEL_LOAD_DIAGNOSTIC_V1`).
+- **Left on standard serving (NOT eligible):** scimilarity (py3.10 lock); genmol (py3.11 lock — pinned
+  pandas/transformers have no py3.12 wheels, and serverless GPU is py3.12); **pltnum** (the register
+  notebook never runs the model and declares its serving env as a `conda_env` pinned to python=3.11 /
+  pandas==1.5.3 / numpy==1.26.4, which have no cp312 wheels — so env_pack would snapshot the py3.12
+  kernel's pandas 2.x / numpy 2.x and silently change the serving runtime, i.e. more than a
+  registration-only change; left as-is). The CPU-only endpoints (netsolp/mhcflurry/hlaiipred) are
+  eligible but out of scope for this GPU-focused pass.
+
+## vaccine_immunogen (2026-10-10) — Vaccine Immunogen Design batch workflow on RFD4-Proteina (in-process H100)
+
+Adds a new `large_molecule/vaccine_immunogen/vaccine_immunogen_v1` batch workflow + UI tab (Large Molecule
+→ Vaccine Immunogen Design): design + reward-optimize stable scaffold proteins that present a conserved
+epitope motif (epitope-focused immunogen design) with **RFD4-Proteina motif-scaffolding loaded in-process
+on an H100**. Full five-layer batch-workflow stack (orchestrator job, registration, dispatcher, Search Past
+Runs, result dialog), mirroring Antibody Design.
+
+### What changed and why
+
+- **New submodule** `vaccine_immunogen_v1` — orchestrator `01_run_vaccine_immunogen.py` loads RFD4
+  in-process and drives a **motif-scaffolding** condition_spec: a single chain whose epitope residues are
+  held FIXED in coordinates (`C_CRD`) and sequence (`C_SEQ`) while symmetric flexible flanks are generated
+  (contrast Antibody Design's separate binder chain + `C_HOT` hotspots). (Optional) ProteinMPNN redesigns
+  the scaffold while FIXING the epitope → ESMFold → reward loop. `register_vaccine_immunogen_job.py`
+  persists the orchestrator job id, grants the app SP `CAN_MANAGE_RUN` + volume `WRITE`, and registers the
+  workflow in `batch_models`. GPU_1xH100 serverless (client '6'); rfproteina pip-installed from the private
+  repo at runtime (same scaffolding as rfd4_proteina / antibody_design). Wired into the large_molecule
+  deploy.sh/destroy.sh ALL_SUBMODULES.
+- **Reward axes differ from Antibody Design** — the headline is **epitope-presentation fidelity**: a
+  backbone RMSD of the ESMFold-folded design's motif region against the input epitope (a self-consistency
+  check; lower is better). The epitope is located in the designed sequence by exact subsequence match (the
+  output is renumbered 1..L, so the antibody loop's residue-id matching can't be reused). Plus scaffold
+  pLDDT, solubility (NetSolP), Tm (DeepSTABp), and a sequence-liability scan (manufacturability). Binding
+  (Boltz) and half-life are dropped — not central for an immunogen. Scaffold self-reactivity (MHCflurry
+  MHC-I / HLAIIPred MHC-II) is OFF by default (weight 0): a vaccine is *meant* to be immunogenic; opt in
+  only to trim T-cell epitopes in the carrier.
+- **App layer** — `services/vaccine_immunogen.py` (dispatcher + search + result loaders) and
+  `routers/vaccine_immunogen.py` (`/api/vaccine_immunogen/*`, included in `main.py`); frontend
+  `VaccineImmunogenTab.tsx` + Large Molecule page tab (after Antibody Design) + client/types.
+- **Bundled demo** — RSV F protein antigenic site II peptide (RCSB `3IXT` chain P, residues 254–277,
+  relabeled chain A), the canonical epitope-scaffolding target (Correia et al. 2014, *Nature*), served via
+  `/api/vaccine_immunogen/defaults` so the form launches a scientifically sensible run out of the box.
+- **Docs triad** — new `documentation/vaccine_immunogen.md` + index entry + README (narrative + docs links).
+
+> ⚠️ FIRST-DRAFT conditioning + NOT YET GPU-tested. The motif is centered with symmetric flanks; a terminal
+> placement or a discontinuous (multi-segment) epitope is a future refinement. Validated py_compile / tsc /
+> vite build only — the real test is a deploy + H100 run (same caveat as antibody_design on first build).
+
+## antibody_design (2026-10-09) — Antibody Design (VHH) batch workflow on RFD4-Proteina (in-process H100)
+
+Adds a new `large_molecule/antibody_design/antibody_design_v1` batch workflow + UI tab (Large Molecule →
+Antibody Design): generate single-domain (VHH / nanobody) antibodies against an antigen epitope with
+**RFD4-Proteina loaded in-process on an H100**, then reward-optimize them. Full five-layer batch-workflow
+stack (orchestrator job, registration, dispatcher, Search Past Runs, result dialog), mirroring Guided
+Enzyme Optimization.
+
+### What changed and why
+- **Generation is RFD4-Proteina in-process on a `GPU_1xH100` orchestrator** (not the endpoint). A true VHH
+  needs antibody-framework conditioning, which the endpoint's first-draft generic-binder path can't give;
+  in-process control lets the loop drive a VHH condition_spec (epitope `C_HOT` hotspots). The submodule
+  bundle therefore FUSES the rfd4_proteina H100/`client:'6'`/rfproteina-git-install scaffolding with the
+  enzyme-opt batch-workflow structure. It loads RFD4's staged flow + AE checkpoints from the rfd4_proteina
+  cache volume (so that submodule must be deployed first — same cross-submodule dependency enzyme-opt has
+  on proteina_complexa).
+- **Reward loop reuses the enzyme machinery** (`PredictorAxis` / `compose_rewards` / half-life anchor) and
+  the same validation/scoring endpoints (ProteinMPNN, ESMFold, Boltz, NetSolP, PLTNUM, DeepSTABp, MHCflurry).
+  Axes = binding (Boltz ipTM, co-fold antigen+VHH) + fold pLDDT + the 4 developability axes, with binding
+  and low-immunogenicity weighted up — what matters for a developable antibody.
+- **CDR-preserving framework redesign.** `anarcii` numbers each design; ProteinMPNN then redesigns the
+  FRAMEWORK while FIXING the CDR positions (the inverse of enzyme-opt's fix-the-motif), so the binding loops
+  RFD4 designed survive. If a design doesn't number as a V-domain, the RFD4 sequence is kept as-is rather
+  than risking a binding-destroying redesign.
+
+### Anti-patterns avoided (from the batch-workflow pattern skill)
+- Dispatcher **pre-creates the MLflow run** and passes `mlflow_run_id` so Search Past Runs lights up during
+  the ~min GPU cold-start (not created only inside the orchestrator). The dispatcher returns the Databricks
+  `job_run_id` for the banner; search discovers the MLflow run via tags.
+- **Progressive `job_status`** (`submitted` → `iter_N_*` → `complete`/`failed`) surfaced as the stage column,
+  not the raw MLflow lifecycle; the orchestrator's `try/except` flips it to `failed` so a crash never shows a
+  perpetual "running". Search `run_url` is the MLflow run page (not the job-run page).
+- **Registration job** persists the orchestrator job id to `settings` and grants the app SP `CAN_MANAGE_RUN`
+  + `WRITE` on the antigen-upload volume (the app uploads each run's antigen PDB via the Files API, not a
+  POSIX write). Reuses the shared `RunSearchSection` (returns the `DBRunRow` contract) + `DispatchSuccess`.
+
+### Reference implementations / files
+- `modules/large_molecule/antibody_design/antibody_design_v1/` (orchestrator `notebooks/01_run_antibody_design.py`,
+  `notebooks/utils.py`, `notebooks/register_antibody_design_job.py`, resources, bundle).
+- App: `services/antibody_design.py`, `routers/antibody_design.py`, `components/AntibodyDesignTab.tsx`.
+- Mirrors: Guided Enzyme Optimization (batch-workflow) + the RFD4 register notebook (in-process RFD4 load).
+- Doc: `modules/core/app/backend/documentation/antibody_design.md`. **First-draft VHH condition_spec — needs
+  a deploy-time iteration** (true Ig-framework scaffolding is the follow-up; not locally GPU-testable).
+
+## antibody_design — "how inert?" reward axes: sequence-liability scan + MHC-II immunogenicity (HLAIIPred) (2026-10-09)
+
+Extends Antibody Design with two developability axes that answer "how inert / de-immunized is this VHH?",
+both minimized (lower = more developable), both exposed as per-axis reward sliders in the UI.
+
+### What changed and why
+- **Sequence-liability scan (`liability`, rule-based, no endpoint).** Weighted motif count over the designed
+  sequence — deamidation (NG/NS/NT), isomerization (DG/DS/DT), N-glyc sequons (N-x-[S/T]), free/unpaired Cys,
+  and Met/Trp oxidation hotspots. Self-contained (`liability_scan`/`liability_weighted_count`/`liability_detail`
+  in the orchestrator `utils.py`); the per-candidate motif breakdown shows in the result dialog as
+  `liability_detail`.
+- **MHC-II immunogenicity (`immuno_mhc2`) via a new HLAIIPred endpoint.** MHCflurry covers MHC-I (CD8); the
+  dominant immunogenicity risk for a *therapeutic antibody* is anti-drug antibodies (ADA), which is MHC-II /
+  CD4-driven. Added [HLAIIPred](https://github.com/pfizer-opensource/HLAIIPred) (Pfizer, **Apache-2.0**) as a
+  new `small_molecule/hlaiipred/hlaiipred_v1` CPU serving endpoint. The PyFunc slides a 15-mer window over the
+  chain across an 8-allele DRB1 panel, averages the two released folds (epT_0/epT_1), and returns
+  `predicted_immuno_burden` (strong presenters per residue). `hlapred` ships via `code_paths`, the ~9 MB
+  weights + `mhcII/` pseudosequences via `artifacts` (no git/PyPI at serving time). Standard `deploy_model`
+  path → auto-grants the app SP `CAN_QUERY`.
+- **Both axes wired end to end**: orchestrator (`PredictorAxis` + `score_iteration`), dispatcher
+  `DEFAULT_AXIS_WEIGHTS` (`immuno`=MHC-I 1.5, `immuno_mhc2`=MHC-II 1.5, `liability`=1.0), and the
+  `AntibodyDesignTab` weight sliders + result-dialog labels (`immuno` relabeled MHC-I / `immuno_mhc2` MHC-II).
+
+### Reference implementations / files
+- New submodule: `modules/small_molecule/hlaiipred/hlaiipred_v1/` (register notebook + PyFunc wrapper + bundle);
+  added to `small_molecule/{deploy,destroy}.sh` ALL_SUBMODULES. Mirrors the MHCflurry submodule.
+- Axis wiring: `antibody_design_v1/notebooks/{utils.py,01_run_antibody_design.py}`,
+  `app/services/antibody_design.py`, `app/frontend/src/components/AntibodyDesignTab.tsx`.
+
+## rfd4_proteina (2026-10-09) — RFD4-Proteina design model served on H100 via Express env_pack
+
+Adds the NVIDIA×Baker **RFD4-Proteina** flow-matching design model as a new `large_molecule` submodule
+(`rfd4_proteina/rfd4_proteina_v1`), mirroring `small_molecule/proteina_complexa` (serving) + `kermt_v2`
+(register → fine-tune → deploy chain). Base de-novo generation is confirmed end-to-end on a real H100 deploy.
+
+### What changed and why
+- **Served on a GPU_XLARGE (1× H100) endpoint via MLflow Express deployments (`env_pack`).** RFD4-Proteina
+  is torch 2.14.1 / CUDA 13 (cu132 wheels + a TMol nvcc source build + cuEquivariance-cu13); standard GPU
+  Model Serving rebuilds the container on a torch-2.7.1 / CUDA-11.8 base and force-reinstalls torch, which
+  the stack cannot run. Express packages the serverless-GPU register env (`env_pack`) and restores it
+  verbatim at serving — no deploy-time rebuild, no force-install — so the model loads + generates exactly as
+  on the register node (and came up in ~6 min vs the 30-38 min standard build).
+- **Source pip-installed at job runtime from the private NVIDIA-BioNeMo RFD4-Proteina repo** (nothing
+  vendored); a GitHub PAT is read from the `dbx_genesis_workbench/rfd4_github_token` secret (token-optional,
+  so it degrades to an unauthenticated clone once the repo is public). Checkpoints come from the public CDN.
+  Register / fine-tune / deploy jobs run on serverless `GPU_1xH100` (`client: '6'` = AI Runtime v6 = CUDA 13).
+- **nb03 (fine-tuned deploy) ported to the same Express path** as nb01: `log_model` without
+  `registered_model_name`, then `register_model(env_pack=EnvPackConfig(install_dependencies=False))`, then a
+  direct `serving_endpoints` create/update — replacing the old per-dep `pip_requirements` pinning +
+  `deploy_model()` (standard-serving) approach. The fine-tuned version (base flow + LoRA adapter) registers
+  as a new version of the same `rfd4_proteina` UC model and updates the same endpoint.
+- **Endpoint tags** (`application` + `created_by`) are applied on BOTH the create and update paths;
+  `update_config_and_wait` does not carry tags, so they are re-applied with `serving_endpoints.patch()`
+  after an update (same fix as `deploy_model_endpoint`), so a redeploy never drops them.
+
+### Anti-patterns avoided (and the bug behind them)
+- **`install_dependencies=True` for env_pack fails** here: rfproteina@git, the tmol nvcc build,
+  torch==2.14.1+cu132 and cuEquivariance-cu13 resolve on NO index, so re-resolution raises "No matching
+  distribution for torch==2.14.1+cu132" — the exact error that killed the standard build. `False` snapshots
+  the installed site-packages verbatim (serving egress is restricted anyway).
+- **Removed the base-torch compat shims + load-failure diagnostics from nb01's serving PyFunc** (the
+  `has_static_value` / `torch.optim.Muon` shims, the `load_context` try/except that captured a `_load_error`,
+  and the best-effort Volume `load_error.log` write). They existed only to survive the standard-serving base
+  torch 2.7.1; with Express the serving env == the register env (torch 2.14), so they were dead code.
+- **Post-restart NameError trap:** the GWB app-registry step runs after a `restartPython()` to the GWB wheel
+  (mlflow 2.22 / sdk 0.50), which wipes the kernel — it re-reads widgets, never references pre-restart names,
+  and is wrapped non-fatally so a registry hiccup can't fail the task (the endpoint is already live).
+
+### Reference implementations / files
+- `modules/large_molecule/rfd4_proteina/rfd4_proteina_v1/notebooks/{01_register_rfd4_proteina,02_rfd4_finetune,03_rfd4_register_serving}.py`
+- Serving + Express recipe mirror: `modules/small_molecule/proteina_complexa/proteina_complexa_v1` (Proteina
+  family, standard-serving era) and the Development skill's "Serving a torch>2.7.1 / CUDA-13 model via Express".
+- Doc: `modules/core/app/backend/documentation/rfd4_proteina_design.md`.
+
 ## v2.2.0 (2026-06-22) — KERMT 2.0 live out-of-the-box · MCP server hardened (UI + MCP grants) · fresh-install & cloud-portability fixes
 
 A consolidation release that makes the **MCP server** dependable as a first-class surface, ships **KERMT 2.0**

@@ -6,6 +6,18 @@ include:
   - variables.yml
   - resources/*.yml
 
+# Packages the airt/ code (run_parabricks.py + command.sh) into ./dist/code.tgz, which the
+# run_parabricks ai_runtime_task references as code_source_path. The bundle builds the tarball
+# — no air CLI / hand-built tarball needed (Databricks AI Runtime productionizing docs).
+artifacts:
+  parabricks_code:
+    type: tgz
+    path: .
+    include:
+      - airt
+    files:
+      - source: ./dist/code.tgz
+
 sync:
   paths:
     - .
@@ -21,11 +33,6 @@ targets:
         level: CAN_MANAGE
     run_as:
       user_name: ${var.current_user}
-    resources:
-      clusters:
-        parabricks_cluster:
-          aws_attributes:
-            availability: ON_DEMAND
 
   prod_azure:
     mode: production
@@ -36,11 +43,6 @@ targets:
         level: CAN_MANAGE
     run_as:
       user_name: ${var.current_user}
-    resources:
-      clusters:
-        parabricks_cluster:
-          azure_attributes:
-            availability: ON_DEMAND_AZURE
 
   prod_gcp:
     mode: production
@@ -51,8 +53,3 @@ targets:
         level: CAN_MANAGE
     run_as:
       user_name: ${var.current_user}
-    resources:
-      clusters:
-        parabricks_cluster:
-          gcp_attributes:
-            availability: ON_DEMAND_GCP

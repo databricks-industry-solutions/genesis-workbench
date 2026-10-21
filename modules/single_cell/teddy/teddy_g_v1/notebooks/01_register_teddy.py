@@ -16,6 +16,7 @@
 # DBTITLE 1,[gwb] pip install pinned requirements
 # MAGIC %cat ../requirements.txt
 # MAGIC %pip install -r ../requirements.txt
+# MAGIC %pip install "mlflow>=3.12" "databricks-sdk>=0.150.0"
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
@@ -56,6 +57,11 @@ print(f"Volume {cache_full_path} ready")
 
 # DBTITLE 1,Download TEDDY snapshot (weights + source code) from HuggingFace
 import os
+# hf_transfer (the Rust fast-downloader, enabled by default on the serverless-GPU runtime)
+# errors on the egress path to the HF LFS CDN: "An error occurred while downloading using
+# hf_transfer." Force the standard, reliable huggingface_hub downloader instead. Must be set
+# before the download. (kermt confirms plain HF resolve URLs are reachable from serverless.)
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
 from huggingface_hub import snapshot_download
 
 snapshot_dir = f"{cache_full_path}/snapshots/{hf_revision}"
@@ -237,8 +243,13 @@ def set_mlflow_experiment(experiment_tag):
 experiment = set_mlflow_experiment(experiment_name)
 registered_model_name = f"{catalog}.{schema}.{model_name}"
 
+# Route the UC artifact upload through the presigned-URL repo (direct S3, boto3
+# multipart, no 5-min cap) — avoids TimeoutError on log_model when the bundled
+# TEDDY weights (esp. the 400M variant, ~1.6 GB) are large.
+os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"
+
 with mlflow.start_run(run_name=f"{model_name}_{model_size}_embedder", experiment_id=experiment.experiment_id) as run:
-    mlflow.pyfunc.log_model(
+    model_info = mlflow.pyfunc.log_model(
         artifact_path="teddy",
         # File-path API (MLflow 2.20+): MLflow imports this file at load time via
         # importlib.util.spec_from_file_location — NO cloudpickle of the class.
@@ -251,7 +262,14 @@ with mlflow.start_run(run_name=f"{model_name}_{model_size}_embedder", experiment
         pip_requirements="../requirements.txt",
         signature=signature,
         input_example=(input_data, default_params),
-        registered_model_name=registered_model_name,
+    )
+
+    # Express: register with env_pack (snapshots this serverless-GPU env for serving). Only the
+    # registration changes — 02_import_model_gwb (import + deploy_model) is unchanged.
+    from mlflow.utils.env_pack import EnvPackConfig
+    mlflow.register_model(
+        model_uri=model_info.model_uri, name=registered_model_name,
+        env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False),
     )
 
 print(f"Registered {registered_model_name}")

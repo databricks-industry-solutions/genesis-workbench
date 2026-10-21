@@ -72,6 +72,7 @@ def run_ligand_binder_design(
     num_samples: int,
     validate_esmfold: bool,
     validate_diffdock: bool,
+    validate_boltz_affinity: bool = False,
     progress_callback: Callable[[int, str], None] | None = None,
 ) -> dict:
     """End-to-end ligand binder design. Caller owns the MLflow run; this
@@ -104,6 +105,7 @@ def run_ligand_binder_design(
             "num_samples": num_samples,
             "validate_esmfold": validate_esmfold,
             "validate_diffdock": validate_diffdock,
+            "validate_boltz_affinity": validate_boltz_affinity,
             "ligand_smiles": ligand_smiles or "",
         },
         w,
@@ -123,5 +125,11 @@ def run_ligand_binder_design(
         if dock_failed:
             warnings.append(
                 f"DiffDock validation failed for {dock_failed}/{total} design(s); docked pose unavailable."
+            )
+    if validate_boltz_affinity and ligand_smiles and ligand_smiles.strip() and total:
+        aff_failed = sum(1 for d in designs if d.get("boltz_affinity_value") is None)
+        if aff_failed:
+            warnings.append(
+                f"Boltz-2 affinity scoring failed for {aff_failed}/{total} design(s); affinity unavailable."
             )
     return {"designs": designs, "ligand_pdb": result.get("ligand_pdb", ligand_pdb), "warnings": warnings}

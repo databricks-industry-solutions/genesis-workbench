@@ -8,12 +8,20 @@ resources:
           - ${var.current_user}
 
       tasks:
-        #this task needs 14.3 LTS ML GPU runtime
+        # Serverless GPU (GPU_1xA10) — the workshop AWS account has EC2 GPU vCPU
+        # quota = 0, so the classic a10 (g5) cluster cannot provision. NOTE: the
+        # notebook's dependency stack was pinned to the DBR 13.3 LTS ML ABI
+        # (torch 1.13 / cu117 / py3.10); it was uplifted to the serverless ABI
+        # (torch 2.7 / cu126 / py3.12) — see 01_register_diffdock.py.
         - task_key: register_diffdock_task
-          job_cluster_key: diffdock_gpu_cluster
+          max_retries: 0
+          disable_auto_optimization: true
+          retry_on_timeout: false
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xA10
           notebook_task:
             notebook_path: ../notebooks/01_register_diffdock.py
-          max_retries: 0
 
         #this task needs serverless runtime with python 3.11
         - task_key: import_diffdock_task
@@ -26,6 +34,9 @@ resources:
 
       environments:
         - environment_key: default
+          spec:
+            client: '4'
+        - environment_key: gpu_env
           spec:
             client: '4'
             
@@ -47,21 +58,4 @@ resources:
         - name: workload_type
           default: ${var.gpu_medium_setting}
           
-      job_clusters:
-        - job_cluster_key: diffdock_gpu_cluster
-          new_cluster:
-            num_workers: 0
-            node_type_id: ${var.a10_node_type}
-            driver_node_type_id: ${var.a10_node_type}
-            spark_version: '13.3.x-gpu-ml-scala2.12'
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            single_user_name: ${workspace.current_user.userName}
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: local[*]
-            custom_tags:
-              ResourceClass: SingleNode
-
-
       tags: ${var.common_resource_tags}

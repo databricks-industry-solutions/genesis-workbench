@@ -7,30 +7,17 @@ resources:
         on_failure:
           - ${var.current_user}
 
-      job_clusters:
-        - job_cluster_key: molecule_optimization_cpu_cluster
-          new_cluster:
-            num_workers: 0
-            node_type_id: ${var.cpu_node_type}
-            driver_node_type_id: ${var.cpu_node_type}
-            spark_version: "15.4.x-scala2.12"
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            single_user_name: ${var.current_user}
-            # Cloud-specific availability is set per-target (aws/azure/gcp_attributes)
-            # in databricks.yml.
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: "local[*]"
-            custom_tags:
-              ResourceClass: SingleNode
-
       tasks:
         - task_key: run_loop
           max_retries: 0
-          job_cluster_key: molecule_optimization_cpu_cluster
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/03_run_molecule_optimization.py
+
+      environments:
+        - environment_key: default
+          spec:
+            client: '4'
 
       # The UI + MCP app SPs get CAN_MANAGE_RUN on this job at registration time via
       # register_molecule_optimization_job.py -> set_app_permissions_for_job, which

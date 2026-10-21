@@ -203,7 +203,14 @@ def _generic_endpoint_node(short: str, display_name: str) -> dict:
     return _serialize_node(node, available=True)
 
 
-def build_catalog() -> list[dict]:
+# The full merged catalog (curated nodes + live endpoint/job availability) is cached for the
+# app's lifetime — deploys restart the app, mirroring _all_job_names_cache. Pre-warmed at startup
+# (see main.py lifespan) so the first Vortex load is instant instead of re-running the deployment
+# and job-availability queries on every request. Pass force=True to rebuild.
+_catalog_cache: list[dict] | None = None
+
+
+def build_catalog(force: bool = False) -> list[dict]:
     """Curated node types merged with live deployment/job availability.
 
     Availability is keyed on the **UC short name** (esmfold, netsolp_v1, …),
@@ -214,7 +221,14 @@ def build_catalog() -> list[dict]:
     - Curated batch nodes: available iff their job is in batch_models.
     - IO nodes: always available.
     - Deployed endpoints with no curated entry: appended as generic nodes.
+
+    Cached for the app's lifetime (pre-warmed at startup); pass force=True to rebuild, e.g. to
+    pick up a newly deployed endpoint without an app restart.
     """
+    global _catalog_cache
+    if _catalog_cache is not None and not force:
+        return _catalog_cache
+
     deployed_shorts, short_to_display = _deployed_endpoints()
     batch_jobs = _batch_job_names() | _all_job_names()
 
@@ -252,6 +266,7 @@ def build_catalog() -> list[dict]:
         "ai_canvas catalog: %d nodes (%d deployed endpoints, %d batch jobs)",
         len(catalog), len(deployed_shorts), len(batch_jobs),
     )
+    _catalog_cache = catalog
     return catalog
 
 

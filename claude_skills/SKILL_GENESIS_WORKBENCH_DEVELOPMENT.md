@@ -290,6 +290,70 @@ run_id = deploy_model(
 result = wait_for_job_run_completion(run_id, timeout=3600)
 ```
 
+#### Serving a torch > 2.7.1 / CUDA-13 model via Express deployments
+
+> **Express is now the standard GPU-serving path across GWB** (not just torch>2.7.1). To MIGRATE an existing
+> model's serving to Express, follow the playbook
+> [`SKILL_GENESIS_WORKBENCH_EXPRESS_MIGRATION.md`](SKILL_GENESIS_WORKBENCH_EXPRESS_MIGRATION.md): the change is
+> **registration-only** — bump `mlflow>=3.12` + `databricks-sdk>=0.150`, `log_model` WITHOUT
+> `registered_model_name`, then `register_model(env_pack=EnvPackConfig(install_dependencies=False))`.
+> `deploy_model` / `02_import_model_gwb` / `model_deployments` / endpoint resolution stay UNTOUCHED
+> (`deploy_model_endpoint` just serves whatever UC version you registered — an env-packed version serves as
+> Express). Migrated: diffdock, esm2_embeddings, esmfold, proteinmpnn, rfdiffusion, scgpt, proteina_complexa,
+> teddy, deepstabp, boltz, kermt, pltnum, chemprop. NOT eligible: **scimilarity (py3.10)** + **genmol
+> (py3.11)** — a Python-version lock the serverless-v3+ (py3.12) runtime can't match → leave on standard serving.
+
+The standard `deploy_model()` path above uses Databricks' STANDARD GPU Model Serving, which rebuilds the
+container at deploy time on a **torch 2.7.1+cu118 (CUDA 11.8)** base and runs a hardcoded post-step that
+**force-reinstalls torch 2.7.1** over any pin. So a model that needs torch > 2.7.1 or CUDA > 11.8 (e.g.
+RFD4-Proteina = torch 2.14.1/cu132 + cuEquivariance-cu13) CANNOT be served the standard way — it loads on
+the register node (serverless GPU, CUDA 13) but fails at serving with `has_static_value` / `torch.optim.
+Muon` / `libnvrtc.so.13` import errors.
+
+Serve it with **Express deployments** instead (docs: `machine-learning/model-serving/express-deployments`),
+which package the serverless-GPU notebook env at REGISTRATION (`env_pack`) and restore it identically at
+serving — no deploy-time rebuild, no force-install. Reference: `large_molecule/rfd4_proteina/.../notebooks/
+01_register_rfd4_proteina.py`. Replace Step 3's `deploy_model(...)` with:
+
+```python
+# In the SAME serverless-GPU kernel that installed the model (needs mlflow>=3.12 + databricks-sdk>=0.150.0):
+import torch, mlflow
+from mlflow.utils.env_pack import EnvPackConfig
+assert torch.cuda.is_available()                     # register FROM GPU (Express is GPU-to-GPU)
+mlflow.set_registry_uri("databricks-uc")
+os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"   # fast path for multi-GB artifacts
+
+mi = mlflow.pyfunc.log_model(                         # log WITHOUT registered_model_name
+    name=model_name, python_model=MyModelWrapper(), artifacts=artifacts, code_paths=code_paths,
+    signature=signature, input_example=example,
+    pip_requirements=["mlflow", "cloudpickle", "pandas", "numpy"])   # minimal: env_pack defines the serving env
+mv = mlflow.register_model(                           # register SEPARATELY with env_pack
+    model_uri=mi.model_uri, name=f"{catalog}.{schema}.{model_name}",
+    env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False))
+
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.serving import (EndpointCoreConfigInput, ServedEntityInput,
+                                             ServingModelWorkloadType, EndpointTag)
+w = WorkspaceClient()
+served = [ServedEntityInput(entity_name=f"{catalog}.{schema}.{model_name}", entity_version=str(mv.version),
+            name=model_name, workload_type=ServingModelWorkloadType("GPU_XLARGE"),  # 1x H100, us-west-2, enrolled
+            workload_size="Small", scale_to_zero_enabled=False)]                    # GPU_XLARGE: no scale-to-zero
+w.serving_endpoints.create_and_wait(name=endpoint_name,
+    config=EndpointCoreConfigInput(name=endpoint_name, served_entities=served),
+    tags=[EndpointTag(key="application", value="genesis_workbench")], timeout=timedelta(minutes=120))
+```
+
+- **`install_dependencies=False`** is essential if the env has git/binary/local-tagged wheels (torch
+  `+cu132`, nvcc source builds, `cuequivariance-*-cu13`): the default `True` re-resolves them from an
+  index and fails with `No matching distribution`. `False` snapshots the installed site-packages verbatim.
+- Express deploys in **~6 min** (no 30-38 min container build).
+- Run `import_model_from_uc` (GWB app-registry metadata) in a SEPARATE cell AFTER restarting to the GWB lib
+  (mlflow 2.22/sdk 0.50) — wrap it NON-FATAL (endpoint already live) and never reference pre-restart
+  variables (e.g. `endpoint_name`) in post-restart cells (`restartPython()` wipes the kernel → `NameError`,
+  which with task `max_retries` becomes a wasteful full-notebook retry storm).
+- Because env *parity* (not the H100 base image) is the mechanism, Express should also work on cheaper
+  CUDA-13-capable tiers (GPU_LARGE=A100 / GPU_MEDIUM=A10) — test to drop the GPU_XLARGE enrollment need.
+
 ### Step 4: Write the job YAML
 
 ```yaml
@@ -331,6 +395,18 @@ resources:
 - Download-only tasks: Use `cpu_node_type` + `cpu-ml` runtime
 - Model registration (needs GPU for test prediction): Use `t4_node_type` + `gpu-ml` runtime
 - Import/deploy (serverless): No cluster needed, use `environments` with `client: '2'`
+
+**Serverless vs classic — prefer serverless (`environment_key` + `environments`), but keep a task on a classic
+`job_cluster_key` when it does any of these** (all learned the hard way):
+- Runs `%sh` cells or reads/writes `/local_disk0` — neither exists on serverless.
+- Loads a large local object into Spark via `spark.createDataFrame(pandas_df)` — serverless (Spark Connect)
+  caps a cached local relation at **3 GiB** (`LOCAL_RELATION_SIZE_LIMIT_EXCEEDED`).
+- Attaches a Spark **JAR** as a cluster library (e.g. Glow) — unsupported on serverless.
+- Pins **Python 3.10** deps (serverless is 3.11/3.12; env-version 1 is the only 3.10 option).
+- Downloads many GB from a slow external host — classic egress + local disk are more forgiving (and pull big
+  public datasets from a cloud-native mirror, e.g. the AWS S3 1000 Genomes mirror, not a slow FTP/HTTPS origin).
+
+CPU classic is **not** quota-blocked on the workshop (only GPU classic is), so classic-CPU for these tasks is fine.
 
 ### Step 5: Wire into the parent module deploy/destroy scripts
 

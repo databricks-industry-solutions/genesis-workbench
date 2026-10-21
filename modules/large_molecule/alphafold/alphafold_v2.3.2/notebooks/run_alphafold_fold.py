@@ -1,214 +1,138 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # Run only the folding process of Alphafold v2.3.2
+# MAGIC # AlphaFold fold — serverless GPU (JAX, no conda)
+# MAGIC Runs the AlphaFold-2.3.2 structure models on **serverless GPU (`GPU_1xA10`)**
+# MAGIC with a modern pip JAX stack (`jax[cuda12]==0.4.28`), instead of the classic
+# MAGIC Miniconda/`conda env`/`jaxlib-cuda11` bootstrap. Loads the `features.pkl`
+# MAGIC produced by the featurize task, runs the **template-free** models, ranks them
+# MAGIC by pLDDT, and writes `ranked_0.pdb` (+ ranked_1..) to
+# MAGIC `/Volumes/{catalog}/{schema}/{model_volume}/results/{run_id}/{run_id}/`
+# MAGIC — the path the GWB app pulls.
 # MAGIC
-# MAGIC - This notebook sets up the environment for running Alphafold v2.3.2.
-# MAGIC - It installs Miniconda and creates a conda environment from a YAML file.
-# MAGIC - This is not normally recommended for distributed workloads, but since we will distribute via Workflows and each job runs on 8-16 cores max, single worker is reasonable here 
-# MAGIC - The notebook clones the Alphafold repository and checks out version 2.3.2.
-# MAGIC   - We use a (Databricks) modified version of the alphafold run script that can run either featurization or folding inpdendently
-# MAGIC   - this is essential for splitting CPU and GPU tasks for efficiency
-# MAGIC - It includes a Python script to handle protein sequences and prepare input files.
-# MAGIC - The script determines if the input is a monomer or multimer and writes the appropriate FASTA file.
-# MAGIC - Environment variables are set for the FASTA file and mode.
-# MAGIC - The output directory is created if it does not exist.
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC For folding consider GPU size
-# MAGIC  - T4 may be ok for small proteins
-# MAGIC  - A100 probably preferred for most proteins
-# MAGIC  - very long proteins may need to be run on larger GPU
+# MAGIC Only template-free models (model_3/4/5) are supported here; templates would
+# MAGIC need hhsearch/pdb70 which the serverless-CPU featurize skips. OpenMM relax is
+# MAGIC not run — `ranked_0.pdb` is the unrelaxed top model.
 
 # COMMAND ----------
 
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
-dbutils.widgets.text("schema", "genesis_schema", "Schema")
+dbutils.widgets.text("schema", "genesis_workbench", "Schema")
 dbutils.widgets.text("model_volume", "alphafold", "Volume")
 dbutils.widgets.text("run_id", "b3c99d3b49ba4893aa402a4342a70cd1", "Run Id")
-dbutils.widgets.text("protein_sequence", "MTYKLILNGKTLKGETTTEAVDAATAEKVFKQYANDNGVDGEWTYDAATKTFTVTE", "Protein Sequence")
+dbutils.widgets.text("protein_sequence", "", "Protein Sequence")  # unused (features carry it)
 dbutils.widgets.text("user_email", "a@b.com", "User Email")
+dbutils.widgets.text("fold_models", "model_3_ptm,model_4_ptm,model_5_ptm", "Template-free models")
+dbutils.widgets.text("num_recycle", "3", "Recycles")
+
+# COMMAND ----------
+
+# torch/CUDA are preinstalled but AF uses JAX; install jax[cuda12] + AF's deps +
+# tensorflow-CPU (feature processing only; JAX owns the GPU). No conda/Miniconda.
+# MAGIC %pip install -q "jax[cuda12]==0.4.28" dm-haiku==0.0.12 chex dm-tree ml-collections immutabledict absl-py biopython "tensorflow-cpu==2.18.0"
+# MAGIC dbutils.library.restartPython()
+
+# COMMAND ----------
+
+import os, sys, subprocess, tempfile, time, pickle
+import numpy as np
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
 VOLUME = dbutils.widgets.get("model_volume")
 RUN_ID = dbutils.widgets.get("run_id")
-PROTEIN_SEQUENCE = dbutils.widgets.get("protein_sequence")
 USER_EMAIL = dbutils.widgets.get("user_email")
+NUM_RECYCLE = int(dbutils.widgets.get("num_recycle"))
+FOLD_MODELS = [m.strip() for m in dbutils.widgets.get("fold_models").split(",") if m.strip()]
+# guard: only template-free models are valid for the serverless (no-template) features
+FOLD_MODELS = [m for m in FOLD_MODELS if any(m.startswith(f"model_{i}") for i in (3, 4, 5))]
+assert FOLD_MODELS, "no template-free models (model_3/4/5) selected"
+
+DATA_DIR = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/datasets"
+OUTDIR = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/results/{RUN_ID}/{RUN_ID}"
+FEATURES = os.path.join(OUTDIR, "features.pkl")
+print("run_id:", RUN_ID, "| models:", FOLD_MODELS, "| recycles:", NUM_RECYCLE)
+print("features:", FEATURES)
 
 # COMMAND ----------
 
-# DBTITLE 1,prepare conda and dependencies
-# MAGIC %sh
-# MAGIC
-# MAGIC mkdir -p /miniconda3
-# MAGIC wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /miniconda3/miniconda.sh
-# MAGIC bash /miniconda3/miniconda.sh -b -u -p /miniconda3
-# MAGIC
-# MAGIC cat > /miniconda3/.condarc <<EOF
-# MAGIC channels:
-# MAGIC   - conda-forge
-# MAGIC   - bioconda
-# MAGIC   - nodefaults
-# MAGIC channel_priority: strict
-# MAGIC EOF
-# MAGIC
-# MAGIC rm -rf /miniconda3/miniconda.sh
-# MAGIC
-# MAGIC source /miniconda3/bin/activate
-# MAGIC
-# MAGIC conda env create -f ../envs/alphafold_env.yml 
-# MAGIC
-# MAGIC mkdir -p /alphafold
-# MAGIC cd /alphafold
-# MAGIC git clone https://github.com/google-deepmind/alphafold.git
-# MAGIC cd alphafold
-# MAGIC git checkout v2.3.2
-# MAGIC cd /
-# MAGIC
-# MAGIC conda activate alphafold_env
-# MAGIC pip install --no-deps /alphafold/alphafold
+# AF source + Biopython SCOPData shim (see featurize notebook for rationale)
+import types, Bio.Data
+try:
+    from Bio.Data import SCOPData  # noqa: F401
+except ImportError:
+    from Bio.Data import PDBData
+    _shim = types.ModuleType("Bio.Data.SCOPData")
+    _shim.protein_letters_3to1 = dict(PDBData.protein_letters_3to1_extended)
+    sys.modules["Bio.Data.SCOPData"] = _shim
+    Bio.Data.SCOPData = _shim
 
-# COMMAND ----------
+_af = tempfile.mkdtemp(prefix="af2_")
+_repo = os.path.join(_af, "alphafold")
+subprocess.run(["git", "clone", "--depth", "1", "--branch", "v2.3.2",
+                "https://github.com/google-deepmind/alphafold.git", _repo],
+               check=True, capture_output=True, text=True)
+sys.path.insert(0, _repo)
 
-# DBTITLE 1,prepare input files
-import os
-from datetime import datetime
-
-def write_monomer(f,protein):
-    f.writelines(['>protein\n',protein])
-
-def write_multimer(f,protein):
-    for i,p in enumerate(protein.split(':')):
-        f.write('>chain_{}\n'.format(i))
-        f.write(p+'\n')
-
-def write(f,protein,mode):
-    if mode=='monomer':
-        write_monomer(f,protein)
-    elif mode=='multimer':
-        write_multimer(f,protein)
-    else:
-        raise ValueError('no mode {} is avaliable, only monomer or multimer'.format(mode))
-
-mode = 'multimer' if ':' in PROTEIN_SEQUENCE else 'monomer'
-
-tmpdir = '/local_disk0/'
-tmp_file = os.path.join(tmpdir,RUN_ID+'.fasta') 
-with open(tmp_file,'w') as f:
-    write(f,PROTEIN_SEQUENCE,mode)
-
-# Where databases etc are stored
-BASEDIR=f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/datasets"
-
-# Get the current datetime object
-now = datetime.now()
-formatted_datetime = now.strftime("%Y%m%d_%H%M%S")
-#Where results are stored
-OUTDIR = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/results/{RUN_ID}"
-
-if not os.path.exists(OUTDIR):
-    os.makedirs(OUTDIR)
-
-os.environ['BASEDIR'] = BASEDIR
-os.environ['OUTDIR'] = OUTDIR
-
-os.environ['AF_FASTA_FILE'] = tmp_file
-os.environ['AF_MODE'] = mode
-
-print(os.environ['BASEDIR'])
-print(os.environ['OUTDIR'])
-print(os.environ['AF_MODE'])
-print(os.environ['AF_FASTA_FILE'])
+import jax
+from alphafold.model import config, data, model
+from alphafold.common import protein, residue_constants
+print("jax", jax.__version__, "backend", jax.default_backend(), jax.devices())
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC Additional setup for folding script 
-# MAGIC - require chmeical properties file to be placed in the repo
-# MAGIC - patch openmm with Deepmind's patch
+# MAGIC ### Load features, run each model, rank by pLDDT
 
 # COMMAND ----------
 
-# DBTITLE 1,chemical properties file to alphafold lib
-# MAGIC %sh
-# MAGIC cp $BASEDIR/common/stereo_chemical_props.txt /miniconda3/envs/alphafold_env/lib/python3.8/site-packages/alphafold/common
+with open(FEATURES, "rb") as f:
+    feature_dict = pickle.load(f)
+print("loaded features; seq len", int(feature_dict["seq_length"][0]),
+      "| MSA rows", int(feature_dict["num_alignments"][0]))
+
+results = []  # (mean_plddt, model_name, pdb_str)
+for model_name in FOLD_MODELS:
+    t0 = time.time()
+    cfg = config.model_config(model_name)
+    cfg.data.common.num_recycle = NUM_RECYCLE
+    cfg.model.num_recycle = NUM_RECYCLE
+    cfg.data.eval.num_ensemble = 1
+    params = data.get_model_haiku_params(model_name=model_name, data_dir=DATA_DIR)
+    runner = model.RunModel(cfg, params)
+    proc = runner.process_features(feature_dict, random_seed=0)
+    pred = runner.predict(proc, random_seed=0)
+    mean_plddt = float(np.mean(pred["plddt"]))
+    b = np.repeat(pred["plddt"][:, None], residue_constants.atom_type_num, axis=-1)
+    prot = protein.from_prediction(features=proc, result=pred, b_factors=b,
+                                   remove_leading_feature_dimension=True)
+    results.append((mean_plddt, model_name, protein.to_pdb(prot)))
+    print(f"{model_name}: mean_plddt {mean_plddt:.1f} | {time.time()-t0:.0f}s")
+
+# rank by mean pLDDT (desc); ranked_0.pdb = best (what the GWB app pulls)
+results.sort(key=lambda r: r[0], reverse=True)
+for rank, (plddt, model_name, pdb_str) in enumerate(results):
+    with open(os.path.join(OUTDIR, f"ranked_{rank}.pdb"), "w") as f:
+        f.write(pdb_str)
+    print(f"ranked_{rank}.pdb <- {model_name} (plddt {plddt:.1f})")
+print("best model:", results[0][1], "plddt", round(results[0][0], 1))
 
 # COMMAND ----------
 
-# DBTITLE 1,patch openmmlib
-# MAGIC %sh
-# MAGIC cd /miniconda3/envs/alphafold_env/lib/python3.8/site-packages
-# MAGIC patch -p0 < /alphafold/alphafold/docker/openmm.patch
-
-# COMMAND ----------
-
-# DBTITLE 1,run alphafold folding-only
-# MAGIC %sh
-# MAGIC set -euo pipefail
-# MAGIC
-# MAGIC echo "Base directory: $BASEDIR"
-# MAGIC
-# MAGIC echo "Out directory: $OUTDIR"
-# MAGIC
-# MAGIC FLAGS="--data_dir=${BASEDIR}\
-# MAGIC  --fasta_paths=${AF_FASTA_FILE}\
-# MAGIC  --output_dir=${OUTDIR}\
-# MAGIC  --db_preset=reduced_dbs\
-# MAGIC  --model_preset="${AF_MODE}"\
-# MAGIC  --uniref90_database_path="${BASEDIR}/uniref90/uniref90.fasta"\
-# MAGIC  --mgnify_database_path="${BASEDIR}/mgnify/mgy_clusters_2022_05.fa"\
-# MAGIC  --small_bfd_database_path="${BASEDIR}/small_bfd/bfd-first_non_consensus_sequences.fasta"\
-# MAGIC  --template_mmcif_dir="${BASEDIR}/pdb_mmcif/mmcif_files/"\
-# MAGIC  --max_template_date=2020-05-14\
-# MAGIC  --obsolete_pdbs_path="${BASEDIR}/pdb_mmcif/obsolete.dat"\
-# MAGIC  --use_gpu_relax\
-# MAGIC  --noonly_featurize\
-# MAGIC  --fold_from_precalculated_features"
-# MAGIC
-# MAGIC if [ "${AF_MODE}" == "multimer" ]; then
-# MAGIC   FLAGS="${FLAGS} --uniprot_database_path=${BASEDIR}/uniprot/uniprot.fasta"
-# MAGIC   FLAGS="${FLAGS} --pdb_seqres_database_path=${BASEDIR}/pdb_seqres/pdb_seqres.txt"
-# MAGIC fi
-# MAGIC if [ "${AF_MODE}" == "monomer" ]; then
-# MAGIC   FLAGS="${FLAGS} --pdb70_database_path=${BASEDIR}/pdb70/pdb70"
-# MAGIC fi
-# MAGIC
-# MAGIC source /miniconda3/bin/activate
-# MAGIC conda activate alphafold_env
-# MAGIC
-# MAGIC # Unified memory: let JAX spill past the GPU VRAM into the node's host RAM
-# MAGIC # (g4dn.4xlarge T4 has 16 GB VRAM + 64 GB RAM) so long sequences — e.g.
-# MAGIC # full-length BRCA1 (1863 aa, needs ~33 GB) — fold without a
-# MAGIC # RESOURCE_EXHAUSTED GPU OOM. AlphaFold's own run_docker.py sets these.
-# MAGIC # NOTE: the A10 (g5.16xlarge) regressed the featurize step on this old
-# MAGIC # env (jaxlib 0.3.25/cuda11.1), so we stay on the T4 + unified memory.
-# MAGIC export TF_FORCE_UNIFIED_MEMORY=1
-# MAGIC export XLA_PYTHON_CLIENT_MEM_FRACTION=4.0
-# MAGIC python ../scripts/run_alphafold_split.py ${FLAGS}
-
-# COMMAND ----------
-
-# MAGIC %sh
-# MAGIC cat ${AF_FASTA_FILE}
-
-# COMMAND ----------
-
-with open(os.environ['AF_FASTA_FILE'], 'r') as file:
-    all_lines = file.readlines()
-    content = "".join(all_lines)
-    print(content)
+# MAGIC %md
+# MAGIC ### Log fold result (fold_complete is also set by the mark_success task)
 
 # COMMAND ----------
 
 import mlflow
 
-with mlflow.start_run(run_id=RUN_ID) as run:
-  mlflow.log_param("fold_results_path", os.environ['OUTDIR'])
-  mlflow.log_param("fold_fasta_file", os.environ['AF_FASTA_FILE'])
-  mlflow.set_tag("job_status","fold_complete")
-  with open(os.environ['AF_FASTA_FILE'], 'r') as file:
-    all_lines = file.readlines()
-    content = "".join(all_lines)
-    mlflow.log_param("output", content)
+try:
+    mlflow.set_registry_uri("databricks-uc")
+    mlflow.set_tracking_uri("databricks")
+    with mlflow.start_run(run_id=RUN_ID):
+        mlflow.log_param("fold_results_path", OUTDIR)
+        mlflow.log_param("fold_best_model", results[0][1])
+        mlflow.log_metric("fold_best_mean_plddt", results[0][0])
+        mlflow.set_tag("job_status", "fold_complete")
+    print("fold_complete")
+except Exception as e:
+    print(f"WARN: could not set fold_complete tag on run {RUN_ID}: {e}")

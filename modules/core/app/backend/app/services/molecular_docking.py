@@ -21,33 +21,40 @@ from app.services.endpoints import get_endpoint_name
 
 logger = logging.getLogger(__name__)
 
-EXAMPLE_SMILES = "COc(cc1)ccc1C#N"
+# Demo default: imatinib (Gleevec) — PubChem CID 5291. Docked into its real target
+# (ABL1 kinase, PDB 1IEP) below: the classic targeted-therapy "wow" example.
+EXAMPLE_SMILES = "CC1=C(C=C(C=C1)NC(=O)C2=CC=C(C=C2)CN3CCN(CC3)C)NC4=NC=CC(=N4)C5=CN=CC=C5"
 _EXAMPLE_PDB_CACHE: dict[str, str] = {}
 
 
 def get_example_pdb() -> str:
-    """Return chain A of PDB 6agt, trimmed to the first 50 residues — same
-    structure used in the DiffDock model registration tests. Cached after
-    the first call. If the RCSB fetch fails (offline, network blocked),
-    returns a placeholder so the form still has something to render."""
+    """Return chain A of PDB 1IEP — the ABL1 tyrosine-kinase domain from the
+    classic ABL–imatinib (Gleevec) complex — as an APO pocket: protein ATOM
+    records only, with the co-crystal ligand + waters (HETATM) stripped, so the
+    docking demo places imatinib back into its real ATP/allosteric pocket.
+    Cached after the first call. If the RCSB fetch fails (offline/blocked),
+    returns a placeholder so the form still renders."""
     cached = _EXAMPLE_PDB_CACHE.get("pdb")
     if cached:
         return cached
     try:
         import requests
 
-        resp = requests.get("https://files.rcsb.org/view/6agt.pdb", timeout=10)
+        resp = requests.get("https://files.rcsb.org/view/1iep.pdb", timeout=10)
         resp.raise_for_status()
         seen: set[str] = set()
         trimmed: list[str] = []
         for line in resp.text.splitlines(keepends=True):
-            if not line.startswith(("ATOM", "HETATM")):
+            # Protein only: keep chain A ATOM records, drop HETATM (the co-crystal
+            # imatinib + waters) so DiffDock docks into an apo pocket. Cap generously
+            # at the full kinase domain (~290 residues).
+            if not line.startswith("ATOM"):
                 continue
             if line[21] != "A":
                 continue
             resseq = line[22:27].strip()
             seen.add(resseq)
-            if len(seen) > 50:
+            if len(seen) > 400:
                 break
             trimmed.append(line)
         trimmed.append("END\n")

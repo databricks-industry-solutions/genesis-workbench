@@ -17,6 +17,7 @@
 # COMMAND ----------
 
 # MAGIC %pip install -r ../requirements.txt
+# MAGIC %pip install "mlflow>=3.12" "databricks-sdk>=0.150.0"
 # MAGIC %restart_python
 
 # COMMAND ----------
@@ -76,6 +77,17 @@ import numpy as np
 import pandas as pd
 import torch
 import mlflow.pyfunc
+
+# torchtext is discontinued and its compiled Vocab (libtorchtext.so) is ABI-locked to
+# old torch, so it cannot load on the runtime's modern torch. Put a pure-Python
+# torchtext shim on sys.path BEFORE importing scgpt (GeneVocab subclasses
+# torchtext.vocab.Vocab); the same shim is shipped to serving via code_paths below.
+import sys, os
+_nb_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+SCGPT_TORCHTEXT_SHIM = "/Workspace" + os.path.dirname(os.path.dirname(_nb_path)) + "/scgpt_shims/torchtext"
+sys.path.insert(0, os.path.dirname(SCGPT_TORCHTEXT_SHIM))
+print("torchtext shim:", SCGPT_TORCHTEXT_SHIM)
+
 from scgpt.tokenizer.gene_tokenizer import GeneVocab
 from scgpt.model import TransformerModel
 from typing import Dict, Any
@@ -400,10 +412,15 @@ def set_mlflow_experiment(experiment_tag, user_email):
 
 experiment = set_mlflow_experiment(experiment_tag=experiment_name, user_email=user_email)
 
+# scGPT weights bundled in artifacts are ~2-3 GB; route the UC upload through the
+# presigned-URL repo (direct S3, boto3 multipart, no 5-min cap) to avoid
+# TimeoutError('Timed out after 0:05:00') on log_model.
+import os
+os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"
 with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experiment_id) as run:
     registered_model_name = f"{catalog}.{schema}.{model_name}"
 
-    mlflow.pyfunc.log_model(
+    model_info = mlflow.pyfunc.log_model(
         "scgpt_perturbation",
         python_model=PerturbationModelWrapper(
             special_tokens=["<pad>", "<cls>", "<eoc>"]
@@ -413,10 +430,18 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
             "model_config_file": str(model_config_file),
             "vocab_file": str(vocab_file),
         },
+        code_paths=[SCGPT_TORCHTEXT_SHIM],  # ship the pure-Python torchtext shim into the serving container
         pip_requirements="../requirements.txt",
         signature=signature,
         input_example=input_data,
-        registered_model_name=registered_model_name,
+    )
+
+    # Express: register with env_pack (snapshots this serverless-GPU env for serving). Only the
+    # registration changes — 04_import_perturbation_gwb (import + deploy_model) is unchanged.
+    from mlflow.utils.env_pack import EnvPackConfig
+    mlflow.register_model(
+        model_uri=model_info.model_uri, name=registered_model_name,
+        env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False),
     )
 
     print(f"Model registered as {registered_model_name}")

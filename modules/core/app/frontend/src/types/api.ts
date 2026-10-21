@@ -486,16 +486,34 @@ export type DockingExampleResponse = {
   pdb: string
 }
 
+export type LigandDruglikeness = {
+  mw: number
+  logp: number
+  qed: number
+  tpsa: number
+  hbd: number
+  hba: number
+  rotatable_bonds: number
+  lipinski_pass: boolean
+  ro5_violations: number
+  veber_pass: boolean
+}
+
 export type DockingPose = {
   rank: number
   confidence: number
   ligand_sdf: string
   viewer_html: string
+  viewer_html_hydrophobicity: string | null
+  contact_count: number | null
+  n_site_residues: number | null
+  buried_area: number | null
   error: string | null
 }
 
 export type MolecularDockingResponse = {
   poses: DockingPose[]
+  ligand_druglikeness: LigandDruglikeness | null
   experiment_id: string
   run_id: string
   n_success: number
@@ -525,15 +543,23 @@ export type LigandBinderDesign = {
   rewards: number
   esmfold_validated: boolean
   dock_confidence: number | null
+  boltz_affinity_value: number | null
+  boltz_affinity_prob: number | null
+  mean_plddt: number | null
+  contact_count: number | null
+  n_site_residues: number | null
+  buried_area: number | null
   viewer_html_ca_backbone: string | null
   viewer_html_esmfold: string | null
   viewer_html_ca_plus_dock: string | null
   viewer_html_esmfold_plus_dock: string | null
+  viewer_html_hydrophobicity: string | null
 }
 
 export type LigandBinderDesignResponse = {
   designs: LigandBinderDesign[]
   ligand_pdb: string
+  ligand_druglikeness: LigandDruglikeness | null
   experiment_id: string
   run_id: string
   warnings: string[]
@@ -546,6 +572,7 @@ export type MotifScaffold = {
   rewards: number
   esmfold_validated: boolean
   viewer_html: string | null
+  viewer_html_hydrophobicity: string | null
 }
 
 export type MotifScaffoldingResponse = {
@@ -603,6 +630,36 @@ export type KermtFinetuneRequest = {
 }
 
 export type KermtDispatchResponse = { job_run_id: number; run_url: string }
+
+// ─── RFD4-Proteina (fine-tune + deploy) ─────────────────────────────────────
+
+export type Rfd4Defaults = {
+  pretrain_ckpt: string
+  train_data: string
+  experiment_preset: string
+}
+
+export type Rfd4Weight = {
+  ft_id: string // BIGINT as string
+  ft_label: string
+  model_type: string
+  experiment_name?: string | null
+  run_id?: string | null
+  created_datetime?: string | null
+}
+
+export type Rfd4FinetuneRequest = {
+  finetune_label: string
+  pretrain_ckpt: string
+  train_data: string
+  experiment_preset: string
+  max_epochs: number
+  steps_per_epoch: number
+  experiment_name: string
+  run_name: string
+}
+
+export type Rfd4DispatchResponse = { job_run_id: number; run_url: string }
 
 // ─── Enzyme Optimization ──────────────────────────────────────────────────
 
@@ -694,6 +751,149 @@ export type EnzymeDefaultsResponse = {
   motif_pdb: string
   default_weights: Record<string, number>
   default_references: EnzymeRefRow[]
+}
+
+// ─── Antibody Design (VHH) ──────────────────────────────────────────────────
+
+export type AntibodyRefRow = { sequence: string }
+
+export type AntibodyDesignStartRequest = {
+  antigen_pdb: string
+  epitope_residues: number[]
+  antigen_chain: string
+  vhh_length_min: number
+  vhh_length_max: number
+  num_samples: number
+  num_iterations: number
+  weights: Record<string, number>
+  references: AntibodyRefRow[]
+  half_life_margin: number
+  resampling_temperature: number
+  strategy: 'resample' | 'noop'
+  run_proteinmpnn: boolean
+  cofold_antigen: boolean
+  framework_conditioning: boolean
+  convergence_threshold: number | null
+  convergence_window: number
+  target_reward: number | null
+  best_k_target: number | null
+  best_k_threshold: number | null
+  mlflow_experiment: string
+  mlflow_run_name: string
+}
+
+export type AntibodyDesignStartResponse = {
+  job_id: number
+  job_run_id: number
+  mlflow_run_id: string
+  experiment_id: string
+  run_url: string
+}
+
+export type AntibodyStatusResponse = {
+  status: string
+  job_status: string
+  run_name: string
+  experiment_id: string
+  iter_max_reward_history: EnzymeRewardHistoryPoint[]
+  iter_mean_reward_history: EnzymeRewardHistoryPoint[]
+  current_metrics: Record<string, number>
+  trajectory: Record<string, number | string | null>[]
+}
+
+export type AntibodyCandidate = {
+  candidate_id: string
+  pdb: string
+  viewer_html: string
+  mhc_burden?: number[] | null  // precomputed per-residue MHC-II burden (null for pre-precompute runs)
+}
+
+export type AntibodyTopKResponse = { candidates: AntibodyCandidate[] }
+
+export type AntibodyColorRequest = {
+  pdb: string
+  color_by: string
+  antigen_chain: string
+  mhc_burden?: number[] | null
+}
+
+export type AntibodyColorResponse = { viewer_html: string }
+
+export type AntibodyDefaultsResponse = {
+  default_weights: Record<string, number>
+  antigen_pdb: string
+  antigen_chain: string
+  epitope_residues: number[]
+}
+
+// ─── Vaccine Immunogen Design ───────────────────────────────────────────────
+
+export type VaccineImmunogenStartRequest = {
+  motif_pdb: string
+  motif_residues: number[]
+  motif_chain: string
+  scaffold_length_min: number
+  scaffold_length_max: number
+  num_samples: number
+  num_iterations: number
+  weights: Record<string, number>
+  resampling_temperature: number
+  strategy: 'resample' | 'noop'
+  run_proteinmpnn: boolean
+  motif_placement: 'indexed' | 'unindexed'
+  convergence_threshold: number | null
+  convergence_window: number
+  target_reward: number | null
+  best_k_target: number | null
+  best_k_threshold: number | null
+  mlflow_experiment: string
+  mlflow_run_name: string
+}
+
+export type VaccineImmunogenStartResponse = {
+  job_id: number
+  job_run_id: number
+  mlflow_run_id: string
+  experiment_id: string
+  run_url: string
+}
+
+export type VaccineImmunogenStatusResponse = {
+  status: string
+  job_status: string
+  run_name: string
+  experiment_id: string
+  iter_max_reward_history: EnzymeRewardHistoryPoint[]
+  iter_mean_reward_history: EnzymeRewardHistoryPoint[]
+  current_metrics: Record<string, number>
+  trajectory: Record<string, number | string | null>[]
+}
+
+export type VaccineCandidate = {
+  candidate_id: string
+  pdb: string
+  viewer_html: string
+  // Precomputed 1-based positions of the fixed epitope motif in the designed sequence (from the run),
+  // or null for runs generated before the precompute shipped — the motif-vs-scaffold color mode uses it.
+  motif_positions?: number[] | null
+}
+
+export type VaccineTopKResponse = { candidates: VaccineCandidate[] }
+
+export type VaccineColorRequest = {
+  pdb: string
+  color_by: string
+  // Precomputed motif positions from the run's artifact, passed back by the frontend for the motif mode.
+  motif_positions?: number[] | null
+}
+
+export type VaccineColorResponse = { viewer_html: string }
+
+export type VaccineImmunogenDefaultsResponse = {
+  default_weights: Record<string, number>
+  motif_pdb: string
+  motif_chain: string
+  motif_residues: number[]
 }
 
 // ─── Genomics ──────────────────────────────────────────────────────

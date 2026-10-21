@@ -1,7 +1,7 @@
 # Databricks notebook source
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "genesis_schema", "Schema")
-dbutils.widgets.text("sql_warehouse_id", "8f210e00850a2c16", "SQL Warehouse Id")
+dbutils.widgets.text("sql_warehouse_id", "", "SQL Warehouse Id")
 dbutils.widgets.text("module", "single_cell", "Model Category for which endpoints will be destroyed")
 dbutils.widgets.text("destroy_user_email", "a@b.com", "User Id")
 

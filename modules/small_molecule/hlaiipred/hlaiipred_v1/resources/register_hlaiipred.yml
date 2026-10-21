@@ -1,0 +1,40 @@
+resources:
+  jobs:
+    register_hlaiipred:
+      name: register_hlaiipred_gwb
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: register_hlaiipred_immunogenicity
+          max_retries: 0
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/01_register_hlaiipred.py
+
+      environments:
+        - environment_key: default
+          spec:
+            client: '4'
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: model_name
+          default: hlaiipred_v1
+        - name: cache_dir
+          default: ${resources.volumes.hlaiipred_cache_dir.name}
+        - name: experiment_name
+          default: ${var.module_registration_experiment_name}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: user_email
+          default: ${var.current_user}
+        - name: workload_type
+          default: CPU
+
+      tags: ${var.common_resource_tags}

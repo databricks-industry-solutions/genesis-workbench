@@ -1,0 +1,95 @@
+variables:
+  current_user:
+    description: User deploying the bundle. Can apply to service principals as well.
+    default: ${workspace.current_user.userName}
+
+  current_working_directory:
+    description: Working directory or bundle root.
+    default: /Users/${var.current_user}/.bundle/${bundle.name}/${bundle.target}
+
+  workspace_url:
+    description: Workspace url for deployment
+
+  common_resource_tags:
+    description: Resource tags
+    default:
+      application: genesis_workbench
+      module: vaccine_immunogen
+      created_by: ${workspace.current_user.short_name}
+
+  # Declared (not used by this submodule — the orchestrator runs on serverless GPU
+  # via `environments: client`) so the shared application.env/<cloud>.env --vars the
+  # large_molecule deploy runner passes to every submodule resolve cleanly.
+  cpu_node_type:
+    description: Node type for CPU vms
+  t4_node_type:
+    description: Node type for T4 GPUs
+  a10_node_type:
+    description: Node type for A10 GPUs
+  gpu_small_setting:
+    description: The config setting for small gpu
+  gpu_medium_setting:
+    description: The config setting for medium gpu
+  gpu_large_setting:
+    description: The config setting for large gpu
+
+  core_catalog_name:
+    description: primary catalog where data, models, and files are stored for this project.
+
+  core_schema_name:
+    description: The schema where core components will be installed.
+
+  sql_warehouse_id:
+    description: Id of the SQL Warehouse that will be used by the app
+
+  module_registration_experiment_name:
+    description: The experiment to which all registered modules are logged
+    default: dbx_genesis_workbench_modules
+
+  # This workflow's own UC volume — the app uploads each run's epitope-motif PDB here
+  # before dispatching, and the orchestrator writes per-run logs here.
+  cache_dir:
+    description: The cache directory (UC volume) for Vaccine Immunogen run inputs/logs
+    default: vaccine_immunogen
+
+  # RFD4-Proteina released WEIGHTS come from Hugging Face (the public release supersedes
+  # the early-access cwobject CDN). The flow denoiser + partial-autoencoder are a MATCHED
+  # PAIR from the 2026-10-19 release (latent dim + residue vocab changed vs early access —
+  # they cannot be mixed). Loaded via the model's `Proteina.from_pretrained(<hf_repo>,
+  # revision=<hf_revision>)` API.
+  rfd4_hf_repo:
+    description: Hugging Face repo for the RFD4-Proteina released weights (matched flow + AE pair)
+    default: nvidia/RFD4-Proteina
+
+  rfd4_hf_revision:
+    description: Pinned HF Hub commit for reproducible weight loading
+    default: a06e2509c7033b010fc43614e9fd840303588502
+
+  rfd4_flow_ckpt:
+    description: Flow (denoiser) checkpoint filename in the HF repo
+    default: rfd4-proteina-flow-release-2026-10-19.ckpt
+
+  rfd4_ae_ckpt:
+    description: Partial-autoencoder checkpoint filename in the HF repo
+    default: rfd4-proteina-ae-release-2026-10-19.ckpt
+
+  # The HF weights repo may be gated; the orchestrator reads a Hugging Face token from
+  # this secret to download the weights.
+  rfd4_hf_token_scope:
+    description: Databricks secret scope holding a Hugging Face token with access to the RFD4-Proteina weights
+    default: dbx_genesis_workbench
+
+  rfd4_hf_token_key:
+    description: Key in the secret scope for the Hugging Face token
+    default: hf_token
+
+  # RFD4-Proteina MODEL CODE is now a PUBLIC repo (BSD-3-Clause, RosettaCommons). The
+  # orchestrator job pip-installs `rfd4-proteina[metrics-cuda13]` straight from this git ref
+  # — no GitHub PAT needed. Pinned to a release tag for reproducibility.
+  rfd4_git_url:
+    description: Git host/path of the public RFD4-Proteina model repo
+    default: github.com/RosettaCommons/RFD4-Proteina.git
+
+  rfd4_git_ref:
+    description: Git ref (release tag/commit) of the RFD4-Proteina repo to install — pinned for reproducibility
+    default: v0.0.1

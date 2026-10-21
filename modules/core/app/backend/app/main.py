@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.routers import (
     ai_canvas,
+    antibody_design,
     assistant,
     bionemo,
     bootstrap,
@@ -20,9 +21,11 @@ from app.routers import (
     models,
     monitoring,
     profile,
+    rfd4,
     settings,
     single_cell,
     small_molecule,
+    vaccine_immunogen,
 )
 from app.services.workbench import initialize_lib
 
@@ -40,6 +43,14 @@ async def lifespan(_: FastAPI):
         logger.info("Genesis Workbench lib initialized")
     except Exception as e:
         logger.warning("Lib initialization failed at startup: %s. Endpoints that need it will fail.", e)
+    # Pre-warm the Vortex node catalog so the first load is instant instead of re-running the
+    # deployment/job-availability queries on every request (cached for the app's lifetime).
+    try:
+        from app.services.ai_canvas import build_catalog
+        n = len(build_catalog())
+        logger.info("Vortex catalog pre-warmed at startup (%d nodes)", n)
+    except Exception as e:
+        logger.warning("Vortex catalog pre-warm failed: %s. Will lazy-load on first request.", e)
     yield
 
 
@@ -66,6 +77,9 @@ app.include_router(small_molecule.router)
 app.include_router(genomics.router)
 app.include_router(bionemo.router)
 app.include_router(kermt.router)
+app.include_router(rfd4.router)
+app.include_router(antibody_design.router)
+app.include_router(vaccine_immunogen.router)
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 

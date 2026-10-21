@@ -97,8 +97,12 @@ resources:
           default: CPU
         - name: gene_order_workload_size
           default: Small
+        # SCimilarity's CellEmbedding is a small MLP encoder — a single A10 (GPU_MEDIUM)
+        # is ample. MULTIGPU_MEDIUM was aborting with "resource did not become available
+        # in time": the workshop serving fleet has no multi-GPU capacity, and this model
+        # never needed it. GPU_MEDIUM is the proven-available single-GPU tier (esmfold/boltz).
         - name: get_embedding_workload_type
-          default: MULTIGPU_MEDIUM
+          default: GPU_MEDIUM
         - name: get_embedding_workload_size
           default: Small
 
@@ -136,13 +140,20 @@ resources:
             custom_tags:
               ResourceClass: SingleNode
 
+        # GetEmbedding registration logs the CellEmbedding pyfunc + runs a small local
+        # smoke test. SCimilarity 0.4.0 is Python-3.10-locked (numpy 1.26.4 / pandas 1.5.3)
+        # and its encoder runs fine on CPU — GPU is only a speedup for bulk embedding, which
+        # this task does not do. The workshop AWS account has EC2 GPU vCPU quota = 0, so the
+        # a10 (g5) node cannot provision; run on a high-RAM CPU node (14.3 LTS ML = py3.10).
+        # The SERVED endpoint still runs on MULTIGPU_MEDIUM managed serving GPU (notebook 05),
+        # which draws from the serving fleet, not the EC2 quota.
         - job_cluster_key: job_cluster_get_embedding
           new_cluster:
             num_workers: 0
-            ### NEED larger compute for SCimilarity
-            node_type_id: ${var.a10_node_type}   
-            driver_node_type_id: ${var.a10_node_type}  
-            spark_version: '14.3.x-gpu-ml-scala2.12'
+            ### high-RAM CPU: utils.py loads the full ~23M-cell CellQuery reference (~12 GB)
+            node_type_id: ${var.cpu_large_node_type}
+            driver_node_type_id: ${var.cpu_large_node_type}
+            spark_version: '14.3.x-cpu-ml-scala2.12'
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             single_user_name: ${workspace.current_user.userName}
@@ -152,13 +163,17 @@ resources:
             custom_tags:
               ResourceClass: SingleNode
 
+        # 06a (extract samples) and 06b (extract 23M-cell reference to Delta) are RAM-bound,
+        # not GPU-bound: 06b reads PRECOMPUTED embeddings from TileDB (no GPU) and 06a embeds
+        # only the small adams sample. Both load CellQuery (~12 GB); 06b briefly holds two.
+        # Same quota rationale as above — use the largest CPU node (768 GB) on 14.3 LTS ML.
         - job_cluster_key: job_cluster_search_nearest
           new_cluster:
             num_workers: 0
-            ### NEED larger RAM compute for SCimilarity: search_nearest
-            node_type_id: ${var.a10_node_type} 
-            driver_node_type_id: ${var.a10_node_type}   
-            spark_version: '14.3.x-gpu-ml-scala2.12'
+            ### largest CPU node — 06b can hold two CellQuery references + the reference matrix
+            node_type_id: ${var.cpu_xlarge_node_type}
+            driver_node_type_id: ${var.cpu_xlarge_node_type}
+            spark_version: '14.3.x-cpu-ml-scala2.12'
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             single_user_name: ${workspace.current_user.userName}

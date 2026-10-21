@@ -17,24 +17,13 @@ resources:
       tasks:
         - task_key: download_cellxgene
           max_retries: 0
-          job_cluster_key: cellxgene_cluster
+          environment_key: default
           notebook_task:
             notebook_path: ../notebooks/download_cellxgene.py
             source: WORKSPACE
           timeout_seconds: 14400
 
-      job_clusters:
-        - job_cluster_key: cellxgene_cluster
-          new_cluster:
-            spark_version: 15.4.x-scala2.12
-            spark_conf:
-              spark.master: local[*, 4]
-              spark.databricks.cluster.profile: singleNode
-            node_type_id: ${var.cpu_node_type}
-            driver_node_type_id: ${var.cpu_node_type}
-            custom_tags:
-              ResourceClass: SingleNode
-            enable_elastic_disk: true
-            data_security_mode: SINGLE_USER
-            runtime_engine: STANDARD
-            num_workers: 0
+      environments:
+        - environment_key: default
+          spec:
+            client: '4'

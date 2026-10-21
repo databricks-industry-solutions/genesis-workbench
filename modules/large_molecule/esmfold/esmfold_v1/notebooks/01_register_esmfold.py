@@ -19,7 +19,9 @@ schema = dbutils.widgets.get("schema")
 # COMMAND ----------
 
 #requirements for genesis workbench library
-%pip install databricks-sdk==0.50.0 databricks-sql-connector==4.0.3 #mlflow==2.22.0
+#On serverless GPU (AI runtime) torch/CUDA is preinstalled, but transformers/
+#accelerate are not — install them here (mirrors the esm2_embeddings notebook).
+%pip install databricks-sdk>=0.150.0 databricks-sql-connector==4.0.3 transformers==4.41.2 accelerate==0.31.0 hf_transfer==0.1.9 mlflow>=3.12
 #requirements for current library
 #%pip install -r ../requirements.txt
 
@@ -81,6 +83,14 @@ initialize(core_catalog_name = catalog, core_schema_name = schema, sql_warehouse
 
 # COMMAND ----------
 
+import os
+# Multi-GB UC model registration was failing with TimeoutError('Timed out after
+# 0:05:00'): the Databricks-SDK models artifact repo wraps the upload in a 5-min
+# SDK retry-timeout that a large model exceeds on throttled workspaces. Defining
+# this flag false routes MLflow to the presigned-URL/S3 upload path (boto3
+# multipart, no 5-min cap) — is_databricks_sdk_models_artifact_repository_enabled()
+# returns this value directly when the env var is defined.
+os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"
 import mlflow
 import torch
 from transformers import AutoTokenizer, EsmForProteinFolding
@@ -109,22 +119,43 @@ from genesis_workbench.workbench import wait_for_job_run_completion
 
 # COMMAND ----------
 
-tokenizer = AutoTokenizer.from_pretrained("facebook/esmfold_v1", cache_dir=cache_full_path)
+# Download to FAST LOCAL temp, not the Volume FUSE mount (writing/reading ~2.8GB
+# through /Volumes FUSE stretched each run to ~40 min). Local temp downloads in
+# a couple of minutes; the flat copy + artifact upload are also local/fast.
+import tempfile
+_dl_cache = tempfile.mkdtemp(prefix="esmfold_dl_")
+tokenizer = AutoTokenizer.from_pretrained("facebook/esmfold_v1", cache_dir=_dl_cache)
 model = EsmForProteinFolding.from_pretrained(
-    "facebook/esmfold_v1", low_cpu_mem_usage=True, cache_dir=cache_full_path
+    "facebook/esmfold_v1", low_cpu_mem_usage=True, cache_dir=_dl_cache
 )
+
+# COMMAND ----------
+
+# Save a FLAT copy of the model (single safetensors + config, no HF cache
+# symlink/blob structure). Logging the raw HF cache uploaded the weights TWICE
+# (snapshot symlink + blob ≈ 5.6GB of many files) and hit the 5-min UC
+# model-registry upload timeout. A flat single-file artifact uploads in ~1 min.
+# NOTE: write to fast LOCAL temp, NOT the UC Volume — save_pretrained to a
+# FUSE-mounted /Volumes path is pathologically slow (near-hang).
+# SIZE: half the ESM-2 backbone before saving (ESMFold's intended serving
+# precision — the pyfunc does the same at load time). This keeps the checkpoint
+# at its native ~8.4GB instead of a fp32-upcast ~14GB, and single-shard so it
+# uploads as ONE file — both keep the UC upload under the 5-min SDK timeout.
+import tempfile
+model.esm = model.esm.half()
+flat_model_path = tempfile.mkdtemp(prefix="esmfold_flat_")
+model.save_pretrained(flat_model_path, max_shard_size="20GB", safe_serialization=True)
+tokenizer.save_pretrained(flat_model_path)
 
 # COMMAND ----------
 
 class ESMFoldPyFunc(mlflow.pyfunc.PythonModel):
     def load_context(self, context):
-        cache_dir = context.artifacts["cache"]
+        model_dir = context.artifacts["model"]
 
-        self.tokenizer = transformers.AutoTokenizer.from_pretrained(
-            "facebook/esmfold_v1", cache_dir=cache_dir
-        )
+        self.tokenizer = transformers.AutoTokenizer.from_pretrained(model_dir)
         self.model = transformers.EsmForProteinFolding.from_pretrained(
-            "facebook/esmfold_v1", low_cpu_mem_usage=True, cache_dir=cache_dir
+            model_dir, low_cpu_mem_usage=True
         )
 
         self.model = self.model.cuda()
@@ -217,22 +248,20 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
         artifact_path="esmfold",
         python_model=esmfold_model,
         artifacts={
-            "cache": cache_full_path,
+            "model": flat_model_path,
         },
-        pip_requirements=[
-            "--extra-index-url https://download.pytorch.org/whl/cu121",
-            "mlflow==2.15.1",
-            "cloudpickle==2.2.1",
-            "transformers==4.41.2",
-            "torch==2.3.1+cu121",
-            "torchvision==0.18.1+cu121",
-            "accelerate==0.31.0",
-            "setuptools<82"
-        ],
+        pip_requirements=["mlflow", "cloudpickle", "pandas", "numpy"],  # minimal: env_pack defines the serving env
         input_example=test_input,
         signature=signature,
-        registered_model_name=f"{catalog}.{schema}.{model_name}",
     )
+
+# Express: register with env_pack (snapshots this serverless-GPU env for serving). Only the registration
+# changes — import_model_from_uc + deploy_model below are unchanged.
+from mlflow.utils.env_pack import EnvPackConfig
+mlflow.register_model(
+    model_uri=model_info.model_uri, name=f"{catalog}.{schema}.{model_name}",
+    env_pack=EnvPackConfig(name="databricks_model_serving", install_dependencies=False),
+)
 
 # COMMAND ----------
 

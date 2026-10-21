@@ -66,7 +66,7 @@ def _resolve_job_id(job_name: str, env_var: str, w: Optional[WorkspaceClient] = 
     if not matches:
         raise RuntimeError(
             f"Job '{job_name}' not found. Deploy the kermt submodule: "
-            "`./deploy.sh small_molecule aws --only-submodule kermt/kermt_v1`"
+            "`./deploy.sh small_molecule aws --only-submodule kermt/kermt_v2`"
         )
     _job_id_cache[job_name] = int(matches[0].job_id)
     return _job_id_cache[job_name]

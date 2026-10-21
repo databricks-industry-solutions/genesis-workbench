@@ -12,27 +12,28 @@ CLOUD=$1
 EXTRA_PARAMS_CLOUD=$(paste -sd, "../../$CLOUD.env")
 EXTRA_PARAMS_GENERAL=$(paste -sd, "../../application.env")
 
+EXTRA_PARAMS="$EXTRA_PARAMS_GENERAL,$EXTRA_PARAMS_CLOUD"
+
+# BioNeMo is containerless (ESM-2 from HF on serverless GPU), so there is no
+# module.env. Append its vars only when the file exists — appending an empty
+# EXTRA_PARAMS_MODULE unconditionally left a trailing comma in --var, which the
+# bundle CLI rejects with "unexpected flag value for variable assignment:".
 if [[ -f "module.env" ]]; then
-    EXTRA_PARAMS_MODULE=$(paste -sd, "module.env")
-else
-    EXTRA_PARAMS_MODULE=''
+    EXTRA_PARAMS="$EXTRA_PARAMS,$(paste -sd, module.env)"
 fi
 
-EXTRA_PARAMS="$EXTRA_PARAMS_GENERAL,$EXTRA_PARAMS_CLOUD,$EXTRA_PARAMS_MODULE"
-
-echo "Extra Params: $EXTRA_PARAMS"
+# BioNeMo ESM2 fine-tune + inference are containerless: they run on serverless GPU as
+# notebook_task jobs (hardware_accelerator: GPU_1xA10) that read ESM-2 from Hugging Face and
+# run it on Transformer Engine. No NGC container, no classic A10 cluster, no air CLI / image
+# registration. Deploy just registers the jobs; the UI launches them ON DEMAND (jobs run-now).
 
 echo ""
 echo "▶️ [BioNeMo] Validating bundle"
-echo ""
-
-databricks bundle validate --var="$EXTRA_PARAMS" 
+databricks bundle validate --var="$EXTRA_PARAMS"
 
 echo ""
 echo "▶️ [BioNeMo] Deploying bundle"
-echo ""
-
-databricks bundle deploy --var="$EXTRA_PARAMS" 
+databricks bundle deploy --var="$EXTRA_PARAMS"
 
 if [[ ! -e ".deployed" ]]; then
     echo ""

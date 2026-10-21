@@ -1,0 +1,60 @@
+# Persistent serverless-GPU Parabricks job (ai_runtime_task), deployed once and triggered
+# on demand from the GWB UI (jobs run-now) — NOT run at deploy time.
+#
+# Productionized per Databricks docs (AI Runtime > productionizing-training-workloads):
+# the DAB `artifacts: {type: tgz}` block packages the code into ./dist/code.tgz and
+# code_source_path points at it (no air CLI, no hand-built tarball — the bundle packages it).
+# Uses the stock NGC Parabricks image directly (public; registered with `air register image`).
+resources:
+  jobs:
+    run_parabricks:
+      name: run_parabricks
+
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+
+      tasks:
+        - task_key: parabricks_germline
+          environment_key: default
+          max_retries: 0
+          ai_runtime_task:
+            experiment: parabricks
+            # Bundle-packaged code tarball (see databricks.yml artifacts: parabricks_code).
+            code_source_path: ./dist/code.tgz
+            docker_image_url: nvcr.io/nvidia/clara/clara-parabricks:4.5.1-1
+            deployments:
+              # command_path must be a LITERAL /Workspace/ or /Volumes/ path (a bundle-relative
+              # path normalizes to /Users/... and is rejected). deploy.sh stages command.sh here.
+              - command_path: /Workspace/Shared/parabricks/command.sh
+                compute:
+                  accelerator_type: GPU_1xA10
+                  accelerator_count: 1
+
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: '6'
+
+      # Inputs the UI dispatcher passes via jobs run-now (job_parameters). command.sh probes
+      # whether these reach the container; if not, run_parabricks.py falls back to a shared
+      # UC-Volume config (ai_runtime_task input-passing per the docs).
+      parameters:
+        - name: pb_fq1
+          default: ""
+        - name: pb_fq2
+          default: ""
+        - name: pb_ref
+          default: ""
+        - name: pb_known_sites
+          default: ""
+        - name: mlflow_run_id
+          default: ""
+        - name: mlflow_experiment
+          default: ""
+        - name: user_email
+          default: ${var.current_user}
+        - name: test_param
+          default: "deploy_default"
+
+      tags: ${var.common_resource_tags}
