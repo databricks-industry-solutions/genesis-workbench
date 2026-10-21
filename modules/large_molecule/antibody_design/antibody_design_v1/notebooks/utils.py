@@ -581,10 +581,12 @@ def graft_cdrs_onto_framework(donor_sequence: str,
 # rfproteina (e.g. during py_compile / unit import).
 # ---------------------------------------------------------------------------
 
-def load_rfd4(flow_ckpt: str, ae_ckpt: str) -> Dict[str, Any]:
-    """Load RFD4-Proteina for warm in-process generation. Returns a context
-    dict {model, transform, pkg_dir, device, torch}. Mirrors nb01's
-    RFD4ProteinaModel.load_context."""
+def load_rfd4(hf_repo: str, hf_revision: str) -> Dict[str, Any]:
+    """Load RFD4-Proteina for warm in-process generation from Hugging Face.
+    Returns a context dict {model, transform, pkg_dir, device, torch}.
+
+    Uses the new public API: Proteina.from_pretrained(hf_repo, revision=hf_revision)
+    for the released weights and run_generation for generation."""
     import os as _os
     import torch
     import rfproteina
@@ -597,12 +599,15 @@ def load_rfd4(flow_ckpt: str, ae_ckpt: str) -> Dict[str, Any]:
     torch.set_float32_matmul_precision("high")
     pkg_dir = _os.path.dirname(rfproteina.__file__)
     monomer_cif = _os.path.join(pkg_dir, "data", "benchmarks", "monomer", "monomer-short.cif")
+    # Public release: weights come from Hugging Face (matched flow+AE pair). Setting hf_ckpt_path/
+    # hf_ckpt_revision makes load_ckpt_n_configure_inference pull them via Proteina.from_pretrained AND
+    # run configure_inference — keep that call; bypassing it (plain from_pretrained) leaves predict_step
+    # with no generation config. HF_TOKEN (env, set before this call) authenticates the gated download.
     overrides = [
         "inference_experiment=inference_on_user_inputs",
         "~metrics/refolding_oracles", "metrics_tags=[]", "num_workers=0", "seed=42",
         f"inputs={monomer_cif}",
-        f"ckpt_path={_os.path.dirname(flow_ckpt)}", f"ckpt_name={_os.path.basename(flow_ckpt)}",
-        f"autoencoder_ckpt_path={ae_ckpt}", "out_dir=/tmp/rfd4_ab_out",
+        f"hf_ckpt_path={hf_repo}", f"hf_ckpt_revision={hf_revision}", "out_dir=/tmp/rfd4_ab_out",
     ]
     GlobalHydra.instance().clear()
     with initialize_config_dir(config_dir=_os.path.join(pkg_dir, "configs"), version_base="1.3"):
@@ -610,7 +615,7 @@ def load_rfd4(flow_ckpt: str, ae_ckpt: str) -> Dict[str, Any]:
     model = load_ckpt_n_configure_inference(cfg)
     model.to(device).eval()
     transform = build_design_validation_pipeline(metrics_tags=None)
-    print(f"[rfd4] loaded on {device}")
+    print(f"[rfd4] loaded {hf_repo}@{hf_revision} on {device}")
     return {"model": model, "transform": transform, "pkg_dir": pkg_dir,
             "device": device, "torch": torch}
 

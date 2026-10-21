@@ -147,7 +147,7 @@ Genesis Workbench ships open models and open datasets across all modules. Models
 | ESM-2 Embeddings | large_molecule / esm2_embeddings | `facebook/esm2_t33_650M_UR50D` | 650M mean-pooled protein embeddings (1280-dim) for similarity search |
 | RFdiffusion | large_molecule / rfdiffusion | RosettaCommons/RFdiffusion | De novo protein backbone design |
 | ProteinMPNN | large_molecule / protein_mpnn | dauparas/ProteinMPNN | Sequence design for a given backbone |
-| RFD4-Proteina | large_molecule / rfd4_proteina | NVIDIA-BioNeMo/RFD4-Proteina (NVIDIA×Baker) | Flow-matching de novo protein backbone + sequence design (first-draft binder/motif conditioning; LoRA fine-tunable), served on H100 via Express |
+| RFD4-Proteina | large_molecule / rfd4_proteina | RosettaCommons/RFD4-Proteina (NVIDIA×Baker, BSD-3-Clause) | Flow-matching de novo protein backbone + sequence design (first-draft binder/motif conditioning; LoRA fine-tunable), served on H100 via Express |
 | DiffDock | small_molecule / diffdock | gcorso/DiffDock v1.1.3 | Protein–ligand blind docking (diffusion) |
 | GenMol | small_molecule / genmol | `nvidia/NV-GenMol-89M-v2` | Generative small-molecule design (SAFE masked diffusion) |
 | Chemprop (BBBP / ClinTox / ADMET) | small_molecule / chemprop | `chemprop==2.2.3` | Blood-brain barrier, clinical toxicity, 10-property ADMET |
@@ -442,7 +442,7 @@ BioNeMo | pynvml | BSD-3 | https://github.com/gpuopenanalytics/pynvml
 Parabricks | see BioNeMo (same docker base dependencies) | |
 ESM2 Embeddings | torch==2.3.1 | BSD-3 | https://github.com/pytorch/pytorch
 ESM2 Embeddings | transformers==4.41.2 | Apache2.0 | https://github.com/huggingface/transformers
-RFD4-Proteina | rfd4-proteina (pip-installed at runtime from the NVIDIA-BioNeMo RFD4-Proteina repo) | MIT | https://github.com/NVIDIA-BioNeMo/RFD4-Proteina
+RFD4-Proteina | rfd4-proteina (pip-installed at runtime from the public RosettaCommons RFD4-Proteina repo, tag v0.0.1) | BSD-3 | https://github.com/RosettaCommons/RFD4-Proteina
 RFD4-Proteina | torch==2.14.1+cu132 | BSD-3 | https://github.com/pytorch/pytorch
 RFD4-Proteina | biotite==1.6.0 | BSD-3 | https://github.com/biotite-dev/biotite
 RFD4-Proteina | mlflow>=3.12 | Apache2.0 | https://github.com/mlflow/mlflow
@@ -450,7 +450,7 @@ RFD4-Proteina | databricks-sdk>=0.150.0 | Apache2.0 | https://pypi.org/project/d
 RFD4-Proteina | cloudpickle | BSD-3 | https://github.com/cloudpipe/cloudpickle
 RFD4-Proteina | numpy | BSD-3 | https://github.com/numpy/numpy
 RFD4-Proteina | pandas | BSD-3 | https://github.com/pandas-dev/pandas
-RFD4-Proteina | MODEL WEIGHTS (flow + autoencoder checkpoints; served on H100 via Express env_pack) | MIT | https://rfd4-proteina-public-e04a.cwobject.com
+RFD4-Proteina | MODEL WEIGHTS (flow + autoencoder checkpoints; served on H100 via Express env_pack) | BSD-3 | https://huggingface.co/nvidia/RFD4-Proteina
 KERMT | kermt (NVIDIA-BioNeMo/KERMT, GROVERbase) | Apache2.0 | https://github.com/NVIDIA-BioNeMo/KERMT
 KERMT | rdkit==2025.3.6 | BSD-3 | https://github.com/rdkit/rdkit
 KERMT | descriptastorus==2.8.0 | MIT | https://github.com/bp-kelley/descriptastorus
@@ -492,11 +492,11 @@ GenMol | databricks-sdk==0.50.0 | Apache2.0 | https://pypi.org/project/databrick
 GenMol | databricks-sql-connector==4.0.3 | Apache2.0 | https://github.com/databricks/databricks-sql-python
 GenMol | MODEL WEIGHTS (NV-GenMol-89M-v2) | NVIDIA Open Model License | https://huggingface.co/nvidia/NV-GenMol-89M-v2
 Antibody Design | batch workflow on RFD4-Proteina — reuses the esmfold / proteinmpnn / boltz / netsolp / deepstabp / mhcflurry / hlaiipred serving endpoints listed above | |
-Antibody Design | rfd4-proteina (in-process on H100) | MIT | https://github.com/NVIDIA-BioNeMo/RFD4-Proteina
+Antibody Design | rfd4-proteina (in-process on H100) | BSD-3 | https://github.com/RosettaCommons/RFD4-Proteina
 Antibody Design | anarcii (VHH / antibody numbering) | BSD-3 | https://github.com/oxpig/ANARCII
 Antibody Design | biotite==1.6.0 | BSD-3 | https://github.com/biotite-dev/biotite
 Antibody Design | torch==2.14.1+cu132 | BSD-3 | https://github.com/pytorch/pytorch
 Vaccine Immunogen | batch workflow on RFD4-Proteina motif-scaffolding — reuses existing serving endpoints as above | |
-Vaccine Immunogen | rfd4-proteina (in-process on H100) | MIT | https://github.com/NVIDIA-BioNeMo/RFD4-Proteina
+Vaccine Immunogen | rfd4-proteina (in-process on H100) | BSD-3 | https://github.com/RosettaCommons/RFD4-Proteina
 Vaccine Immunogen | biotite==1.6.0 | BSD-3 | https://github.com/biotite-dev/biotite
 Vaccine Immunogen | torch==2.14.1+cu132 | BSD-3 | https://github.com/pytorch/pytorch

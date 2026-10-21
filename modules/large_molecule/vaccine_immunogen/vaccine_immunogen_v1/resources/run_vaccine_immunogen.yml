@@ -35,27 +35,30 @@ resources:
           default: ${var.core_schema_name}
         - name: cache_dir
           default: ${resources.volumes.vaccine_immunogen_cache_dir.name}
-        # Where the RFD4 flow + AE checkpoints are staged (by the rfd4_proteina deploy).
-        - name: rfd4_cache_dir
-          default: ${var.rfd4_cache_dir}
-        - name: rfd4_flow_ckpt
-          default: ${var.rfd4_flow_ckpt}
-        - name: rfd4_ae_ckpt
-          default: ${var.rfd4_ae_ckpt}
         - name: sql_warehouse_id
           default: ${var.sql_warehouse_id}
         - name: user_email
           default: ${var.current_user}
 
-        # rfproteina is pip-installed from the private GitHub repo at runtime.
+        # RFD4-Proteina weights from Hugging Face (the released public checkpoint pair).
+        - name: rfd4_hf_repo
+          default: ${var.rfd4_hf_repo}
+        - name: rfd4_hf_revision
+          default: ${var.rfd4_hf_revision}
+        - name: rfd4_flow_ckpt
+          default: ${var.rfd4_flow_ckpt}
+        - name: rfd4_ae_ckpt
+          default: ${var.rfd4_ae_ckpt}
+        - name: rfd4_hf_token_scope
+          default: ${var.rfd4_hf_token_scope}
+        - name: rfd4_hf_token_key
+          default: ${var.rfd4_hf_token_key}
+
+        # rfproteina is pip-installed from the public GitHub repo at runtime.
         - name: rfd4_git_url
           default: ${var.rfd4_git_url}
         - name: rfd4_git_ref
           default: ${var.rfd4_git_ref}
-        - name: rfd4_git_token_scope
-          default: ${var.rfd4_git_token_scope}
-        - name: rfd4_git_token_key
-          default: ${var.rfd4_git_token_key}
 
         # Per-run parameters (populated by start_vaccine_immunogen_job)
         - name: mlflow_experiment

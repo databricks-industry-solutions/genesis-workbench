@@ -12,14 +12,34 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# ── Hugging Face token (RFD4-Proteina weight pulls) ─────────────────────────────────
+# The token lives in the gitignored module.env (never committed) and is seeded into the
+# Databricks secret scope here at deploy time — the RFD4 register / finetune / antibody /
+# vaccine jobs read the weights from that secret. Mirrors the core module's env->secret
+# pattern. The weights repo is currently PUBLIC so this is optional; wiring it keeps gated
+# revisions / private forks working with no code change. (hf_token is a non-exported shell
+# var, so it is NOT inherited by the bundle/submodule child processes.)
+HF_TOKEN_SCOPE="${rfd4_hf_token_scope:-dbx_genesis_workbench}"
+HF_TOKEN_KEY="${rfd4_hf_token_key:-hf_token}"
+if [[ -f "module.env" ]]; then
+    # shellcheck disable=SC1091
+    source module.env
+fi
+if [[ -n "${hf_token:-}" ]]; then
+    echo "▶️ Seeding Hugging Face token into secret ${HF_TOKEN_SCOPE}/${HF_TOKEN_KEY} (from module.env)"
+    databricks secrets put-secret "$HF_TOKEN_SCOPE" "$HF_TOKEN_KEY" --string-value "$hf_token"
+fi
+
 EXTRA_PARAMS_CLOUD=$(paste -sd, "../../$CLOUD.env")
 EXTRA_PARAMS_GENERAL=$(paste -sd, "../../application.env")
 
 EXTRA_PARAMS="$EXTRA_PARAMS_GENERAL,$EXTRA_PARAMS_CLOUD"
 
 if [[ -f "module.env" ]]; then
-    EXTRA_PARAMS_MODULE=$(paste -sd, "module.env")
-    EXTRA_PARAMS="$EXTRA_PARAMS,$EXTRA_PARAMS_MODULE"
+    # Pass module.env entries as bundle --vars, but NEVER the raw hf_token secret value
+    # (it is seeded as a secret above, not a bundle variable). Also drop comments/blank lines.
+    EXTRA_PARAMS_MODULE=$(grep -vE '^[[:space:]]*(hf_token[[:space:]]*=|#|$)' module.env | paste -sd, -)
+    [[ -n "$EXTRA_PARAMS_MODULE" ]] && EXTRA_PARAMS="$EXTRA_PARAMS,$EXTRA_PARAMS_MODULE"
 fi
 
 echo "Extra Params: $EXTRA_PARAMS"

@@ -1,10 +1,15 @@
 # Genesis Workbench — Changelog
 
-## Unreleased (branch `feature/serverless-gpu-jobs`) — serverless migration + genomics/single-cell deploy fixes
+## Unreleased (branch `feature/serverless-gpu-jobs`) — serverless migration + genomics/single-cell deploy fixes + RFD4-Proteina public-release refresh
 
 Migrates module jobs off classic clusters to **serverless** (to bypass the workshop's EC2 GPU quota=0 and cut
-cluster-start time) and hardens deploy-time sample-data staging.
+cluster-start time), hardens deploy-time sample-data staging, and refreshes all RFD4-Proteina references for the public release.
 
+- **RFD4-Proteina public-release refresh.** Repository moved from private NVIDIA-BioNeMo to public
+  [RosettaCommons/RFD4-Proteina](https://github.com/RosettaCommons/RFD4-Proteina) (tag v0.0.1, BSD-3-Clause license).
+  Weights now served from HuggingFace `nvidia/RFD4-Proteina` instead of cwobject CDN. Dependency bumps: atomworks 3.0.4,
+  cuequivariance 0.13. Updated checkpoint filenames, model descriptions, and license/repo references throughout the
+  app, documentation, benchmarks, and deployment skills.
 - **Serverless migration.** Classic CPU register/setup jobs and GPU jobs converted to serverless
   `notebook_task` (`environment_key` + job-level `environments`); GPU jobs use `compute.hardware_accelerator:
   GPU_1xA10`. bionemo ESM-2 re-architected **containerless** (HF + Transformer Engine); the TE wheel is built

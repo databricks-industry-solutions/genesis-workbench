@@ -62,6 +62,44 @@ spark.sql(f"USE SCHEMA {schema}")
 
 # COMMAND ----------
 
+# 0. Stage the tiny tutorial fine-tune dataset so the DEFAULT `tutorial/finetune_test_dataset` run
+# trains out of the box (this is what the RFD4 fine-tune form uses when "training data" is left blank).
+# It's one public tarball from the same bucket as the checkpoints; the fine-tune job sets DATA_PATH to
+# this volume and the preset's train source reads ${DATA_PATH}/test_dataset/{test_systems.parquet,cifs/}.
+# PROJECT_ROOT (for the packaged val set) auto-resolves from the wheel's .project-root, and the preset
+# drops the AF3 refolding oracle, so nothing else is needed. Skip-if-exists -> cheap on repeat deploys.
+# Runs here (CPU) rather than in 01_register (GPU) so it adds no GPU time and doesn't churn the endpoint.
+import os, tarfile, tempfile
+import requests
+
+RFD4_DATA_BASE_URL = "https://rfd4-proteina-public-e04a.cwobject.com"
+_ds_dir = f"/Volumes/{catalog}/{schema}/rfd4_proteina/test_dataset"
+_ds_marker = f"{_ds_dir}/test_systems.parquet"
+if os.path.exists(_ds_marker):
+    print(f"tutorial fine-tune dataset already staged at {_ds_dir}, skipping")
+else:
+    os.makedirs(_ds_dir, exist_ok=True)
+    _url = f"{RFD4_DATA_BASE_URL}/test_dataset/test_dataset.tar.gz"
+    print(f"staging tutorial fine-tune dataset <- {_url}")
+    with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as _tmp:
+        with requests.get(_url, stream=True, timeout=1800) as _r:
+            _r.raise_for_status()
+            for _chunk in _r.iter_content(chunk_size=1 << 20):
+                _tmp.write(_chunk)
+        _tmp_path = _tmp.name
+    try:
+        with tarfile.open(_tmp_path, "r:gz") as _tf:
+            try:
+                _tf.extractall(_ds_dir, filter="data")  # py3.12: guards path traversal (official bucket)
+            except TypeError:
+                _tf.extractall(_ds_dir)                  # py<3.12 has no `filter` kwarg
+    finally:
+        os.remove(_tmp_path)
+    assert os.path.exists(_ds_marker), f"staging did not produce {_ds_marker}; check tarball layout"
+    print(f"staged tutorial fine-tune dataset -> {_ds_dir}")
+
+# COMMAND ----------
+
 # 1. Persist job ids to settings (key LIKE '%_job_id' is what grant_app_permissions queries).
 for key, val in (("rfd4_finetune_job_id", rfd4_finetune_job_id),
                  ("rfd4_deploy_job_id", rfd4_deploy_job_id)):

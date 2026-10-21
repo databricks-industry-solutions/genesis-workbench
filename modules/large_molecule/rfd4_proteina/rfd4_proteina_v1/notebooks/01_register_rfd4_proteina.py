@@ -32,45 +32,46 @@ dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("model_name", "rfd4_proteina", "Model Name")
 dbutils.widgets.text("cache_dir", "rfd4_proteina", "Cache dir (UC volume)")
-dbutils.widgets.text("rfd4_git_url", "github.com/NVIDIA-BioNeMo/RFD4-Proteina-Open-Model-Private.git", "RFD4 git host/path")
-dbutils.widgets.text("rfd4_git_ref", "84d83b98442e5946a6a626d0d99a19773207e894", "RFD4 git ref (commit/branch/tag)")
-dbutils.widgets.text("rfd4_git_token_scope", "dbx_genesis_workbench", "Secret scope for the GitHub PAT")
-dbutils.widgets.text("rfd4_git_token_key", "rfd4_github_token", "Secret key for the GitHub PAT")
+dbutils.widgets.text("rfd4_git_url", "github.com/RosettaCommons/RFD4-Proteina.git", "RFD4 git host/path (public repo)")
+dbutils.widgets.text("rfd4_git_ref", "v0.0.1", "RFD4 git ref (release tag/commit)")
 dbutils.widgets.text("experiment_name", "dbx_genesis_workbench_modules", "MLflow experiment")
 dbutils.widgets.text("sql_warehouse_id", "", "SQL Warehouse Id")
 dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
 dbutils.widgets.text("workload_type", "GPU_XLARGE", "Serving workload type (GPU_XLARGE = 1x H100)")
-dbutils.widgets.text("rfd4_ckpt_base_url", "https://rfd4-proteina-public-e04a.cwobject.com", "Checkpoint base URL")
-dbutils.widgets.text("rfd4_flow_ckpt", "chk_epoch_00000169_step_000000340000-ema.ckpt", "Flow checkpoint")
-dbutils.widgets.text("rfd4_ae_ckpt", "2026_09_04_release_ae_z16_400k-ema.ckpt", "Autoencoder checkpoint")
+dbutils.widgets.text("rfd4_hf_repo", "nvidia/RFD4-Proteina", "HF repo for weights (matched flow + AE pair)")
+dbutils.widgets.text("rfd4_hf_revision", "a06e2509c7033b010fc43614e9fd840303588502", "HF Hub commit for weight reproducibility")
+dbutils.widgets.text("rfd4_hf_token_scope", "dbx_genesis_workbench", "Secret scope for HF token")
+dbutils.widgets.text("rfd4_hf_token_key", "hf_token", "Secret key for HF token")
+dbutils.widgets.text("rfd4_flow_ckpt", "rfd4-proteina-flow-release-2026-10-19.ckpt", "Flow checkpoint filename in HF repo")
+dbutils.widgets.text("rfd4_ae_ckpt", "rfd4-proteina-ae-release-2026-10-19.ckpt", "AE checkpoint filename in HF repo")
 
 g = dbutils.widgets.get
 catalog, schema, model_name, cache_dir = g("catalog"), g("schema"), g("model_name"), g("cache_dir")
 experiment_name = g("experiment_name")
 sql_warehouse_id, user_email, workload_type = g("sql_warehouse_id"), g("user_email"), g("workload_type")
-ckpt_base_url, flow_ckpt, ae_ckpt = g("rfd4_ckpt_base_url"), g("rfd4_flow_ckpt"), g("rfd4_ae_ckpt")
+hf_repo, hf_revision, flow_ckpt, ae_ckpt = g("rfd4_hf_repo"), g("rfd4_hf_revision"), g("rfd4_flow_ckpt"), g("rfd4_ae_ckpt")
+hf_token_scope, hf_token_key = g("rfd4_hf_token_scope"), g("rfd4_hf_token_key")
 git_url, git_ref = g("rfd4_git_url"), g("rfd4_git_ref")
-git_token_scope, git_token_key = g("rfd4_git_token_scope"), g("rfd4_git_token_key")
 
 vol_root = f"/Volumes/{catalog}/{schema}/{cache_dir}"
-flow_dir, ae_dir = f"{vol_root}/flow_checkpoints", f"{vol_root}/ae_checkpoints"
-print(f"catalog={catalog} schema={schema} vol_root={vol_root}\nrfd4_git={git_url}@{git_ref} workload_type={workload_type}")
+print(f"catalog={catalog} schema={schema} vol_root={vol_root}\nrfd4_git={git_url}@{git_ref} hf_repo={hf_repo}@{hf_revision} workload_type={workload_type}")
 
 # COMMAND ----------
 
 # DBTITLE 1,Install the rfproteina CUDA-13 stack (torch 2.14.1/cu132 + TMol source build + cuEquivariance-cu13)
 # This is the make-or-break step. client '6' (AI Runtime v6) is CUDA 13 so the cu132 wheels + the TMol
 # nvcc build resolve against the base toolkit. uv handles the TMol build isolation. We pip-install
-# rfproteina STRAIGHT FROM THE PRIVATE GITHUB REPO — nothing is vendored into GWB and a customer needs
-# nothing cloned locally — authenticating with a GitHub PAT read from the GWB secret scope. Pinned to a
-# commit for reproducibility. Installing from the real repo means every build file (README/LICENSE/
-# .project-root/data) is present, so the hatchling build just works.
+# rfproteina from the PUBLIC GITHUB REPO — nothing is vendored into GWB and a customer needs
+# nothing cloned locally. Pinned to a tag for reproducibility. Installing from the real repo means every
+# build file (README/LICENSE/.project-root/data) is present, so the hatchling build just works.
 import os, subprocess, sys
 
+# Set HF_TOKEN from the secret scope (the HF weights repo may be gated; the new API uses Proteina.from_pretrained)
 try:
-    gh_token = dbutils.secrets.get(git_token_scope, git_token_key)
+    hf_token = dbutils.secrets.get(hf_token_scope, hf_token_key)
+    os.environ["HF_TOKEN"] = hf_token
 except Exception:
-    gh_token = None  # OK once the RFD4-Proteina repo is public — fall back to an unauthenticated clone
+    pass  # OK if the HF repo is public or HF_TOKEN will be set via hf auth login
 
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "uv"], check=True)
 bc = "/tmp/rfd4_build_constraint.txt"
@@ -80,8 +81,8 @@ open(bc, "w").write("torch==2.14.1\n")
 # sys.executable targets the kernel env so rfproteina's deps (e.g. a newer typing_extensions that the
 # base runtime lacks `sentinel` for) overwrite in-place and are live after restartPython. --torch-backend
 # cu132 pins CUDA-13 torch; --build-constraint aligns TMol's nvcc build torch.
-cred = f"x-access-token:{gh_token}@" if gh_token else ""
-spec = f"rfd4-proteina[metrics-cuda13] @ git+https://{cred}{git_url}@{git_ref}"
+# The public repo at RosettaCommons needs no credential injection.
+spec = f"rfd4-proteina[metrics-cuda13] @ git+https://{git_url}@{git_ref}"
 # Capture uv output: write the FULL log to the Volume (readable via `fs cat`) and embed the stderr tail
 # in the exception so the failure cause is visible via get-run-output (which has no driver-logs field).
 _r = subprocess.run(
@@ -92,43 +93,32 @@ _r = subprocess.run(
 )
 os.makedirs(f"{vol_root}/register_logs", exist_ok=True)
 _log = (_r.stdout or "") + "\n==STDERR==\n" + (_r.stderr or "")
-if gh_token:
-    _log = _log.replace(gh_token, "<redacted>")  # never persist the PAT
 open(f"{vol_root}/register_logs/uv_install.log", "w").write(_log)
 print(_log[-4000:])
 if _r.returncode != 0:
-    hint = ("" if gh_token else
-            f"\n(No token at '{git_token_scope}/{git_token_key}'. While the repo is private, set a PAT: "
-            f"databricks secrets put-secret {git_token_scope} {git_token_key} --string-value <PAT>)")
-    raise RuntimeError(f"uv install failed rc={_r.returncode}; stderr tail:\n{_log[-3000:]}{hint}")
+    raise RuntimeError(f"uv install failed rc={_r.returncode}; stderr tail:\n{_log[-3000:]}")
 dbutils.library.restartPython()
 
 # COMMAND ----------
 
-# DBTITLE 1,Re-read widgets after restart + download checkpoints (skip-if-exists)
-import os, requests
+# DBTITLE 1,Re-read widgets after restart + ensure HF_TOKEN is set for downloads (if repo is gated)
+import os
 g = dbutils.widgets.get
 catalog, schema, model_name, cache_dir = g("catalog"), g("schema"), g("model_name"), g("cache_dir")
 sql_warehouse_id, user_email, workload_type = g("sql_warehouse_id"), g("user_email"), g("workload_type")
 experiment_name = g("experiment_name")
-ckpt_base_url, flow_ckpt, ae_ckpt = g("rfd4_ckpt_base_url"), g("rfd4_flow_ckpt"), g("rfd4_ae_ckpt")
+hf_repo, hf_revision = g("rfd4_hf_repo"), g("rfd4_hf_revision")
+hf_token_scope, hf_token_key = g("rfd4_hf_token_scope"), g("rfd4_hf_token_key")
 vol_root = f"/Volumes/{catalog}/{schema}/{cache_dir}"
-flow_dir, ae_dir = f"{vol_root}/flow_checkpoints", f"{vol_root}/ae_checkpoints"
 
-def _download(url, dest):
-    if os.path.exists(dest) and os.path.getsize(dest) > 1_000_000:
-        print(f"exists, skip: {dest}"); return
-    os.makedirs(os.path.dirname(dest), exist_ok=True)
-    print(f"downloading {url} -> {dest}")
-    with requests.get(url, stream=True, timeout=1800) as r:
-        r.raise_for_status()
-        with open(dest, "wb") as f:
-            for chunk in r.iter_content(chunk_size=16 << 20):
-                f.write(chunk)
-    assert os.path.getsize(dest) > 1_000_000, f"download too small: {dest}"
-
-_download(f"{ckpt_base_url}/flow_checkpoints/{flow_ckpt}", f"{flow_dir}/{flow_ckpt}")
-_download(f"{ckpt_base_url}/ae_checkpoints/{ae_ckpt}", f"{ae_dir}/{ae_ckpt}")
+# Set HF_TOKEN from secret scope if available (the weights repo may be gated).
+# Proteina.from_pretrained will use HF_TOKEN to authenticate with the Hub.
+try:
+    hf_token = dbutils.secrets.get(hf_token_scope, hf_token_key)
+    os.environ["HF_TOKEN"] = hf_token
+except Exception:
+    pass  # OK if the HF repo is public or HF_TOKEN will be set via hf auth login
+print(f"HF_TOKEN: {'set' if 'HF_TOKEN' in os.environ else 'not set'}")
 
 # COMMAND ----------
 
@@ -179,7 +169,14 @@ class RFD4ProteinaModel(PythonModel):
         torch.set_float32_matmul_precision("high")
         self._pkg_dir = os.path.dirname(rfproteina.__file__)   # ships via code_paths -> configs + benchmarks
 
-        flow, ae = context.artifacts["flow_ckpt"], context.artifacts["ae_ckpt"]
+        # Public release: the matched flow+AE weights ship as a portable HF bundle (config.json +
+        # model.safetensors). We BAKE that bundle into the model version at register time (snapshot_download
+        # below) and hand load_context the LOCAL dir as an artifact. Pointing hf_ckpt_path at that dir makes
+        # load_ckpt_n_configure_inference load it via Proteina.from_pretrained with NO serving-time network
+        # (hub.load_pretrained_bundle takes an existing dir as-is) AND run configure_inference — keep that
+        # call; bypassing it (bare from_pretrained) leaves predict_step with no generation config. An
+        # adapter_path override applies a fine-tuned LoRA (nb 03).
+        bundle = context.artifacts["hf_bundle"]                # local bundle dir, baked at register
         adapter = context.artifacts.get("adapter_dir")         # set only for a fine-tuned deploy (nb 03)
         # `inputs` is a mandatory config key (generation.dataset interpolates ${inputs}); we drive the
         # dataset per-request in predict() instead, so point it at the bundled monomer CIF purely to
@@ -190,15 +187,14 @@ class RFD4ProteinaModel(PythonModel):
             "~metrics/refolding_oracles",                      # no AF3 refolding oracle at serving time
             "metrics_tags=[]", "num_workers=0", "seed=42",
             f"inputs={_monomer_cif}",
-            f"ckpt_path={os.path.dirname(flow)}", f"ckpt_name={os.path.basename(flow)}",
-            f"autoencoder_ckpt_path={ae}", "out_dir=/tmp/rfd4_out",
+            f"hf_ckpt_path={bundle}", "out_dir=/tmp/rfd4_out",   # local dir => offline load, revision already pinned
         ]
         if adapter:
             overrides.append(f"adapter_path={adapter}")
         GlobalHydra.instance().clear()
         with initialize_config_dir(config_dir=os.path.join(self._pkg_dir, "configs"), version_base="1.3"):
             cfg = compose(config_name="inference", overrides=overrides)
-        self.model = load_ckpt_n_configure_inference(cfg)      # the model's own loader + configurer
+        self.model = load_ckpt_n_configure_inference(cfg)      # HF from_pretrained + configure_inference
         self.model.to(self.device).eval()
         self.transform = build_design_validation_pipeline(metrics_tags=None)
 
@@ -299,7 +295,14 @@ output_schema = Schema([ColSpec("long", "sample_id"), ColSpec("string", "pdb_out
                         ColSpec("string", "sequence"), ColSpec("double", "rewards")])
 signature = ModelSignature(inputs=input_schema, outputs=output_schema)
 
-artifacts = {"flow_ckpt": f"{flow_dir}/{flow_ckpt}", "ae_ckpt": f"{ae_dir}/{ae_ckpt}"}
+# Bake the matched flow+AE weights (portable HF bundle: config.json + model.safetensors) into a local dir
+# so serving loads them OFFLINE — no HF egress or token on the endpoint (mirrors the old local-checkpoint
+# baking). The repo is public; HF_TOKEN is passed only if present (harmless no-op otherwise).
+from huggingface_hub import snapshot_download
+bundle_dir = snapshot_download(repo_id=hf_repo, revision=hf_revision, token=os.environ.get("HF_TOKEN") or None,
+                               allow_patterns=["config.json", "model.safetensors"], local_dir="/tmp/rfd4_bundle")
+print("bundle_dir:", bundle_dir, "contents:", sorted(os.listdir(bundle_dir)))
+artifacts = {"hf_bundle": bundle_dir}
 _m = RFD4ProteinaModel(); _m.load_context(PythonModelContext(artifacts=artifacts, model_config={}))
 _sample = pd.DataFrame([{"task": "de_novo", "target_pdb": "", "binder_length_min": 60,
                          "binder_length_max": 60, "num_samples": 1, "hotspot_residues": "", "target_chain": "A"}])
@@ -327,8 +330,11 @@ for _pkg in ("rfproteina", "rfd4_proteina", "script_utils", "gearnet"):
         pass
 print("code_paths:", code_paths)
 
-# ~8GB checkpoints: use the fast UC artifact path so log_model doesn't hit MLflow's 5-min upload timeout.
-os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"
+# Bake the local HF bundle dir (downloaded above) into the model version as an MLflow artifact so serving
+# loads the weights OFFLINE. NOTE: MLflow treats every artifacts VALUE as a path/URI to copy in — passing
+# the HF repo id ("nvidia/RFD4-Proteina") here instead makes MLflow try to resolve it as an artifact URI
+# and fail ("No such artifact"). Always bake a real local dir.
+artifacts = {"hf_bundle": bundle_dir}
 
 # Log WITHOUT registered_model_name — Express requires registering in a SEPARATE register_model() step
 # (below) so env_pack can run.
@@ -459,8 +465,8 @@ try:
         model_uc_version=model_version,
         model_name="RFD4-Proteina",
         model_display_name="RFD4-Proteina Design",
-        model_source_version="early-access",
-        model_description_url="https://github.com/NVIDIA-BioNeMo/RFD4-Proteina-Open-Model-Private",
+        model_source_version="v0.0.1",
+        model_description_url="https://github.com/RosettaCommons/RFD4-Proteina",
     )
     print(f"GWB app-registry model_id={gwb_model_id} ({model_name} endpoint already live via Express)")
 except Exception:

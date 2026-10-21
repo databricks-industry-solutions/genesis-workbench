@@ -21,75 +21,84 @@
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("cache_dir", "rfd4_proteina", "Cache dir (UC volume)")
-dbutils.widgets.text("rfd4_git_url", "github.com/NVIDIA-BioNeMo/RFD4-Proteina-Open-Model-Private.git", "RFD4 git host/path")
-dbutils.widgets.text("rfd4_git_ref", "84d83b98442e5946a6a626d0d99a19773207e894", "RFD4 git ref (commit/branch/tag)")
-dbutils.widgets.text("rfd4_git_token_scope", "dbx_genesis_workbench", "Secret scope for the GitHub PAT")
-dbutils.widgets.text("rfd4_git_token_key", "rfd4_github_token", "Secret key for the GitHub PAT")
+dbutils.widgets.text("rfd4_git_url", "github.com/RosettaCommons/RFD4-Proteina.git", "RFD4 git host/path (public repo)")
+dbutils.widgets.text("rfd4_git_ref", "v0.0.1", "RFD4 git ref (release tag/commit)")
 dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
 dbutils.widgets.text("sql_warehouse_id", "", "SQL Warehouse Id")
 dbutils.widgets.text("ft_id", "", "Fine-tuned id (empty = latest active)")
 dbutils.widgets.text("model_name", "rfd4_proteina", "UC model name")
 dbutils.widgets.text("workload_type", "GPU_XLARGE", "Serving workload type (GPU_XLARGE = 1x H100)")
+dbutils.widgets.text("rfd4_hf_repo", "nvidia/RFD4-Proteina", "HF repo for weights")
+dbutils.widgets.text("rfd4_hf_revision", "a06e2509c7033b010fc43614e9fd840303588502", "HF Hub commit for reproducibility")
+dbutils.widgets.text("rfd4_hf_token_scope", "dbx_genesis_workbench", "Secret scope for HF token")
+dbutils.widgets.text("rfd4_hf_token_key", "hf_token", "Secret key for HF token")
 
 g = dbutils.widgets.get
 catalog, schema, cache_dir = g("catalog"), g("schema"), g("cache_dir")
 user_email, sql_warehouse_id = g("user_email"), g("sql_warehouse_id")
 git_url, git_ref = g("rfd4_git_url"), g("rfd4_git_ref")
-git_token_scope, git_token_key = g("rfd4_git_token_scope"), g("rfd4_git_token_key")
+hf_repo, hf_revision = g("rfd4_hf_repo"), g("rfd4_hf_revision")
+hf_token_scope, hf_token_key = g("rfd4_hf_token_scope"), g("rfd4_hf_token_key")
 ft_id, model_name, workload_type = g("ft_id"), g("model_name"), g("workload_type")
 vol_root = f"/Volumes/{catalog}/{schema}/{cache_dir}"
 
 # COMMAND ----------
 
 # DBTITLE 1,Install the rfproteina CUDA-13 stack + the Express deploy APIs, then restart
-import subprocess, sys
-# Install rfproteina from the private GitHub repo (nothing vendored; customer needs nothing local),
-# authenticating with a GitHub PAT from the GWB secret scope — the same CUDA-13 stack as 01_register. Also
-# install mlflow>=3.12 + databricks-sdk>=0.150.0 (the Express env_pack API). restartPython() makes the
-# just-installed torch 2.14.1/cu132 live in-kernel so the dry-load + env_pack register FROM this exact env.
+import os, subprocess, sys
+# Install rfproteina from the PUBLIC GitHub repo (nothing vendored; customer needs nothing local).
+# Same CUDA-13 stack as 01_register. Also install mlflow>=3.12 + databricks-sdk>=0.150.0 (the Express
+# env_pack API). restartPython() makes the just-installed torch 2.14.1/cu132 live in-kernel so the
+# dry-load + env_pack register FROM this exact env.
+# Set HF_TOKEN if available (weights repo may be gated).
 try:
-    gh_token = dbutils.secrets.get(git_token_scope, git_token_key)
+    hf_token = dbutils.secrets.get(hf_token_scope, hf_token_key)
+    os.environ["HF_TOKEN"] = hf_token
 except Exception:
-    gh_token = None  # OK once the repo is public — fall back to an unauthenticated clone
+    pass  # OK if the HF repo is public or HF_TOKEN will be set via hf auth login
+
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "uv"], check=True)
 open("/tmp/bc.txt", "w").write("torch==2.14.1\n")
 # Install into THIS kernel's env (sys.executable → /databricks/python, writable + survives the restart; the
 # diffdock serverless pattern). uv --system wrongly targets the read-only /usr. --torch-backend cu132 pins
-# CUDA-13 torch; --build-constraint aligns TMol's nvcc build torch.
-cred = f"x-access-token:{gh_token}@" if gh_token else ""
-spec = f"rfd4-proteina[metrics-cuda13] @ git+https://{cred}{git_url}@{git_ref}"
+# CUDA-13 torch; --build-constraint aligns TMol's nvcc build torch. The public repo needs no credential injection.
+spec = f"rfd4-proteina[metrics-cuda13] @ git+https://{git_url}@{git_ref}"
 _r = subprocess.run(["uv", "pip", "install", "--python", sys.executable, "--break-system-packages",
                      "--build-constraint", "/tmp/bc.txt", "--torch-backend", "cu132", spec,
                      "mlflow>=3.12", "databricks-sdk>=0.150.0"],   # Express deploy API (env_pack) + GPU_XLARGE enum
                     capture_output=True, text=True)
 if _r.returncode != 0:
     _err = (_r.stderr or "")
-    if gh_token:
-        _err = _err.replace(gh_token, "<redacted>")
-    hint = "" if gh_token else f" (no token at {git_token_scope}/{git_token_key}; set a PAT if the repo is still private)"
-    raise RuntimeError(f"uv install failed rc={_r.returncode}{hint}; stderr tail:\n{_err[-3000:]}")
+    raise RuntimeError(f"uv install failed rc={_r.returncode}; stderr tail:\n{_err[-3000:]}")
 dbutils.library.restartPython()
 
 # COMMAND ----------
 
-# DBTITLE 1,Re-read widgets after restart + resolve ft_id/adapter from rfd4_weights
-import glob, os
+# DBTITLE 1,Re-read widgets after restart + resolve ft_id/adapter from rfd4_weights + set HF_TOKEN
+import os
 g = dbutils.widgets.get
 catalog, schema, cache_dir = g("catalog"), g("schema"), g("cache_dir")
 user_email, sql_warehouse_id = g("user_email"), g("sql_warehouse_id")
 ft_id, model_name, workload_type = g("ft_id"), g("model_name"), g("workload_type")
+hf_repo, hf_revision = g("rfd4_hf_repo"), g("rfd4_hf_revision")
+hf_token_scope, hf_token_key = g("rfd4_hf_token_scope"), g("rfd4_hf_token_key")
 vol_root = f"/Volumes/{catalog}/{schema}/{cache_dir}"
+
+# Set HF_TOKEN from secret scope if available (the weights repo may be gated).
+try:
+    hf_token = dbutils.secrets.get(hf_token_scope, hf_token_key)
+    os.environ["HF_TOKEN"] = hf_token
+except Exception:
+    pass
 
 if not ft_id:
     row = spark.sql(f"SELECT ft_id FROM {catalog}.{schema}.rfd4_weights WHERE is_active = true ORDER BY ft_id DESC LIMIT 1").collect()
     assert row, "no active fine-tune found in rfd4_weights — run 02_rfd4_finetune first"
     ft_id = str(row[0]["ft_id"])
-meta = spark.sql(f"SELECT ft_label, adapter_volume_location, pretrain_ckpt FROM {catalog}.{schema}.rfd4_weights WHERE ft_id = {ft_id} AND is_active = true").collect()
+meta = spark.sql(f"SELECT ft_label, adapter_volume_location FROM {catalog}.{schema}.rfd4_weights WHERE ft_id = {ft_id} AND is_active = true").collect()
 assert meta, f"ft_id {ft_id} not found/active in rfd4_weights"
-ft_label, adapter_loc, pretrain_ckpt = meta[0]["ft_label"], meta[0]["adapter_volume_location"], meta[0]["pretrain_ckpt"]
-# AE ckpt lives alongside the base flow ckpt under the cache volume.
-ae_ckpt = (glob.glob(f"{vol_root}/ae_checkpoints/*.ckpt") or [""])[0]
-print(f"ft_id={ft_id} label={ft_label} adapter={adapter_loc} base={pretrain_ckpt} ae={ae_ckpt}")
+ft_label, adapter_loc = meta[0]["ft_label"], meta[0]["adapter_volume_location"]
+print(f"ft_id={ft_id} label={ft_label} adapter={adapter_loc} hf_repo={hf_repo}@{hf_revision}")
 
 # COMMAND ----------
 
@@ -110,7 +119,8 @@ class RFD4ProteinaFineTunedModel(PythonModel):
     """
 
     def load_context(self, context):
-        import os, torch, rfproteina
+        import os, torch
+        import rfproteina
         from hydra import compose, initialize_config_dir
         from hydra.core.global_hydra import GlobalHydra
         from rfproteina.generate import load_ckpt_n_configure_inference
@@ -121,22 +131,27 @@ class RFD4ProteinaFineTunedModel(PythonModel):
         torch.set_float32_matmul_precision("high")
         self._pkg_dir = os.path.dirname(rfproteina.__file__)
 
-        flow, ae = context.artifacts["flow_ckpt"], context.artifacts["ae_ckpt"]
+        # Public release: the matched flow+AE base weights ship as a portable HF bundle (config.json +
+        # model.safetensors), BAKED into the model version at register time and handed in as a local-dir
+        # artifact (offline serving — no HF egress/token on the endpoint). The fine-tuned LoRA applies via
+        # the adapter_path override. load_ckpt_n_configure_inference loads the base bundle
+        # (Proteina.from_pretrained, local dir => no network), applies the adapter, AND runs
+        # configure_inference — keep it; bypassing it leaves predict_step with no generation config.
+        bundle = context.artifacts["hf_bundle"]               # local base bundle dir, baked at register
         adapter = context.artifacts.get("adapter_dir")        # the fine-tuned LoRA adapter
         _monomer_cif = os.path.join(self._pkg_dir, "data", "benchmarks", "monomer", "monomer-short.cif")
         overrides = [
             "inference_experiment=inference_on_user_inputs",
             "~metrics/refolding_oracles", "metrics_tags=[]", "num_workers=0", "seed=42",
-            f"inputs={_monomer_cif}",                          # satisfies ${inputs}; dataset is driven per-request
-            f"ckpt_path={os.path.dirname(flow)}", f"ckpt_name={os.path.basename(flow)}",
-            f"autoencoder_ckpt_path={ae}", "out_dir=/tmp/rfd4_out",
+            f"inputs={_monomer_cif}",
+            f"hf_ckpt_path={bundle}", "out_dir=/tmp/rfd4_out",   # local dir => offline load, revision already pinned
         ]
         if adapter:
             overrides.append(f"adapter_path={adapter}")
         GlobalHydra.instance().clear()
         with initialize_config_dir(config_dir=os.path.join(self._pkg_dir, "configs"), version_base="1.3"):
             cfg = compose(config_name="inference", overrides=overrides)
-        self.model = load_ckpt_n_configure_inference(cfg)
+        self.model = load_ckpt_n_configure_inference(cfg)      # HF from_pretrained + adapter + configure_inference
         self.model.to(self.device).eval()
         self.transform = build_design_validation_pipeline(metrics_tags=None)
 
@@ -220,7 +235,15 @@ signature = ModelSignature(
                    ColSpec("long", "num_samples"), ColSpec("string", "hotspot_residues"), ColSpec("string", "target_chain")]),
     outputs=Schema([ColSpec("long", "sample_id"), ColSpec("string", "pdb_output"),
                     ColSpec("string", "sequence"), ColSpec("double", "rewards")]))
-artifacts = {"flow_ckpt": pretrain_ckpt, "ae_ckpt": ae_ckpt, "adapter_dir": adapter_loc}
+# Bake the base HF weight bundle (config.json + model.safetensors) + the fine-tuned LoRA adapter dir into
+# the model version so serving loads them OFFLINE. (MLflow copies every artifacts VALUE as a path — never
+# pass the HF repo id here or it gets mis-resolved as an artifact URI; always bake a real local dir.)
+import os
+from huggingface_hub import snapshot_download
+bundle_dir = snapshot_download(repo_id=hf_repo, revision=hf_revision, token=os.environ.get("HF_TOKEN") or None,
+                               allow_patterns=["config.json", "model.safetensors"], local_dir="/tmp/rfd4_bundle")
+print("bundle_dir:", bundle_dir, "contents:", sorted(os.listdir(bundle_dir)))
+artifacts = {"hf_bundle": bundle_dir, "adapter_dir": adapter_loc}
 _ex = pd.DataFrame([{"task": "de_novo", "target_pdb": "", "binder_length_min": 60, "binder_length_max": 60,
                      "num_samples": 1, "hotspot_residues": "", "target_chain": "A"}])
 _m = RFD4ProteinaFineTunedModel(); _m.load_context(PythonModelContext(artifacts=artifacts, model_config={}))
@@ -246,8 +269,8 @@ for _pkg in ("rfproteina", "rfd4_proteina", "script_utils", "gearnet"):
         pass
 print("code_paths:", code_paths)
 
-# ~8GB checkpoints + adapter: use the fast UC artifact path so log_model doesn't hit the 5-min upload timeout.
-os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"
+# The new release uses HF Hub for weights (Proteina.from_pretrained), so no large checkpoints to upload.
+# Only the adapter directory is included in artifacts.
 
 # Log WITHOUT registered_model_name — Express requires registering in a SEPARATE register_model() step
 # (below) so env_pack can run.
@@ -374,7 +397,7 @@ try:
         model_name="RFD4-Proteina",
         model_display_name="RFD4-Proteina Design (fine-tuned)",
         model_source_version=f"ft:{ft_id}",
-        model_description_url="https://github.com/NVIDIA-BioNeMo/RFD4-Proteina-Open-Model-Private",
+        model_description_url="https://github.com/RosettaCommons/RFD4-Proteina",
     )
     print(f"GWB app-registry model_id={gwb_model_id} (fine-tuned endpoint already live via Express)")
 except Exception:

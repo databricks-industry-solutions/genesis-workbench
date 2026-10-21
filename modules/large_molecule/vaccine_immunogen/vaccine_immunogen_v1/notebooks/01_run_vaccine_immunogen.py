@@ -33,16 +33,18 @@
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("cache_dir", "vaccine_immunogen", "Cache dir (UC volume) for this workflow")
-dbutils.widgets.text("rfd4_cache_dir", "rfd4_proteina", "RFD4 cache dir holding the flow + AE checkpoints")
-dbutils.widgets.text("rfd4_flow_ckpt", "chk_epoch_00000169_step_000000340000-ema.ckpt", "Flow checkpoint filename")
-dbutils.widgets.text("rfd4_ae_ckpt", "2026_09_04_release_ae_z16_400k-ema.ckpt", "Autoencoder checkpoint filename")
 dbutils.widgets.text("sql_warehouse_id", "", "SQL Warehouse Id")
 dbutils.widgets.text("user_email", "a@b.com", "User Id/Email")
 
-dbutils.widgets.text("rfd4_git_url", "github.com/NVIDIA-BioNeMo/RFD4-Proteina-Open-Model-Private.git", "RFD4 git host/path")
-dbutils.widgets.text("rfd4_git_ref", "84d83b98442e5946a6a626d0d99a19773207e894", "RFD4 git ref")
-dbutils.widgets.text("rfd4_git_token_scope", "dbx_genesis_workbench", "Secret scope for the GitHub PAT")
-dbutils.widgets.text("rfd4_git_token_key", "rfd4_github_token", "Secret key for the GitHub PAT")
+dbutils.widgets.text("rfd4_hf_repo", "nvidia/RFD4-Proteina", "Hugging Face repo for RFD4-Proteina weights")
+dbutils.widgets.text("rfd4_hf_revision", "a06e2509c7033b010fc43614e9fd840303588502", "HF Hub commit for reproducible weight loading")
+dbutils.widgets.text("rfd4_flow_ckpt", "rfd4-proteina-flow-release-2026-10-19.ckpt", "Flow checkpoint filename in HF repo")
+dbutils.widgets.text("rfd4_ae_ckpt", "rfd4-proteina-ae-release-2026-10-19.ckpt", "Autoencoder checkpoint filename in HF repo")
+dbutils.widgets.text("rfd4_hf_token_scope", "dbx_genesis_workbench", "Secret scope for the Hugging Face token")
+dbutils.widgets.text("rfd4_hf_token_key", "hf_token", "Secret key for the Hugging Face token")
+
+dbutils.widgets.text("rfd4_git_url", "github.com/RosettaCommons/RFD4-Proteina.git", "RFD4 git host/path (public)")
+dbutils.widgets.text("rfd4_git_ref", "v0.0.1", "RFD4 git ref (release tag/commit)")
 
 dbutils.widgets.text("mlflow_experiment", "", "MLflow experiment tag")
 dbutils.widgets.text("mlflow_run_name", "", "MLflow run name")
@@ -78,26 +80,26 @@ dbutils.widgets.text("best_k_threshold", "", "Best-K stop: composite reward thre
 import os, subprocess, sys
 g = dbutils.widgets.get
 git_url, git_ref = g("rfd4_git_url"), g("rfd4_git_ref")
-git_token_scope, git_token_key = g("rfd4_git_token_scope"), g("rfd4_git_token_key")
+hf_token_scope, hf_token_key = g("rfd4_hf_token_scope"), g("rfd4_hf_token_key")
 
 try:
-    gh_token = dbutils.secrets.get(git_token_scope, git_token_key)
+    hf_token = dbutils.secrets.get(hf_token_scope, hf_token_key)
 except Exception:
-    gh_token = None  # OK once the repo is public — fall back to an unauthenticated clone
+    hf_token = None
+
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "uv"], check=True)
 open("/tmp/bc.txt", "w").write("torch==2.14.1\n")
 # Install rfproteina into the kernel env (diffdock pattern). --torch-backend cu132 pins CUDA-13 torch.
-cred = f"x-access-token:{gh_token}@" if gh_token else ""
-spec = f"rfd4-proteina[metrics-cuda13] @ git+https://{cred}{git_url}@{git_ref}"
+# The public repo requires no GitHub PAT; HF_TOKEN is set for downstream weight downloads.
+spec = f"rfd4-proteina[metrics-cuda13] @ git+https://{git_url}@{git_ref}"
 _r = subprocess.run(["uv", "pip", "install", "--python", sys.executable, "--break-system-packages",
                      "--build-constraint", "/tmp/bc.txt", "--torch-backend", "cu132", spec],
-                    capture_output=True, text=True)
+                    capture_output=True, text=True, env={**os.environ, "HF_TOKEN": (hf_token or "")})
 if _r.returncode != 0:
     _err = (_r.stderr or "")
-    if gh_token:
-        _err = _err.replace(gh_token, "<redacted>")
-    hint = "" if gh_token else f" (no token at {git_token_scope}/{git_token_key}; set a PAT if the repo is still private)"
-    raise RuntimeError(f"uv install failed rc={_r.returncode}{hint}; stderr tail:\n{_err[-3000:]}")
+    if hf_token:
+        _err = _err.replace(hf_token, "<redacted>")
+    raise RuntimeError(f"uv install failed rc={_r.returncode}; stderr tail:\n{_err[-3000:]}")
 dbutils.library.restartPython()
 
 # COMMAND ----------
@@ -128,8 +130,9 @@ import mlflow
 
 g = dbutils.widgets.get
 catalog, schema, cache_dir = g("catalog"), g("schema"), g("cache_dir")
-rfd4_cache_dir = g("rfd4_cache_dir")
+rfd4_hf_repo, rfd4_hf_revision = g("rfd4_hf_repo"), g("rfd4_hf_revision")
 rfd4_flow_ckpt, rfd4_ae_ckpt = g("rfd4_flow_ckpt"), g("rfd4_ae_ckpt")
+rfd4_hf_token_scope, rfd4_hf_token_key = g("rfd4_hf_token_scope"), g("rfd4_hf_token_key")
 sql_warehouse_id, user_email = g("sql_warehouse_id"), g("user_email")
 
 mlflow_experiment = g("mlflow_experiment")
@@ -173,8 +176,10 @@ target_reward = _parse_optional_float(g("target_reward"))
 best_k_target = _parse_optional_int(g("best_k_target"))
 best_k_threshold = _parse_optional_float(g("best_k_threshold"))
 
-flow_ckpt_path = f"/Volumes/{catalog}/{schema}/{rfd4_cache_dir}/flow_checkpoints/{rfd4_flow_ckpt}"
-ae_ckpt_path = f"/Volumes/{catalog}/{schema}/{rfd4_cache_dir}/ae_checkpoints/{rfd4_ae_ckpt}"
+try:
+    hf_token = dbutils.secrets.get(rfd4_hf_token_scope, rfd4_hf_token_key)
+except Exception:
+    hf_token = None
 
 print(f"motif_pdb_path:    {motif_pdb_path}")
 print(f"motif_residues:    {motif_residues or '(whole chain)'}")
@@ -182,8 +187,7 @@ print(f"motif_chain:       {motif_chain}")
 print(f"scaffold_length:   [{scaffold_length_min}, {scaffold_length_max}]")
 print(f"K (candidates):    {num_samples}   N (iterations): {num_iterations}")
 print(f"weights:           {weights}")
-print(f"flow_ckpt:         {flow_ckpt_path}")
-print(f"ae_ckpt:           {ae_ckpt_path}")
+print(f"rfd4_hf_repo:      {rfd4_hf_repo}@{rfd4_hf_revision}")
 
 # COMMAND ----------
 
@@ -269,10 +273,14 @@ strategy = make_strategy(strategy_name, temperature=resampling_temperature)
 
 # DBTITLE 1,Load RFD4-Proteina in-process (H100) + warm the scoring endpoints
 import torch
+import os as _os
 if not torch.cuda.is_available():
     raise RuntimeError("Vaccine Immunogen Design requires a GPU (H100) — torch.cuda.is_available() is False. "
                        "The orchestrator job is pinned to GPU_1xH100; check the job's compute.")
-rfd4_ctx = load_rfd4(flow_ckpt_path, ae_ckpt_path)
+# Set HF_TOKEN for Proteina.from_pretrained to download gated weights if needed.
+if hf_token:
+    _os.environ["HF_TOKEN"] = hf_token
+rfd4_ctx = load_rfd4(rfd4_hf_repo, rfd4_hf_revision, rfd4_flow_ckpt, rfd4_ae_ckpt)
 print("Warming developability endpoints...")
 print(warmup_developability_endpoints(dev_user_prefix=dev_user_prefix))
 

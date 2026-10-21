@@ -14,8 +14,8 @@ dbutils.widgets.text("max_samples", "50", "Number of samples to run")
 # COMMAND ----------
 # DBTITLE 1,Install RFD4-Proteina code deps (CUDA-13 stack). load_model fetches the checkpoints.
 import subprocess, sys
-GIT_URL = "github.com/NVIDIA-BioNeMo/RFD4-Proteina-Open-Model-Private.git"
-GIT_REF = "84d83b98442e5946a6a626d0d99a19773207e894"
+GIT_URL = "github.com/RosettaCommons/RFD4-Proteina.git"
+GIT_REF = "v0.0.1"
 try:
     _gh = dbutils.secrets.get("dbx_genesis_workbench", "rfd4_github_token")
 except Exception:
@@ -53,8 +53,8 @@ MODEL = "rfd4_proteina"
 OUT_DIR = dbutils.widgets.get("out_dir")
 MAX = int(dbutils.widgets.get("max_samples"))
 VOL = "/Volumes/main/genesis_workbench/rfd4_proteina"
-FLOW = f"{VOL}/flow_checkpoints/chk_epoch_00000169_step_000000340000-ema.ckpt"
-AE = f"{VOL}/ae_checkpoints/2026_09_04_release_ae_z16_400k-ema.ckpt"
+FLOW = f"{VOL}/flow_checkpoints/rfd4-proteina-flow-release-2026-10-19.ckpt"
+AE = f"{VOL}/ae_checkpoints/rfd4-proteina-ae-release-2026-10-19.ckpt"
 print("GPU:", gpu_info())
 
 device = "cuda" if torch.cuda.is_available() else "cpu"

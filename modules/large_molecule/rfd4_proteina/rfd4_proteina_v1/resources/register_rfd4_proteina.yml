@@ -46,16 +46,12 @@ resources:
           default: rfd4_proteina
         - name: cache_dir
           default: ${resources.volumes.rfd4_proteina_cache_dir.name}
-        # RFD4-Proteina source is pip-installed from the private GitHub repo at runtime (nothing
-        # vendored locally); the job reads a GitHub PAT from rfd4_git_token_scope/key.
+        # RFD4-Proteina source is pip-installed from the PUBLIC GitHub repo at runtime (nothing
+        # vendored locally); no GitHub PAT needed anymore.
         - name: rfd4_git_url
           default: ${var.rfd4_git_url}
         - name: rfd4_git_ref
           default: ${var.rfd4_git_ref}
-        - name: rfd4_git_token_scope
-          default: ${var.rfd4_git_token_scope}
-        - name: rfd4_git_token_key
-          default: ${var.rfd4_git_token_key}
         - name: experiment_name
           default: ${var.module_registration_experiment_name}
         - name: sql_warehouse_id
@@ -65,8 +61,15 @@ resources:
         # Serving-endpoint workload type (GPU_LARGE — top single-GPU serving tier; H100 is job-only here).
         - name: workload_type
           default: ${var.gpu_serving_setting}
-        - name: rfd4_ckpt_base_url
-          default: ${var.rfd4_ckpt_base_url}
+        # HF weights repo (matched flow + AE pair). The job reads HF_TOKEN from rfd4_hf_token_scope/key.
+        - name: rfd4_hf_repo
+          default: ${var.rfd4_hf_repo}
+        - name: rfd4_hf_revision
+          default: ${var.rfd4_hf_revision}
+        - name: rfd4_hf_token_scope
+          default: ${var.rfd4_hf_token_scope}
+        - name: rfd4_hf_token_key
+          default: ${var.rfd4_hf_token_key}
         - name: rfd4_flow_ckpt
           default: ${var.rfd4_flow_ckpt}
         - name: rfd4_ae_ckpt

@@ -65,37 +65,43 @@ variables:
     description: The cache directory (UC volume) for RFD4-Proteina model artifacts + fine-tuned weights
     default: rfd4_proteina
 
-  # RFD4-Proteina released checkpoints (public HTTPS object store; no credentials). The flow
-  # denoiser + the partial-autoencoder, per the model repo's scripts/download_example_data.sh.
-  rfd4_ckpt_base_url:
-    description: Public base URL for the RFD4-Proteina released checkpoints
-    default: https://rfd4-proteina-public-e04a.cwobject.com
+  # RFD4-Proteina released WEIGHTS come from Hugging Face (the public release supersedes the early-access
+  # cwobject CDN). The flow denoiser + partial-autoencoder are a MATCHED PAIR from the 2026-10-19 release
+  # (latent dim + residue vocab changed vs early access — they cannot be mixed). Loaded via the model's
+  # `Proteina.from_pretrained(<hf_repo>, revision=<hf_revision>)` API (configs/inference.yaml hf_ckpt_*).
+  rfd4_hf_repo:
+    description: Hugging Face repo for the RFD4-Proteina released weights (matched flow + AE pair)
+    default: nvidia/RFD4-Proteina
+
+  rfd4_hf_revision:
+    description: Pinned HF Hub commit for reproducible weight loading (configs/inference.yaml hf_ckpt_revision)
+    default: a06e2509c7033b010fc43614e9fd840303588502
 
   rfd4_flow_ckpt:
-    description: Flow (denoiser) checkpoint filename
-    default: chk_epoch_00000169_step_000000340000-ema.ckpt
+    description: Flow (denoiser) checkpoint filename in the HF repo
+    default: rfd4-proteina-flow-release-2026-10-19.ckpt
 
   rfd4_ae_ckpt:
-    description: Partial-autoencoder checkpoint filename
-    default: 2026_09_04_release_ae_z16_400k-ema.ckpt
+    description: Partial-autoencoder checkpoint filename in the HF repo
+    default: rfd4-proteina-ae-release-2026-10-19.ckpt
 
-  # RFD4-Proteina MODEL CODE is pulled at job runtime from the private GitHub repo. A GWB customer
-  # deploying this module does NOT have the repo cloned locally, and there is no public HuggingFace
-  # mirror of the code (only the weights are on the public CDN above). So the register/finetune/deploy
-  # jobs pip-install `rfproteina` straight from this git ref, authenticating with a GitHub PAT read
-  # from the GWB secret scope. Pinned to a commit for reproducibility. Nothing is vendored into GWB.
-  rfd4_git_url:
-    description: Git host/path of the RFD4-Proteina model repo (no scheme; token is injected at runtime)
-    default: github.com/NVIDIA-BioNeMo/RFD4-Proteina-Open-Model-Private.git
-
-  rfd4_git_ref:
-    description: Git ref (commit/branch/tag) of the RFD4-Proteina repo to install — pinned for reproducibility
-    default: 84d83b98442e5946a6a626d0d99a19773207e894
-
-  rfd4_git_token_scope:
-    description: Databricks secret scope holding the GitHub PAT with read access to the RFD4-Proteina repo
+  # The HF weights repo may be gated; the register/finetune/deploy jobs read a Hugging Face token from
+  # this secret (same scope that used to hold the GitHub PAT).
+  rfd4_hf_token_scope:
+    description: Databricks secret scope holding a Hugging Face token with access to the RFD4-Proteina weights
     default: dbx_genesis_workbench
 
-  rfd4_git_token_key:
-    description: Key in the secret scope for the GitHub PAT
-    default: rfd4_github_token
+  rfd4_hf_token_key:
+    description: Key in the secret scope for the Hugging Face token
+    default: hf_token
+
+  # RFD4-Proteina MODEL CODE is now a PUBLIC repo (BSD-3-Clause, RosettaCommons). The register/finetune/
+  # deploy jobs pip-install `rfd4-proteina[metrics-cuda13]` straight from this git ref — no GitHub PAT
+  # needed. Pinned to a release tag for reproducibility. Nothing is vendored into GWB.
+  rfd4_git_url:
+    description: Git host/path of the public RFD4-Proteina model repo
+    default: github.com/RosettaCommons/RFD4-Proteina.git
+
+  rfd4_git_ref:
+    description: Git ref (release tag/commit) of the RFD4-Proteina repo to install — pinned for reproducibility
+    default: v0.0.1

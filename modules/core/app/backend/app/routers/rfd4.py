@@ -29,17 +29,18 @@ class DefaultsResponse(BaseModel):
 
 
 # The pinned RFD4 flow (denoiser) checkpoint the rfd4_proteina deploy stages
-# (matches variables.yml `rfd4_flow_ckpt`).
-_RFD4_FLOW_CKPT = "chk_epoch_00000169_step_000000340000-ema.ckpt"
+# (matches variables.yml `rfd4_flow_ckpt`). Public-release weight from HuggingFace.
+_RFD4_FLOW_CKPT = "rfd4-proteina-flow-release-2026-10-19.ckpt"
 
 
 @router.get("/defaults", response_model=DefaultsResponse)
 def defaults(_: CurrentUserDep) -> DefaultsResponse:
     """Pre-fill the fine-tune form so it runs out of the box: the staged RFD4 flow
-    checkpoint as the base, and the repo's tutorial finetune preset. Training data
-    is left BLANK on purpose — blank uses rfd4-train's bundled tutorial dataset
-    (the `tutorial/finetune_test_dataset` preset); pointing at a non-existent
-    ft_data dir would fail the run. A user supplies their own dir to override."""
+    checkpoint as the base, and the repo's tutorial finetune preset. Training data is
+    left BLANK on purpose — blank uses the `tutorial/finetune_test_dataset` preset,
+    whose tiny PLINDER train set + packaged val set are staged to the module volume at
+    deploy (register_rfd4_jobs.py) and read via DATA_PATH, so the default run trains
+    out of the box. A user supplies their own /Volumes dir to override."""
     catalog = os.environ["CORE_CATALOG_NAME"]
     schema = os.environ["CORE_SCHEMA_NAME"]
     return DefaultsResponse(

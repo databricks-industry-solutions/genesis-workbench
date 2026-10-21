@@ -12,20 +12,21 @@ case "$CLOUD" in
 esac
 
 # The orchestrator loads RFD4-Proteina in-process on an H100, pip-installing the
-# model code from the PRIVATE GitHub repo at runtime (same as the rfd4_proteina
-# submodule — nothing vendored). It authenticates with a GitHub PAT read from a
-# Databricks secret. Seed it here from $RFD4_GITHUB_TOKEN if provided; otherwise
-# warn with the exact command (the job fails fast with the same instruction).
-RFD4_GIT_TOKEN_SCOPE="${RFD4_GIT_TOKEN_SCOPE:-dbx_genesis_workbench}"
-RFD4_GIT_TOKEN_KEY="${RFD4_GIT_TOKEN_KEY:-rfd4_github_token}"
-if [ -n "${RFD4_GITHUB_TOKEN:-}" ]; then
-  echo "▶️ [Antibody Design] Storing GitHub PAT in secret ${RFD4_GIT_TOKEN_SCOPE}/${RFD4_GIT_TOKEN_KEY}"
-  databricks secrets put-secret "$RFD4_GIT_TOKEN_SCOPE" "$RFD4_GIT_TOKEN_KEY" --string-value "$RFD4_GITHUB_TOKEN"
-elif ! databricks secrets list-secrets "$RFD4_GIT_TOKEN_SCOPE" 2>/dev/null | grep -qw "$RFD4_GIT_TOKEN_KEY"; then
-  echo "⚠️  [Antibody Design] Secret ${RFD4_GIT_TOKEN_SCOPE}/${RFD4_GIT_TOKEN_KEY} is not set."
-  echo "    The orchestrator needs a GitHub PAT with read access to the private RFD4-Proteina repo. Set it with:"
-  echo "      databricks secrets put-secret ${RFD4_GIT_TOKEN_SCOPE} ${RFD4_GIT_TOKEN_KEY} --string-value <PAT>"
-  echo "    or re-run: RFD4_GITHUB_TOKEN=<PAT> $0 $CLOUD  (continuing; a run will fail without it)"
+# model code from the PUBLIC GitHub repo (same as the rfd4_proteina submodule — nothing
+# vendored), and downloads released weights from Hugging Face. The HF weights repo may
+# be gated, so it reads an HF token from a Databricks secret. Seed it here from
+# $HF_TOKEN if provided; otherwise warn with the exact command (a run will fail without
+# it if the HF repo is gated).
+RFD4_HF_TOKEN_SCOPE="${RFD4_HF_TOKEN_SCOPE:-dbx_genesis_workbench}"
+RFD4_HF_TOKEN_KEY="${RFD4_HF_TOKEN_KEY:-hf_token}"
+if [ -n "${HF_TOKEN:-}" ]; then
+  echo "▶️ [Antibody Design] Storing Hugging Face token in secret ${RFD4_HF_TOKEN_SCOPE}/${RFD4_HF_TOKEN_KEY}"
+  databricks secrets put-secret "$RFD4_HF_TOKEN_SCOPE" "$RFD4_HF_TOKEN_KEY" --string-value "$HF_TOKEN"
+elif ! databricks secrets list-secrets "$RFD4_HF_TOKEN_SCOPE" 2>/dev/null | grep -qw "$RFD4_HF_TOKEN_KEY"; then
+  echo "⚠️  [Antibody Design] Secret ${RFD4_HF_TOKEN_SCOPE}/${RFD4_HF_TOKEN_KEY} is not set."
+  echo "    The orchestrator downloads RFD4-Proteina weights from Hugging Face (may be gated). If the HF repo is gated, set:"
+  echo "      databricks secrets put-secret ${RFD4_HF_TOKEN_SCOPE} ${RFD4_HF_TOKEN_KEY} --string-value <HF_TOKEN>"
+  echo "    or re-run: HF_TOKEN=<HF_TOKEN> $0 $CLOUD  (continuing; a run will fail if the repo is gated and token is missing)"
 fi
 
 echo ""

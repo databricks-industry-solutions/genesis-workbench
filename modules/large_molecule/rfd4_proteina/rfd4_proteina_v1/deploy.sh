@@ -11,21 +11,21 @@ case "$CLOUD" in
   *) echo "Usage: $0 <aws|azure|gcp> --var=..."; exit 1 ;;
 esac
 
-# RFD4-Proteina's model code lives in a PRIVATE GitHub repo (no public HuggingFace mirror) and is
-# pip-installed by the register/finetune/deploy jobs at runtime — nothing is vendored into GWB, so a
-# customer needs nothing cloned locally. The jobs authenticate with a GitHub PAT (read access to the
-# repo) read from a Databricks secret. Seed it here from $RFD4_GITHUB_TOKEN if provided; otherwise
-# warn with the exact command (the job fails fast with the same instruction if the secret is missing).
-RFD4_GIT_TOKEN_SCOPE="${RFD4_GIT_TOKEN_SCOPE:-dbx_genesis_workbench}"
-RFD4_GIT_TOKEN_KEY="${RFD4_GIT_TOKEN_KEY:-rfd4_github_token}"
-if [ -n "${RFD4_GITHUB_TOKEN:-}" ]; then
-  echo "▶️ [RFD4-Proteina] Storing GitHub PAT in secret ${RFD4_GIT_TOKEN_SCOPE}/${RFD4_GIT_TOKEN_KEY}"
-  databricks secrets put-secret "$RFD4_GIT_TOKEN_SCOPE" "$RFD4_GIT_TOKEN_KEY" --string-value "$RFD4_GITHUB_TOKEN"
-elif ! databricks secrets list-secrets "$RFD4_GIT_TOKEN_SCOPE" 2>/dev/null | grep -qw "$RFD4_GIT_TOKEN_KEY"; then
-  echo "⚠️  [RFD4-Proteina] Secret ${RFD4_GIT_TOKEN_SCOPE}/${RFD4_GIT_TOKEN_KEY} is not set."
-  echo "    The jobs need a GitHub PAT with read access to the private RFD4-Proteina repo. Set it with:"
-  echo "      databricks secrets put-secret ${RFD4_GIT_TOKEN_SCOPE} ${RFD4_GIT_TOKEN_KEY} --string-value <PAT>"
-  echo "    or re-run: RFD4_GITHUB_TOKEN=<PAT> $0 $CLOUD  (continuing; the register job will fail without it)"
+# RFD4-Proteina's model code is now a PUBLIC GitHub repo (RosettaCommons, BSD-3) — pip-installed by the
+# register/finetune/deploy jobs at runtime, nothing vendored into GWB, and NO GitHub PAT needed. The
+# released WEIGHTS come from a Hugging Face repo that may be gated, so the jobs authenticate with a Hugging
+# Face token read from a Databricks secret. Seed it here from $HF_TOKEN if provided; otherwise warn with
+# the exact command (the register job fails fast with the same instruction if the secret is missing).
+RFD4_HF_TOKEN_SCOPE="${RFD4_HF_TOKEN_SCOPE:-dbx_genesis_workbench}"
+RFD4_HF_TOKEN_KEY="${RFD4_HF_TOKEN_KEY:-hf_token}"
+if [ -n "${HF_TOKEN:-}" ]; then
+  echo "▶️ [RFD4-Proteina] Storing Hugging Face token in secret ${RFD4_HF_TOKEN_SCOPE}/${RFD4_HF_TOKEN_KEY}"
+  databricks secrets put-secret "$RFD4_HF_TOKEN_SCOPE" "$RFD4_HF_TOKEN_KEY" --string-value "$HF_TOKEN"
+elif ! databricks secrets list-secrets "$RFD4_HF_TOKEN_SCOPE" 2>/dev/null | grep -qw "$RFD4_HF_TOKEN_KEY"; then
+  echo "⚠️  [RFD4-Proteina] Secret ${RFD4_HF_TOKEN_SCOPE}/${RFD4_HF_TOKEN_KEY} is not set."
+  echo "    The jobs need a Hugging Face token with access to the gated RFD4-Proteina weights. Set it with:"
+  echo "      databricks secrets put-secret ${RFD4_HF_TOKEN_SCOPE} ${RFD4_HF_TOKEN_KEY} --string-value <HF_TOKEN>"
+  echo "    or re-run: HF_TOKEN=<token> $0 $CLOUD  (continuing; the register job will fail without it)"
 fi
 
 echo ""

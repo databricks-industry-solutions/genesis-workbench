@@ -27,24 +27,24 @@ resources:
           default: ${var.core_schema_name}
         - name: cache_dir
           default: ${var.cache_dir}
-        # RFD4-Proteina source is pip-installed from the private GitHub repo at runtime (nothing
-        # vendored locally); the job reads a GitHub PAT from rfd4_git_token_scope/key.
+        # RFD4-Proteina source is pip-installed from the PUBLIC GitHub repo at runtime (nothing
+        # vendored locally); no GitHub PAT needed anymore.
         - name: rfd4_git_url
           default: ${var.rfd4_git_url}
         - name: rfd4_git_ref
           default: ${var.rfd4_git_ref}
-        - name: rfd4_git_token_scope
-          default: ${var.rfd4_git_token_scope}
-        - name: rfd4_git_token_key
-          default: ${var.rfd4_git_token_key}
         - name: user_email
           default: ${var.current_user}
         # Base checkpoint to fine-tune from (the released flow denoiser staged on the cache Volume).
         - name: pretrain_ckpt_path
           default: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/${var.cache_dir}/flow_checkpoints/${var.rfd4_flow_ckpt}
-        # Training data: a directory with a parquet manifest (path,key) + CIF files on the cache Volume.
+        # Training data: BLANK by default -> the `experiment_preset` (tutorial/finetune_test_dataset)
+        # trains on its own staged test_dataset (register_rfd4_jobs.py stages it to the cache Volume at
+        # ${DATA_PATH}/test_dataset). The dispatcher only forwards this param when non-empty, so a blank
+        # form correctly falls through to this default. A user overrides with their own /Volumes dir
+        # (parquet manifest + CIFs) to fine-tune on custom data.
         - name: train_data_location
-          default: /Volumes/${var.core_catalog_name}/${var.core_schema_name}/${var.cache_dir}/ft_data
+          default: ""
         # rfd4-train experiment preset (the repo's tutorial finetune on the small test dataset by default).
         - name: experiment_preset
           default: tutorial/finetune_test_dataset

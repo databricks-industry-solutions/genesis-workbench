@@ -2,7 +2,7 @@
 
 ## Introduction
 
-RFD4-Proteina is the NVIDIA×Baker flow-matching protein-design foundation model, served in Genesis
+RFD4-Proteina is the NVIDIA×Baker flow-matching protein-design foundation model (open-source, BSD-3-Clause license), served in Genesis
 Workbench as a real-time endpoint. It generates novel protein backbones (and their sequences) from a
 length-only de-novo prompt or, in first-draft form, from a target structure with a contig + hotspot
 conditioning spec. It is deployed on a serverless **GPU_XLARGE (1× H100)** endpoint via MLflow
@@ -93,8 +93,9 @@ so there is no deploy-time container rebuild and no torch force-install.
 
 - **Endpoint:** `gwb_<prefix>_rfd4_proteina_endpoint` — GPU_XLARGE (1× H100), Express env_pack, no scale-to-zero
 - **UC model:** `<catalog>.<schema>.rfd4_proteina` (base + fine-tuned versions)
-- **Source:** `rfproteina` pip-installed at job runtime from the NVIDIA-BioNeMo RFD4-Proteina repo (nothing
-  vendored); checkpoints from the public CDN. The register / fine-tune / deploy jobs run on serverless `GPU_1xH100`.
+- **Source:** `rfproteina` pip-installed at job runtime from the public RosettaCommons RFD4-Proteina repo
+  (`github.com/RosettaCommons/RFD4-Proteina`, BSD-3-Clause license, tag v0.0.1); weights from HuggingFace
+  `nvidia/RFD4-Proteina`. The register / fine-tune / deploy jobs run on serverless `GPU_1xH100`.
 
 ## Limitations and known issues
 
