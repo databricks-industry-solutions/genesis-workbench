@@ -29,8 +29,19 @@ const fmtTox = (v: number | null | undefined) => {
   return v.toFixed(3)
 }
 
+// ── Demo defaults — ABL1 tyrosine-kinase (the Gleevec / CML target) ───────────────
+// Seed the form with a classic targeted-therapy lead-optimization story: optimize
+// imatinib (Gleevec) analogs and dock each against the ABL1 kinase domain — the exact
+// chain-A sequence from the ABL–imatinib crystal structure (PDB 1IEP), the same target
+// the Molecular Docking tab uses. Any field can be cleared/replaced by the user.
+const DEMO_SEED_SMILES =
+  'CC1=C(C=C(C=C1)NC(=O)C2=CC=C(C=C2)CN3CCN(CC3)C)NC4=NC=CC(=N4)C5=CN=CC=C5' // imatinib (PubChem CID 5291)
+const DEMO_TARGET_GENE = 'ABL1'
+const DEMO_TARGET_SEQUENCE =
+  'GAMDPSSPNYDKWEMERTDITMKHKLGGGQYGEVYEGVWKKYSLTVAVKTLKEDTMEVEEFLKEAAVMKEIKHPNLVQLLGVCTREPPFYIITEFMTYGNLLDYLRECNRQEVSAVVLLYMATQISSAMEYLEKKNFIHRDLAARNCLVGENHLVKVADFGLSRLMTGDTYTAHAGAKFPIKWTAPESLAYNKFSIKSDVWAFGVLLWEIATYGMSPYPGIDLSQVYELLEKDYRMERPEGCPEKVYELMRACWQWNPSDRPSFAEIHQAFETMFQESSISDEVEKELGKRGT'
+
 export function GuidedMoleculeOptimizationTab() {
-  const [seeds, setSeeds] = useState('')
+  const [seeds, setSeeds] = useState(DEMO_SEED_SMILES)
   const [numIterations, setNumIterations] = useState(25)
   const [numSamples, setNumSamples] = useState(24)
   const [selectTop, setSelectTop] = useState(3)
@@ -38,7 +49,7 @@ export function GuidedMoleculeOptimizationTab() {
   // Hard-constraint targets: keep molecules with QED >= qedMin and ClinTox <= toxMax.
   const [qedMin, setQedMin] = useState(0.5)
   const [toxMax, setToxMax] = useState(0.3)
-  const [targetSequence, setTargetSequence] = useState('')
+  const [targetSequence, setTargetSequence] = useState(DEMO_TARGET_SEQUENCE)
   const [dockPerIter, setDockPerIter] = useState(8)
   const [experiment, setExperiment] = useState('gwb_molecule_optimization')
   const [runName, setRunName] = useState(`mol_opt_${ts()}`)
@@ -46,7 +57,7 @@ export function GuidedMoleculeOptimizationTab() {
   const [searchToken, setSearchToken] = useState(0)
 
   // Find binding motif from target → seed scaffold(s).
-  const [gene, setGene] = useState('')
+  const [gene, setGene] = useState(DEMO_TARGET_GENE)
   const motifs = useMutation({
     mutationFn: (p: { gene?: string; sequence?: string }) => api.genmolSeedMotifs(p),
   })

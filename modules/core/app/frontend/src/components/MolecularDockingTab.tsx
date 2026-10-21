@@ -141,7 +141,7 @@ export function MolecularDockingTab() {
             <input
               value={smiles}
               onChange={(e) => setSmiles(e.target.value)}
-              placeholder="COc(cc1)ccc1C#N"
+              placeholder="CC1=C(C=C(C=C1)NC(=O)C2=CC=C(C=C2)CN3CCN(CC3)C)NC4=NC=CC(=N4)C5=CN=CC=C5"
               className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
             />
           </label>

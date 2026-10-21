@@ -14,7 +14,9 @@ import { cn } from '@/lib/utils'
 
 type InputMode = 'smiles' | 'pdb'
 
-const EXAMPLE_SMILES = 'COc(cc1)ccc1C#N'
+// Demo default: fentanyl (PubChem CID 3345) — design a de-novo protein binder / biosensor
+// for a notable small molecule (opioid detection). Valid SMILES; the user can replace it.
+const EXAMPLE_SMILES = 'CCC(=O)N(C1CCN(CC1)CCC2=CC=CC=C2)C3=CC=CC=C3'
 const EXAMPLE_LIGAND_PDB = `HETATM    1  C1  LIG A   1       0.000   0.000   0.000  1.00  0.00           C
 HETATM    2  C2  LIG A   1       1.394   0.000   0.000  1.00  0.00           C
 HETATM    3  C3  LIG A   1       2.091   1.209   0.000  1.00  0.00           C
@@ -268,7 +270,7 @@ export function LigandBinderDesignTab() {
                 aria-label="Ligand SMILES"
                 value={smiles}
                 onChange={(e) => setSmiles(e.target.value)}
-                placeholder="COc(cc1)ccc1C#N"
+                placeholder="CCC(=O)N(C1CCN(CC1)CCC2=CC=CC=C2)C3=CC=CC=C3"
                 className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
               />
             </div>
@@ -292,7 +294,7 @@ export function LigandBinderDesignTab() {
                 <input
                   value={smiles}
                   onChange={(e) => setSmiles(e.target.value)}
-                  placeholder="COc(cc1)ccc1C#N"
+                  placeholder="CCC(=O)N(C1CCN(CC1)CCC2=CC=CC=C2)C3=CC=CC=C3"
                   className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
                 />
               </label>
