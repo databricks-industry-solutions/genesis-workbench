@@ -53,7 +53,7 @@ Genesis Workbench is an open-source, Databricks-native blueprint that packages b
 **Get started fast with prepackaged models and workflows — and clear patterns to customize and extend them with your own.**
 
 - **Pre-packaged biological models** ready to deploy: ESMFold, AlphaFold2, ProteinMPNN, RFDiffusion, scGPT, SCimilarity, Scanpy, rapids-singlecell (part of scverse), ChemProp, DiffDock, Boltz, NVIDIA Parabricks, NVIDIA BioNeMo and more.
-- **Tailored workflows** for protein design, drug discovery, single-cell analysis, and variant analysis — each surfaced as a UI tab with sane defaults.
+- **Tailored workflows** across protein design, drug discovery, single-cell analysis, and variant analysis — including **Antibody (VHH) Design**, **Vaccine Immunogen Design**, and guided **Enzyme** & **Molecule** optimization — each a UI tab with sane defaults.
 - **Built on Databricks primitives**: Asset Bundles, Workflows, Model Serving, MLflow, Unity Catalog, and Databricks Apps — so everything you run is governed, reproducible, and traceable.
 - **Modular and extensible**: each capability is an independent module that can be deployed and destroyed independently.
 
@@ -71,14 +71,14 @@ Single-cell RNA-seq at scale. Run end-to-end pipelines on millions of cells with
 📖 [Single Cell Analysis](modules/core/app/backend/documentation/single_cell_analysis.md) · [Cell Type Annotation](modules/core/app/backend/documentation/cell_type_annotation.md) · [Cell Similarity Search](modules/core/app/backend/documentation/cell_similarity.md) · [Gene Perturbation Prediction](modules/core/app/backend/documentation/perturbation_prediction.md)
 
 ### Large Molecule
-Protein structure prediction, design, and engineering. Fold proteins in seconds with ESMFold or at high accuracy with AlphaFold2; design novel backbones with RFDiffusion + ProteinMPNN; redesign sequences for a fixed backbone (inverse folding) with ProteinMPNN and validate each design by re-folding with ESMFold; run BLAST-like searches across 150M+ sequences using ESM-2 embeddings. The **Guided Enzyme Optimization** workflow chains Proteina-Complexa, ProteinMPNN, ESMFold, Boltz, NetSolP, PLTNUM, DeepSTABp, and MHCflurry into a reward-weighted scaffold-and-score loop that surfaces variants ranked on motif fidelity, fold confidence, optional substrate complex, and four developability axes (solubility, anchor-relative half-life, melting temperature, immunogenic burden). Generate novel backbones from scratch with the NVIDIA×Baker **RFD4-Proteina** flow-matching design model, served on a GPU_XLARGE (1× H100) endpoint via Express env_pack. The **Antibody Design** workflow drives RFD4-Proteina in-process on an H100 to generate and reward-optimize single-domain (VHH / nanobody) antibodies against an antigen epitope, scored on binding, fold confidence, and developability. The **Vaccine Immunogen Design** workflow uses RFD4-Proteina motif-scaffolding (in-process, H100) to graft a conserved epitope onto de-novo stable scaffolds — epitope-focused immunogens reward-optimized on epitope-presentation fidelity (motif RMSD), scaffold fold confidence, and manufacturability.
+Protein structure prediction, design, and engineering. Fold proteins in seconds with **ESMFold** or at high accuracy with **AlphaFold2**; design backbones with **RFDiffusion** + **ProteinMPNN**; redesign sequences for a fixed backbone (inverse folding) and validate by re-folding; and run BLAST-like search across 150M+ sequences with **ESM-2** embeddings. The **Guided Enzyme Optimization** workflow chains Proteina-Complexa, ProteinMPNN, ESMFold, Boltz, NetSolP, PLTNUM, DeepSTABp, and MHCflurry into a reward-weighted scaffold-and-score loop, ranking variants on motif fidelity, fold confidence, optional substrate complex, and four developability axes (solubility, half-life, melting temperature, immunogenicity). The NVIDIA×Baker **RFD4-Proteina** flow-matching model — served on an H100 endpoint via Express env_pack — generates backbones de novo and powers two in-process design workflows: **Antibody (VHH) Design**, single-domain nanobodies optimized against an antigen epitope for binding, fold confidence, and developability; and **Vaccine Immunogen Design**, conserved epitopes grafted onto de-novo scaffolds and optimized for epitope presentation (motif RMSD), fold confidence, and manufacturability.
 
 **Models bundled:** ESMFold, ESM-2 Embeddings, AlphaFold2, ProteinMPNN, RFDiffusion, Boltz, RFD4-Proteina
 
 📖 [Protein Structure Prediction](modules/core/app/backend/documentation/protein_structure_prediction.md) · [Protein Design](modules/core/app/backend/documentation/protein_design.md) · [Inverse Folding](modules/core/app/backend/documentation/inverse_folding.md) · [Sequence Similarity Search](modules/core/app/backend/documentation/sequence_search.md) · [RFD4-Proteina Design](modules/core/app/backend/documentation/rfd4_proteina_design.md) · [Antibody Design (VHH)](modules/core/app/backend/documentation/antibody_design.md) · [Vaccine Immunogen Design](modules/core/app/backend/documentation/vaccine_immunogen.md) · [Guided Enzyme Optimization](modules/core/app/backend/documentation/enzyme_optimization.md)
 
 ### Small Molecule
-Drug-discovery essentials. Generate novel candidate molecules from a seed scaffold or binding motif with **GenMol** in a hard-constraint generate→score→reseed loop (**Guided Molecule Design**), profile candidates for drug-like properties and toxicity with ChemProp, predict protein-ligand binding poses with DiffDock, design protein binders to a target protein or small molecule with Proteina-Complexa, and transplant functional motifs into new scaffolds. Fine-tune **KERMT** (NVIDIA-BioNeMo's Kinetic GROVER Multi-Task GNN) on your own ADMET/tox assay and serve it side-by-side with ChemProp. Each generated candidate can be scored on developability through NetSolP (solubility), PLTNUM-ESM2 (relative half-life), DeepSTABp (melting temperature), MHCflurry (MHC-I immunogenic burden), and HLAIIPred (MHC-II / anti-drug-antibody immunogenic burden).
+Drug-discovery essentials. Generate candidate molecules from a seed scaffold or binding motif with **GenMol** in a hard-constraint generate→score→reseed loop (**Guided Molecule Design**); profile them for drug-likeness and toxicity with **ChemProp**; predict protein–ligand poses with **DiffDock**; design protein binders for a target protein or small molecule with **Proteina-Complexa**; and transplant functional motifs onto new scaffolds. Fine-tune **KERMT** (NVIDIA-BioNeMo's Kinetic GROVER Multi-Task GNN) on your own ADMET/tox assay and serve it beside ChemProp. Score each candidate for developability via **NetSolP** (solubility), **PLTNUM-ESM2** (half-life), **DeepSTABp** (melting temperature), **MHCflurry** (MHC-I), and **HLAIIPred** (MHC-II / anti-drug-antibody).
 
 **Models bundled:** GenMol, KERMT, ChemProp, DiffDock, Proteina-Complexa, NetSolP-1.0, PLTNUM-ESM2, DeepSTABp, MHCflurry 2.x, HLAIIPred
 
@@ -126,6 +126,8 @@ Full step-by-step setup is in the [Installation Guide](Installation.md). Quick p
 ./deploy.sh bionemo         <aws|azure|gcp>   # optional, requires BioNeMo container build
 ```
 
+> **RFD4-Proteina (large_molecule)** needs no credentials — its code and HuggingFace weights are public. Optionally set a Hugging Face token (`hf_token=…`) in `modules/large_molecule/module.env` to stay future-proof for gated weights or a private fork; `deploy.sh` stores it in the `dbx_genesis_workbench/hf_token` secret. See the [Installation Guide](Installation.md).
+
 For UI-only redeploys after the initial install (preserves all settings tables — never use `deploy.sh core` on a populated install):
 
 ```bash
@@ -143,7 +145,7 @@ Genesis Workbench ships open models and open datasets across all modules. Models
 |---|---|---|---|
 | AlphaFold2 | large_molecule / alphafold | DeepMind AlphaFold2 v2.3.2 | Protein 3D structure prediction (MSA + templates) |
 | ESMFold | large_molecule / esmfold | `facebook/esmfold_v1` | Fast single-sequence structure prediction (no MSA) |
-| Boltz-1 | large_molecule / boltz | `boltz-community/boltz-1` | Lightweight structure / co-folding prediction |
+| Boltz-2 | large_molecule / boltz | jwohlwend/boltz (Boltz-2, `boltz==2.2.1`) | Structure / co-folding prediction + protein–ligand binding-affinity head |
 | ESM-2 Embeddings | large_molecule / esm2_embeddings | `facebook/esm2_t33_650M_UR50D` | 650M mean-pooled protein embeddings (1280-dim) for similarity search |
 | RFdiffusion | large_molecule / rfdiffusion | RosettaCommons/RFdiffusion | De novo protein backbone design |
 | ProteinMPNN | large_molecule / protein_mpnn | dauparas/ProteinMPNN | Sequence design for a given backbone |
@@ -285,23 +287,13 @@ ESMfold | transformers | Apache2.0 | https://github.com/huggingface/transformers
 ESMfold | accelerate | Apache2.0 | https://github.com/huggingface/transformers
 ESMfold | hf_transfer==0.1.9 | Apache2.0 | https://github.com/huggingface/hf_transfer
 ESMfold | MODEL WEIGHTS | MIT
-Boltz-1 | Boltz-1 |	MIT | https://github.com/jwohlwend/boltz
-Boltz-1 | packaging |Apache2.0 | https://github.com/pypa/packaging
-Boltz-1 | ninja | Apache2.0 | https://github.com/scikit-build/ninja-python-distributions
-Boltz-1 | torch==2.3.1+cu121 | BSD-3 | https://github.com/pytorch/pytorch
-Boltz-1 | torchvision==0.18.1+cu121 | BSD-3 | https://github.com/pytorch/vision
-Boltz-1 | mlflow==2.15.1 | Apache2.0 | https://github.com/mlflow/mlflow
-Boltz-1 | cloudpickle==2.2.1 | BSD-3 | https://github.com/cloudpipe/cloudpickle
-Boltz-1 | requests>=2.25.1 | Apache2.0 | https://github.com/psf/requests
-Boltz-1 | boltz==0.4.0 | MIT | https://github.com/jwohlwend/boltz
-Boltz-1 | rdkit | BSD-3 | https://github.com/rdkit/rdkit
-Boltz-1 | absl-py==1.0.0 |	Apache2.0 | https://github.com/abseil/abseil-py
-Boltz-1 | transformers>=4.41 | 	Apache2.0 | https://github.com/huggingface/transformers
-Boltz-1 | sentence-transformers>=2.7 |	Apache2.0 | https://github.com/UKPLab/sentence-transformers/
-Boltz-1 | pyspark |	Apache2.0 | https://github.com/apache/spark
-Boltz-1 | pandas |	BSD-3 | https://github.com/pandas-dev/pandas
-Boltz-1 | flash_attn==1.0.9 (optional GPU) | Apache2.0 | https://github.com/Dao-AILab/flash-attention
-Boltz-1 | MODEL WEIGHTS |	MIT | https://github.com/jwohlwend/boltz
+Boltz-2 | Boltz-2 (boltz==2.2.1 — structure, co-folding, and protein–ligand binding-affinity head) | MIT | https://github.com/jwohlwend/boltz
+Boltz-2 | rdkit | BSD-3 | https://github.com/rdkit/rdkit
+Boltz-2 | absl-py | Apache2.0 | https://github.com/abseil/abseil-py
+Boltz-2 | mlflow==2.22.0 | Apache2.0 | https://github.com/mlflow/mlflow
+Boltz-2 | cloudpickle==3.0.0 | BSD-3 | https://github.com/cloudpipe/cloudpickle
+Boltz-2 | torch / numpy / pandas / requests / cuequivariance (pulled transitively by boltz 2.2.1 on the serverless-GPU AI runtime) | respective upstream licenses | https://github.com/jwohlwend/boltz
+Boltz-2 | MODEL WEIGHTS (Boltz-2, packaged with the pip install) | MIT | https://github.com/jwohlwend/boltz
 Scanpy | scanpy==1.11.4 | BSD-3 | https://github.com/scverse/scanpy
 Scanpy | anndata | BSD-3 | https://github.com/scverse/anndata
 Scanpy | scikit-network | BSD-3 | https://github.com/sknetwork-team/scikit-network

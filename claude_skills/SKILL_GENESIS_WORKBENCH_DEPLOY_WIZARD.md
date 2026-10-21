@@ -138,7 +138,7 @@ Read the current file if present; offer each field with its current value as the
 
 ## Phase 6 — Module-specific `module.env` — ONLY for selected modules
 
-Only `core` (Phase 5), `bionemo`, and `genomics` need a `module.env`. **`large_molecule`, `single_cell`, and `small_molecule` need NO `module.env`** — they run off `application.env` + the cloud env file. So:
+`core` (Phase 5), `bionemo`, and `genomics` need a `module.env`; **`large_molecule` has an OPTIONAL one** (an RFD4-Proteina Hugging Face token); `single_cell` and `small_molecule` need none — they run off `application.env` + the cloud env file. So:
 
 - **If `bionemo` was selected** → `modules/bionemo/module.env`:
   ```
@@ -156,7 +156,13 @@ Only `core` (Phase 5), `bionemo`, and `genomics` need a `module.env`. **`large_m
   ```
   (parabricks is a genomics submodule; the GWAS / variant-annotation / VCF-ingestion submodules don't need docker creds.)
 
-- **If only `large_molecule` / `single_cell` / `small_molecule` were selected** → skip Phase 6 entirely; do **not** prompt for or create any extra `module.env`.
+- **If `large_molecule` was selected** → an OPTIONAL `modules/large_molecule/module.env` for RFD4-Proteina:
+  ```
+  hf_token=<Hugging Face token>
+  ```
+  RFD4's public repo + public HuggingFace weights need no credentials today, so this is optional. If set, `deploy.sh` seeds it into the `dbx_genesis_workbench/hf_token` secret (NOT a plaintext `--var` — `large_molecule/deploy.sh` strips it from the `paste` and `put-secret`s it), keeping RFD4 working if the weights repo becomes gated / for a private fork. Skip it otherwise.
+
+- **If only `single_cell` / `small_molecule` were selected** (no `large_molecule`) → skip Phase 6 entirely; do **not** prompt for or create any extra `module.env`.
 
 ### Env-file writing rule (critical)
 Write env files with the `Write` tool — **no comments, no blank lines, `key=value` only**. `deploy.sh` flattens each file with `paste -sd,` into the bundle's `--var` string; a comment or blank line corrupts the variable list and breaks the deploy.

@@ -9,7 +9,13 @@ cluster-start time), hardens deploy-time sample-data staging, and refreshes all 
   [RosettaCommons/RFD4-Proteina](https://github.com/RosettaCommons/RFD4-Proteina) (tag v0.0.1, BSD-3-Clause license).
   Weights now served from HuggingFace `nvidia/RFD4-Proteina` instead of cwobject CDN. Dependency bumps: atomworks 3.0.4,
   cuequivariance 0.13. Updated checkpoint filenames, model descriptions, and license/repo references throughout the
-  app, documentation, benchmarks, and deployment skills.
+  app, documentation, benchmarks, and deployment skills. The register/serving jobs now **bake the portable HF
+  bundle** (`config.json` + `model.safetensors`) into the model version at register time (loaded offline at
+  serving — no HF egress/token on the endpoint); the optional Hugging Face token lives in
+  `modules/large_molecule/module.env` and `deploy.sh` seeds it into the `dbx_genesis_workbench/hf_token` secret.
+  Fine-tune reworked to the v0.0.1 `rfd4-train` form (`out_dir`, `log.log_wandb=false`, and
+  `opt.dist_strategy=auto` for a single serverless H100). All three RFD4 workflows (rfd4_proteina,
+  antibody_design, vaccine_immunogen) GPU-validated green on H100.
 - **Serverless migration.** Classic CPU register/setup jobs and GPU jobs converted to serverless
   `notebook_task` (`environment_key` + job-level `environments`); GPU jobs use `compute.hardware_accelerator:
   GPU_1xA10`. bionemo ESM-2 re-architected **containerless** (HF + Transformer Engine); the TE wheel is built
@@ -38,6 +44,29 @@ cluster-start time), hardens deploy-time sample-data staging, and refreshes all 
   time, never parallel" rule, post-deploy job-completion + verify-by-content checks, and the serverless-vs-classic
   + S3 realities; troubleshooting skill gains recipes for the S3 mirror, serverless `%sh`/`/local_disk0` and
   `LOCAL_RELATION_SIZE_LIMIT_EXCEEDED`, and the unreliable `fs ls` size on UC Volumes.
+
+## small_molecule (2026-10-21) — Boltz-2 affinity axis · rich docking/ligand-binder viewer & metrics · demo prefills · app fixes
+
+### What changed and why
+
+- **Boltz-2 affinity scoring axis.** Upgraded dbboltz to `boltz==2.2.1` (Boltz-2) and surfaced its
+  protein–small-molecule binding-affinity head. Ligand Binder Design can co-fold each designed binder with the
+  target ligand and report `affinity_pred_value` / `affinity_probability_binary` (opt-in
+  `validate_boltz_affinity`) as a second ranking axis alongside DiffDock pose confidence. (Affinity head is
+  protein–small-molecule only; the binder must be the ligand chain — not valid for protein–protein.)
+- **Rich docking / ligand-binder / motif viewer + decision metrics.** New Mol* viewer
+  (`services/molstar.py::molstar_html_docking_surface`): cartoon + a translucent **hydrophobicity surface**
+  (now the default) + pocket sticks + interaction (H-bond/contact) dashes + a camera-clipping depth fix. A
+  CPU-side metrics strip (mean pLDDT, heavy-atom contacts, Shrake-Rupley buried SASA, Boltz affinity, dock
+  confidence) and an RDKit druglikeness mini-panel (`services/structure_metrics.py`,
+  `components/DockingMetrics.tsx`).
+- **Demo prefills.** Small-molecule tabs open with valid, recognizable targets: Molecular Docking + Guided
+  Molecule Design seed **imatinib (Gleevec)** against the **ABL1 kinase** (PDB 1IEP apo pocket / its chain-A
+  sequence); Ligand Binder Design seeds **fentanyl** (de-novo binder / opioid biosensor). The docking example
+  now serves the full ABL kinase domain as an apo pocket (was a 50-residue stub) so the pose lands in the real
+  pocket. SMILES are PubChem-canonical; the sequence is from RCSB 1IEP.
+- **App fixes.** The AI-canvas (Vortex) tool catalog is cached + pre-warmed at app startup (no slow
+  first-request rebuild); dispatch success toasts are uniform across tabs (green, with the run name).
 
 ## vaccine_immunogen (2026-10-14) — result-dialog "Color by" viewer + unindexed motif placement + input robustness
 

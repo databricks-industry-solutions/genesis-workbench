@@ -175,7 +175,14 @@ bionemo_docker_userid=User ID for the bionemo image repo
 bionemo_docker_token=Token for the bionemo image repo
 bionemo_docker_image=Image tag for the bionemo image
 ```
-For the other modules currently no additional configurations required
+
+**For the `large_molecule` module, optionally create a `module.env` file in the `modules/large_molecule` folder to serve RFD4-Proteina:**
+```
+hf_token=Hugging Face token with access to the RFD4-Proteina weights
+```
+RFD4-Proteina's code (public [RosettaCommons/RFD4-Proteina](https://github.com/RosettaCommons/RFD4-Proteina)) and weights (public [`nvidia/RFD4-Proteina`](https://huggingface.co/nvidia/RFD4-Proteina)) currently need **no credentials**, so this is **optional**. If set, `deploy.sh` seeds it into the `dbx_genesis_workbench/hf_token` secret scope — NOT a plaintext job variable (it is stripped from the `--var` list and `put-secret`'d) — so the RFD4 register / fine-tune / Antibody / Vaccine jobs keep working if the weights repo later becomes gated or you point at a private fork.
+
+For the other modules currently no additional configuration is required.
 
 ##### Cloud configurations
 Cloud configuration is used to specify what instance type to use and endpoint configurations. **A default configuration is supplied, you can change it if you want to change the default behavior**

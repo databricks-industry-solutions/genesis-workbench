@@ -70,6 +70,14 @@ bionemo_docker_image=<Docker image tag>
 
 **Security note:** `bionemo_docker_token` (and `parabricks_docker_token`) are passed as plaintext DAB variables — visible in job definitions via API. For hardening, store in a secret scope and reference via `{{secrets/scope/key}}`.
 
+### module.env — Large Molecule Module (`modules/large_molecule/module.env`) — OPTIONAL
+
+```
+hf_token=<Hugging Face token with access to the RFD4-Proteina weights>
+```
+
+Only needed to serve **RFD4-Proteina** (large_molecule/rfd4_proteina + the Antibody/Vaccine workflows). RFD4's code (public [RosettaCommons/RFD4-Proteina](https://github.com/RosettaCommons/RFD4-Proteina)) and weights (public [`nvidia/RFD4-Proteina`](https://huggingface.co/nvidia/RFD4-Proteina)) currently need **no credentials**, so this file is OPTIONAL. If present, `modules/large_molecule/deploy.sh` seeds `hf_token` into the `dbx_genesis_workbench/hf_token` secret and **excludes it from the `--var` paste** (unlike the docker tokens above, it is a real secret, not a plaintext job variable). Set it to stay working if the weights repo becomes gated or for a private fork.
+
 ### Cloud-Specific Configuration
 
 **aws.env:**
