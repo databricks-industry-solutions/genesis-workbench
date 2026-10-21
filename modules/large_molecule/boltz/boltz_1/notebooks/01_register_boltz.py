@@ -194,6 +194,28 @@ print(result[0].keys())
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC #### Affinity smoke-test (protein + small-molecule binder)
+# MAGIC Exercises the Boltz-2 affinity head so a dbboltz wiring bug fails fast HERE (at registration)
+# MAGIC rather than at first user call. Additive: affinity activates only when `affinity_binder` is
+# MAGIC passed, so this does not change the structure-only signature inferred above.
+
+# COMMAND ----------
+
+_aff_input = {
+    "input": "protein_A:MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG;ligand_B:CC(=O)Oc1ccccc1C(=O)O",
+    "msa": "no_msa",
+    "affinity_binder": "B",
+}
+_aff_result = model.predict(context, [_aff_input])
+print("affinity result keys:", _aff_result[0].keys())
+assert "affinity_pred_value" in _aff_result[0], \
+    f"Boltz-2 affinity head did not emit affinity_pred_value; got {list(_aff_result[0].keys())}"
+print("affinity_pred_value:", _aff_result[0].get("affinity_pred_value"),
+      "| affinity_probability_binary:", _aff_result[0].get("affinity_probability_binary"))
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ### Ship dbboltz to the serving container via `code_paths`
 # MAGIC `code_paths` points straight at the package source, so the whole `dbboltz`
 # MAGIC package (incl. the `dbboltz.alphafold` submodule) is copied into the model and

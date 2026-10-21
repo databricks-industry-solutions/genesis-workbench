@@ -486,16 +486,34 @@ export type DockingExampleResponse = {
   pdb: string
 }
 
+export type LigandDruglikeness = {
+  mw: number
+  logp: number
+  qed: number
+  tpsa: number
+  hbd: number
+  hba: number
+  rotatable_bonds: number
+  lipinski_pass: boolean
+  ro5_violations: number
+  veber_pass: boolean
+}
+
 export type DockingPose = {
   rank: number
   confidence: number
   ligand_sdf: string
   viewer_html: string
+  viewer_html_hydrophobicity: string | null
+  contact_count: number | null
+  n_site_residues: number | null
+  buried_area: number | null
   error: string | null
 }
 
 export type MolecularDockingResponse = {
   poses: DockingPose[]
+  ligand_druglikeness: LigandDruglikeness | null
   experiment_id: string
   run_id: string
   n_success: number
@@ -525,15 +543,23 @@ export type LigandBinderDesign = {
   rewards: number
   esmfold_validated: boolean
   dock_confidence: number | null
+  boltz_affinity_value: number | null
+  boltz_affinity_prob: number | null
+  mean_plddt: number | null
+  contact_count: number | null
+  n_site_residues: number | null
+  buried_area: number | null
   viewer_html_ca_backbone: string | null
   viewer_html_esmfold: string | null
   viewer_html_ca_plus_dock: string | null
   viewer_html_esmfold_plus_dock: string | null
+  viewer_html_hydrophobicity: string | null
 }
 
 export type LigandBinderDesignResponse = {
   designs: LigandBinderDesign[]
   ligand_pdb: string
+  ligand_druglikeness: LigandDruglikeness | null
   experiment_id: string
   run_id: string
   warnings: string[]
@@ -546,6 +572,7 @@ export type MotifScaffold = {
   rewards: number
   esmfold_validated: boolean
   viewer_html: string | null
+  viewer_html_hydrophobicity: string | null
 }
 
 export type MotifScaffoldingResponse = {

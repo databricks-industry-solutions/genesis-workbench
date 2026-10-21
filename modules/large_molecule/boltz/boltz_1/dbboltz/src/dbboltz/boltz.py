@@ -166,22 +166,31 @@ def get_jackhmmer_alignment(
 def post_process_boltz_results(dir, yaml_name, expected_result_count : int =0):
     preds_dir = f"{dir}/boltz_results_{yaml_name}/predictions/{yaml_name}"
 
+    # Boltz-2 affinity (when requested via a `properties: affinity` block) writes ONE JSON per complex
+    # -- `affinity_<name>.json` -- not per diffusion sample. Read it once and attach to every result.
+    affinity = None
+    aff_path = os.path.join(preds_dir, f"affinity_{yaml_name}.json")
+    if os.path.exists(aff_path):
+        with open(aff_path, 'r') as af:
+            affinity = json.load(af)
+
     boltz_results = []
     for i in range(expected_result_count):
         with open(os.path.join(preds_dir, f"{yaml_name}_model_{i}.pdb"), 'r') as pdbfile:
             pdb_text = pdbfile.read()
-            
+
         with open(os.path.join(preds_dir, f"confidence_{yaml_name}_model_{i}.json"),'r') as cf:
             confidence = json.load(cf)
-        
+
         plddt = np.load(
             os.path.join(preds_dir, f"plddt_{yaml_name}_model_{i}.npz")
         )['plddt']
-        
+
         this_out_dict = {
             'pdb':pdb_text,
             'confidence':confidence,
-            'plddt':plddt
+            'plddt':plddt,
+            'affinity':affinity,
         }
         boltz_results.append(this_out_dict)
 
@@ -263,6 +272,26 @@ def process_boltz_inputs(
                             naming_conv[t]: s[1],
                         }
                     })
+
+        # Optional: Boltz-2 AFFINITY prediction (protein-small-molecule binding). The binder MUST be a
+        # ligand chain (Boltz-2's affinity head is NOT valid for protein-protein). The caller passes
+        # `affinity_binder` as the ligand chain id (e.g. "B"); resolve it to the exact id string this
+        # builder writes for that ligand so the `properties` block references it. Affinity is triggered
+        # purely by this YAML block -- no extra CLI flag. Absent `affinity_binder` -> no change, so every
+        # existing (structure-only) caller behaves identically.
+        binder = config.get('affinity_binder')
+        if binder:
+            lig_id = None
+            for s in (sequences.get('ligand') or []):
+                written_id = f"{str(list(s[0]))}"
+                if str(binder) == written_id or str(binder) in list(s[0]):
+                    lig_id = written_id
+                    break
+            if lig_id is None and sequences.get('ligand'):
+                lig_id = f"{str(list(sequences['ligand'][0][0]))}"  # fall back to first ligand
+            if lig_id is not None:
+                input_dict['properties'] = [{'affinity': {'binder': lig_id}}]
+
         span.set_outputs({"Boltz input yaml content": input_dict})
 
     with open(boltz_yaml_file_path, 'w') as file:
@@ -442,6 +471,20 @@ class Boltz(mlflow.pyfunc.PythonModel):
             for k,v in r['confidence'].items():
                 if k in CONFIDENCE_ENTRIES_KEEP_SERVING:
                     tmp_r[k] = "{:.7f}".format(v)
+            # Boltz-2 affinity (present only when `affinity_binder` was requested). Surface the predicted
+            # affinity value + binder probability (and the 2 ensemble members) as string-formatted scores,
+            # matching the confidence-key convention. Absent -> nothing added (backward compatible).
+            aff = r.get('affinity')
+            if isinstance(aff, dict):
+                for k in ('affinity_pred_value', 'affinity_probability_binary',
+                          'affinity_pred_value1', 'affinity_probability_binary1',
+                          'affinity_pred_value2', 'affinity_probability_binary2'):
+                    v = aff.get(k)
+                    if v is not None:
+                        try:
+                            tmp_r[k] = "{:.7f}".format(float(v))
+                        except (TypeError, ValueError):
+                            pass
             new_results.append(tmp_r)
         return new_results
 

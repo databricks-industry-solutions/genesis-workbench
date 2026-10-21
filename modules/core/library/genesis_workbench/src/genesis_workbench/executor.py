@@ -76,6 +76,28 @@ def _diffdock_best(w: WorkspaceClient, protein_pdb: str, ligand_smiles: str, n: 
             best = (c, sdf)
     return (best[1], best[0]) if best else (None, None)
 
+
+def _boltz_affinity(w: WorkspaceClient, binder_seq: str, ligand_smiles: str):
+    """Boltz-2 affinity for a protein binder + small-molecule ligand (co-fold + affinity head).
+    Returns (pred_value, probability) or (None, None). `pred_value` is a log(IC50)-style score
+    (lower = stronger binder); `probability` is P(binder) in [0, 1]. Valid ONLY for protein-small-
+    molecule; the binder MUST be the ligand chain (Boltz-2's affinity head is not for protein-protein)."""
+    ep = get_endpoint_name_for_uc_model("boltz")
+    boltz_input = f"protein_A:{binder_seq};ligand_B:{ligand_smiles}"
+    payload = [{"input": boltz_input, "msa": "no_msa", "affinity_binder": "B"}]
+    preds = w.serving_endpoints.query(name=ep, inputs=payload).predictions
+    if isinstance(preds, dict) and "predictions" in preds:
+        preds = preds["predictions"]
+    if isinstance(preds, list) and preds and isinstance(preds[0], dict):
+        d = preds[0]
+        def _f(k):
+            try:
+                return float(d[k])
+            except (KeyError, TypeError, ValueError):
+                return None
+        return _f("affinity_pred_value"), _f("affinity_probability_binary")
+    return (None, None)
+
 logger = logging.getLogger(__name__)
 
 
@@ -328,6 +350,9 @@ def _chain_ligand_binder_design(w, inputs, params, progress=None) -> dict:
     validate_fold = bool(p.get("validate_esmfold", False))
     smiles = str(p.get("ligand_smiles", "") or "")
     validate_dock = bool(p.get("validate_diffdock", False)) and bool(smiles)
+    # Boltz-2 affinity: predicted binding affinity for the designed protein binder + the target ligand.
+    # A second, complementary ranking axis to DiffDock's pose confidence. Opt-in (needs the SMILES).
+    validate_affinity = bool(p.get("validate_boltz_affinity", False)) and bool(smiles)
     designs = []
     for i, r in enumerate(rows):
         esmfold_pdb = None
@@ -344,9 +369,17 @@ def _chain_ligand_binder_design(w, inputs, params, progress=None) -> dict:
                 dock_sdf, dock_conf = _diffdock_best(w, esmfold_pdb or r.get("pdb_output"), smiles, 5)
             except Exception as e:  # noqa: BLE001
                 logger.info("ligand_binder diffdock failed: %s", e)
+        aff_value = aff_prob = None
+        if validate_affinity:
+            _emit(progress, 90 + int((i + 1) / max(len(rows), 1) * 8), f"Scoring affinity {i + 1}/{len(rows)} (Boltz-2)")
+            try:
+                aff_value, aff_prob = _boltz_affinity(w, str(r.get("sequence", "")), smiles)
+            except Exception as e:  # noqa: BLE001
+                logger.info("ligand_binder boltz affinity failed: %s", e)
         designs.append({"sample_id": str(r.get("sample_id", "")), "sequence": str(r.get("sequence", "")),
                         "rewards": float(r.get("rewards", 0) or 0), "pdb_output": str(r.get("pdb_output", "")),
-                        "esmfold_pdb": esmfold_pdb, "best_dock_sdf": dock_sdf, "dock_confidence": dock_conf})
+                        "esmfold_pdb": esmfold_pdb, "best_dock_sdf": dock_sdf, "dock_confidence": dock_conf,
+                        "boltz_affinity_value": aff_value, "boltz_affinity_prob": aff_prob})
     _emit(progress, 100, "Ligand binder design complete")
     return {"designs": designs, "ligand_pdb": ligand_pdb}
 

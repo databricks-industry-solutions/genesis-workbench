@@ -19,7 +19,8 @@ from app.services import ligand_binder_design as ligand_pipeline
 from app.services import molecule_optimization as mol_opt
 from app.services import molecular_docking as docking
 from app.services import motif_scaffolding as motif_pipeline
-from app.services.molstar import molstar_html_multibody
+from app.services import structure_metrics
+from app.services.molstar import molstar_html_multibody, molstar_html_docking_surface
 from app.services.sse import stream_with_progress
 
 logger = logging.getLogger(__name__)
@@ -60,11 +61,19 @@ class DockingPose(BaseModel):
     # server-side so the frontend can flip through poses without round-
     # tripping the protein/ligand to a render endpoint per click.
     viewer_html: str
+    # Hydrophobicity-surface view: target surface painted by hydrophobicity + the docked pose in the pocket.
+    viewer_html_hydrophobicity: Optional[str] = None
+    # CPU-side decision metrics for this pose.
+    contact_count: Optional[int] = None          # heavy-atom target-ligand contacts (<4 A)
+    n_site_residues: Optional[int] = None         # binding-site residues (<5 A of ligand)
+    buried_area: Optional[float] = None           # ligand SASA buried in the pose (A^2)
     error: Optional[str] = None
 
 
 class DockingResponse(BaseModel):
     poses: list[DockingPose]
+    # RDKit druglikeness of the docked ligand (one per run).
+    ligand_druglikeness: Optional[dict] = None
     experiment_id: str
     run_id: str
     n_success: int
@@ -128,6 +137,8 @@ def diffdock_stream(payload: DockingRequest, user: CurrentUserDep):
             for _, row in results_df.iterrows():
                 ligand_sdf = str(row.get("ligand_sdf", ""))
                 err_msg: str | None = None
+                viewer_hydrophobicity: str | None = None
+                contact_count = n_site_res = buried_area = None
                 if ligand_sdf.startswith("ERROR"):
                     err_msg = ligand_sdf
                     viewer_html = molstar_html_multibody(
@@ -139,19 +150,32 @@ def diffdock_stream(payload: DockingRequest, user: CurrentUserDep):
                     pdbs = [payload.protein_pdb] + ([ligand_pdb] if ligand_pdb else [])
                     names = ["target"] + (["pose"] if ligand_pdb else [])
                     viewer_html = molstar_html_multibody(pdbs, names=names, with_iframe=False)
+                    if ligand_pdb:
+                        pocket_pdb, n_site_res, contact_count = structure_metrics.binding_site_pocket(
+                            payload.protein_pdb, ligand_pdb)
+                        buried_area = structure_metrics.ligand_buried_sasa(payload.protein_pdb, ligand_pdb)
+                        viewer_hydrophobicity = molstar_html_docking_surface(
+                            payload.protein_pdb, ligand_pdb, pocket_pdb=pocket_pdb,
+                            theme="hydrophobicity", with_iframe=False
+                        )
                     n_success += 1
 
                 poses.append({
                     "rank": int(row.get("rank", 0)),
                     "confidence": float(row.get("confidence", 0.0)),
                     "ligand_sdf": ligand_sdf,
+                    "contact_count": contact_count,
+                    "n_site_residues": n_site_res,
+                    "buried_area": buried_area,
                     "viewer_html": viewer_html,
+                    "viewer_html_hydrophobicity": viewer_hydrophobicity,
                     "error": err_msg,
                 })
 
             progress_cb(100, f"Done — {n_success}/{len(poses)} successful pose(s)")
             return {
                 "poses": poses,
+                "ligand_druglikeness": structure_metrics.ligand_druglikeness(payload.ligand_smiles or ""),
                 "experiment_id": str(experiment.experiment_id),
                 "run_id": mlflow_run_id,
                 "n_success": n_success,
@@ -178,6 +202,8 @@ class LigandBinderDesignRequest(BaseModel):
     validate_esmfold: bool = True
     # DiffDock validation needs a SMILES string regardless of input mode.
     validate_diffdock: bool = True
+    # Boltz-2 predicted binding affinity (protein binder + ligand). Needs a SMILES.
+    validate_boltz_affinity: bool = False
     mlflow_experiment: str = Field("gwb_ligand_binder_design", min_length=1)
     mlflow_run_name: str = Field(..., min_length=1)
 
@@ -188,17 +214,28 @@ class LigandBinderDesign(BaseModel):
     rewards: float
     esmfold_validated: bool
     dock_confidence: Optional[float] = None
-    # Pre-built Mol* HTMLs for the four view choices. None when the
-    # underlying structure isn't available.
+    # Boltz-2 affinity: predicted binding affinity (log-IC50-style, lower = stronger) + P(binder).
+    boltz_affinity_value: Optional[float] = None
+    boltz_affinity_prob: Optional[float] = None
+    # CPU-side decision metrics (from the designed binder + docked ligand).
+    mean_plddt: Optional[float] = None          # mean CA pLDDT of the ESMFold-folded binder
+    contact_count: Optional[int] = None         # heavy-atom protein-ligand contacts (<4 A)
+    n_site_residues: Optional[int] = None        # binding-site residues (<5 A of ligand)
+    buried_area: Optional[float] = None          # ligand SASA buried on binding (A^2)
+    # Pre-built Mol* HTMLs for the view choices. None when the underlying structure isn't available.
     viewer_html_ca_backbone: Optional[str] = None
     viewer_html_esmfold: Optional[str] = None
     viewer_html_ca_plus_dock: Optional[str] = None
     viewer_html_esmfold_plus_dock: Optional[str] = None
+    # Hydrophobicity-surface docking view (protein surface painted by hydrophobicity + ligand in pocket).
+    viewer_html_hydrophobicity: Optional[str] = None
 
 
 class LigandBinderDesignResponse(BaseModel):
     designs: list[LigandBinderDesign]
     ligand_pdb: str
+    # RDKit druglikeness of the target ligand (one per run; same ligand for every design).
+    ligand_druglikeness: Optional[dict] = None
     experiment_id: str
     run_id: str
     warnings: list[str]
@@ -240,6 +277,7 @@ def ligand_binder_design_stream(payload: LigandBinderDesignRequest, user: Curren
                 "num_samples": payload.num_samples,
                 "validate_esmfold": payload.validate_esmfold,
                 "validate_diffdock": payload.validate_diffdock,
+                "validate_boltz_affinity": payload.validate_boltz_affinity,
                 "input_mode": "PDB" if payload.ligand_pdb else "SMILES",
             })
 
@@ -251,6 +289,7 @@ def ligand_binder_design_stream(payload: LigandBinderDesignRequest, user: Curren
                 num_samples=payload.num_samples,
                 validate_esmfold=payload.validate_esmfold,
                 validate_diffdock=payload.validate_diffdock,
+                validate_boltz_affinity=payload.validate_boltz_affinity,
                 progress_callback=progress_cb,
             )
 
@@ -266,6 +305,8 @@ def ligand_binder_design_stream(payload: LigandBinderDesignRequest, user: Curren
                             "sequence": d["sequence"],
                             "rewards": d["rewards"],
                             "dock_confidence": d.get("dock_confidence"),
+                            "boltz_affinity_value": d.get("boltz_affinity_value"),
+                            "boltz_affinity_prob": d.get("boltz_affinity_prob"),
                         }
                         for d in designs_raw
                     ],
@@ -312,6 +353,26 @@ def ligand_binder_design_stream(payload: LigandBinderDesignRequest, user: Curren
                     if (esmfold_pdb and lig_pdb_block)
                     else None
                 )
+                # Hydrophobicity-surface docking view: protein surface painted by hydrophobicity with
+                # the docked ligand in the pocket + interacting-residue sticks and H-bond/contact dashes.
+                # Prefer the ESMFold structure (real sidechains -> meaningful surface + contacts); fall
+                # back to the CA backbone. Needs the docked ligand.
+                surf_protein = esmfold_pdb or ca_pdb
+                pocket_pdb = contact_count = n_site_res = buried_area = None
+                if surf_protein and lig_pdb_block:
+                    pocket_pdb, n_site_res, contact_count = structure_metrics.binding_site_pocket(
+                        surf_protein, lig_pdb_block)
+                    buried_area = structure_metrics.ligand_buried_sasa(surf_protein, lig_pdb_block)
+                viewer_hydrophobicity = (
+                    molstar_html_docking_surface(
+                        surf_protein, lig_pdb_block, pocket_pdb=pocket_pdb,
+                        theme="hydrophobicity", with_iframe=False
+                    )
+                    if (surf_protein and lig_pdb_block)
+                    else None
+                )
+                # Mean pLDDT of the designed binder (ESMFold writes pLDDT into the B-factor column).
+                mean_plddt = structure_metrics.mean_plddt_from_pdb(esmfold_pdb) if esmfold_pdb else None
 
                 designs.append({
                     "sample_id": d["sample_id"],
@@ -319,16 +380,24 @@ def ligand_binder_design_stream(payload: LigandBinderDesignRequest, user: Curren
                     "rewards": d["rewards"],
                     "esmfold_validated": bool(esmfold_pdb),
                     "dock_confidence": d.get("dock_confidence"),
+                    "boltz_affinity_value": d.get("boltz_affinity_value"),
+                    "boltz_affinity_prob": d.get("boltz_affinity_prob"),
+                    "mean_plddt": mean_plddt,
+                    "contact_count": contact_count,
+                    "n_site_residues": n_site_res,
+                    "buried_area": buried_area,
                     "viewer_html_ca_backbone": viewer_ca,
                     "viewer_html_esmfold": viewer_esmfold,
                     "viewer_html_ca_plus_dock": viewer_ca_dock,
                     "viewer_html_esmfold_plus_dock": viewer_esmfold_dock,
+                    "viewer_html_hydrophobicity": viewer_hydrophobicity,
                 })
 
             progress_cb(100, f"Done — {len(designs)} design(s) ready")
             return {
                 "designs": designs,
                 "ligand_pdb": ligand_pdb,
+                "ligand_druglikeness": structure_metrics.ligand_druglikeness(payload.ligand_smiles or ""),
                 "experiment_id": str(experiment.experiment_id),
                 "run_id": mlflow_run_id,
                 "warnings": warnings,
@@ -365,6 +434,8 @@ class MotifScaffold(BaseModel):
     # Single Mol* HTML overlaying motif + scaffold (ESMFold preferred,
     # CA-only backbone fallback).
     viewer_html: Optional[str] = None
+    # Scaffold surface painted by hydrophobicity (default view; no ligand — this is a monomer design).
+    viewer_html_hydrophobicity: Optional[str] = None
 
 
 class MotifScaffoldingResponse(BaseModel):
@@ -452,6 +523,12 @@ def motif_scaffolding_stream(payload: MotifScaffoldingRequest, user: CurrentUser
                     if display_pdb
                     else None
                 )
+                # Hydrophobicity-surface view of the designed scaffold (monomer — no ligand/pocket).
+                viewer_hydrophobicity = (
+                    molstar_html_docking_surface(display_pdb, theme="hydrophobicity", with_iframe=False)
+                    if display_pdb
+                    else None
+                )
                 scaffolds.append({
                     "sample_id": s["sample_id"],
                     "sequence": s["sequence"],
@@ -459,6 +536,7 @@ def motif_scaffolding_stream(payload: MotifScaffoldingRequest, user: CurrentUser
                     "rewards": s["rewards"],
                     "esmfold_validated": s["esmfold_validated"],
                     "viewer_html": viewer,
+                    "viewer_html_hydrophobicity": viewer_hydrophobicity,
                 })
 
             progress_cb(100, f"Done — {len(scaffolds)} scaffold(s) ready")

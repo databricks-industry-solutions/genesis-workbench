@@ -210,6 +210,128 @@ def molstar_html_complex(pdb: str, name: Optional[str] = None, with_iframe: Opti
     return html_str
 
 
+_HYDROPHOBICITY_LEGEND_HTML = """
+    <div style="position:absolute; top:10px; right:10px; background:rgba(30,30,30,0.82); color:#ddd;
+         font:11px/1.3 sans-serif; padding:6px 8px; border-radius:4px; z-index:10; pointer-events:none;">
+      <div style="margin-bottom:3px;">Surface: hydrophobicity</div>
+      <div style="width:130px; height:10px; border-radius:2px;
+           background:linear-gradient(to right,#1565c0,#e0e0e0,#8d6e63);"></div>
+      <div style="display:flex; justify-content:space-between; margin-top:2px;">
+         <span>hydrophilic</span><span>hydrophobic</span></div>
+    </div>
+"""
+
+
+def molstar_html_docking_surface(protein_pdb: str, ligand_pdb: Optional[str] = None,
+                                 pocket_pdb: Optional[str] = None,
+                                 theme: str = "hydrophobicity", surface_alpha: float = 0.20,
+                                 with_iframe: bool = True) -> str:
+    """Docking-style viewer: protein cartoon + a SEMI-TRANSPARENT molecular surface colored by a
+    physicochemical property (default Mol* `hydrophobicity` theme, alpha 0.20 so the fold + ligand show
+    through), with the docked ligand drawn as ball-and-stick inside the pocket. Reproduces the
+    research-figure look (property-painted binding pocket + ligand).
+
+    When `pocket_pdb` (binding-site residues + ligand, from structure_metrics.binding_site_pocket) is
+    supplied, the binding site is loaded as a 2nd structure drawn as ball-and-stick with the computed
+    non-covalent interactions (H-bond / contact dashes) overlaid — Mol*'s `interactions` representation
+    only sees within-structure contacts, so the residues + ligand must share one structure. Falls back
+    to the ligand alone (plain ball-and-stick) when no pocket is given.
+
+    The ligand is passed as a PDB/HETATM block whose coordinates are already in the protein frame
+    (DiffDock docks into the given protein), so the overlay sits in the pocket. The camera frames the
+    WHOLE structure and widens the clipping sphere (cameraClipping radius=100, far=false) so the
+    translucent surface is never sliced against the screen — a tight ligand-focus was removed because it
+    caused that depth cutoff. Surface+coloring and the clipping tweak are each wrapped in try/catch so
+    any rcsb-molstar API/theme drift degrades to a plain cartoon+ligand, never a blank viewer; an
+    unsupported `theme` falls back to a `chain-id` surface. `theme` is any Mol* color-theme id. The
+    surface is applied ONLY to the first structure (protein), never the ligand. (Theme id + clipping
+    verified in-browser against the pinned rcsb-molstar CDN build.)"""
+    protein_b64 = base64.b64encode(protein_pdb.encode()).decode()
+    # Second structure: prefer the pocket (site residues + ligand) so we can draw interacting-residue
+    # sticks + H-bond/contact dashes; else fall back to the ligand alone (plain ball-and-stick).
+    second_pdb = pocket_pdb or ligand_pdb or ""
+    second_b64 = base64.b64encode(second_pdb.encode()).decode() if second_pdb else ""
+    load_second = (f'                    await viewer.loadStructureFromData(atob("{second_b64}"), "pdb", false);'
+                   if second_b64 else "")
+    pocket_js = ("""
+                        // Second structure = binding-site pocket (site residues + ligand): ball-and-stick
+                        // + the computed non-covalent interactions (H-bond / contact dashes), so a scientist
+                        // sees HOW the ligand is held. Each wrapped so a missing representation is skipped.
+                        if (current.structures.length > 1) {
+                            for (const c of current.structures[1].components) {
+                                try {
+                                    await plugin.builders.structure.representation.addRepresentation(
+                                        c.cell, { type: "ball-and-stick", color: "element-symbol" });
+                                } catch (e) { console.log("pocket sticks skipped:", e && e.message); }
+                                try {
+                                    await plugin.builders.structure.representation.addRepresentation(
+                                        c.cell, { type: "interactions" });
+                                } catch (e) { console.log("interactions skipped:", e && e.message); }
+                            }
+                        }
+""" if pocket_pdb else "")
+    legend = _HYDROPHOBICITY_LEGEND_HTML if theme == "hydrophobicity" else ""
+    js = ("""
+                (async function() {
+                    const viewer = new rcsbMolstar.Viewer("viewer", {layoutShowLog: false, backgroundColor: 0x1e1e1e});
+                    await viewer.loadStructureFromData(atob("__PROT_B64__"), "pdb", false);
+__LOAD_SECOND__
+                    try {
+                        await new Promise(function(r){ setTimeout(r, 450); });
+                        const plugin = viewer.plugin;
+                        const current = plugin.managers.structure.hierarchy.current;
+                        // First structure = protein: overlay a semi-transparent molecular surface colored by
+                        // the theme. An unsupported theme degrades to a chain-id surface so the pocket shape
+                        // still renders.
+                        if (current.structures.length > 0) {
+                            for (const c of current.structures[0].components) {
+                                try {
+                                    await plugin.builders.structure.representation.addRepresentation(
+                                        c.cell, { type: "molecular-surface", typeParams: { alpha: __ALPHA__ }, color: "__THEME__" });
+                                } catch (e1) {
+                                    try {
+                                        await plugin.builders.structure.representation.addRepresentation(
+                                            c.cell, { type: "molecular-surface", typeParams: { alpha: __ALPHA__ }, color: "chain-id" });
+                                    } catch (e2) { console.log("surface skipped:", e2 && e2.message); }
+                                }
+                            }
+                        }
+__POCKET_JS__
+                        // Frame the WHOLE structure (default camera after load) and widen the camera
+                        // clipping sphere so the translucent surface is never sliced against the screen.
+                        // (A tight ligand-focus was removed — it caused that depth cutoff.) radius:100
+                        // keeps the full scene; far:false disables far-plane clipping.
+                        try {
+                            plugin.canvas3d.setProps({ cameraClipping: { far: false, radius: 100, minNear: 0.1 } });
+                        } catch (e) { console.log("camera clipping tweak skipped:", e && e.message); }
+                    } catch (e) { console.log("docking surface build skipped, cartoon kept:", e && e.message); }
+                })();
+    """.replace("__PROT_B64__", protein_b64)
+        .replace("__LOAD_SECOND__", load_second)
+        .replace("__POCKET_JS__", pocket_js)
+        .replace("__ALPHA__", str(surface_alpha))
+        .replace("__THEME__", theme))
+    html_str = ("""
+    <!DOCTYPE html>
+    <html>
+        <head>
+            <script src="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.js"></script>
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@rcsb/rcsb-molstar/build/dist/viewer/rcsb-molstar.css">
+            """ + MOLSTAR_DARK_CSS + """
+        </head>
+        <body>
+            <div style="position:relative; width:100%; height:500px;">
+                <div id="viewer" style="width: 100%; height: 500px;"></div>
+                """ + legend + """
+            </div>
+            <script>""" + js + """</script>
+        </body>
+    </html>""")
+    if with_iframe:
+        return html_as_iframe(html_str)
+    return html_str
+
+
 def _pdb_to_mmcif_bfactor(pdb_str: str, res_values: Optional[dict] = None,
                           default_value: float = 0.0) -> str:
     """Minimal mmCIF (one `_atom_site` loop) from a PDB string, writing a per-residue value into

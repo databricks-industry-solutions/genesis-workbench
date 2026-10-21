@@ -557,8 +557,10 @@ _CHAIN_NODES: list[NodeType] = [
             ParamField("num_samples", "Samples", "int", default=2),
             ParamField("validate_esmfold", "Validate (ESMFold)", "bool", default=False),
             ParamField("validate_diffdock", "Validate (DiffDock)", "bool", default=False),
+            ParamField("validate_boltz_affinity", "Score (Boltz-2 affinity)", "bool", default=False,
+                       help="Predicted binding affinity for the designed binder + ligand (needs SMILES)."),
             ParamField("ligand_smiles", "Ligand SMILES", "string", default="",
-                       help="Needed for DiffDock validation."),
+                       help="Needed for DiffDock / Boltz-2 affinity validation."),
         ],
     ),
     NodeType(

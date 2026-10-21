@@ -5,6 +5,7 @@ import { DataTable } from '@/components/DataTable'
 import { MolstarViewer } from '@/components/MolstarViewer'
 import { RealtimeProgress } from '@/components/RealtimeProgress'
 import { useSseMutation } from '@/hooks/useSseMutation'
+import { cn } from '@/lib/utils'
 import type { MotifScaffold, MotifScaffoldingResponse } from '@/types/api'
 
 const EXAMPLE_MOTIF_PDB = `ATOM      1  N   HIS B   1       5.123   8.456   2.345  1.00 15.00           N
@@ -54,6 +55,7 @@ export function MotifScaffoldingTab() {
   const [runName, setRunName] = useState(`motif_scaffolding_${ts()}`)
 
   const [selectedIdx, setSelectedIdx] = useState(0)
+  const [motifView, setMotifView] = useState<'hydrophobicity' | 'overlay'>('hydrophobicity')
 
   const job = useSseMutation<
     {
@@ -347,7 +349,40 @@ export function MotifScaffoldingTab() {
                 )}
               </div>
 
-              <MolstarViewer viewerHtml={selected?.viewer_html ?? null} height={520} />
+              {selected?.viewer_html_hydrophobicity ? (
+                <div className="mb-2 flex flex-wrap items-center gap-1">
+                  <span className="mr-1 text-xs uppercase tracking-wide text-muted-foreground">View</span>
+                  {(
+                    [
+                      ['hydrophobicity', 'Hydrophobicity surface'],
+                      ['overlay', 'Motif + scaffold'],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setMotifView(id)}
+                      className={cn(
+                        'rounded-md border px-3 py-2 text-xs transition-colors',
+                        motifView === id
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border text-muted-foreground hover:bg-accent',
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              <MolstarViewer
+                viewerHtml={
+                  (motifView === 'hydrophobicity'
+                    ? (selected?.viewer_html_hydrophobicity ?? selected?.viewer_html)
+                    : selected?.viewer_html) ?? null
+                }
+                height={520}
+              />
 
               {selected && (
                 <div>
