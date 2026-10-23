@@ -922,12 +922,12 @@ set_mlflow_experiment(experiment_tag=experiment_name,
 mlflow.set_registry_uri("databricks-uc")
 mlflow.set_tracking_uri("databricks")
 
-# The Proteina-Complexa checkpoints bundled per model (main + autoencoder .ckpt)
-# are large. MLflow's default UC upload path (Databricks-SDK models artifact repo)
-# wraps the whole upload in a 5-min retry_timeout and fails multi-GB models with
-# TimeoutError('Timed out after 0:05:00'). Defining this env var routes the upload
-# to the PresignedUrlArtifactRepository (direct S3, boto3 multipart, no 5-min cap).
-os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"
+# MLflow 3.12+ logs model artifacts under a LoggedModel (logged_models/m-<id>). With this
+# flag "false" the presigned-URL/S3 repo can't vend write-credentials for an m-<id> id
+# ("RESOURCE_DOES_NOT_EXIST: Run not found" -> None -> "NoneType object is not iterable"),
+# so the upload fails. Use MLflow's default Databricks-SDK artifact repo, which handles
+# logged models correctly (verified: a 3 GB model uploaded, no 5-min-timeout issue).
+os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "true"
 
 # COMMAND ----------
 

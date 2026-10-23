@@ -56,16 +56,23 @@ any multi-GB model. (`MLFLOW_ARTIFACT_UPLOAD_DOWNLOAD_TIMEOUT` does not help —
 AWS. The `python_model.pkl` "timing out" was a red herring: the 5-min alarm just fired on
 whichever small file happened to be in flight.)
 
-**Fix — one env var, set before `log_model`:**
+**Historical fix (MLflow pre-LoggedModel):** setting
 
 ```python
 os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"
 ```
 
-When that var is *defined*, the dispatch function returns it directly, routing the upload to
-the **PresignedUrlArtifactRepository (direct S3, boto3 multipart, no 5-min cap)**. Combined
-with the fp16/single-shard flat artifact (fast upload), esmfold registers cleanly. This is THE
-fix for every large GWB model's registration.
+routed the upload to the **PresignedUrlArtifactRepository** (direct S3, boto3 multipart, no
+5-min cap), avoiding the timeout on older MLflow.
+
+**⚠️ Superseded on MLflow 3.12+ — set this flag to `"true"` (or leave it unset/default).**
+MLflow 3.12 logs model artifacts under a **LoggedModel** (`logged_models/m-<id>`). The
+presigned-URL repo can't vend write-credentials for an `m-<id>`: the backend returns
+`RESOURCE_DOES_NOT_EXIST: Run 'm-...' not found`, the credential list comes back `None`, and
+every file then fails with `'NoneType' object is not iterable` — so the upload dies before any
+bytes move. Use MLflow's **default Databricks-SDK artifact repo** (`"true"`), which addresses
+logged models correctly. Verified on GWB: the ~3 GB ProtT5 (deepstabp) model uploaded cleanly
+with no recurrence of the 5-min timeout. All GWB registration notebooks now set this `"true"`.
 
 ## ✅ SOLVED: serving-container load failure = pip_requirements version mismatch
 
