@@ -4,7 +4,7 @@
 # Productionized per Databricks docs (AI Runtime > productionizing-training-workloads):
 # the DAB `artifacts: {type: tgz}` block packages the code into ./dist/code.tgz and
 # code_source_path points at it (no air CLI, no hand-built tarball — the bundle packages it).
-# Uses the stock NGC Parabricks image directly (public; registered with `air register image`).
+# Uses the NGC Parabricks image pushed into DAR (Unity Catalog); referenced by unity_catalog_image_path.
 resources:
   jobs:
     run_parabricks:
@@ -22,7 +22,7 @@ resources:
             experiment: parabricks
             # Bundle-packaged code tarball (see databricks.yml artifacts: parabricks_code).
             code_source_path: ./dist/code.tgz
-            docker_image_url: nvcr.io/nvidia/clara/clara-parabricks:4.5.1-1
+            unity_catalog_image_path: ${var.core_catalog_name}.${var.core_schema_name}.parabricks:4.5.1-1
             deployments:
               # command_path must be a LITERAL /Workspace/ or /Volumes/ path (a bundle-relative
               # path normalizes to /Users/... and is rejected). deploy.sh stages command.sh here.
