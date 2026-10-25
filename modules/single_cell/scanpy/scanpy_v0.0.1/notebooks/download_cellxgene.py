@@ -127,20 +127,38 @@ else:
     print(f"Selected {len(keep)} cells of {a.n_obs}.")
 
     # 4) Build output: X = raw integer counts; var keyed by gene symbol (deduped).
-    raw = a.raw if a.raw is not None else a
-    raw_X = raw[keep].X
-    # Normalize to a float32 CSR matrix. Backed slicing of some curated H5ADs hands
-    # back an object-dtype array here (integer counts boxed as Python objects), which
-    # scipy rejects with "scipy.sparse does not support dtype object". Coerce to a
-    # numeric dtype before building/converting the sparse matrix — this also keeps
-    # out.write() (which serializes X as sparse) from hitting the same error.
-    if sp.issparse(raw_X):
-        raw_X = raw_X.tocsr()
-        if not np.issubdtype(raw_X.dtype, np.number):
-            raw_X = raw_X.astype(np.float32)
-    else:
-        raw_X = sp.csr_matrix(np.asarray(raw_X, dtype=np.float32))
-    var = raw.var.copy()
+    # Read ONLY the selected cells' raw counts straight from the H5AD with h5py. anndata
+    # 0.10.9's backed sparse reader (BaseCompressedSparseDataset.__getitem__) materializes
+    # the FULL matrix before subsetting — it OOMs on a large atlas ("Execution ran out of
+    # memory") — AND its index format is incompatible with the runtime's newer scipy (raises
+    # "ValueError: setting an array element with a sequence" during index validation). So
+    # there is no memory-safe or version-safe way to subset through anndata here. Slicing the
+    # CSR rows by hand reads just the ~15k chosen rows and sidesteps both failures. (anndata
+    # is still used for the small in-memory obs/var metadata, which don't hit the sparse reader.)
+    import h5py
+
+    parts_data, parts_idx, new_indptr = [], [], [0]
+    with h5py.File(tmp_h5ad, "r") as _f:
+        xgrp = _f["raw/X"] if "raw/X" in _f else _f["X"]
+        enc = str(xgrp.attrs.get("encoding-type", "csr_matrix"))
+        assert "csr" in enc, f"expected a CSR raw matrix, got encoding-type={enc!r}"
+        shape = tuple(int(s) for s in (xgrp.attrs["shape"] if "shape" in xgrp.attrs else xgrp.attrs["h5sparse_shape"]))
+        indptr = xgrp["indptr"][:]
+        data_ds, indices_ds = xgrp["data"], xgrp["indices"]
+        for r in keep:
+            s, e = int(indptr[r]), int(indptr[r + 1])
+            parts_data.append(data_ds[s:e])
+            parts_idx.append(indices_ds[s:e])
+            new_indptr.append(new_indptr[-1] + (e - s))
+    raw_X = sp.csr_matrix(
+        (
+            np.concatenate(parts_data).astype(np.float32) if parts_data else np.zeros(0, np.float32),
+            np.concatenate(parts_idx) if parts_idx else np.zeros(0, np.int64),
+            np.asarray(new_indptr),
+        ),
+        shape=(len(keep), shape[1]),
+    )
+    var = (a.raw.var if a.raw is not None else a.var).copy()
     fn = var["feature_name"].astype(str) if "feature_name" in var.columns else var.index.astype(str)
     keep_genes = ~fn.duplicated(keep="first")
     raw_X = raw_X[:, keep_genes.values]
@@ -161,5 +179,13 @@ else:
 
     for g in ("PARP1", "BRCA1", "BRCA2"):
         print(f"  {g} present: {g in out.var_names}")
-    out.write(DEMO_OUT)
+    # anndata/h5py write HDF5 with many random-access/seek writes, which the /Volumes FUSE
+    # mount rejects (OSError errno 5, "Driver write request failed" / "Input/output error").
+    # Write to fast LOCAL disk first, then copy the finished file to the Volume — a single
+    # sequential copy, which FUSE handles fine.
+    import shutil
+
+    local_out = os.path.join(tempfile.gettempdir(), "hgsoc_demo_15k.h5ad")
+    out.write(local_out)
+    shutil.copyfile(local_out, DEMO_OUT)
     print(f"Staged demo dataset: {out.shape[0]} cells × {out.shape[1]} genes -> {DEMO_OUT}")
