@@ -23,7 +23,10 @@ generalization of the worked snake-venom example at `workshops/snake_venom_binde
    service; see the `gwb-workshops-endpoints-only` memory.)
 2. **Start from the template**, don't hand-roll structure: copy
    `workshops/protein_design_from_paper/TEMPLATE_protein_design_notebook.py`, keep the ONE design-variant
-   block that matches the task, delete the others, and fill every `TODO`/`<...>`.
+   block that matches the task, delete the others, and fill every `TODO`/`<...>`. The generated notebook
+   must meet the shared **Notebook authoring standard** (a `%md` section with a `## N ·` header before every
+   code cell, rationale in markdown not crammed into code, readable names) — see
+   `SKILL_GENESIS_WORKBENCH_DEVELOPMENT.md`. The template already has this shape; keep it.
 3. **Be honest about scope.** The wet-lab steps (affinity, measured Tm, neutralization, PK) are not
    reproducible in silico; the developability endpoints are *proxies* that prioritize what to order.
 4. **Fail loud on missing models.** Endpoint discovery (`get_ep`) raises if a model is undeployed/asleep —

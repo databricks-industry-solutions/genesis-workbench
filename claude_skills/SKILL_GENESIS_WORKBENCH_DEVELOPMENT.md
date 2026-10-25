@@ -153,6 +153,66 @@ hand-waving, the UI / inputs / outputs / errors aren't done yet.
 
 ---
 
+## Notebook authoring standard (hard rule)
+
+Every GWB notebook (registration, import/deploy, batch pipeline) is read by
+**research scientists and future contributors**, not just executed. It must read
+as a **documented narrative**, not working code with rationale crammed into
+comments. A notebook that is merely "working code" is **not** done — it is
+reviewed and bounced the same as missing docs.
+
+**Strictly follow the template — do not hand-roll structure.** Copy
+[`claude_skills/templates/TEMPLATE_01_register_model.py`](templates/TEMPLATE_01_register_model.py),
+keep the sections, fill every `<…>`/`TODO`, delete only what genuinely does not
+apply. (This mirrors how the protein-design skill scaffolds from
+`workshops/protein_design_from_paper/TEMPLATE_protein_design_notebook.py`.)
+
+**The rules (all enforced):**
+
+1. **One concern per cell.** Each logical step is its own `# COMMAND` cell.
+2. **Every code cell is introduced by a `%md` cell** (a real `# MAGIC %md`
+   markdown cell, *not* a `# DBTITLE` one-liner) that says, in prose, *what* the
+   cell does and *why*. A `# DBTITLE` may additionally label the cell, but it
+   does not replace the markdown.
+3. **Section headers.** Use `## N · Title` headers (`## 1 · Install
+   dependencies`, `## 2 · Parameters`, …) so the notebook has a visible spine,
+   exactly like the protein-design template.
+4. **Rationale lives in markdown, not in code.** The long "why cu132 / why
+   env_pack / why this FUSE path" explanations go in the preceding `%md` cell.
+   Code comments are reserved for the *surprising one-liner* next to the line it
+   explains — not multi-sentence paragraphs wedged between statements.
+5. **Readable names.** No throwaway 1–2 character names for things that live
+   more than one line (`g`, `bc`, `_r`, `_m`, `aa`, `sid`). Spell them:
+   `widget`, `build_constraint`, `install_result`, `model`, `atom_array`,
+   `sample_id`. A leading underscore for a scratch local is fine; a cryptic
+   abbreviation is not.
+6. **Standard section skeleton** for a registration notebook: title+overview →
+   1 install → 2 parameters → 3 download weights → 4 PyFunc wrapper → 5 dry-load
+   test → 6 signature+input_example → 7 log & register (or 7-Express) → 8
+   summary. Import/deploy and batch notebooks follow the same *shape* (header +
+   per-step `%md`), with their own sections.
+
+**Exemplars to mirror** (clean, well-sectioned): `large_molecule/boltz/boltz_1/
+notebooks/01_register_boltz.py` (full register) and the predictor notebooks
+`small_molecule/{deepstabp,netsolp,pltnum,mhcflurry}/.../01_register_*.py`; for
+the **Express (env_pack) register + deploy** flow, `large_molecule/rfd4_proteina/
+rfd4_proteina_v1/notebooks/01_register_rfd4_proteina.py` + `03_rfd4_register_serving.py`.
+
+**Why this standard exists:** the RFD4-Proteina notebooks originally shipped with a
+single markdown cell and hundreds of lines of dense code (crammed paragraph-comments,
+one-letter names) — the exact readability failure this rule prevents. They were
+refactored to meet this standard (documented `## N ·` sections, rationale in markdown,
+readable names) with behavior held identical, and are now the Express exemplar above.
+
+**Acceptance checklist** (every notebook, before "shipped"):
+- [ ] A title `%md` with what / compute / pipeline / honest-status.
+- [ ] Every code cell has a preceding `%md` section cell with a `## N ·` header.
+- [ ] No multi-sentence rationale paragraphs buried inside code cells.
+- [ ] No cryptic 1–2 char names surviving past one line.
+- [ ] A closing `## Summary` cell stating what was produced + the next step.
+
+---
+
 ## Architecture Overview
 
 ```
@@ -186,6 +246,14 @@ modules/large_molecule/mymodel/mymodel_v1/
 ```
 
 ### Step 2: Write the registration notebook (01_register_mymodel.py)
+
+**Start from the template — do not hand-roll.** Copy
+[`claude_skills/templates/TEMPLATE_01_register_model.py`](templates/TEMPLATE_01_register_model.py)
+and follow the **Notebook authoring standard (hard rule)** above: a `%md`
+section cell with a `## N ·` header before every code cell, rationale in
+markdown (not crammed into code), and readable names. The skeleton below is the
+*logic* each section fills in — it is not a substitute for the template's
+structure.
 
 **Pattern** (from all existing models):
 
@@ -321,7 +389,10 @@ import torch, mlflow
 from mlflow.utils.env_pack import EnvPackConfig
 assert torch.cuda.is_available()                     # register FROM GPU (Express is GPU-to-GPU)
 mlflow.set_registry_uri("databricks-uc")
-os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"   # fast path for multi-GB artifacts
+# Do NOT force MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC="false": on MLflow 3.12+ the model logs
+# under a LoggedModel (logged_models/m-<id>) and the presigned-URL repo can't vend write-credentials for it
+# ("RESOURCE_DOES_NOT_EXIST: Run not found" → None → "NoneType object is not iterable"). Leave the default
+# (the Databricks-SDK artifact repo, which handles logged models correctly).
 
 mi = mlflow.pyfunc.log_model(                         # log WITHOUT registered_model_name
     name=model_name, python_model=MyModelWrapper(), artifacts=artifacts, code_paths=code_paths,

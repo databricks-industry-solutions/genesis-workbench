@@ -11,6 +11,8 @@ When a new feature looks like:
 
 Follow this pattern end-to-end. Don't invent a parallel approach — every batch workflow in this repo (AlphaFold, Genomics GWAS / Variant Annotation, Guided Enzyme Optimization, Scanpy) has converged on it. Newer implementations refine it slightly; the most complete reference is the **Guided Enzyme Optimization** stack landed on the `guided_enzyme_creation` branch.
 
+> **Notebook readability applies here too.** Any orchestrator/registration notebook this pattern adds must meet the **Notebook authoring standard (hard rule)** — a `%md` section cell with a `## N ·` header before every code cell, rationale in markdown rather than crammed into code, and readable names. See `SKILL_GENESIS_WORKBENCH_DEVELOPMENT.md`.
+
 ## When to apply
 
 - Any workflow whose runtime exceeds a few seconds. (Sub-second flows that hit a serving endpoint live can use the simpler in-app pattern; this skill is for *job-dispatched* work.)
