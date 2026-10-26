@@ -88,8 +88,20 @@ from genesis_workbench.workbench import wait_for_job_run_completion
 
 MODEL_TAG = "facebook/esm2_t33_650M_UR50D"
 
-tokenizer = AutoTokenizer.from_pretrained(MODEL_TAG, cache_dir=cache_full_path)
-model = AutoModel.from_pretrained(MODEL_TAG, cache_dir=cache_full_path)
+# Download to FAST LOCAL temp, then save a FLAT copy (real model.safetensors + config +
+# tokenizer files; no HF cache symlink/blob structure) to another local dir and log THAT.
+# Logging the raw HF cache_dir fails on object-storage-backed UC Volumes: HF's
+# snapshots/ -> blobs/ symlinks are stored as unreadable "goofys-link" markers on the
+# serverless /Volumes FUSE (hit on Azure), so mlflow.log_model read them with
+# "[Errno 5] Input/output error". Mirrors the esmfold local-staging pattern; cloud-portable.
+import tempfile
+_dl_cache = tempfile.mkdtemp(prefix="esm2_dl_")
+tokenizer = AutoTokenizer.from_pretrained(MODEL_TAG, cache_dir=_dl_cache)
+model = AutoModel.from_pretrained(MODEL_TAG, cache_dir=_dl_cache)
+
+flat_model_path = tempfile.mkdtemp(prefix="esm2_flat_")
+tokenizer.save_pretrained(flat_model_path)
+model.save_pretrained(flat_model_path)
 
 # COMMAND ----------
 
@@ -105,14 +117,10 @@ import transformers
 
 class ESM2EmbeddingPyFunc(mlflow.pyfunc.PythonModel):
     def load_context(self, context):
-        cache_dir = context.artifacts["cache"]
+        model_path = context.artifacts["model"]
 
-        self.tokenizer = transformers.AutoTokenizer.from_pretrained(
-            "facebook/esm2_t33_650M_UR50D", cache_dir=cache_dir
-        )
-        self.model = transformers.AutoModel.from_pretrained(
-            "facebook/esm2_t33_650M_UR50D", cache_dir=cache_dir
-        )
+        self.tokenizer = transformers.AutoTokenizer.from_pretrained(model_path)
+        self.model = transformers.AutoModel.from_pretrained(model_path)
 
         self.model = self.model.cuda().eval()
         torch.backends.cuda.matmul.allow_tf32 = True
@@ -173,7 +181,7 @@ with mlflow.start_run(run_name=f"{model_name}", experiment_id=experiment.experim
         artifact_path="esm2_embeddings",
         python_model=esm2_embedding_model,
         artifacts={
-            "cache": cache_full_path,
+            "model": flat_model_path,
         },
         pip_requirements=["mlflow", "cloudpickle", "pandas", "numpy"],  # minimal: env_pack defines the serving env
         input_example=test_input,
