@@ -17,8 +17,8 @@ dependencies = [
   # serving image until the container build timed out ("internal error /
   # ambiguous_other"). boltz==2.2.1 still pulls pandas/requests/numpy transitively.
   "boltz==2.2.1",
-  "rdkit",
-  "absl-py",
+  "rdkit==2025.3.6",
+  "absl-py==2.5.1",
   # Match the serverless GPU AI runtime (and the serving conda_env). Pinning the
   # old 2.15.1/2.2.1 here would downgrade the logging env and desync serving,
   # causing the serving container to fail unpickling the model. See esmfold notes.

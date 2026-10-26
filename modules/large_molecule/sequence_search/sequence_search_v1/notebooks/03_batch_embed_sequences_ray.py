@@ -35,7 +35,7 @@
 # torch/CUDA are preinstalled on the serverless GPU AI runtime (don't pin torch —
 # a reinstall risks a cuDNN mismatch). hf_transfer is required because the runtime
 # sets HF_HUB_ENABLE_HF_TRANSFER=1 (same as _sgc.py); ray[data] drives the fan-out.
-# MAGIC %pip install -q transformers==4.41.2 pyarrow==15.0.2 hf_transfer==0.1.9 "ray[data]"
+# MAGIC %pip install -q transformers==4.41.2 pyarrow==15.0.2 hf_transfer==0.1.9 "ray[data]==2.59.0"
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------

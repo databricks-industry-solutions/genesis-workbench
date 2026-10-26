@@ -25,6 +25,6 @@ dependencies:
     # modern pip rejects the missing path) — it broke the container build outright.
     # boltz==2.2.1 transitively pulls numpy<2.0, pandas, scipy, numba, rdkit, … .
     - boltz==2.2.1
-    - rdkit
-    - absl-py
+    - rdkit==2025.3.6
+    - absl-py==2.5.1
     - setuptools<82
