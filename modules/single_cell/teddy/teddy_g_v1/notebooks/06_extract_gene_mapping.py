@@ -14,7 +14,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install -q "numpy<2" cellxgene-census==1.17.0
+# MAGIC %pip install -q "numpy==1.26.4" cellxgene-census==1.17.0
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------

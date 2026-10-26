@@ -18,13 +18,13 @@
 # MAGIC   cudf-cu13==25.10.* cuml-cu13==25.10.* cugraph-cu13==25.10.* cuvs-cu13==25.10.* \
 # MAGIC   libcudf-cu13==25.10.* libcuml-cu13==25.10.* libcugraph-cu13==25.10.* libcuvs-cu13==25.10.* \
 # MAGIC   librmm-cu13==25.10.* libraft-cu13==25.10.*
-# MAGIC %pip install cupy-cuda13x
+# MAGIC %pip install cupy-cuda13x==14.2.0
 # MAGIC # rapids-singlecell + pandas pin MUST share one %pip line, else scanpy/anndata
 # MAGIC # re-upgrade pandas to 3.x (which removed pandas.api.types.is_interval that cudf
 # MAGIC # calls). typing_extensions>=4.13 provides `Format` that scverse_misc needs.
 # MAGIC # numpy is intentionally NOT pinned — cupy-cuda13x is built for numpy 2.x, so the
 # MAGIC # runtime's numpy 2.1.3 is kept (the old numpy==1.26.4 pin broke cupy's ABI).
-# MAGIC %pip install rapids-singlecell==0.14.1 scikit-learn==1.5.2 "typing_extensions>=4.13.2" "pandas>=2.0,<3.0"
+# MAGIC %pip install rapids-singlecell==0.14.1 scikit-learn==1.5.2 "typing_extensions==4.16.0" "pandas==2.3.3"
 
 # MAGIC %restart_python
 
