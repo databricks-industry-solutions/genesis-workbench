@@ -1,0 +1,12 @@
+# Parabricks data-cache volume. run_parabricks.py (the ai_runtime_task) stages the multi-GB
+# reference tarball + sample under /Volumes/<core_catalog>/<core_schema>/parabricks
+# (CACHE_DIR defaults to "parabricks"). Created by `databricks bundle deploy` so the volume
+# exists before any on-demand run. Catalog/schema follow the GWB convention (passed-in args).
+resources:
+  volumes:
+    parabricks_cache:
+      catalog_name: ${var.core_catalog_name}
+      schema_name: ${var.core_schema_name}
+      name: parabricks
+      volume_type: MANAGED
+      comment: Parabricks reference/sample data cache for the run_parabricks ai_runtime_task.

@@ -243,10 +243,12 @@ def set_mlflow_experiment(experiment_tag):
 experiment = set_mlflow_experiment(experiment_name)
 registered_model_name = f"{catalog}.{schema}.{model_name}"
 
-# Route the UC artifact upload through the presigned-URL repo (direct S3, boto3
-# multipart, no 5-min cap) — avoids TimeoutError on log_model when the bundled
-# TEDDY weights (esp. the 400M variant, ~1.6 GB) are large.
-os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"
+# MLflow 3.12+ logs model artifacts under a LoggedModel (logged_models/m-<id>). With this
+# flag "false" the presigned-URL/S3 repo can't vend write-credentials for an m-<id> id
+# ("RESOURCE_DOES_NOT_EXIST: Run not found" -> None -> "NoneType object is not iterable"),
+# so the upload fails. Use MLflow's default Databricks-SDK artifact repo, which handles
+# logged models correctly (verified: a 3 GB model uploaded, no 5-min-timeout issue).
+os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "true"
 
 with mlflow.start_run(run_name=f"{model_name}_{model_size}_embedder", experiment_id=experiment.experiment_id) as run:
     model_info = mlflow.pyfunc.log_model(

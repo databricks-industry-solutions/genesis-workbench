@@ -326,9 +326,12 @@ print("proteinmpnn code path:", os.path.abspath(proteinmpnn_code_path), "->", os
 
 # COMMAND ----------
 
-# Route the (small) UC model upload through the presigned-URL/S3 path — consistent
-# with the other large_molecule models; avoids the Databricks-SDK 5-min upload cap.
-os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"
+# MLflow 3.12+ logs model artifacts under a LoggedModel (logged_models/m-<id>). With this
+# flag "false" the presigned-URL/S3 repo can't vend write-credentials for an m-<id> id
+# ("RESOURCE_DOES_NOT_EXIST: Run not found" -> None -> "NoneType object is not iterable"),
+# so the upload fails. Use MLflow's default Databricks-SDK artifact repo, which handles
+# logged models correctly (verified: a 3 GB model uploaded, no 5-min-timeout issue).
+os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "true"
 
 from databricks.sdk import WorkspaceClient
 
