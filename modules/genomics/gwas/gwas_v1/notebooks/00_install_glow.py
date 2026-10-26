@@ -55,7 +55,7 @@ spark.sql(f"CREATE VOLUME IF NOT EXISTS {catalog}.{schema}.gwas_libraries")
 # MAGIC source ~/miniconda3/bin/activate
 # MAGIC conda env create -f /local_disk0/glow/python/environment.yml || conda env update -f /local_disk0/glow/python/environment.yml
 # MAGIC conda activate glow
-# MAGIC pip install -U databricks-sdk
+# MAGIC pip install -U databricks-sdk==0.157.0
 
 # COMMAND ----------
 
