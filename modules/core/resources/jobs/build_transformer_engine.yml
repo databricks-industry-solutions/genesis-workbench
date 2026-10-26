@@ -32,6 +32,10 @@ resources:
         - name: schema
           default: ${var.core_schema_name}
         - name: te_version
-          default: ""
+          # Pinned to the newest TE that compiles against the serverless base's torch
+          # (env v4 = torch 2.7.1). TE >= 2.19 needs torch >= 2.8 (its csrc includes
+          # torch/.../symm_mem/SymmetricMemory.hpp, absent in 2.7.1). Bump only when the
+          # serverless base torch moves to 2.8+. Blank would track PyPI latest and break.
+          default: "2.5.0"
 
       tags: ${var.common_resource_tags}

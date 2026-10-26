@@ -14,12 +14,19 @@
 # MAGIC wheels (installed as torch deps) at `site-packages/nvidia/<lib>/include/`, so we surface them
 # MAGIC on CPATH for the build. `NVTE_CUDA_ARCHS=86` targets A10 (Ampere sm_86; the same arch the
 # MAGIC downstream jobs run on, so the wheel is binary-compatible).
+# MAGIC
+# MAGIC **Version pin (`te_version`, default 2.5.0):** the newest TE that compiles against the
+# MAGIC serverless base's **torch 2.7.1** (env v4). TE ≥ 2.19 fails the source build —
+# MAGIC `csrc/extensions/ep.cpp` includes `torch/csrc/distributed/c10d/symm_mem/SymmetricMemory.hpp`,
+# MAGIC a header that only exists in torch ≥ 2.8. A blank pin tracks PyPI "latest" and breaks
+# MAGIC whenever TE releases ahead of the base torch. Bump this only when the serverless base
+# MAGIC moves to torch 2.8+.
 
 # COMMAND ----------
 
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "genesis_schema", "Schema")
-dbutils.widgets.text("te_version", "", "Transformer Engine version to pin (blank = latest compatible)")
+dbutils.widgets.text("te_version", "2.5.0", "Transformer Engine version (must match the serverless base torch — see header)")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
@@ -84,6 +91,69 @@ os.environ["NVTE_FRAMEWORK"] = "pytorch"
 os.environ["MAX_JOBS"] = "2"
 print("CPATH set:", bool(cpath), "| NVTE_CUDA_ARCHS=86 | NVTE_FRAMEWORK=pytorch")
 print("nvcc:", shutil.which("nvcc"))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Clear the serverless hash-pin + provide nvcc for the source build
+# MAGIC
+# MAGIC Two things block the source build on serverless GPU env v4:
+# MAGIC 1. The runtime pins its package set with a **hash-locked pip constraint**
+# MAGIC    (`PIP_CONSTRAINT` / require-hashes). TE's build pulls NEW transitive CUDA-13
+# MAGIC    deps (`nvidia-cutlass-dsl-libs-cu13`, `cuda-bindings`, …) through the Databricks
+# MAGIC    package proxy, whose artifacts don't match those pinned hashes → pip aborts with
+# MAGIC    *"THESE PACKAGES DO NOT MATCH THE HASHES FROM THE REQUIREMENTS FILE"*. We drop the
+# MAGIC    constraint for the build subprocesses so TE's deps resolve freely from the proxy.
+# MAGIC 2. `nvcc` is **not on PATH** on the base (`shutil.which` → None), so the CUDA-kernel
+# MAGIC    compile can't run. We locate a system toolkit, else install the pip `nvidia-cuda-nvcc`
+# MAGIC    wheel (now unconstrained) and point `CUDA_HOME`/`PATH` at it.
+
+# COMMAND ----------
+
+# --- diagnostics: how is the hash-pin imposed? (env vs pip.conf) ---
+print("[diag] PIP_CONSTRAINT     =", os.environ.get("PIP_CONSTRAINT"))
+print("[diag] PIP_REQUIRE_HASHES =", os.environ.get("PIP_REQUIRE_HASHES"))
+print("[diag] PIP_CONFIG_FILE    =", os.environ.get("PIP_CONFIG_FILE"))
+print("[diag] PIP_INDEX_URL set  =", bool(os.environ.get("PIP_INDEX_URL")))
+
+# Drop the hash-locked constraint for the build subprocesses (keep PIP_INDEX_URL / the
+# proxy index intact — do NOT touch PIP_CONFIG_FILE, which carries the index).
+for _k in ("PIP_CONSTRAINT", "PIP_REQUIRE_HASHES", "PIP_REQUIREMENT"):
+    _v = os.environ.pop(_k, None)
+    if _v is not None:
+        print(f"[fix] unset {_k} (was {_v})")
+
+# Ensure nvcc is available for the CUDA-kernel compile.
+def _find_nvcc():
+    hit = shutil.which("nvcc")
+    if hit:
+        return hit
+    for c in sorted(glob.glob("/usr/local/cuda*/bin/nvcc")):
+        if os.path.exists(c):
+            return c
+    return None
+
+_nvcc = _find_nvcc()
+if not _nvcc:
+    print("[fix] nvcc absent on base — installing nvidia-cuda-nvcc-cu13 (unconstrained)")
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "nvidia-cuda-nvcc-cu13"])
+    except Exception as _e:
+        print(f"[warn] nvidia-cuda-nvcc-cu13 install failed: {type(_e).__name__}: {_e}")
+    _cands = glob.glob(os.path.join(os.path.dirname(os.path.dirname(sys.executable)),
+                                    "lib", "python*", "site-packages", "nvidia", "cuda_nvcc", "bin", "nvcc"))
+    _cands += glob.glob("/databricks/python*/lib/python*/site-packages/nvidia/cuda_nvcc/bin/nvcc")
+    _nvcc = _cands[0] if _cands else None
+
+if _nvcc:
+    _cuda_home = os.path.dirname(os.path.dirname(_nvcc))
+    os.environ["CUDA_HOME"] = _cuda_home
+    os.environ["CUDA_PATH"] = _cuda_home
+    os.environ["PATH"] = os.path.dirname(_nvcc) + ":" + os.environ.get("PATH", "")
+    print("[fix] nvcc:", _nvcc, "| CUDA_HOME:", _cuda_home)
+    subprocess.run([_nvcc, "--version"], check=False)
+else:
+    print("[warn] nvcc STILL not found — CUDA kernel compile will likely fail")
 
 # COMMAND ----------
 
