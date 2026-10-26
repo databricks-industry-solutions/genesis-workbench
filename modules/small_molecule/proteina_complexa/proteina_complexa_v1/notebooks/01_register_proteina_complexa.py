@@ -157,7 +157,7 @@ subprocess.check_call([
     # ligand format we don't exercise, re-add narrowly with the license
     # exposure documented.
 ])
-subprocess.check_call(["pip", "install", "-q", "--no-build-isolation", "--no-deps", "graphein"])
+subprocess.check_call(["pip", "install", "-q", "--no-build-isolation", "--no-deps", "graphein==1.7.8"])
 
 # COMMAND ----------
 
