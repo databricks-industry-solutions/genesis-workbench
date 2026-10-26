@@ -70,7 +70,7 @@ resources:
             notebook_path: ../notebooks/download_uniprot.py
             source: WORKSPACE
           job_cluster_key: download_uniprot_cluster
-          timeout_seconds: 21600
+          timeout_seconds: 36000
           health:
             rules:
               - metric: RUN_DURATION_SECONDS
@@ -155,9 +155,6 @@ resources:
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD
             num_workers: 0
-            cluster_log_conf:
-              dbfs:
-                destination: dbfs:/cluster-logs/alphafold-downloads
 
         - job_cluster_key: download_unirefs_cluster
           new_cluster:
@@ -221,9 +218,6 @@ resources:
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD
             num_workers: 0
-            cluster_log_conf:
-              dbfs:
-                destination: dbfs:/cluster-logs/alphafold-downloads
 
       tags: ${var.common_resource_tags}
 
