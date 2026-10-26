@@ -45,15 +45,15 @@ schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
-# MAGIC %pip install databricks-sdk>=0.150.0 databricks-sql-connector==4.0.3
+# MAGIC %pip install databricks-sdk==0.157.0 databricks-sql-connector==4.0.3
 # MAGIC %pip install chemprop==2.2.3 rdkit==2025.3.6 torch==2.7.1 torchvision==0.22.1 lightning==2.6.1
 # MAGIC %pip install --no-deps PyTDC==1.1.15
 # MAGIC # PyTDC is installed --no-deps (its transitive scikit-learn pin has no cp312 wheel and
 # MAGIC # fails to build on serverless py3.12), so its runtime deps are installed explicitly
 # MAGIC # here. huggingface_hub is required: `tdc/__init__` imports tdc.model_server.tdc_hf,
 # MAGIC # which does `from huggingface_hub import create_repo` at import time.
-# MAGIC %pip install fuzzywuzzy seaborn tqdm requests huggingface_hub
-# MAGIC %pip install mlflow[databricks]>=3.12
+# MAGIC %pip install fuzzywuzzy==0.18.0 seaborn==0.13.2 tqdm==4.70.1 requests==2.32.3 huggingface_hub==2.3.0
+# MAGIC %pip install mlflow[databricks]==3.17.2
 
 # COMMAND ----------
 

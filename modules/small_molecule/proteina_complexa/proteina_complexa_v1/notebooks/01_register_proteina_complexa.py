@@ -39,7 +39,7 @@ schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
-# MAGIC %pip install -q databricks-sdk>=0.150.0 databricks-sql-connector>=4.0.2 mlflow>=3.12
+# MAGIC %pip install -q databricks-sdk==0.157.0 databricks-sql-connector==4.0.3 mlflow==3.17.2
 # MAGIC %pip install -q \
 # MAGIC     --find-links https://data.pyg.org/whl/torch-2.7.0+cu126.html \
 # MAGIC     torch==2.7.1 \
