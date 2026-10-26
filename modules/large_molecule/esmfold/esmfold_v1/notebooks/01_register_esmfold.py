@@ -21,7 +21,7 @@ schema = dbutils.widgets.get("schema")
 #requirements for genesis workbench library
 #On serverless GPU (AI runtime) torch/CUDA is preinstalled, but transformers/
 #accelerate are not — install them here (mirrors the esm2_embeddings notebook).
-%pip install databricks-sdk>=0.150.0 databricks-sql-connector==4.0.3 transformers==4.41.2 accelerate==0.31.0 hf_transfer==0.1.9 mlflow>=3.12
+%pip install databricks-sdk==0.157.0 databricks-sql-connector==4.0.3 transformers==4.41.2 accelerate==0.31.0 hf_transfer==0.1.9 mlflow==3.17.2
 #requirements for current library
 #%pip install -r ../requirements.txt
 
