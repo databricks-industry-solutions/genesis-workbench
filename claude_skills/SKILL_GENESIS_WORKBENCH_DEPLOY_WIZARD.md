@@ -11,6 +11,12 @@ Drive a deployment of [Genesis Workbench](https://github.com/databricks-industry
 
 > ⛔ **Do not shortcut to a raw `./deploy.sh` / `databricks bundle deploy` without following this skill — even for a one-line change or a single submodule.** Every deploy path below still enforces the same invariants (confirmed workspace + profile, `application.env` catalog/schema, one module at a time, post-deploy verification). Skipping them is how deploys hit the wrong workspace/catalog, run modules concurrently, or "succeed" while the data never staged. (This exact shortcut has been a reported miss.)
 
+> 🔒 **`deploy.sh` / `update.sh` is the ONLY deploy path — and the `.deployed` lock is theirs alone (hard rule).**
+> - **Deploy / redeploy only via `./deploy.sh <module> <cloud>`** (optionally `--only-submodule <path>`), or — to refresh an existing **core** — `cd modules/core && ./update.sh <cloud>`. Do **not** substitute a hand-run `databricks bundle deploy` / `bundle run` / `secrets`/`volumes`/resource-create to "finish", "patch", or "complete" a deploy the script couldn't. If a step the script owns didn't happen, fix the cause and re-run the script — don't do the script's job by hand.
+> - **Never hand-write, `touch`, `date >`, `echo >`, copy, or otherwise fabricate `modules/*/.deployed`.** That lock is written by `deploy.sh` itself, and ONLY after a clean **full** module run (the script skips writing it on `--only-submodule`). The moment you reach for `… > modules/<m>/.deployed`, stop — you are faking the "module fully deployed" signal and the next session will trust a lie.
+> - **A full run that aborts partway ⇒ the module is NOT deployed.** `set -e` means one failed submodule aborts the rest and the lock is (correctly) not written. To complete the module: clear the blocker (retry the transient, enable the workspace feature, add the credential), then **re-run the full `./deploy.sh <module> <cloud>`**. Submodule deploys are **idempotent** — weight/data downloads skip-if-present, models re-register, DAR images re-push as already-cached layers — so a clean full re-run is cheap and is the *only* legitimate way the lock gets written.
+> - `--only-submodule <path>` is for **iterating on a single submodule** (dev/fix/unblock) and deliberately leaves `.deployed` unwritten — using it to deploy the one piece that failed does **not** make the module "done". Likewise, re-running a failed async register/setup job with `databricks jobs run-now <id>` (a job `deploy.sh` kicked with `--no-wait`) is a fine post-deploy **recovery** action (it re-runs exactly what `deploy.sh` created and touches no lock) — but it, too, is not a substitute for the full-run lock. After any such targeted fix, do the full `./deploy.sh <module> <cloud>` re-run to earn the lock.
+
 ## Pick the MODE first
 
 **Mode A — Full guided install** (fresh workspace, or the user says "deploy GWB / install / set up"): run Phases 0–7 below in order.
@@ -264,6 +270,7 @@ If `terraform` isn't installed: `brew install terraform` (macOS) and retry.
    databricks fs cat dbfs:/Volumes/<cat>/<schema>/<vol>/<file> | head -c 16 | xxd   # magic bytes: 1f8b gzip, 8948444601 HDF5
    ```
    An empty **directory listing** (no entries) IS reliable — that means genuinely absent.
+3. **Did the module's `deploy.sh` write `modules/<module>/.deployed`?** That lock is the script's "clean full run" signal. If it's absent, the module is **not** done — a submodule aborted (`set -e`). Do **NOT** create the lock by hand: clear the blocker and **re-run the full `./deploy.sh <module> <cloud>`** (idempotent) so `deploy.sh` writes the lock itself. See the 🔒 hard rule at the top of this skill.
 
 Then print:
 - Databricks App URL: `<workspace_url>/apps/<app_name>`

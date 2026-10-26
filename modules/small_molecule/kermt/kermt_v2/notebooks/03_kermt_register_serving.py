@@ -270,10 +270,12 @@ signature = ModelSignature(
     outputs=Schema([ColSpec("double", name=t) for t in task_names]),
 )
 
-# KERMT artifacts (kermt_src + checkpoint_dir + calibration) can be several hundred
-# MB. Route the UC upload through the presigned-URL repo (direct S3, boto3 multipart,
-# no 5-min cap) to avoid TimeoutError('Timed out after 0:05:00').
-os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "false"
+# MLflow 3.12+ logs model artifacts under a LoggedModel (logged_models/m-<id>). With this
+# flag "false" the presigned-URL/S3 repo can't vend write-credentials for an m-<id> id
+# ("RESOURCE_DOES_NOT_EXIST: Run not found" -> None -> "NoneType object is not iterable"),
+# so the upload fails. Use MLflow's default Databricks-SDK artifact repo, which handles
+# logged models correctly (verified: a 3 GB model uploaded, no 5-min-timeout issue).
+os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "true"
 mlflow.set_registry_uri("databricks-uc")
 with mlflow.start_run(run_name=f"register_{model_name}"):
     model_info = mlflow.pyfunc.log_model(

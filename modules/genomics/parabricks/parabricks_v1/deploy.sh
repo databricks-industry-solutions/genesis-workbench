@@ -11,55 +11,52 @@ case "$CLOUD" in
   *) echo "Usage: $0 <aws|azure|gcp> --var=..."; exit 1 ;;
 esac
 
-# Parabricks is a GWB batch workflow: deploy REGISTERS a persistent serverless-GPU job
-# (ai_runtime_task, run_parabricks) that the UI launches ON DEMAND (jobs run-now). This
-# script does NOT run pbrun — it registers the image, deploys the job (bundle packages the
-# code tarball via artifacts:), and runs the registration job (register_batch_model +
-# app-SP grant). The pbrun run happens when a user clicks Launch in the UI.
+# Parabricks is a GWB batch workflow: deploy pushes the container image into the Databricks
+# Artifact Registry (DAR, Unity Catalog), creates the parabricks data-cache volume (via the
+# bundle), REGISTERS a persistent serverless-GPU job (ai_runtime_task, run_parabricks) that the
+# UI launches ON DEMAND (jobs run-now), and runs the registration job (register_batch_model +
+# app-SP grant). This script does NOT run pbrun — that happens when a user clicks Launch.
 #
-# Image = NVIDIA's stock NGC Parabricks container, used directly (AI Runtime accepts nvcr.io
-# and pulls the public image — no Docker Hub mirror, custom Dockerfile, or credentials).
+# Image = NVIDIA's stock NGC Parabricks container (public; no NGC login). It is pushed into DAR
+# with `databricks air images push` and referenced by the ai_runtime_task via its Unity Catalog
+# coordinates (unity_catalog_image_path), per the Databricks AI Runtime cookbook.
 
 IMAGE=nvcr.io/nvidia/clara/clara-parabricks:4.5.1-1
+IMAGE_TAG=4.5.1-1                                  # DAR artifact tag (matches the NGC tag)
+DAR_ARTIFACT=parabricks                            # DAR artifact -> <catalog>.<schema>.parabricks
 WS_COMMAND=/Workspace/Shared/parabricks           # literal path for the job's command_path
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# `air` doesn't read DATABRICKS_CONFIG_PROFILE like the databricks CLI — pass it through.
-PROFILE_ARG=""
-[ -n "$DATABRICKS_CONFIG_PROFILE" ] && PROFILE_ARG="-p $DATABRICKS_CONFIG_PROFILE"
-
-# --- 1) Install the AI Runtime (air) CLI if missing (used only to register the image) ---
-export PATH="$HOME/.local/bin:$PATH"
-if ! command -v air >/dev/null 2>&1; then
-  echo ""
-  echo "▶️ [Parabricks] Installing the databricks-air (AI Runtime) CLI"
-  command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
-  uv tool install --force databricks-air --python 3.12
+# GWB convention: catalog + schema come from application.env, passed through as --var here.
+# Parse them out so we can target DAR (they also drive the bundle's parabricks volume + job).
+CATALOG=$(printf '%s' "$EXTRA_PARAMS" | grep -oE 'core_catalog_name=[^,"[:space:]]+' | head -1 | cut -d= -f2)
+SCHEMA=$(printf '%s' "$EXTRA_PARAMS" | grep -oE 'core_schema_name=[^,"[:space:]]+' | head -1 | cut -d= -f2)
+if [ -z "$CATALOG" ] || [ -z "$SCHEMA" ]; then
+  echo "🚫 [Parabricks] could not parse core_catalog_name/core_schema_name from --var"; exit 1
 fi
 
-# --- 2) Register the public NGC image with AI Compute (no credentials; pulls + caches) ---
+# --- 1) Push the NGC image into the Databricks Artifact Registry (DAR / Unity Catalog) ---
+# `databricks air images push` pulls a linux/amd64 image via local Docker and pushes it to
+# <catalog>.<schema>.<artifact>:<tag>. Requires Docker running locally. The image is several GB,
+# so the first push takes a while; later deploys reuse the cached local image (omit --pull).
 echo ""
-echo "▶️ [Parabricks] Registering public NGC image with AI Compute: $IMAGE"
-set +e
-air register image "$IMAGE" $PROFILE_ARG
-_rc=$?
-set -e
-[ "$_rc" -eq 0 ] || echo "⚠️  air register returned $_rc (already registered?) — continuing"
+echo "▶️ [Parabricks] Pushing $IMAGE to DAR: ${CATALOG}.${SCHEMA}.${DAR_ARTIFACT}:${IMAGE_TAG}"
+databricks air images push -s "$IMAGE" --catalog "$CATALOG" --schema "$SCHEMA" --artifact "${DAR_ARTIFACT}:${IMAGE_TAG}"
 
-# --- 3) Stage command.sh to a literal /Workspace path (the ai_runtime_task command_path) ---
+# --- 2) Stage command.sh to a literal /Workspace path (the ai_runtime_task command_path) ---
 # The launcher rejects a /Users/... command_path, so it can't be a bundle file; upload it here.
 echo ""
 echo "▶️ [Parabricks] Staging command.sh to $WS_COMMAND"
 databricks workspace mkdirs "$WS_COMMAND"
 databricks workspace import "$WS_COMMAND/command.sh" --file "$SCRIPT_DIR/airt/command.sh" --format RAW --overwrite
 
-# --- 4) Validate + deploy (creates run_parabricks job; bundle packages ./dist/code.tgz) ---
+# --- 3) Validate + deploy (creates run_parabricks job + parabricks volume; packages ./dist/code.tgz) ---
 echo ""
 echo "▶️ [Parabricks] Validating + deploying bundle (target=$TARGET)"
 databricks bundle validate --target $TARGET $EXTRA_PARAMS
 databricks bundle deploy --target $TARGET $EXTRA_PARAMS
 
-# --- 5) Register the batch model so the UI can launch it on demand (NOT a pbrun run) ---
+# --- 4) Register the batch model so the UI can launch it on demand (NOT a pbrun run) ---
 # Foreground: registration must finish before a user can launch from the UI.
 echo ""
 echo "▶️ [Parabricks] Running registration job (register_batch_model + app-SP grant)"
