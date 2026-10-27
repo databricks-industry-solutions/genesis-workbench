@@ -8,5 +8,5 @@
 # "ImportError: cannot import name 'get_inferred_polymer_bonds'". 2.2.1 (2026-06-08) is the last
 # release that still has it. Must appear before rc-foundry so this exact pin wins.
 atomworks[ml]==2.2.1
-rc-foundry
-biopython
+rc-foundry==0.2.0
+biopython==1.88

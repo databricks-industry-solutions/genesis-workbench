@@ -39,7 +39,7 @@ schema = dbutils.widgets.get("schema")
 # COMMAND ----------
 
 # MAGIC %pip install -q rdkit==2025.3.6 descriptastorus==2.8.0 scikit-learn==1.5.2 tqdm==4.67.1
-# MAGIC %pip install -q mlflow[databricks]>=3.12 databricks-sdk>=0.150.0 databricks-sql-connector==4.0.3
+# MAGIC %pip install -q mlflow[databricks]==3.17.2 databricks-sdk==0.157.0 databricks-sql-connector==4.0.3
 
 # COMMAND ----------
 

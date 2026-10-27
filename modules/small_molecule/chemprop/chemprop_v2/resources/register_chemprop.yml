@@ -49,31 +49,31 @@ resources:
           spec:
             environment_version: "4"
             dependencies:
-              - chemprop>=2.0.0
-              - rdkit
-              - torch>=2.0
-              - lightning
-              - mlflow>=2.15
-              - databricks-sdk>=0.50.0
-              - databricks-sql-connector>=4.0.2
+              - chemprop==2.2.3
+              - rdkit==2025.3.6
+              - torch==2.7.1
+              - lightning==2.6.1
+              - mlflow==3.17.2
+              - databricks-sdk==0.157.0
+              - databricks-sql-connector==4.0.3
 
         - environment_key: chemprop_admet_env
           spec:
             environment_version: "4"
             dependencies:
-              - chemprop>=2.0.0
-              - rdkit
-              - torch>=2.0
-              - lightning
-              - mlflow>=2.15
-              - databricks-sdk>=0.50.0
-              - databricks-sql-connector>=4.0.2
+              - chemprop==2.2.3
+              - rdkit==2025.3.6
+              - torch==2.7.1
+              - lightning==2.6.1
+              - mlflow==3.17.2
+              - databricks-sdk==0.157.0
+              - databricks-sql-connector==4.0.3
               # NOTE: PyTDC is intentionally NOT an env dependency. Installed unpinned +
               # with deps here, the serverless env builder pulls an old scikit-learn that
               # has no cp312 wheel and fails to compile on py3.12 (env_version 4). The
               # notebook installs it correctly instead: `%pip install --no-deps PyTDC==1.1.15`,
               # relying on scikit-learn>=1.3 (cp312 wheel) below for its runtime needs.
-              - scikit-learn>=1.3
+              - scikit-learn==1.6.1
 
       parameters:
         - name: catalog

@@ -9,7 +9,7 @@
 
 # MAGIC %pip install -r requirements.txt
 # MAGIC %pip install ../proteinmpnn
-# MAGIC %pip install "mlflow>=3.12" "databricks-sdk>=0.150.0"
+# MAGIC %pip install "mlflow==3.17.2" "databricks-sdk==0.157.0"
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------

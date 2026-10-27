@@ -41,7 +41,7 @@ samples_url = dbutils.widgets.get("repurposing_samples_url")
 
 # COMMAND ----------
 
-# MAGIC %pip install rdkit==2025.3.6 requests
+# MAGIC %pip install rdkit==2025.3.6 requests==2.32.3
 
 # COMMAND ----------
 

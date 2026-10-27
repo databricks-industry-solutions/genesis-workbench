@@ -31,7 +31,7 @@ resources:
             environment_version: "4"
             dependencies:
               - rdkit==2025.3.6
-              - requests
+              - requests==2.32.3
 
       parameters:
         - name: catalog

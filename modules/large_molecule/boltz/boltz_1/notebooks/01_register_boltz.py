@@ -37,7 +37,7 @@ print("dbboltz staged to /tmp/dbboltz from", _dbboltz_ws)
 
 # COMMAND ----------
 
-# MAGIC %pip install databricks-sdk>=0.150.0 databricks-sql-connector==4.0.3 mlflow>=3.12
+# MAGIC %pip install databricks-sdk==0.157.0 databricks-sql-connector==4.0.3 mlflow==3.17.2
 # MAGIC # dbboltz pulls boltz==2.2.1 (+ numpy<2.0, hydra-core, pytorch-lightning, rdkit …).
 # MAGIC # On the serverless GPU AI runtime torch 2.7.1+cu126 is preinstalled and satisfies
 # MAGIC # boltz's torch>=2.2, so torch is NOT reinstalled. Boltz-2 has its own attention
@@ -59,7 +59,7 @@ print(gwb_library_path)
 
 # MAGIC %pip install {gwb_library_path} --force-reinstall
 # MAGIC # Reinstall LAST so dbboltz/gwb-lib can't downgrade it — env_pack (register_model) needs mlflow>=3.12.
-# MAGIC %pip install "mlflow>=3.12" "databricks-sdk>=0.150.0"
+# MAGIC %pip install "mlflow==3.17.2" "databricks-sdk==0.157.0"
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
