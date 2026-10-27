@@ -1,5 +1,44 @@
 # Genesis Workbench — Changelog
 
+## v3.1.0 (2026-10-27) — Dependency pinning & cross-cloud portability hardening
+
+Pins every `pip install` across the repo to reproducible versions and fixes the portability gaps
+surfaced while validating a full six-module install on a second cloud (Azure serverless). No
+behavior change to the AWS release — all six modules deploy-locked and pin-validated end-to-end.
+
+- **Repo-wide pip version pinning.** ~80 previously-unpinned `pip install` specs across all six
+  modules are pinned to exact `==` versions (the ones already resolving on the serverless-GPU
+  runtime) — registration/serving notebooks, module dependency specs, and the core app — so installs
+  are reproducible and immune to upstream drift (the failure mode that had broken the Transformer
+  Engine build). Client trio standardized where applicable: `mlflow==3.17.2`,
+  `databricks-sdk==0.157.0`, `databricks-sql-connector==4.0.3`. ~23 specs are deliberately left
+  unpinned (conda-env transitive deps, uv-tool tokens, the `nvidia-cuda-nvcc-cu13` fallback).
+- **esm2 embeddings — stage HF weights to local disk, not `/Volumes`.** Downloads to a local temp
+  dir and logs a flat `save_pretrained` copy instead of logging the HF cache on a UC Volume, whose
+  `snapshots/ -> blobs/` symlinks are stored as unreadable `goofys-link` markers by some
+  object-storage FUSE backends (`[Errno 5]` at `log_model`). Mirrors the esmfold pattern; cloud-portable.
+- **Transformer Engine wheel build fixed on serverless GPU env v4.** Clears `PIP_CONSTRAINT`/
+  `PIP_REQUIRE_HASHES` for the build subprocess (proxy hash-pin), locates/stages `nvcc` and sets
+  `CUDA_HOME`, and pins `te_version=2.5.0` (newest TE that compiles against torch 2.7.1). Build-time
+  only — serving endpoints are unaffected.
+- **genomics classic clusters DBR 15.4 → 16.4 LTS.** 15.4 cannot read core's `settings` table when
+  the catalog stamps it with the `catalogManaged` Delta reader feature; 16.4 can. Same Spark 3.5.x /
+  Scala 2.12 major, so Glow and the genomics JARs carry over unchanged. Applied to all five genomics
+  classic clusters (gwas + variant_annotation setup/workflow, vcf_ingestion workflow).
+- **MLflow UC model logging.** Uses the default SDK artifact repository when logging models to Unity
+  Catalog on MLflow 3.12+.
+- **AlphaFold download job.** Dropped the DBFS `cluster_log_conf` the target workspace rejects at
+  cluster prep, and raised the `download_uniprot` timeout. (UniProt remains slow enough to warrant a
+  reworked reference-DB download path — tracked separately.)
+- **scanpy CELLxGENE demo** now stages on fresh installs: direct h5py CSR subset read +
+  write-local-then-copy, avoiding the anndata/scipy backed-read OOM and the `/Volumes` FUSE EIO.
+- **parabricks via Databricks Artifact Registry.** Pushes the public NGC image to DAR and runs it
+  through `databricks air` (requires local Docker at deploy time).
+- **rfd4 notebooks** restructured into documented sections (behavior-identical).
+- **alphafold** restored to classic compute (from `v2.2.0-stable-classic-compute`).
+- **Skills/docs.** `deploy.sh`/`update.sh`-only deploy route (never hand-write `.deployed`); notebook
+  authoring standard + registration template.
+
 ## v3.0.0 (2026-10-21) — RFD4-Proteina design suite (de-novo · antibody · vaccine) · serverless GPU + Express serving · Boltz-2 affinity
 
 Migrates module jobs off classic clusters to **serverless** (to bypass the workshop's EC2 GPU quota=0 and cut
