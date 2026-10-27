@@ -28,7 +28,7 @@
 
 # MAGIC # cellxgene-census (tiledbsoma) ships extensions built against numpy<2 → pin numpy==1.26.4 for
 # MAGIC # the Census read. torch is only used here for the (CPU/GPU) top-k, identical to 03b's math.
-# MAGIC %pip install -q -r ../requirements.txt cellxgene-census==1.17.0 pyarrow==15.0.2 numpy==1.26.4 "ray[data]"
+# MAGIC %pip install -q -r ../requirements.txt cellxgene-census==1.17.0 pyarrow==15.0.2 numpy==1.26.4 "ray[data]==2.59.0"
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------

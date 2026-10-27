@@ -39,7 +39,7 @@ schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
-# MAGIC %pip install -q databricks-sdk>=0.150.0 databricks-sql-connector>=4.0.2 mlflow>=3.12
+# MAGIC %pip install -q databricks-sdk==0.157.0 databricks-sql-connector==4.0.3 mlflow==3.17.2
 # MAGIC %pip install -q \
 # MAGIC     --find-links https://data.pyg.org/whl/torch-2.7.0+cu126.html \
 # MAGIC     torch==2.7.1 \
@@ -157,7 +157,7 @@ subprocess.check_call([
     # ligand format we don't exercise, re-add narrowly with the license
     # exposure documented.
 ])
-subprocess.check_call(["pip", "install", "-q", "--no-build-isolation", "--no-deps", "graphein"])
+subprocess.check_call(["pip", "install", "-q", "--no-build-isolation", "--no-deps", "graphein==1.7.8"])
 
 # COMMAND ----------
 

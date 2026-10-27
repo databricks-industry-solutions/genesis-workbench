@@ -91,7 +91,7 @@ resources:
         - job_cluster_key: gwas_spark_cluster
           new_cluster:
             cluster_name: ""
-            spark_version: 15.4.x-scala2.12
+            spark_version: 16.4.x-scala2.12
             spark_conf:
               spark.sql.codegen.wholeStage: "false"
             node_type_id: ${var.cpu_node_type}

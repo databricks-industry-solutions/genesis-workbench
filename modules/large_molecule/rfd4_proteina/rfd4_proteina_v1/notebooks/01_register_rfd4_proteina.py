@@ -28,7 +28,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install -q "databricks-sdk>=0.50.0" "databricks-sql-connector>=4.0.2" "mlflow>=2.15"
+# MAGIC %pip install -q "databricks-sdk==0.157.0" "databricks-sql-connector==4.0.3" "mlflow==3.17.2"
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------

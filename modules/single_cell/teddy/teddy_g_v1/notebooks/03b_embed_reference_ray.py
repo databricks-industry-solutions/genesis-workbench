@@ -11,7 +11,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install -q -r ../requirements.txt pyarrow==15.0.2 "ray[data]"
+# MAGIC %pip install -q -r ../requirements.txt pyarrow==15.0.2 "ray[data]==2.59.0"
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------

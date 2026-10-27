@@ -13,7 +13,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install -q "numpy<2" mlflow==2.22.0 databricks-sdk==0.50.0 databricks-sql-connector==4.0.3
+# MAGIC %pip install -q "numpy==1.26.4" mlflow==2.22.0 databricks-sdk==0.50.0 databricks-sql-connector==4.0.3
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------

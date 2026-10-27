@@ -102,7 +102,7 @@ if _r.returncode != 0:
 # explicitly. Separate call (no --torch-backend) so it reuses the torch we just installed.
 # Best-effort: number_vhh degrades gracefully if it's absent, so a failure here only means
 # designs won't be numbered (is_vhh=False) rather than killing the whole run.
-_a = subprocess.run(["uv", "pip", "install", "--python", sys.executable, "--break-system-packages", "anarcii"],
+_a = subprocess.run(["uv", "pip", "install", "--python", sys.executable, "--break-system-packages", "anarcii==2.0.8"],
                     capture_output=True, text=True)
 if _a.returncode != 0:
     print(f"[anarcii] install failed rc={_a.returncode} (VHH numbering + ProteinMPNN framework "

@@ -59,7 +59,7 @@ dbutils.widgets.text("mlflow_run_id", "", "Pre-created MLflow run id (from the a
 
 # Containerless deps. transformers/accelerate drive the HF Trainer; mlflow[databricks] for
 # tracking. Transformer Engine is installed separately below (it may need a source build).
-# MAGIC %pip install -q "transformers==4.55.0" "accelerate>=0.34" "mlflow[databricks]==2.22.0" "databricks-sdk==0.50.0"
+# MAGIC %pip install -q "transformers==4.55.0" "accelerate==1.15.0" "mlflow[databricks]==2.22.0" "databricks-sdk==0.50.0"
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------

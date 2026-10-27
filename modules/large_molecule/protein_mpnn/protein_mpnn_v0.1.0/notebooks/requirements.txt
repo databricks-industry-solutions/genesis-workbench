@@ -6,4 +6,4 @@
 mlflow==2.22.0
 cloudpickle==3.0.0
 biopython==1.84
-numpy<2.0
+numpy==1.26.4
