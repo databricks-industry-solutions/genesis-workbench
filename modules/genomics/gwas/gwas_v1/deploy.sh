@@ -13,32 +13,33 @@ esac
 
 # The parabricks_alignment job's run_germline task runs on serverless GPU via an
 # ai_runtime_task (stock NGC Parabricks image) — it's launched ON DEMAND from the UI, not at
-# deploy. This script registers the NGC image with AI Compute and stages the ai_runtime_task
-# entrypoint, then deploys the bundle (which packages the code tarball via artifacts:) and
-# runs the initial setup job (installs Glow, downloads reference genomes, and registers both
-# gwas_analysis and parabricks_alignment as batch models).
+# deploy. This script pushes the NGC image into the Databricks Artifact Registry (DAR) and
+# stages the ai_runtime_task entrypoint, then deploys the bundle (which packages the code
+# tarball via artifacts:) and runs the initial setup job (installs Glow, downloads reference
+# genomes, and registers both gwas_analysis and parabricks_alignment as batch models).
 
 IMAGE=nvcr.io/nvidia/clara/clara-parabricks:4.5.1-1
+IMAGE_TAG=4.5.1-1                               # DAR artifact tag (matches the NGC tag)
+DAR_ARTIFACT=parabricks                         # DAR artifact -> <catalog>.<schema>.parabricks
 WS_COMMAND=/Workspace/Shared/gwas_parabricks    # literal path for the ai_runtime_task command_path
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROFILE_ARG=""
-[ -n "$DATABRICKS_CONFIG_PROFILE" ] && PROFILE_ARG="-p $DATABRICKS_CONFIG_PROFILE"
 
-# --- Install the AI Runtime (air) CLI if missing (only used to register the image) ---
-export PATH="$HOME/.local/bin:$PATH"
-if ! command -v air >/dev/null 2>&1; then
-  echo ""
-  echo "▶️ [GWAS] Installing the databricks-air (AI Runtime) CLI"
-  command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
-  uv tool install --force databricks-air --python 3.12
+# GWB convention: catalog + schema come from application.env, passed through as --var here.
+# Parse them out so we can target DAR (same artifact the parabricks submodule pushes; the
+# gwas parabricks_alignment job references it via unity_catalog_image_path).
+CATALOG=$(printf '%s' "$EXTRA_PARAMS" | grep -oE 'core_catalog_name=[^,"[:space:]]+' | head -1 | cut -d= -f2)
+SCHEMA=$(printf '%s' "$EXTRA_PARAMS" | grep -oE 'core_schema_name=[^,"[:space:]]+' | head -1 | cut -d= -f2)
+if [ -z "$CATALOG" ] || [ -z "$SCHEMA" ]; then
+  echo "🚫 [GWAS] could not parse core_catalog_name/core_schema_name from --var"; exit 1
 fi
 
-# --- Register the public NGC Parabricks image with AI Compute (no credentials) ---
+# --- Push the public NGC Parabricks image into DAR (Unity Catalog; no NGC credentials) ---
+# `databricks air images push` pulls the linux/amd64 image via local Docker and pushes it to
+# <catalog>.<schema>.<artifact>:<tag>. Requires Docker running locally. The image is several GB;
+# idempotent — a later deploy (or the parabricks submodule) reuses the cached local image.
 echo ""
-echo "▶️ [GWAS] Registering public NGC image with AI Compute: $IMAGE"
-set +e
-air register image "$IMAGE" $PROFILE_ARG
-set -e
+echo "▶️ [GWAS] Pushing $IMAGE to DAR: ${CATALOG}.${SCHEMA}.${DAR_ARTIFACT}:${IMAGE_TAG}"
+databricks air images push -s "$IMAGE" --catalog "$CATALOG" --schema "$SCHEMA" --artifact "${DAR_ARTIFACT}:${IMAGE_TAG}"
 
 # --- Stage the ai_runtime_task entrypoint to a literal /Workspace path ---
 echo ""

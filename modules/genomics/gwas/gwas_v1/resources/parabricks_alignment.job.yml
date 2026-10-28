@@ -1,5 +1,6 @@
 # GWAS Parabricks alignment — serverless-GPU. The run_germline task is a serverless
-# ai_runtime_task (stock NGC image) instead of a classic a10 GPU cluster with a custom
+# ai_runtime_task (stock NGC Parabricks image pushed to DAR, referenced by its Unity Catalog
+# coordinates) instead of a classic a10 GPU cluster with a custom
 # container (can't provision at EC2 GPU quota=0). Deployed once; launched ON DEMAND from the
 # UI (jobs run-now) with per-run FASTQ paths. mark_success/mark_failure keep the MLflow status.
 # Code is delivered by the bundle's artifacts:{type:tgz} block (databricks.yml).
@@ -19,7 +20,7 @@ resources:
           ai_runtime_task:
             experiment: gwas_parabricks_alignment
             code_source_path: ./dist/code.tgz
-            docker_image_url: nvcr.io/nvidia/clara/clara-parabricks:4.5.1-1
+            unity_catalog_image_path: ${var.core_catalog_name}.${var.core_schema_name}.parabricks:4.5.1-1
             deployments:
               # command_path must be a LITERAL /Workspace/ or /Volumes/ path (a bundle path
               # normalizes to /Users/... and is rejected). deploy.sh stages command.sh here.
