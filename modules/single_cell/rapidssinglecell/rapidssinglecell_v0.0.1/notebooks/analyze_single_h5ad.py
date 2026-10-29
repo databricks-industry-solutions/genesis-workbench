@@ -24,7 +24,13 @@
 # MAGIC # calls). typing_extensions>=4.13 provides `Format` that scverse_misc needs.
 # MAGIC # numpy is intentionally NOT pinned — cupy-cuda13x is built for numpy 2.x, so the
 # MAGIC # runtime's numpy 2.1.3 is kept (the old numpy==1.26.4 pin broke cupy's ABI).
-# MAGIC %pip install rapids-singlecell==0.14.1 scikit-learn==1.5.2 "typing_extensions==4.16.0" "pandas==2.3.3"
+# MAGIC # scipy is pinned to 1.13.1: scanpy's sc.pp.neighbors calls
+# MAGIC # csr_array.getnnz(axis=1), which scipy removed from the sparse-array
+# MAGIC # classes in 1.15 (deprecated in 1.14). Unpinned, pip pulled scipy>=1.15
+# MAGIC # and the run died with "'csr_array' object has no attribute 'getnnz'".
+# MAGIC # 1.13.1 still has getnnz, supports numpy 2.x (so cupy's ABI is kept),
+# MAGIC # and meets rapids-singlecell's scipy>=1.4 floor.
+# MAGIC %pip install rapids-singlecell==0.14.1 scipy==1.13.1 scikit-learn==1.5.2 "typing_extensions==4.16.0" "pandas==2.3.3"
 
 # MAGIC %restart_python
 
