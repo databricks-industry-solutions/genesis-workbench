@@ -14,9 +14,33 @@ resources:
           - ${var.current_user}
 
       tasks:
+        # An ai_runtime_task can't receive run-now job_parameters as env vars, so this notebook
+        # task bridges them: it writes the per-run inputs to a shared UC-Volume inbox JSON keyed
+        # by the Databricks job run id ({{job.run_id}}). run_germline's container recovers the same
+        # id from its SGC_DEBUG_INFO env var and reads exactly that file — concurrent runs never
+        # cross-wire, so no serialization is needed. Runs as the job owner (owns the volume).
+        - task_key: write_pb_config
+          max_retries: 0
+          disable_auto_optimization: true
+          notebook_task:
+            notebook_path: ../notebooks/write_pb_config.py
+            source: WORKSPACE
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              schema: "{{job.parameters.schema}}"
+              fastq_r1: "{{job.parameters.fastq_r1}}"
+              fastq_r2: "{{job.parameters.fastq_r2}}"
+              reference_genome_path: "{{job.parameters.reference_genome_path}}"
+              output_volume_path: "{{job.parameters.output_volume_path}}"
+              mlflow_run_id: "{{job.parameters.mlflow_run_id}}"
+              job_run_id: "{{job.run_id}}"
+          environment_key: default
+
         - task_key: run_germline
           max_retries: 0
           environment_key: airt
+          depends_on:
+            - task_key: write_pb_config
           ai_runtime_task:
             experiment: gwas_parabricks_alignment
             code_source_path: ./dist/code.tgz

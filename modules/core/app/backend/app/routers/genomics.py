@@ -44,10 +44,15 @@ class VcfIngestionDefaults(BaseModel):
     vcf_path: str = ""
 
 
+class VariantAnnotationDefaults(BaseModel):
+    pathogenic_vcf_path: str = ""
+
+
 class GenomicsDefaultsResponse(BaseModel):
     variant_calling: VariantCallingDefaults
     gwas: GwasDefaults
     vcf_ingestion: VcfIngestionDefaults
+    variant_annotation: VariantAnnotationDefaults
 
 
 @router.get("/defaults", response_model=GenomicsDefaultsResponse)
@@ -81,6 +86,16 @@ def genomics_defaults(_: CurrentUserDep) -> GenomicsDefaultsResponse:
         ),
         vcf_ingestion=VcfIngestionDefaults(
             vcf_path=f"{base}/variant_annotation_data/sample/brca_pathogenic_corrected.vcf",
+        ),
+        # Default the annotation's "spike" VCF to the same BRCA sample. 01_spike unions these
+        # known ClinVar-Pathogenic BRCA1/BRCA2 variants into whatever table is annotated, so the
+        # demo surfaces pathogenic hits even when the ingested variants come from a normal
+        # individual (e.g. the HG00096 variant-calling output). Clear the field for a real,
+        # un-spiked annotation.
+        variant_annotation=VariantAnnotationDefaults(
+            pathogenic_vcf_path=(
+                f"{base}/variant_annotation_data/sample/brca_pathogenic_corrected.vcf"
+            ),
         ),
     )
 

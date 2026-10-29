@@ -187,6 +187,16 @@ def start_parabricks_alignment(
         mlflow.log_param("fastq_r1", fastq_r1)
         mlflow.log_param("fastq_r2", fastq_r2)
         mlflow.log_param("reference_genome", reference_genome_path)
+        # Record the VCF this run will produce so the GWAS / VCF-Ingestion pickers can chain
+        # onto it (list_successful_variant_calling exposes params.output_vcf). The container
+        # writes to this exact path — keep in sync with run_alignment.py's OUT_VCF
+        # ({OUTPUT_VOLUME}/alignment/{MLFLOW_RUN_ID}/germline.vcf).
+        mlflow.log_param(
+            "output_vcf", f"{output_volume_path}/alignment/{mlflow_run_id}/germline.vcf"
+        )
+        # run_germline is an ai_runtime_task, which can't receive these run-now job_parameters as
+        # env vars. The job's write_pb_config notebook task bridges them into the shared UC-Volume
+        # inbox the container reads (keyed by {{job.run_id}}); see parabricks_alignment.job.yml.
         job_run_id = execute_workflow(
             job_id=get_job_id("parabricks_alignment_job_id"),
             params={
@@ -230,16 +240,28 @@ def list_successful_variant_calling(user_email: str) -> list[dict]:
     if runs.empty:
         return []
     runs["experiment_name"] = runs["experiment_id"].map(exp_map)
-    return [
-        {
-            "run_id": str(r.get("run_id", "")),
-            "run_name": str(r.get("tags.mlflow.runName", "") or ""),
-            "experiment_name": str(r.get("experiment_name", "") or ""),
-            "output_vcf": str(r.get("params.output_vcf", "") or ""),
-            "start_time_ms": _start_time_ms(r.get("start_time")),
-        }
-        for _, r in runs.iterrows()
-    ]
+    # Default output volume the Variant Calling form uses — lets us reconstruct the output VCF
+    # path for runs dispatched before output_vcf was logged (the container always writes to
+    # {output_volume}/alignment/{mlflow_run_id}/germline.vcf; see run_alignment.py OUT_VCF).
+    default_out_vol = (
+        f"/Volumes/{os.environ['CORE_CATALOG_NAME']}/{os.environ['CORE_SCHEMA_NAME']}/gwas_data"
+    )
+    rows: list[dict] = []
+    for _, r in runs.iterrows():
+        run_id = str(r.get("run_id", "") or "")
+        output_vcf = str(r.get("params.output_vcf", "") or "")
+        if not output_vcf and run_id:
+            output_vcf = f"{default_out_vol}/alignment/{run_id}/germline.vcf"
+        rows.append(
+            {
+                "run_id": run_id,
+                "run_name": str(r.get("tags.mlflow.runName", "") or ""),
+                "experiment_name": str(r.get("experiment_name", "") or ""),
+                "output_vcf": output_vcf,
+                "start_time_ms": _start_time_ms(r.get("start_time")),
+            }
+        )
+    return rows
 
 
 # ─── GWAS ───────────────────────────────────────────────────────────────────

@@ -17,11 +17,6 @@ export function GenomicsPage() {
             content: <VariantCallingTab />,
           },
           {
-            id: 'gwas',
-            label: 'GWAS',
-            content: <GwasTab />,
-          },
-          {
             id: 'ingestion',
             label: 'VCF Ingestion',
             content: <VcfIngestionTab />,
@@ -30,6 +25,11 @@ export function GenomicsPage() {
             id: 'annotation',
             label: 'Variant Annotation',
             content: <VariantAnnotationTab />,
+          },
+          {
+            id: 'gwas',
+            label: 'GWAS',
+            content: <GwasTab />,
           },
         ]}
       />

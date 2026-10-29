@@ -42,10 +42,17 @@ echo "▶️ [GWAS] Pushing $IMAGE to DAR: ${CATALOG}.${SCHEMA}.${DAR_ARTIFACT}:
 databricks air images push -s "$IMAGE" --catalog "$CATALOG" --schema "$SCHEMA" --artifact "${DAR_ARTIFACT}:${IMAGE_TAG}"
 
 # --- Stage the ai_runtime_task entrypoint to a literal /Workspace path ---
+# An ai_runtime_task can't receive run-now job_parameters, so per-run inputs reach the container
+# via a shared UC-Volume inbox (the app writes a JSON per run; command.sh consumes the oldest).
+# The container can't build the inbox path (catalog/schema are job_parameters it never sees), so
+# bake the catalog/schema-specific dir into command.sh here.
+PB_INBOX_DIR="/Volumes/${CATALOG}/${SCHEMA}/gwas_data/_pb_inbox"
+STAGED_CMD="$(mktemp -d)/command.sh"
+sed "s#__PB_INBOX_DIR__#${PB_INBOX_DIR}#g" "$SCRIPT_DIR/airt/command.sh" > "$STAGED_CMD"
 echo ""
-echo "▶️ [GWAS] Staging alignment command.sh to $WS_COMMAND"
+echo "▶️ [GWAS] Staging alignment command.sh to $WS_COMMAND (inbox=$PB_INBOX_DIR)"
 databricks workspace mkdirs "$WS_COMMAND"
-databricks workspace import "$WS_COMMAND/command.sh" --file "$SCRIPT_DIR/airt/command.sh" --format RAW --overwrite
+databricks workspace import "$WS_COMMAND/command.sh" --file "$STAGED_CMD" --format RAW --overwrite
 
 echo ""
 echo "▶️ [GWAS] Validating bundle (target=$TARGET)"
