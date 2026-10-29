@@ -30,12 +30,39 @@ from genesis_workbench.workbench import initialize
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gwb_mcp")
 
+
+def _allowed_origins() -> list[str]:
+    """CORS / transport allowed origins for the MCP server.
+
+    Parametrized rather than hardcoded to a single workspace: an explicit
+    comma-separated ``MCP_ALLOWED_ORIGINS`` wins; otherwise derive the
+    workspace URL from the Apps-runtime-injected ``DATABRICKS_HOSTNAME`` /
+    ``DATABRICKS_HOST`` (the same vars the UI app uses to build workspace
+    links). Returns ``[]`` when none are set (e.g. local dev)."""
+    explicit = os.environ.get("MCP_ALLOWED_ORIGINS", "").strip()
+    if explicit:
+        return [o.strip().rstrip("/") for o in explicit.split(",") if o.strip()]
+    host = (
+        os.environ.get("DATABRICKS_HOSTNAME")
+        or os.environ.get("DATABRICKS_HOST")
+        or ""
+    ).strip().rstrip("/")
+    if not host:
+        return []
+    if not host.startswith("http"):
+        host = "https://" + host
+    return [host]
+
+
+_ALLOWED_ORIGINS = _allowed_origins()
+logger.info("MCP allowed origins: %s", _ALLOWED_ORIGINS or "(none — origin checks will reject browser clients)")
+
 # https://github.com/modelcontextprotocol/python-sdk/blob/v1.27.2/src/mcp/server/fastmcp/server.py
 mcp = FastMCP(
     "genesis-workbench",
     stateless_http=True,
     transport_security=TransportSecuritySettings(
-        allowed_origins=["https://fevm-srijit-nair-ci-demo.cloud.databricks.com"],
+        allowed_origins=_ALLOWED_ORIGINS,
         allowed_hosts=["localhost", "localhost:8000", "*.databricksapps.com"],
     ),
 )
@@ -156,7 +183,7 @@ def build_app():
     starlette_app = mcp.streamable_http_app()
     starlette_app.add_middleware(
         CORSMiddleware,
-        allow_origins=["https://fevm-srijit-nair-ci-demo.cloud.databricks.com"],
+        allow_origins=_ALLOWED_ORIGINS,
         allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=["Mcp-Session-Id"],
