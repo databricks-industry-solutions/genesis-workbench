@@ -121,7 +121,24 @@ print(f"Filtered to {filtered_variants_df.count()} variants with phenotyped samp
 
 # COMMAND ----------
 
-REFERENCE_GENOME_PATH = "/dbfs/genesis_workbench/gwas/reference/grch38/GRCh38_full_analysis_set_plus_decoy_hla.fa"
+# Stage the reference FASTA (+ .fai) to the node's local disk for Glow's normalize_variants.
+# htsjdk opens the FASTA with random-access java.nio, which is blocked ("Operation not
+# permitted") against the UC Volumes FUSE, and this workspace has Public DBFS root disabled, so
+# the legacy /dbfs staging path is unavailable. The job runs single-node (gwas_spark_cluster
+# num_workers=0), so a local-disk copy is reachable by the normalize tasks. dbutils.fs.cp reads
+# the Volume through dbio (not raw java.nio), so it isn't subject to the FUSE restriction.
+import os
+
+_vol_ref_dir = f"/Volumes/{catalog}/{schema}/gwas_reference/genomes"
+_ref_name = "GRCh38_full_analysis_set_plus_decoy_hla.fa"
+_local_ref_dir = "/local_disk0/gwas_ref"
+os.makedirs(_local_ref_dir, exist_ok=True)
+for _f in (_ref_name, f"{_ref_name}.fai"):
+    _dst = f"{_local_ref_dir}/{_f}"
+    if not os.path.exists(_dst):
+        dbutils.fs.cp(f"{_vol_ref_dir}/{_f}", f"file:{_dst}")
+REFERENCE_GENOME_PATH = f"{_local_ref_dir}/{_ref_name}"
+print(f"Staged reference to {REFERENCE_GENOME_PATH}")
 
 biallelic_df = filtered_variants_df.where(F.size(F.col("alternateAlleles")) == 1)
 indels_df = biallelic_df.where((F.length("referenceAllele") > 1) | (F.length(F.col("alternateAlleles")[0]) > 1))

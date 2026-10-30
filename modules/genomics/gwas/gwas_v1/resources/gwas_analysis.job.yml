@@ -93,15 +93,28 @@ resources:
             cluster_name: ""
             spark_version: 16.4.x-scala2.12
             spark_conf:
+              # A num_workers:0 cluster MUST be declared single-node (local scheduler), or it comes
+              # up with zero executors and never provisions any — so every Spark action hangs
+              # forever waiting for executors (this was the prepare_phenotype hang). These three
+              # settings (local master + singleNode profile + ResourceClass tag) are what the
+              # original working config had; the serverless-era refactor dropped them.
+              spark.master: "local[*, 4]"
+              spark.databricks.cluster.profile: singleNode
               spark.sql.codegen.wholeStage: "false"
             node_type_id: ${var.cpu_node_type}
             driver_node_type_id: ${var.cpu_node_type}
             custom_tags:
+              ResourceClass: SingleNode
               work_type: gwas_analysis
             enable_elastic_disk: true
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD
-            num_workers: 4
+            # Single-node (as this pipeline ran originally). Glow's normalize_variants uses htsjdk,
+            # which opens the FASTA with random-access java.nio — blocked ("Operation not permitted")
+            # against the UC Volumes FUSE from sandboxed Spark executors. Running single-node keeps
+            # normalize in the driver JVM, and 04_gwas_analysis stages the reference to the node's
+            # local disk (DBFS root is disabled here, so the old /dbfs staging is gone).
+            num_workers: 0
 
       environments:
         - environment_key: default

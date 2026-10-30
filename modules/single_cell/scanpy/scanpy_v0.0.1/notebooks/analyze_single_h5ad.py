@@ -7,7 +7,12 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install numpy==1.26.4 scanpy==1.11.4 anndata==0.12.10 scikit-network==0.33.5
+# MAGIC # scipy is pinned: scanpy 1.11.4 calls `csr_array.getnnz()` inside
+# MAGIC # sc.pp.neighbors, but scipy 1.15 removed getnnz from the sparse-array
+# MAGIC # classes (deprecated in 1.14). Unpinned, pip pulled scipy>=1.15 and the
+# MAGIC # run died with `'csr_array' object has no attribute 'getnnz'`. 1.13.1 is
+# MAGIC # pre-removal and the repo-standard pin (teddy/diffdock/hlaiipred).
+# MAGIC %pip install numpy==1.26.4 scipy==1.13.1 scanpy==1.11.4 anndata==0.12.10 scikit-network==0.33.5
 # MAGIC %restart_python
 
 # COMMAND ----------

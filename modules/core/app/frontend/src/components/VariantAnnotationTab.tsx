@@ -20,14 +20,28 @@ export function VariantAnnotationTab() {
     queryFn: api.vcfIngestionSuccessful,
     staleTime: 60_000,
   })
+  const defaults = useQuery({
+    queryKey: ['genomics', 'defaults'],
+    queryFn: api.diseaseBiologyDefaults,
+    staleTime: Infinity,
+  })
 
   const [selectedIngRun, setSelectedIngRun] = useState('')
   const [variantsTable, setVariantsTable] = useState('')
   const [geneRegions, setGeneRegions] = useState('')
   // UI-only preset; collapses to acmg|custom for the backend.
   const [genePanelPreset, setGenePanelPreset] = useState<'acmg' | 'brca' | 'custom'>('acmg')
+  // "Spike" VCF of known pathogenic variants unioned into the annotated table (01_spike). Seeded
+  // with the shipped BRCA sample so the demo surfaces pathogenic hits even when the ingested
+  // variants are from a normal individual; clear it for a real, un-spiked annotation.
+  const [pathogenicVcfPath, setPathogenicVcfPath] = useState('')
   const [experiment, setExperiment] = useState('gwb_variant_annotation')
   const [runName, setRunName] = useState(`variant_annotation_${ts()}`)
+
+  useEffect(() => {
+    if (!defaults.data) return
+    setPathogenicVcfPath((cur) => cur || defaults.data!.variant_annotation.pathogenic_vcf_path)
+  }, [defaults.data])
 
   const BRCA1_BRCA2_JSON =
     '[{"name":"BRCA1","contig":"chr17","start":43044292,"end":43170327},{"name":"BRCA2","contig":"chr13","start":32315086,"end":32400268}]'
@@ -63,7 +77,7 @@ export function VariantAnnotationTab() {
     start.mutate({
       variants_table: variantsTable,
       gene_regions: effectiveGeneRegions,
-      pathogenic_vcf_path: '',
+      pathogenic_vcf_path: pathogenicVcfPath.trim(),
       gene_panel_mode: genePanelMode,
       mlflow_experiment: experiment,
       mlflow_run_name: runName,
@@ -111,6 +125,21 @@ export function VariantAnnotationTab() {
             placeholder="catalog.schema.cohort_variants"
             className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
           />
+        </label>
+        <label className="block text-xs">
+          <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
+            Pathogenic VCF to spike in (optional)
+          </span>
+          <input
+            value={pathogenicVcfPath}
+            onChange={(e) => setPathogenicVcfPath(e.target.value)}
+            placeholder="/Volumes/.../brca_pathogenic_corrected.vcf"
+            className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
+          />
+          <span className="mt-1 block text-[10px] text-muted-foreground">
+            Known pathogenic variants unioned into the table so the demo surfaces hits. Clear for a
+            real annotation.
+          </span>
         </label>
       </div>
 
