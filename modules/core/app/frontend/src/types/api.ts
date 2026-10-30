@@ -1043,6 +1043,9 @@ export type GenomicsDefaultsResponse = {
   vcf_ingestion: {
     vcf_path: string
   }
+  variant_annotation: {
+    pathogenic_vcf_path: string
+  }
 }
 
 // ─── NVIDIA BioNeMo ──────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 # GWAS Parabricks alignment — serverless-GPU. The run_germline task is a serverless
-# ai_runtime_task (stock NGC image) instead of a classic a10 GPU cluster with a custom
+# ai_runtime_task (stock NGC Parabricks image pushed to DAR, referenced by its Unity Catalog
+# coordinates) instead of a classic a10 GPU cluster with a custom
 # container (can't provision at EC2 GPU quota=0). Deployed once; launched ON DEMAND from the
 # UI (jobs run-now) with per-run FASTQ paths. mark_success/mark_failure keep the MLflow status.
 # Code is delivered by the bundle's artifacts:{type:tgz} block (databricks.yml).
@@ -13,13 +14,37 @@ resources:
           - ${var.current_user}
 
       tasks:
+        # An ai_runtime_task can't receive run-now job_parameters as env vars, so this notebook
+        # task bridges them: it writes the per-run inputs to a shared UC-Volume inbox JSON keyed
+        # by the Databricks job run id ({{job.run_id}}). run_germline's container recovers the same
+        # id from its SGC_DEBUG_INFO env var and reads exactly that file — concurrent runs never
+        # cross-wire, so no serialization is needed. Runs as the job owner (owns the volume).
+        - task_key: write_pb_config
+          max_retries: 0
+          disable_auto_optimization: true
+          notebook_task:
+            notebook_path: ../notebooks/write_pb_config.py
+            source: WORKSPACE
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              schema: "{{job.parameters.schema}}"
+              fastq_r1: "{{job.parameters.fastq_r1}}"
+              fastq_r2: "{{job.parameters.fastq_r2}}"
+              reference_genome_path: "{{job.parameters.reference_genome_path}}"
+              output_volume_path: "{{job.parameters.output_volume_path}}"
+              mlflow_run_id: "{{job.parameters.mlflow_run_id}}"
+              job_run_id: "{{job.run_id}}"
+          environment_key: default
+
         - task_key: run_germline
           max_retries: 0
           environment_key: airt
+          depends_on:
+            - task_key: write_pb_config
           ai_runtime_task:
             experiment: gwas_parabricks_alignment
             code_source_path: ./dist/code.tgz
-            docker_image_url: nvcr.io/nvidia/clara/clara-parabricks:4.5.1-1
+            unity_catalog_image_path: ${var.core_catalog_name}.${var.core_schema_name}.parabricks:4.5.1-1
             deployments:
               # command_path must be a LITERAL /Workspace/ or /Volumes/ path (a bundle path
               # normalizes to /Users/... and is rejected). deploy.sh stages command.sh here.

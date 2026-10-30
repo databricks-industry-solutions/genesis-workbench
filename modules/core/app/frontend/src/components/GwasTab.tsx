@@ -6,7 +6,7 @@ import { api } from '@/api/client'
 import { DataTable } from '@/components/DataTable'
 import { PlotlyChart as Plot } from '@/components/PlotlyChart'
 import { RunSearchSection } from '@/components/RunSearchSection'
-import type { DBRunRow, GwasHit, VariantCallingPickerRow } from '@/types/api'
+import type { DBRunRow, GwasHit } from '@/types/api'
 
 function ts(): string {
   const d = new Date()
@@ -14,20 +14,12 @@ function ts(): string {
 }
 
 export function GwasTab() {
-  // Pick a completed variant-calling run to seed the VCF path.
-  const picker = useQuery({
-    queryKey: ['genomics', 'variant_calling', 'successful'],
-    queryFn: api.variantCallingSuccessful,
-    staleTime: 60_000,
-  })
-
   const defaults = useQuery({
     queryKey: ['genomics', 'defaults'],
     queryFn: api.diseaseBiologyDefaults,
     staleTime: Infinity,
   })
 
-  const [selectedVcRun, setSelectedVcRun] = useState<string>('')
   const [vcfPath, setVcfPath] = useState('')
   const [phenoPath, setPhenoPath] = useState('')
   const [phenoCol, setPhenoCol] = useState('phenotype')
@@ -46,13 +38,6 @@ export function GwasTab() {
     setVcfPath((cur) => cur || d.vcf_path)
     setPhenoPath((cur) => cur || d.phenotype_path)
   }, [defaults.data])
-
-  // When the user picks a VC run, slot its output VCF into the path field.
-  useEffect(() => {
-    if (!selectedVcRun || !picker.data) return
-    const row = picker.data.runs.find((r) => r.run_id === selectedVcRun)
-    if (row?.output_vcf) setVcfPath(row.output_vcf)
-  }, [selectedVcRun, picker.data])
 
   const [searchToken, setSearchToken] = useState(0)
   const start = useMutation({
@@ -83,31 +68,13 @@ export function GwasTab() {
       <div>
         <h3 className="text-sm font-semibold">Run Genome-Wide Association Analysis</h3>
         <p className="text-xs text-muted-foreground">
-          Glow-based GWAS on a VCF + phenotype CSV. Pick a completed Variant Calling run to
-          auto-fill the VCF path, or type a custom path. Results land in a per-run Delta table
-          you can browse in the View dialog (Manhattan plot + top hits).
+          Glow-based GWAS on a multi-sample cohort VCF + phenotype file (the form is pre-filled
+          with the sample cohort). GWAS is a population analysis, so the VCF must contain many
+          samples whose IDs match the phenotype file — not a single-sample Variant Calling output.
+          Results land in a per-run Delta table you can browse in the View dialog (Manhattan plot +
+          top hits).
         </p>
       </div>
-
-      {picker.data && picker.data.runs.length > 0 && (
-        <label className="block text-xs">
-          <span className="mb-1 block uppercase tracking-wide text-muted-foreground">
-            Use VCF from a completed Variant Calling run
-          </span>
-          <select
-            value={selectedVcRun}
-            onChange={(e) => setSelectedVcRun(e.target.value)}
-            className="w-full max-w-xl rounded-md border border-border bg-background px-3 py-2 text-sm"
-          >
-            <option value="">— pick a run —</option>
-            {picker.data.runs.map((r: VariantCallingPickerRow) => (
-              <option key={r.run_id} value={r.run_id}>
-                {r.run_name} · {r.experiment_name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <label className="block text-xs">

@@ -133,21 +133,9 @@ else:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Copy reference to DBFS (required by Glow for variant normalization)
-
-# COMMAND ----------
-
-# MAGIC %sh
-# MAGIC DBFS_REF="/dbfs/genesis_workbench/gwas/reference/grch38"
-# MAGIC mkdir -p $DBFS_REF
-# MAGIC
-# MAGIC if [ ! -f "$DBFS_REF/GRCh38_full_analysis_set_plus_decoy_hla.fa" ]; then
-# MAGIC   cp $GENOME_PATH/GRCh38_full_analysis_set_plus_decoy_hla.fa $DBFS_REF/
-# MAGIC   cp $GENOME_PATH/GRCh38_full_analysis_set_plus_decoy_hla.fa.fai $DBFS_REF/
-# MAGIC   echo "Reference genome copied to DBFS for Glow"
-# MAGIC else
-# MAGIC   echo "Reference genome already exists in DBFS, skipping"
-# MAGIC fi
+# MAGIC ### Reference genome setup complete
+# MAGIC 04_gwas_analysis reads the reference straight from this UC Volume (with its .fai index);
+# MAGIC no DBFS copy is needed — /Volumes is FUSE-readable by the classic-cluster executors.
 
 # COMMAND ----------
 
