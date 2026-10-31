@@ -81,6 +81,32 @@ def _query(axis: str, inputs: Any, dev_user_prefix: Optional[str] = None,
     return client.serving_endpoints.query(name=name, inputs=inputs)
 
 
+def generate_via_rfd4_endpoint(condition_spec: Dict[str, Any], structure_cif: str, num_samples: int,
+                               exclude_chain: str = "") -> pd.DataFrame:
+    """Run RFD4-Proteina generation on the serving endpoint (NOT in-process). The endpoint name is
+    resolved from the `model_deployments` registry via `get_endpoint_name_for_uc_model` — the single
+    source of truth the app uses (immune to DEV_USER_PREFIX mismatch), set up by the orchestrator's
+    earlier `initialize(...)` call. Sends the full `condition_spec` + structure CIF; the endpoint injects
+    the CIF as the spec's `input` and runs the model's own `predict_step`. Routing generation through the
+    endpoint is what brings AI Gateway + inference-table coverage to the most expensive step.
+
+    Returns a DataFrame with `sample_id`, `designed_pdb`, `designed_sequence`, `complex_pdb` — the same
+    contract the loop previously got from the in-process generator. `exclude_chain` (the antigen chain)
+    makes the endpoint return the designed binder alone as `designed_pdb` and the full complex as
+    `complex_pdb`."""
+    from genesis_workbench.models import get_endpoint_name_for_uc_model
+    payload = [{
+        "task": "", "target_pdb": "", "binder_length_min": 0, "binder_length_max": 0,
+        "num_samples": int(num_samples), "hotspot_residues": "", "target_chain": "",
+        "condition_spec_json": json.dumps(condition_spec), "structure_cif": structure_cif,
+        "exclude_chain": exclude_chain or "",
+    }]
+    name = get_endpoint_name_for_uc_model("rfd4_proteina")
+    client = WorkspaceClient(config=Config(http_timeout_seconds=1800))
+    resp = client.serving_endpoints.query(name=name, inputs=payload)
+    return pd.DataFrame(resp.predictions)
+
+
 # ---------------------------------------------------------------------------
 # Validation / scoring endpoint helpers (reused from enzyme utils)
 # ---------------------------------------------------------------------------
@@ -620,10 +646,10 @@ def load_rfd4(hf_repo: str, hf_revision: str) -> Dict[str, Any]:
             "device": device, "torch": torch}
 
 
-def _vhh_condition_spec(antigen_cif_path: str, epitope_residues: List[int],
-                        antigen_chain: str, antigen_res_range, length_min: int, length_max: int,
-                        tmpdir: str) -> str:
-    """Build the RFD4 condition_spec JSON for VHH design against an antigen epitope and return its path.
+def _vhh_condition_spec(epitope_residues: List[int], antigen_chain: str,
+                        antigen_res_range, length_min: int, length_max: int) -> Dict[str, Any]:
+    """Build the de-novo VHH RFD4 condition_spec dict (the serving endpoint injects the structure CIF as
+    the spec's `input`, so no file/path is produced here).
 
     FIRST-DRAFT conditioning (same caveat as nb01's binder/motif path): a fresh VHH-length chain is
     generated against the antigen, with the antigen backbone + sequence kept as context (C_CRD/C_SEQ) and
@@ -633,7 +659,6 @@ def _vhh_condition_spec(antigen_cif_path: str, epitope_residues: List[int],
     letter — that raises "Malformed preserved-segment token"), and conditions use atomworks `res_id` selects
     (NOT `sel(...)`).
     """
-    import json as _json
     lo, hi = antigen_res_range if antigen_res_range else (1, 1)
     # contig: fresh VHH chain (length window) + chain break (/0) + the preserved antigen chain, by range.
     contig = f"{int(length_min)}-{int(length_max)}, /0, {antigen_chain}{lo}-{hi}"
@@ -647,11 +672,7 @@ def _vhh_condition_spec(antigen_cif_path: str, epitope_residues: List[int],
     }
     if epitope_residues:
         conditions["C_HOT"] = {True: [{"select": f"res_id=={int(r)}"} for r in epitope_residues]}
-    spec = {"binder": {"input": antigen_cif_path, "contig": contig, "conditions": conditions}}
-    spec_path = os.path.join(tmpdir, "vhh_spec.json")
-    with open(spec_path, "w") as f:
-        f.write(_json.dumps(spec))
-    return spec_path
+    return {"binder": {"input": "", "contig": contig, "conditions": conditions}}
 
 
 # ---------------------------------------------------------------------------
@@ -846,10 +867,10 @@ def _combine_framework_antigen_cif(framework_pdb_str: str, antigen_pdb_str: str,
     return cif_path
 
 
-def _framework_condition_spec(combined_cif: str, fr_spans: Dict[str, Tuple[int, int]],
+def _framework_condition_spec(fr_spans: Dict[str, Tuple[int, int]],
                               cdr_windows: Dict[str, Tuple[int, int]],
                               epitope_residues: List[int], antigen_chain: str, antigen_res_range,
-                              tmpdir: str, add_cath: bool = False) -> str:
+                              add_cath: bool = False) -> Dict[str, Any]:
     """Build the framework-conditioning condition_spec: fixed FR segments (chain F) interleaved with
     designed CDR windows → one antibody chain, then the antigen chain. Framework = internal-coordinate
     motif (C_CRDGRP 1, free placement — the model docks it) + fixed sequence (C_SEQ); antigen backbone
@@ -860,8 +881,10 @@ def _framework_condition_spec(combined_cif: str, fr_spans: Dict[str, Tuple[int, 
     only internal-coord + sequence + hotspot conditioning (verified in the benchmark condition CIF's
     mask columns), and the FR internal-coord motif already pins the immunoglobulin fold. C_CATH is not
     part of that benchmark, so adding it is an untested condition whose failure would silently drop the
-    run back to de-novo; leave it opt-in."""
-    import json as _json
+    run back to de-novo; leave it opt-in.
+
+    Returns the condition_spec dict; the serving endpoint injects the combined framework+antigen CIF as
+    the spec's `input`."""
     alo, ahi = antigen_res_range if antigen_res_range else (1, 1)
     parts: List[str] = []
     fr_ranges: List[Tuple[int, int]] = []
@@ -895,11 +918,7 @@ def _framework_condition_spec(combined_cif: str, fr_spans: Dict[str, Tuple[int, 
                                       for r in epitope_residues]}
     if add_cath:
         conditions["C_CATH"] = {"2.60.40": [{"select": fr_sel}]}     # immunoglobulin topology
-    spec = {"antibody": {"input": combined_cif, "contig": contig, "conditions": conditions}}
-    spec_path = os.path.join(tmpdir, "framework_spec.json")
-    with open(spec_path, "w") as f:
-        f.write(_json.dumps(spec))
-    return spec_path
+    return {"antibody": {"input": "", "contig": contig, "conditions": conditions}}
 
 
 def default_framework_ctx() -> Optional[Dict[str, Any]]:
@@ -1030,62 +1049,44 @@ def _pdb_to_cif(pdb_path: str, cif_path: str) -> None:
     cif.write(cif_path)
 
 
-def generate_vhh(ctx: Dict[str, Any], antigen_pdb_str: str, epitope_residues: List[int],
+def generate_vhh(antigen_pdb_str: str, epitope_residues: List[int],
                  antigen_chain: str, length_min: int, length_max: int,
                  num_samples: int, framework_ctx: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
-    """Generate `num_samples` VHH candidates against the antigen epitope.
-    Returns a DataFrame with columns `designed_pdb`, `designed_sequence`,
-    `sample_id` — the same contract the enzyme loop expects from `call_ame`.
+    """Generate `num_samples` VHH candidates against the antigen epitope via the RFD4 serving endpoint.
+    Returns a DataFrame with columns `sample_id`, `designed_pdb`, `designed_sequence`, `complex_pdb` —
+    the same contract the loop expects (the endpoint returns the designed binder as `designed_pdb` and
+    the full antigen+VHH complex as `complex_pdb`, driven by `exclude_chain=antigen_chain`).
 
-    When `framework_ctx` is given (from `build_framework_ctx`), uses the native
-    FRAMEWORK-CONDITIONING task (keep a real VHH framework, design only the CDR loops →
-    genuine antibody folds); otherwise falls back to the de-novo binder spec. Any failure
-    in the framework path degrades to de-novo rather than killing the run."""
-    from rfproteina.generate import get_contig_or_design_problem_dataset
-    from rfproteina.datapipes.collate import collate_batch
-    model, transform, torch = ctx["model"], ctx["transform"], ctx["torch"]
-    rows = []
+    When `framework_ctx` is given (from `build_framework_ctx`), uses the native FRAMEWORK-CONDITIONING
+    task (keep a real VHH framework, design only the CDR loops → genuine antibody folds); otherwise falls
+    back to the de-novo binder spec. Any failure building the framework spec degrades to de-novo rather
+    than killing the run. Generation runs on the endpoint (AI Gateway + inference tables), NOT in-process."""
     with tempfile.TemporaryDirectory() as tmp:
         antigen_pdb = os.path.join(tmp, "antigen.pdb")
         with open(antigen_pdb, "w") as f:
             f.write(antigen_pdb_str)
         res_range = _chain_res_range(antigen_pdb_str, antigen_chain)
-        spec_path = None
+        spec, structure_cif = None, None
         if framework_ctx is not None:
             try:
                 combined_cif = _combine_framework_antigen_cif(
                     framework_ctx["pdb"], antigen_pdb_str, antigen_chain, tmp)
-                spec_path = _framework_condition_spec(
-                    combined_cif, framework_ctx["fr_spans"], framework_ctx["cdr_windows"],
-                    epitope_residues, antigen_chain, res_range, tmp)
+                spec = _framework_condition_spec(
+                    framework_ctx["fr_spans"], framework_ctx["cdr_windows"],
+                    epitope_residues, antigen_chain, res_range)
+                structure_cif = open(combined_cif).read()
                 print(f"[framework] using framework-conditioning condition_spec "
                       f"(scaffold: {framework_ctx.get('source', '?')})")
             except Exception as e:  # noqa: BLE001
                 print(f"[framework] spec build failed ({type(e).__name__}: {str(e)[:160]}); "
                       "falling back to de-novo binder generation")
-                spec_path = None
-        if spec_path is None:
+                spec, structure_cif = None, None
+        if spec is None:
             # De-novo binder spec: antigen context + epitope hotspots, fresh VHH-length chain.
             antigen_cif = os.path.join(tmp, "antigen.cif")
             _pdb_to_cif(antigen_pdb, antigen_cif)
-            spec_path = _vhh_condition_spec(antigen_cif, epitope_residues, antigen_chain,
-                                            res_range, length_min, length_max, tmp)
-        ds = get_contig_or_design_problem_dataset(spec_path, num_replicates=int(num_samples),
-                                                  transform=transform)
-        batch = collate_batch([ds[i] for i in range(len(ds))],
-                              schema="rfproteina.datapipes.schema.proteina.ProteinaDataSample",
-                              fixed_dimensions=None)
-        batch = model.transfer_batch_to_device(batch, torch.device(ctx["device"]), 0)
-        with torch.no_grad():
-            outs = model.predict_step(batch, 0)
-    for i, out in enumerate(outs):
-        # Keep ONLY the designed binder chain — the RFD4 output also carries the
-        # preserved antigen chain, and scoring the VHH+antigen fusion silently broke
-        # is_vhh / Boltz / developability. Drop the antigen chain here.
-        pdb_str, seq = _structure_to_pdb_and_seq(out, exclude_chain=antigen_chain)
-        # Also keep the FULL RFD4 complex (antigen chain A + designed VHH chain B) so the
-        # binding pose/epitope is persisted — downstream scoring still uses the isolated VHH.
-        complex_pdb, _ = _structure_to_pdb_and_seq(out, exclude_chain=None)
-        rows.append({"sample_id": i, "designed_pdb": pdb_str, "designed_sequence": seq,
-                     "complex_pdb": complex_pdb})
-    return pd.DataFrame(rows)
+            spec = _vhh_condition_spec(epitope_residues, antigen_chain, res_range, length_min, length_max)
+            structure_cif = open(antigen_cif).read()
+    # Generation on the serving endpoint: designed VHH as designed_pdb, full complex as complex_pdb.
+    return generate_via_rfd4_endpoint(spec, structure_cif, int(num_samples),
+                                      exclude_chain=antigen_chain)

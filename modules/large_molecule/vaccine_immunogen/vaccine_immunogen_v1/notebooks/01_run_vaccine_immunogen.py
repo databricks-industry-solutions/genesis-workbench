@@ -88,12 +88,17 @@ except Exception:
     hf_token = None
 
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "uv"], check=True)
-open("/tmp/bc.txt", "w").write("torch==2.14.1\n")
+# Write the pip build-constraint to a UNIQUE temp path. A fixed "/tmp/bc.txt" collides on reused
+# serverless-GPU nodes (a stale file owned by a prior run's container user → PermissionError on open).
+import tempfile as _tf
+with _tf.NamedTemporaryFile("w", suffix="_bc.txt", delete=False) as _bcf:
+    _bcf.write("torch==2.14.1\n")
+_bc_path = _bcf.name
 # Install rfproteina into the kernel env (diffdock pattern). --torch-backend cu132 pins CUDA-13 torch.
 # The public repo requires no GitHub PAT; HF_TOKEN is set for downstream weight downloads.
 spec = f"rfd4-proteina[metrics-cuda13] @ git+https://{git_url}@{git_ref}"
 _r = subprocess.run(["uv", "pip", "install", "--python", sys.executable, "--break-system-packages",
-                     "--build-constraint", "/tmp/bc.txt", "--torch-backend", "cu132", spec],
+                     "--build-constraint", _bc_path, "--torch-backend", "cu132", spec],
                     capture_output=True, text=True, env={**os.environ, "HF_TOKEN": (hf_token or "")})
 if _r.returncode != 0:
     _err = (_r.stderr or "")
@@ -201,7 +206,7 @@ import utils as vi_utils
 importlib.reload(vi_utils)
 from utils import (
     PredictorAxis, compose_rewards, make_strategy,
-    load_rfd4, generate_scaffold,
+    generate_scaffold,
     call_esmfold, call_proteinmpnn,
     call_netsolp, call_deepstabp, call_mhcflurry, call_hlaiipred,
     warmup_developability_endpoints, _extract_mean_plddt_from_pdb,
@@ -271,16 +276,11 @@ strategy = make_strategy(strategy_name, temperature=resampling_temperature)
 
 # COMMAND ----------
 
-# DBTITLE 1,Load RFD4-Proteina in-process (H100) + warm the scoring endpoints
-import torch
-import os as _os
-if not torch.cuda.is_available():
-    raise RuntimeError("Vaccine Immunogen Design requires a GPU (H100) — torch.cuda.is_available() is False. "
-                       "The orchestrator job is pinned to GPU_1xH100; check the job's compute.")
-# Set HF_TOKEN for Proteina.from_pretrained to download gated weights if needed.
-if hf_token:
-    _os.environ["HF_TOKEN"] = hf_token
-rfd4_ctx = load_rfd4(rfd4_hf_repo, rfd4_hf_revision, rfd4_flow_ckpt, rfd4_ae_ckpt)
+# DBTITLE 1,Warm the scoring + generation endpoints
+# RFD4 generation now runs on the `rfd4_proteina` serving endpoint (AI Gateway + inference tables)
+# instead of loading the model in-process — see utils.generate_scaffold / generate_via_rfd4_endpoint.
+# The endpoint has the weights baked in, so the orchestrator no longer loads RFD4, needs a GPU, or an
+# HF token here (job compute is slimmed to CPU in the GPU->CPU follow-on).
 print("Warming developability endpoints...")
 print(warmup_developability_endpoints(dev_user_prefix=dev_user_prefix))
 
@@ -324,7 +324,7 @@ def generate_and_validate(num: int) -> Dict[str, List]:
     """RFD4 motif-scaffold → (optional) ProteinMPNN scaffold redesign fixing the
     epitope → ESMFold. Returns dict of parallel lists (incl. the located motif
     positions in each FINAL sequence, for the motif-RMSD axis)."""
-    gen_df = generate_scaffold(rfd4_ctx, motif_pdb_str, motif_chain,
+    gen_df = generate_scaffold(motif_pdb_str, motif_chain,
                                (motif_lo, motif_hi), scaffold_length_min, scaffold_length_max, num,
                                placement=motif_placement)
     seqs = list(gen_df["designed_sequence"])

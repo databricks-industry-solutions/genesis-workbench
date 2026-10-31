@@ -12,12 +12,17 @@
 # MAGIC **GPU_XLARGE (1× H100)** endpoint. Express is what makes RFD4 servable: it restores this exact
 # MAGIC torch-2.14.1/CUDA-13 env at serving instead of rebuilding on the standard torch-2.7.1/CUDA-11.8 base.
 # MAGIC
-# MAGIC Serving contract is proteina_complexa-compatible (UI drop-in) with an added `task`:
-# MAGIC input `[task, target_pdb, binder_length_min, binder_length_max, num_samples, hotspot_residues, target_chain]`
-# MAGIC → output `[sample_id, pdb_output, sequence, rewards]`.
+# MAGIC Serving contract (proteina_complexa-compatible, UI drop-in) with an added `task` plus a
+# MAGIC **pass-through `condition_spec`** path for the design workflows:
+# MAGIC input `[task, target_pdb, binder_length_min, binder_length_max, num_samples, hotspot_residues,
+# MAGIC target_chain, condition_spec_json, structure_cif, exclude_chain]`
+# MAGIC → output `[sample_id, designed_pdb, designed_sequence, complex_pdb]`.
 # MAGIC
-# MAGIC > Confirmed on a real H100 deploy: de-novo generation serves end-to-end via Express. The
-# MAGIC > binder/motif condition-spec construction is still first-draft and gets refined in the design workflows.
+# MAGIC > Confirmed on a real H100 deploy: de-novo generation serves end-to-end via Express. The simple
+# MAGIC > binder/motif construction from the scalar columns is first-draft; the Antibody/Vaccine design
+# MAGIC > workflows instead build their own rich `condition_spec` (framework C_CRDGRP / motif C_IDX) and
+# MAGIC > send it via `condition_spec_json` + `structure_cif`, so generation runs through THIS endpoint
+# MAGIC > (AI Gateway + inference tables) instead of loading RFD4 in-process.
 
 # COMMAND ----------
 
@@ -179,13 +184,31 @@ class RFD4ProteinaModel(PythonModel):
     Inference runs through the model's OWN supported path (mirrors the model repo's
     tests/test_inference_integration.py + rfproteina/generate.py), NOT a hand-rolled batch.
 
-    Serving contract (proteina_complexa-compatible + a `task` column):
-      in : task, target_pdb, binder_length_min, binder_length_max, num_samples, hotspot_residues, target_chain
-      out: sample_id, pdb_output (PDB text), sequence, rewards
+    Serving contract (proteina_complexa-compatible + a `task` column + a pass-through condition_spec):
+      in : task, target_pdb, binder_length_min, binder_length_max, num_samples, hotspot_residues,
+           target_chain, condition_spec_json, structure_cif, exclude_chain
+      out: sample_id, designed_pdb (PDB text), designed_sequence, complex_pdb
+
+    Two input modes:
+      - condition_spec_json non-empty: run the caller's full condition_spec verbatim against the
+        provided structure_cif (the design workflows build framework/motif specs this way). When
+        exclude_chain is set (the antigen chain), designed_pdb is the designed binder only (that chain
+        dropped, remainder relabeled 'A') and complex_pdb is the full generated complex.
+      - condition_spec_json empty: the legacy scalar path (de_novo / first-draft binder/motif).
     """
 
     def load_context(self, context):
         import os
+        # Disable torch.compile for serving. rfproteina compiles an RMSNorm helper at import
+        # (nn/modules/norm.py: torch.compile(_rms_norm_preserve_dtype, fullgraph=True)); conditioned
+        # condition_spec inputs (antibody/vaccine C_CRD/C_SEQ/C_HOT/C_CRDGRP) trip a dynamo graph break
+        # that fullgraph=True escalates to a hard failure ("Hard failure due to fullgraph=True"), while
+        # unconditioned de-novo compiles fine. Trunk compile is OFF at serving (use_torch_compile defaults
+        # False, reserve_shape_cache is never called), so that RMSNorm is the only active compile — and
+        # disabling dynamo degrades it to the identical EAGER rms_norm (no numeric change). This is exactly
+        # how rfproteina's own e2e regression tests run (TORCHDYNAMO_DISABLE=1). Must be set before torch
+        # imports so the module-level compile in norm.py becomes a passthrough.
+        os.environ["TORCHDYNAMO_DISABLE"] = "1"
         import torch
         import rfproteina
         from hydra import compose, initialize_config_dir
@@ -238,9 +261,8 @@ class RFD4ProteinaModel(PythonModel):
         open(spec_path, "w").write(json.dumps({task: {"input": target, "contig": contig, "conditions": conditions}}))
         return spec_path
 
-    def _structure_to_pdb_and_seq(self, sample):
+    def _array_to_pdb_and_seq(self, atom_array):
         import io, numpy as np
-        atom_array = sample["generated_atom_array"]
         seq = ""
         try:
             from biotite.structure import to_sequence
@@ -274,6 +296,40 @@ class RFD4ProteinaModel(PythonModel):
             cif_file.write(buffer)
             return buffer.getvalue(), seq
 
+    def _structure_to_pdb_and_seq(self, sample, exclude_chain=""):
+        """Convert a generated sample to (pdb_text, sequence). When `exclude_chain` is set (the antigen
+        chain, for antibody design), drop that chain and relabel the remaining designed chain to 'A' so
+        the result is the designed binder only; pass "" to return the full generated structure/complex."""
+        import numpy as np
+        atom_array = sample["generated_atom_array"]
+        if exclude_chain:
+            keep = atom_array.chain_id != exclude_chain
+            if keep.any() and not keep.all():   # fall back to the full array if exclude drops all / none
+                atom_array = atom_array[keep]
+                atom_array.set_annotation("chain_id", np.full(atom_array.array_length(), "A"))
+        return self._array_to_pdb_and_seq(atom_array)
+
+    def _row_to_input_path(self, row, tmp):
+        """Resolve the model input path for one request row. If `condition_spec_json` is provided, write
+        the caller's structure CIF and inject its path as the spec's `input` (the design-workflow path);
+        otherwise fall back to the legacy scalar `task`/`target_pdb` construction."""
+        import json, os
+        condition_spec_json = str(row.get("condition_spec_json", "") or "").strip()
+        if condition_spec_json:
+            spec = json.loads(condition_spec_json)
+            cif_path = os.path.join(tmp, "structure.cif")
+            open(cif_path, "w").write(str(row.get("structure_cif", "") or ""))
+            top_key = next(iter(spec))                 # "binder" / "antibody" / "immunogen" / ...
+            spec[top_key]["input"] = cif_path          # the endpoint owns the server-local path
+            spec_path = os.path.join(tmp, "spec.json")
+            open(spec_path, "w").write(json.dumps(spec))
+            return spec_path
+        task = str(row.get("task", "de_novo") or "de_novo")
+        return self._request_to_input_path(
+            task, str(row.get("target_pdb", "") or ""),
+            row.get("binder_length_min", 100), row.get("binder_length_max", 100),
+            str(row.get("hotspot_residues", "") or ""), tmp)
+
     def predict(self, context, model_input, params=None):
         import pandas as pd
         import tempfile
@@ -283,13 +339,10 @@ class RFD4ProteinaModel(PythonModel):
 
         rows, sample_id = [], 0
         for _, row in model_input.iterrows():
-            task = str(row.get("task", "de_novo") or "de_novo")
             num_samples = int(row.get("num_samples", 1) or 1)
+            exclude_chain = str(row.get("exclude_chain", "") or "").strip()
             with tempfile.TemporaryDirectory() as tmp:
-                inputs = self._request_to_input_path(
-                    task, str(row.get("target_pdb", "") or ""),
-                    row.get("binder_length_min", 100), row.get("binder_length_max", 100),
-                    str(row.get("hotspot_residues", "") or ""), tmp)
+                inputs = self._row_to_input_path(row, tmp)
                 dataset = get_contig_or_design_problem_dataset(inputs, num_replicates=num_samples, transform=self.transform)
                 batch = collate_batch([dataset[i] for i in range(len(dataset))],
                                       schema="rfproteina.datapipes.schema.proteina.ProteinaDataSample",
@@ -300,8 +353,12 @@ class RFD4ProteinaModel(PythonModel):
                 with torch.no_grad():
                     outputs = self.model.predict_step(batch, 0)
             for output in outputs:
-                pdb_str, seq = self._structure_to_pdb_and_seq(output)
-                rows.append({"sample_id": sample_id, "pdb_output": pdb_str, "sequence": seq, "rewards": None}); sample_id += 1
+                designed_pdb, seq = self._structure_to_pdb_and_seq(output, exclude_chain=exclude_chain)
+                complex_pdb = ""
+                if exclude_chain:
+                    complex_pdb, _ = self._structure_to_pdb_and_seq(output, exclude_chain="")
+                rows.append({"sample_id": sample_id, "designed_pdb": designed_pdb,
+                             "designed_sequence": seq, "complex_pdb": complex_pdb}); sample_id += 1
         return pd.DataFrame(rows)
 
 # COMMAND ----------
@@ -324,9 +381,11 @@ input_schema = Schema([
     ColSpec("string", "task"), ColSpec("string", "target_pdb"),
     ColSpec("long", "binder_length_min"), ColSpec("long", "binder_length_max"),
     ColSpec("long", "num_samples"), ColSpec("string", "hotspot_residues"), ColSpec("string", "target_chain"),
+    # Pass-through condition_spec path (the Antibody/Vaccine design workflows):
+    ColSpec("string", "condition_spec_json"), ColSpec("string", "structure_cif"), ColSpec("string", "exclude_chain"),
 ])
-output_schema = Schema([ColSpec("long", "sample_id"), ColSpec("string", "pdb_output"),
-                        ColSpec("string", "sequence"), ColSpec("double", "rewards")])
+output_schema = Schema([ColSpec("long", "sample_id"), ColSpec("string", "designed_pdb"),
+                        ColSpec("string", "designed_sequence"), ColSpec("string", "complex_pdb")])
 signature = ModelSignature(inputs=input_schema, outputs=output_schema)
 
 # Bake the matched flow+AE weights (portable HF bundle: config.json + model.safetensors) into a local dir so
@@ -338,8 +397,28 @@ print("bundle_dir:", bundle_dir, "contents:", sorted(os.listdir(bundle_dir)))
 artifacts = {"hf_bundle": bundle_dir}
 test_model = RFD4ProteinaModel(); test_model.load_context(PythonModelContext(artifacts=artifacts, model_config={}))
 example_input = pd.DataFrame([{"task": "de_novo", "target_pdb": "", "binder_length_min": 60,
-                               "binder_length_max": 60, "num_samples": 1, "hotspot_residues": "", "target_chain": "A"}])
-print(test_model.predict(None, example_input)[["sample_id", "sequence"]].head())
+                               "binder_length_max": 60, "num_samples": 1, "hotspot_residues": "", "target_chain": "A",
+                               "condition_spec_json": "", "structure_cif": "", "exclude_chain": ""}])
+print(test_model.predict(None, example_input)[["sample_id", "designed_sequence"]].head())
+
+# Exercise the pass-through condition_spec code path (JSON parse → structure_cif write → input
+# injection → predict_step) using the bundled monomer CIF as a self-contained motif scaffold.
+# Informational only (try/except): the de-novo prediction above is the hard serving gate, and the
+# rich antibody/vaccine specs are validated end-to-end by the design-workflow runs.
+try:
+    import json as _json
+    _monomer_cif = open(test_model._request_to_input_path("de_novo", "", 60, 60, "", "/tmp")).read()
+    _spec = {"immunogen": {"input": "", "contig": "10-20, A1-20, 10-20",
+                           "conditions": {"C_CRD": {True: [{"select": "res_id>=1 and res_id<=20"}]},
+                                          "C_SEQ": {True: [{"select": "res_id>=1 and res_id<=20"}]}}}}
+    _cs_input = pd.DataFrame([{"task": "", "target_pdb": "", "binder_length_min": 0, "binder_length_max": 0,
+                               "num_samples": 1, "hotspot_residues": "", "target_chain": "",
+                               "condition_spec_json": _json.dumps(_spec), "structure_cif": _monomer_cif,
+                               "exclude_chain": ""}])
+    _cs_out = test_model.predict(None, _cs_input)
+    print("condition_spec smoke OK:", list(_cs_out.columns), "rows:", len(_cs_out))
+except Exception as _e:
+    print(f"condition_spec smoke (informational) did not complete: {type(_e).__name__}: {_e}")
 
 # COMMAND ----------
 
@@ -469,6 +548,23 @@ else:
         timeout=timedelta(minutes=120))
 print(f"endpoint {endpoint_name} is live")
 
+# Enable AI Gateway inference-table payload capture so every generation request/response made by the
+# Antibody/Vaccine design workflows (which now call this endpoint instead of loading RFD4 in-process)
+# is logged to a UC table — governance + observability for the most expensive step. Best-effort: the
+# endpoint is the critical deliverable, so a gateway hiccup must NOT fail the task (verify the table
+# in the design-workflow validation run).
+try:
+    from databricks.sdk.service.serving import AiGatewayInferenceTableConfig
+    w.serving_endpoints.put_ai_gateway(
+        name=endpoint_name,
+        inference_table_config=AiGatewayInferenceTableConfig(
+            enabled=True, catalog_name=catalog, schema_name=schema,
+            table_name_prefix=f"{model_name}_payload"),
+    )
+    print(f"AI Gateway inference table enabled -> {catalog}.{schema}.{model_name}_payload_*")
+except Exception as e:
+    print(f"WARNING: could not enable AI Gateway inference table (endpoint is live regardless): {e}")
+
 # COMMAND ----------
 
 # MAGIC %md
@@ -520,7 +616,42 @@ try:
         model_source_version="v0.0.1",
         model_description_url="https://github.com/RosettaCommons/RFD4-Proteina",
     )
-    print(f"GWB app-registry model_id={gwb_model_id} ({model_name} endpoint already live via Express)")
+    # Record the deployment in `model_deployments` so get_endpoint_name_for_uc_model("rfd4_proteina")
+    # resolves this endpoint (the Express path above skips the standard deploy_model job's MERGE, so the
+    # design workflows otherwise couldn't look the endpoint up). Mirrors
+    # modules/core/notebooks/deploy_model.py: one active row per model, keyed on deploy_model_uc_name.
+    import time as _time
+    def _esc(v): return str(v).replace("'", "''")
+    try:
+        _dev_prefix = dbutils.secrets.get("dbx_genesis_workbench", "dev_user_prefix")
+    except Exception:
+        _dev_prefix = ""
+    _endpoint_name = (f"gwb_{_dev_prefix}_{model_name}_endpoint"
+                      if _dev_prefix and _dev_prefix.strip() else f"gwb_{model_name}_endpoint")
+    _hostname = spark.conf.get("spark.databricks.workspaceUrl")
+    _deploy_id = int(_time.time() * 1000)
+    spark.sql(f"""
+        MERGE INTO {catalog}.{schema}.model_deployments AS target
+        USING (SELECT '{_esc(uc_model_name)}' AS deploy_model_uc_name) AS source
+        ON target.deploy_model_uc_name = source.deploy_model_uc_name AND target.is_active = true
+        WHEN MATCHED THEN UPDATE SET
+            target.deploy_model_uc_version = '{model_version}',
+            target.model_deployed_date = CURRENT_TIMESTAMP(),
+            target.model_deployed_by = '{_esc(user_email)}',
+            target.model_endpoint_name = '{_esc(_endpoint_name)}',
+            target.model_invoke_url = 'https://{_hostname}/serving-endpoints/{_esc(_endpoint_name)}/invocations'
+        WHEN NOT MATCHED THEN INSERT
+            (deployment_id, deployment_name, deployment_description, model_id, input_adapter, output_adapter,
+             is_adapter, deploy_model_uc_name, deploy_model_uc_version, model_deployed_date, model_deployed_by,
+             model_deploy_platform, model_endpoint_name, model_invoke_url, is_active, deactivated_timestamp)
+        VALUES
+            ({_deploy_id}, 'RFD4-Proteina Design', 'RFD4-Proteina Design endpoint (Express)', {gwb_model_id},
+             '', '', false, '{_esc(uc_model_name)}', '{model_version}', CURRENT_TIMESTAMP(), '{_esc(user_email)}',
+             'model_serving', '{_esc(_endpoint_name)}',
+             'https://{_hostname}/serving-endpoints/{_esc(_endpoint_name)}/invocations', true, NULL)
+    """)
+    print(f"GWB app-registry model_id={gwb_model_id}; model_deployments active row -> {_endpoint_name}")
 except Exception:
     print("WARNING: GWB app-registry metadata step failed — the endpoint is already live, so NOT failing "
-          "the task. Fix separately if the model should appear in the GWB app UI:\n" + traceback.format_exc())
+          "the task. NOTE: the design workflows resolve this endpoint via model_deployments, so fix this "
+          "row if antibody/vaccine generation can't find the endpoint:\n" + traceback.format_exc())

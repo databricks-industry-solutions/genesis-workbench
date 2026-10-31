@@ -87,6 +87,29 @@ def _query(axis: str, inputs: Any, dev_user_prefix: Optional[str] = None,
     return client.serving_endpoints.query(name=name, inputs=inputs)
 
 
+def generate_via_rfd4_endpoint(condition_spec: Dict[str, Any], structure_cif: str, num_samples: int,
+                               exclude_chain: str = "") -> pd.DataFrame:
+    """Run RFD4-Proteina generation on the serving endpoint (NOT in-process). The endpoint name is
+    resolved from the `model_deployments` registry via `get_endpoint_name_for_uc_model` — the single
+    source of truth the app uses (immune to DEV_USER_PREFIX mismatch), set up by the orchestrator's
+    earlier `initialize(...)` call. Sends the full `condition_spec` + structure CIF; the endpoint injects
+    the CIF as the spec's `input` and runs the model's own `predict_step`. Routing generation through the
+    endpoint is what brings AI Gateway + inference-table coverage to the most expensive step. Returns a
+    DataFrame with `sample_id`, `designed_pdb`, `designed_sequence`, `complex_pdb` (the immunogen path
+    leaves `exclude_chain` empty, so `complex_pdb` is unused)."""
+    from genesis_workbench.models import get_endpoint_name_for_uc_model
+    payload = [{
+        "task": "", "target_pdb": "", "binder_length_min": 0, "binder_length_max": 0,
+        "num_samples": int(num_samples), "hotspot_residues": "", "target_chain": "",
+        "condition_spec_json": json.dumps(condition_spec), "structure_cif": structure_cif,
+        "exclude_chain": exclude_chain or "",
+    }]
+    name = get_endpoint_name_for_uc_model("rfd4_proteina")
+    client = WorkspaceClient(config=Config(http_timeout_seconds=1800))
+    resp = client.serving_endpoints.query(name=name, inputs=payload)
+    return pd.DataFrame(resp.predictions)
+
+
 # ---------------------------------------------------------------------------
 # Validation / scoring endpoint helpers (reused from antibody utils)
 # ---------------------------------------------------------------------------
@@ -513,11 +536,11 @@ def _flank_segments(length_min: int, length_max: int, motif_len: int) -> Tuple[s
     return seg, seg
 
 
-def _motif_scaffold_condition_spec(motif_cif_path: str, motif_chain: str,
-                                   motif_range: Tuple[int, int],
-                                   length_min: int, length_max: int, tmpdir: str,
-                                   placement: str = "indexed") -> str:
-    """Build the RFD4 condition_spec JSON for epitope motif-scaffolding and return its path.
+def _motif_scaffold_condition_spec(motif_chain: str, motif_range: Tuple[int, int],
+                                   length_min: int, length_max: int,
+                                   placement: str = "indexed") -> Dict[str, Any]:
+    """Build the RFD4 epitope motif-scaffolding condition_spec dict (the serving endpoint injects the
+    motif CIF as the spec's `input`, so no file/path is produced here).
 
     The designed chain is ONE continuous chain: a flexible flank, the preserved epitope motif segment,
     and another flexible flank. The motif SEQUENCE is always held fixed (`C_SEQ`), the flanks are
@@ -539,7 +562,6 @@ def _motif_scaffold_condition_spec(motif_cif_path: str, motif_chain: str,
         this is NOT `C_CRDGRP` — that is the distinct "indexed internal-coordinate" variant (free 3D dock
         at a fixed sequence position, as in the antibody framework path), a different axis.
     """
-    import json as _json
     lo, hi = motif_range
     pre, post = _flank_segments(length_min, length_max, hi - lo + 1)
     contig = f"{pre}, {motif_chain}{lo}-{hi}, {post}"
@@ -553,11 +575,7 @@ def _motif_scaffold_condition_spec(motif_cif_path: str, motif_chain: str,
         # Free the motif's SEQUENCE POSITION — the model places the epitope within the scaffold. C_IDX:false
         # requires a `group:` label; one group preserves the motif residues' relative offsets.
         conditions["C_IDX"] = {False: [{"select": motif_sel, "group": "epitope"}]}
-    spec = {"immunogen": {"input": motif_cif_path, "contig": contig, "conditions": conditions}}
-    spec_path = os.path.join(tmpdir, "immunogen_spec.json")
-    with open(spec_path, "w") as f:
-        f.write(_json.dumps(spec))
-    return spec_path
+    return {"immunogen": {"input": "", "contig": contig, "conditions": conditions}}
 
 
 def _structure_to_pdb_and_seq(sample: Dict[str, Any]) -> Tuple[str, str]:
@@ -654,18 +672,14 @@ def _pdb_to_cif(pdb_path: str, cif_path: str) -> None:
     cif.write(cif_path)
 
 
-def generate_scaffold(ctx: Dict[str, Any], motif_pdb_str: str, motif_chain: str,
+def generate_scaffold(motif_pdb_str: str, motif_chain: str,
                       motif_range: Tuple[int, int], length_min: int, length_max: int,
                       num_samples: int, placement: str = "indexed") -> pd.DataFrame:
-    """Generate `num_samples` scaffold candidates presenting the epitope motif.
-    Returns a DataFrame with columns `designed_pdb`, `designed_sequence`,
-    `sample_id` — the same contract the loop expects. `placement` is forwarded to
-    `_motif_scaffold_condition_spec` (indexed = fixed C_CRD position; unindexed =
-    free-placement C_CRDGRP motif group)."""
-    from rfproteina.generate import get_contig_or_design_problem_dataset
-    from rfproteina.datapipes.collate import collate_batch
-    model, transform, torch = ctx["model"], ctx["transform"], ctx["torch"]
-    rows = []
+    """Generate `num_samples` scaffold candidates presenting the epitope motif via the RFD4 serving
+    endpoint (NOT in-process). Returns a DataFrame with columns `sample_id`, `designed_pdb`,
+    `designed_sequence` (plus an unused empty `complex_pdb`) — the same contract the loop expects.
+    `placement` is forwarded to `_motif_scaffold_condition_spec` (indexed = fixed motif position;
+    unindexed = C_IDX:false so the model chooses the motif's position)."""
     with tempfile.TemporaryDirectory() as tmp:
         motif_pdb = os.path.join(tmp, "motif.pdb")
         with open(motif_pdb, "w") as f:
@@ -673,17 +687,8 @@ def generate_scaffold(ctx: Dict[str, Any], motif_pdb_str: str, motif_chain: str,
         # RFD4's condition_spec `input` must be CIF/BinaryCIF, not PDB — convert first.
         motif_cif = os.path.join(tmp, "motif.cif")
         _pdb_to_cif(motif_pdb, motif_cif)
-        spec_path = _motif_scaffold_condition_spec(motif_cif, motif_chain, motif_range,
-                                                   length_min, length_max, tmp, placement=placement)
-        ds = get_contig_or_design_problem_dataset(spec_path, num_replicates=int(num_samples),
-                                                  transform=transform)
-        batch = collate_batch([ds[i] for i in range(len(ds))],
-                              schema="rfproteina.datapipes.schema.proteina.ProteinaDataSample",
-                              fixed_dimensions=None)
-        batch = model.transfer_batch_to_device(batch, torch.device(ctx["device"]), 0)
-        with torch.no_grad():
-            outs = model.predict_step(batch, 0)
-    for i, out in enumerate(outs):
-        pdb_str, seq = _structure_to_pdb_and_seq(out)
-        rows.append({"sample_id": i, "designed_pdb": pdb_str, "designed_sequence": seq})
-    return pd.DataFrame(rows)
+        spec = _motif_scaffold_condition_spec(motif_chain, motif_range, length_min, length_max,
+                                              placement=placement)
+        structure_cif = open(motif_cif).read()
+    # Generation on the serving endpoint (AI Gateway + inference tables), not in-process.
+    return generate_via_rfd4_endpoint(spec, structure_cif, int(num_samples))

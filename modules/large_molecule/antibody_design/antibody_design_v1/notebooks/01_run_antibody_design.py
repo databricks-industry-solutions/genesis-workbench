@@ -88,11 +88,16 @@ except Exception as e:
     print(f"[HF_TOKEN] not set (will try unauthenticated download); {type(e).__name__}: {str(e)[:100]}")
 
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "uv"], check=True)
-open("/tmp/bc.txt", "w").write("torch==2.14.1\n")
+# Write the pip build-constraint to a UNIQUE temp path. A fixed "/tmp/bc.txt" collides on reused
+# serverless-GPU nodes (a stale file owned by a prior run's container user → PermissionError on open).
+import tempfile as _tf
+with _tf.NamedTemporaryFile("w", suffix="_bc.txt", delete=False) as _bcf:
+    _bcf.write("torch==2.14.1\n")
+_bc_path = _bcf.name
 # Install rfproteina from the PUBLIC GitHub repo. --torch-backend cu132 pins CUDA-13 torch.
 spec = f"rfd4-proteina[metrics-cuda13] @ git+https://{git_url}@{git_ref}"
 _r = subprocess.run(["uv", "pip", "install", "--python", sys.executable, "--break-system-packages",
-                     "--build-constraint", "/tmp/bc.txt", "--torch-backend", "cu132", spec],
+                     "--build-constraint", _bc_path, "--torch-backend", "cu132", spec],
                     capture_output=True, text=True)
 if _r.returncode != 0:
     _err = (_r.stderr or "")
@@ -222,7 +227,7 @@ from utils import (
     PredictorAxis, compose_rewards, half_life_anchor_threshold, half_life_anchor_rewards,
     self_consistency_rmsd,
     make_strategy, number_vhh, graft_cdrs_onto_framework,
-    build_framework_ctx, default_framework_ctx, CANONICAL_VHH_FRAMEWORK, load_rfd4, generate_vhh,
+    build_framework_ctx, default_framework_ctx, CANONICAL_VHH_FRAMEWORK, generate_vhh,
     call_esmfold, call_proteinmpnn, call_boltz, boltz_iptm,
     call_netsolp, call_pltnum, call_deepstabp, call_mhcflurry, call_hlaiipred,
     mhc_burden_per_residue,
@@ -298,12 +303,11 @@ strategy = make_strategy(strategy_name, temperature=resampling_temperature)
 
 # COMMAND ----------
 
-# DBTITLE 1,Load RFD4-Proteina in-process (H100) + warm the scoring endpoints
-import torch
-if not torch.cuda.is_available():
-    raise RuntimeError("Antibody Design requires a GPU (H100) — torch.cuda.is_available() is False. "
-                       "The orchestrator job is pinned to GPU_1xH100; check the job's compute.")
-rfd4_ctx = load_rfd4(rfd4_hf_repo, rfd4_hf_revision)
+# DBTITLE 1,Warm the scoring + generation endpoints
+# RFD4 generation now runs on the `rfd4_proteina` serving endpoint (AI Gateway + inference tables)
+# instead of loading the model in-process — see utils.generate_vhh / generate_via_rfd4_endpoint. The
+# orchestrator no longer loads RFD4 or requires a GPU here (job compute is slimmed to CPU in the
+# GPU->CPU follow-on).
 print("Warming developability endpoints...")
 print(warmup_developability_endpoints(dev_user_prefix=dev_user_prefix))
 
@@ -405,7 +409,7 @@ def generate_and_validate(num: int) -> Dict[str, List]:
     else de-novo binder) → hard VHH gate (anarcii) → optional CDR-graft / ProteinMPNN framework
     redesign QC → ESMFold. Returns dict of parallel lists over the SURVIVING candidates (the gate
     can shrink the batch)."""
-    gen_df = generate_vhh(rfd4_ctx, antigen_pdb_str, epitope_residues, antigen_chain,
+    gen_df = generate_vhh(antigen_pdb_str, epitope_residues, antigen_chain,
                           vhh_length_min, vhh_length_max, num, framework_ctx=framework_ctx)
     seqs = list(gen_df["designed_sequence"])
     rfd4_vhh_pdbs = list(gen_df["designed_pdb"])             # raw RFD4 VHH structure (persisted)
