@@ -59,7 +59,7 @@ dbutils.library.restartPython()
 # DBTITLE 1,Read widget values
 # num_gpu_workers + max_sequences are job parameters so a run can be tuned without
 # editing the notebook (default: 4 A10 Ray workers over the 1M-sequence corpus).
-dbutils.widgets.text("num_gpu_workers", "4", "Serverless-GPU A10 Ray workers")
+dbutils.widgets.text("num_gpu_workers", "8", "Serverless-GPU H100 Ray workers")
 dbutils.widgets.text("max_sequences", "1000000", "Max sequences to embed")
 # Blank = production target `{catalog}.{schema}.sequence_embeddings`. Set to a scratch
 # table name to validate a bounded run without touching the live VS source table.
@@ -131,7 +131,7 @@ if not skip_embedding:
 from serverless_gpu.ray import ray_launch
 
 
-@ray_launch(gpus=NUM_WORKERS, gpu_type="a10", remote=True)
+@ray_launch(gpus=NUM_WORKERS, gpu_type="h100", remote=True)
 def embed_with_ray():
     import numpy as np
     import ray
