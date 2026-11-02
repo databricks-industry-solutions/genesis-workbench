@@ -54,7 +54,7 @@ dbutils.widgets.text("teddy_model_size", "400M", "TEDDY-G variant")
 dbutils.widgets.text("target_n_cells", "2000000", "Target reference cell count")
 dbutils.widgets.text("per_stratum_cap", "30000", "Max cells per (tissue, disease) stratum")
 dbutils.widgets.text("census_version", "2024-07-01", "CELLxGENE Census version (LTS tag or 'latest')")
-dbutils.widgets.text("num_gpu_workers", "4", "Number of single-A10 serverless-GPU Ray workers (stage fetch parallelism)")
+dbutils.widgets.text("num_gpu_workers", "8", "Number of single-H100 serverless-GPU Ray workers (stage fetch parallelism)")
 dbutils.widgets.text("obs_limit", "0", "Cap Census obs scan to first N soma_joinids (0 = full scan; >0 for fast tests)")
 
 catalog = dbutils.widgets.get("catalog")
@@ -194,7 +194,7 @@ RUN_TOKENS_DIR = f"{TOKENS_STAGE_DIR}/chunk_{int(_time.time())}"
 # DBTITLE 1,Ray: N A10 workers fetch Census X in parallel → top-k TEDDY tokens → token parquet
 from serverless_gpu.ray import ray_launch
 
-@ray_launch(gpus=NUM_GPU_WORKERS, gpu_type="a10", remote=True)
+@ray_launch(gpus=NUM_GPU_WORKERS, gpu_type="h100", remote=True)
 def stage_tokens_with_ray():
     import inspect, json, sys
     import numpy as np

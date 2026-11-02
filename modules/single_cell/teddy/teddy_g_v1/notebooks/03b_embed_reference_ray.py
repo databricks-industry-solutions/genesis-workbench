@@ -34,7 +34,7 @@ dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("cache_dir", "teddy", "Cache dir")
 dbutils.widgets.text("teddy_model_size", "400M", "TEDDY-G variant")
 dbutils.widgets.text("target_n_cells", "2000000", "Target reference cell count (for the idempotency check)")
-dbutils.widgets.text("num_gpu_workers", "4", "Number of single-A10 serverless-GPU Ray workers")
+dbutils.widgets.text("num_gpu_workers", "8", "Number of single-H100 serverless-GPU Ray workers")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
@@ -88,7 +88,7 @@ if not already_done:
 if not already_done:
     from serverless_gpu.ray import ray_launch
 
-    @ray_launch(gpus=NUM_GPU_WORKERS, gpu_type="a10", remote=True)
+    @ray_launch(gpus=NUM_GPU_WORKERS, gpu_type="h100", remote=True)
     def embed_with_ray():
         import inspect, sys
         import numpy as np
