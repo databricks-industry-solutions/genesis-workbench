@@ -11,8 +11,21 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install -q -r ../requirements.txt pyarrow==15.0.2 "ray[data]==2.59.0"
-# MAGIC dbutils.library.restartPython()
+# pyarrow==18.1.0 because ray[data]==2.59.0 requires pyarrow>=17 and mlflow (requirements.txt) requires
+# pyarrow<20 (the old pyarrow==15.0.2 pin predates the ray 2.59 bump and is unsatisfiable). These pins
+# also conflict with the serverless base env's pipConstraints.txt, so %pip (which force-adds -c
+# pipConstraints.txt) can't resolve them. Use a subprocess pip (NOT %pip) to bypass the constraints;
+# capture output so any resolver error is visible.
+import subprocess, sys
+_r = subprocess.run(
+    [sys.executable, "-m", "pip", "install", "-q",
+     "-r", "../requirements.txt", "pyarrow==18.1.0", "ray[data]==2.59.0"],
+    capture_output=True, text=True,
+)
+print((_r.stdout or "")[-3000:])
+if _r.returncode != 0:
+    raise RuntimeError(f"pip install failed (exit {_r.returncode}):\n{(_r.stderr or '')[-6000:]}")
+dbutils.library.restartPython()
 
 # COMMAND ----------
 
