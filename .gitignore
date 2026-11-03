@@ -19,6 +19,7 @@ module.env
 application.env
 temp.*
 /temp
+tmp/
 mlruns
 lightning_logs
 .deployed

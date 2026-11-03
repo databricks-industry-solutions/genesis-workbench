@@ -16,6 +16,7 @@ When a user in this repo asks for help with deployment, installation, developmen
 | Migrating a serving model to Express deployments (env_pack) — faster/robuster serving, registration-only change | [`claude_skills/SKILL_GENESIS_WORKBENCH_EXPRESS_MIGRATION.md`](claude_skills/SKILL_GENESIS_WORKBENCH_EXPRESS_MIGRATION.md) |
 | Using the GWB UI — how each tab works, inputs/outputs | [`claude_skills/SKILL_GENESIS_WORKBENCH_WORKFLOWS.md`](claude_skills/SKILL_GENESIS_WORKBENCH_WORKFLOWS.md) |
 | "use this paper to design/optimize XXX protein/binder", scaffold a protein-design notebook for a user's own target (binder / ligand-binder / motif / de novo / optimize) via serving endpoints | [`claude_skills/SKILL_GENESIS_WORKBENCH_PROTEIN_DESIGN_FROM_PAPER.md`](claude_skills/SKILL_GENESIS_WORKBENCH_PROTEIN_DESIGN_FROM_PAPER.md) |
+| "use this paper to call variants / find the pathogenic variant / annotate a VCF / is my sample a carrier", scaffold a GPU variant-calling + ClinVar-annotation genomics notebook (Parabricks + DeepVariant, Glow-free) | [`claude_skills/SKILL_GENESIS_WORKBENCH_VARIANT_CALLING_FROM_PAPER.md`](claude_skills/SKILL_GENESIS_WORKBENCH_VARIANT_CALLING_FROM_PAPER.md) |
 
 ## Quick start — deploy
 

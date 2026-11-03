@@ -14,6 +14,7 @@ indices**, and dispatch its **batch jobs** — **never `import genesis_workbench
 |---|---|
 | Run a model on an input (fold/design a protein, dock, generate molecules, predict ADMET/solubility/Tm, embed sequences or cells) | **gwb-serving-endpoints** |
 | Design or optimize a protein for *their own* target (binder / ligand-binder / motif / de novo / optimize) | **protein-design-from-paper** |
+| Call germline variants from sequencing reads + interpret them clinically (GPU Parabricks/DeepVariant → ClinVar, Glow-free) | **variant-calling-from-paper** |
 | Find similar proteins by embedding | **gwb-sequence-search** |
 | Annotate / embed / perturb single cells (scRNA-seq, AnnData) | **gwb-single-cell** |
 | Nearest-neighbor / similarity / annotation over any GWB index | **gwb-vector-search** |

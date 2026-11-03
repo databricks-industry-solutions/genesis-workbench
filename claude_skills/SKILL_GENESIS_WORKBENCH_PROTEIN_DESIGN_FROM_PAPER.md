@@ -40,6 +40,7 @@ Map to exactly one task:
 | If the user wants to… | Task | GWB generation endpoint (toolkit fn) |
 |---|---|---|
 | Bind a **protein** target (block an interaction, neutralize a toxin, antibody-alternative) | `binder_vs_protein` | **Proteina-Complexa Binder** → `gen_protein_binders(target_pdb, target_chain, hotspots, …)` |
+| Design a **single-domain antibody (VHH / nanobody)** against an antigen epitope | `antibody_vhh` | **RFD4-Proteina** → `gen_vhh_antibodies(target_pdb, target_chain, hotspots, length_min=110, length_max=130, …)` |
 | Bind a **small molecule / ligand** | `binder_vs_ligand` | **Proteina-Complexa Ligand** → `gen_ligand_binders(ligand_pdb, …)` |
 | Graft/preserve a **functional motif** (active site, epitope) onto a new scaffold | `motif_scaffold` | **Proteina-Complexa AME** → `scaffold_motif(motif_pdb, motif_chain, …)` |
 | Generate/diversify a **de novo monomer** fold | `denovo_monomer` | **RFdiffusion-inpaint + ProteinMPNN** → `rfdiffusion_inpaint(pdb, i, j)` then `proteinmpnn(bb)` |
@@ -69,6 +70,7 @@ Target source → how to get the model input:
 ## Step 3 — Per-task deltas
 
 - **binder_vs_protein** — the full funnel. Hotspots steer the interface. *(Worked example: `workshops/snake_venom_binders/`.)*
+- **antibody_vhh** — epitope-conditioned single-domain antibody (VHH/nanobody) via **RFD4-Proteina** (`gen_vhh_antibodies`, VHH length 110–130; `exclude_chain`=antigen chain so the sequence is the VHH alone). Same funnel as binder_vs_protein, but add the **MHC-II / anti-drug-antibody (ADA)** axis — `developability(seq, which=(…, "hlaiipred"))` → `predicted_immuno_mhc2` (lower = de-immunized), the key immunogenicity signal for a biologic. First-draft VHH (epitope-conditioned binder, not yet a full Ig-framework scaffold).
 - **binder_vs_ligand** — generate with `gen_ligand_binders`; validate the pocket with `diffdock(binder_pdb, SMILES)` (confidence↑) and/or Boltz `ligand_B:`; add `chemprop_admet` on the ligand.
 - **motif_scaffold** — generate with `scaffold_motif`; optionally redesign surface with `proteinmpnn`; verify the motif is preserved by folding (ESMFold) and, if there's a partner, Boltz. There is **no Rosetta/InterfaceAnalyzer** in GWB — rank on pLDDT/ipTM.
 - **denovo_monomer** — no binding partner: `rfdiffusion_inpaint` a span of a seed PDB, `proteinmpnn` the backbone, ESMFold-gate; **skip Boltz**; score on pLDDT + developability.
@@ -92,12 +94,13 @@ Target source → how to get the model input:
 | `gen_protein_binders` | `proteina_complexa` (excl. ligand/ame) | `dataframe_split` cols `target_pdb,binder_length_min,binder_length_max,num_samples,hotspot_residues,target_chain` | `sample_id, pdb_output, sequence, rewards` |
 | `gen_ligand_binders` | `proteina_complexa_ligand` | same cols, ligand PDB in `target_pdb` slot | `sample_id, pdb_output, sequence, rewards` |
 | `scaffold_motif` | `proteina_complexa_ame` | same cols, motif PDB + `target_chain` (default B) | `sample_id, pdb_output, sequence, rewards` |
+| `gen_vhh_antibodies` | `rfd4_proteina` | `dataframe_split` cols `task,target_pdb,binder_length_min,binder_length_max,num_samples,hotspot_residues,target_chain,condition_spec_json,structure_cif,exclude_chain` (task=`binder`, exclude_chain=antigen chain) | `sample_id, designed_pdb, designed_sequence, complex_pdb` |
 | `rfdiffusion_inpaint` | `rfdiffusion` | `dataframe_records [{pdb,start_idx,end_idx}]` | backbone PDB string(s) |
 | `proteinmpnn` | `proteinmpnn` | `dataframe_records [{pdb,fixed_positions}]` | sequence strings |
 | `esmfold` | `esmfold` | `inputs=[seq]` | PDB (pLDDT in B-factors) |
 | `boltz_complex` | `boltz` | `inputs=[{input,msa,use_msa_server}]` | `pdb, iptm, protein_iptm, ptm, confidence_score, complex_plddt` |
 | `diffdock` | `diffdock_esm_embeddings` + `diffdock` | `dataframe_split` | best `ligand_sdf`, `confidence` |
-| `developability` | `netsolp` / `deepstabp` / `pltnum` / `mhcflurry` | `dataframe_records [{sequence,…}]` | `predicted_solubility` / `predicted_tm_celsius` / `predicted_stability` / `predicted_immuno_burden` |
+| `developability` | `netsolp` / `deepstabp` / `pltnum` / `mhcflurry` / `hlaiipred` | `dataframe_records [{sequence,…}]` | `predicted_solubility` / `predicted_tm_celsius` / `predicted_stability` / `predicted_immuno_burden` (mhcflurry = MHC-I; hlaiipred = MHC-II/ADA, pass DRB1 `alleles` → alias `predicted_immuno_mhc2`) |
 | `chemprop_admet` | `chemprop_admet` / `chemprop_bbbp` / `chemprop_clintox` | `inputs=[smiles,…]` | per-model predictions |
 
 ## GWB-vs-literature deviations to state in the generated notebook
