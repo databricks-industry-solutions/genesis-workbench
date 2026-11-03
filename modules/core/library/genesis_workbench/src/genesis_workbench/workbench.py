@@ -273,12 +273,40 @@ def _list_app_names() -> List[str]:
 
 def set_app_permissions_for_job(job_id:str, user_email:str):
     w = WorkspaceClient()
-    acl = [
-        JobAccessControlRequest(
-            user_name=user_email,
-            permission_level=JobPermissionLevel.IS_OWNER
+    acl = []
+
+    # A job must have exactly ONE owner, and update_permissions() below is ADDITIVE
+    # (PATCH semantics). Unconditionally sending an IS_OWNER grant for `user_email`
+    # therefore fails with "The job must have exactly one owner" whenever that
+    # principal is not already the current owner (e.g. a different/invalid value such
+    # as the initialize notebook's "a@b.com" default). So check the current owner
+    # first and only (re)assert ownership when it would actually change — keeping this
+    # idempotent and conflict-free. No hardcoded principals: everything is derived
+    # from the passed-in user_email and the job's live ACL.
+    try:
+        existing_acl = w.jobs.get_permissions(job_id=job_id).access_control_list or []
+    except Exception as e:
+        print(f"⚠️  Could not read current permissions for job {job_id}: {e}")
+        existing_acl = []
+    current_owner = next(
+        (
+            entry.user_name or entry.service_principal_name or entry.group_name
+            for entry in existing_acl
+            if any(p.permission_level == JobPermissionLevel.IS_OWNER
+                   for p in (entry.all_permissions or []))
+        ),
+        None,
+    )
+    if current_owner == user_email:
+        print(f"Job {job_id} already owned by {user_email}; leaving ownership unchanged.")
+    else:
+        acl.append(
+            JobAccessControlRequest(
+                user_name=user_email,
+                permission_level=JobPermissionLevel.IS_OWNER
+            )
         )
-    ]
+
     for app_name in _list_app_names():
         try:
             app_sp = w.apps.get(name=app_name).service_principal_client_id
@@ -291,6 +319,11 @@ def set_app_permissions_for_job(job_id:str, user_email:str):
                 permission_level=JobPermissionLevel.CAN_MANAGE_RUN
             )
         )
+
+    if not acl:
+        print(f"No job permission changes needed for job {job_id} "
+              f"(owner already {user_email}, no app service principals resolved).")
+        return
 
     # ADDITIVE grant (PATCH semantics) — preserves any existing ACL rather than
     # replacing it. Critical for multi-app installs: a module re-registration

@@ -32,11 +32,22 @@
 # COMMAND ----------
 
 # DBTITLE 1,Install dependencies
-# torch/CUDA are preinstalled on the serverless GPU AI runtime (don't pin torch —
-# a reinstall risks a cuDNN mismatch). hf_transfer is required because the runtime
-# sets HF_HUB_ENABLE_HF_TRANSFER=1 (same as _sgc.py); ray[data] drives the fan-out.
-# MAGIC %pip install -q transformers==4.41.2 pyarrow==15.0.2 hf_transfer==0.1.9 "ray[data]==2.59.0"
-# MAGIC dbutils.library.restartPython()
+# torch/CUDA are preinstalled on the serverless GPU AI runtime (don't pin torch — a reinstall risks a
+# cuDNN mismatch). hf_transfer is required because the runtime sets HF_HUB_ENABLE_HF_TRANSFER=1; ray[data]
+# drives the fan-out. pyarrow==18.1.0 because ray[data]==2.59.0 requires pyarrow>=17 (the old
+# pyarrow==15.0.2 pin predates the ray 2.59 bump and is unsatisfiable). These pins conflict with the
+# serverless base env's pipConstraints.txt, so %pip (which force-adds -c pipConstraints.txt) can't
+# resolve them. Use a subprocess pip (NOT %pip) to bypass the constraints; capture output on failure.
+import subprocess, sys
+_r = subprocess.run(
+    [sys.executable, "-m", "pip", "install", "-q",
+     "transformers==4.41.2", "pyarrow==18.1.0", "hf_transfer==0.1.9", "ray[data]==2.59.0"],
+    capture_output=True, text=True,
+)
+print((_r.stdout or "")[-3000:])
+if _r.returncode != 0:
+    raise RuntimeError(f"pip install failed (exit {_r.returncode}):\n{(_r.stderr or '')[-6000:]}")
+dbutils.library.restartPython()
 
 # COMMAND ----------
 
@@ -48,7 +59,7 @@
 # DBTITLE 1,Read widget values
 # num_gpu_workers + max_sequences are job parameters so a run can be tuned without
 # editing the notebook (default: 4 A10 Ray workers over the 1M-sequence corpus).
-dbutils.widgets.text("num_gpu_workers", "4", "Serverless-GPU A10 Ray workers")
+dbutils.widgets.text("num_gpu_workers", "8", "Serverless-GPU H100 Ray workers")
 dbutils.widgets.text("max_sequences", "1000000", "Max sequences to embed")
 # Blank = production target `{catalog}.{schema}.sequence_embeddings`. Set to a scratch
 # table name to validate a bounded run without touching the live VS source table.
@@ -120,7 +131,7 @@ if not skip_embedding:
 from serverless_gpu.ray import ray_launch
 
 
-@ray_launch(gpus=NUM_WORKERS, gpu_type="a10", remote=True)
+@ray_launch(gpus=NUM_WORKERS, gpu_type="h100", remote=True)
 def embed_with_ray():
     import numpy as np
     import ray

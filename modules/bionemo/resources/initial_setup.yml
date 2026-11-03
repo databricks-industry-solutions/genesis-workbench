@@ -33,5 +33,10 @@ resources:
           default: ${var.sql_warehouse_id}
         - name: databricks_app_names
           default: genesis-workbench:mcp-genesis-workbench
+        # Owner for the finetune/inference jobs' permission grants. Without this the
+        # initialize notebook falls back to the widget default ("a@b.com"), an invalid
+        # principal → set_app_permissions_for_job fails "The job must have exactly one owner".
+        - name: user_email
+          default: ${var.current_user}
 
       tags: ${var.common_resource_tags}
