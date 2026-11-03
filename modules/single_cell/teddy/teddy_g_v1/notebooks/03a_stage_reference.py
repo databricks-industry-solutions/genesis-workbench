@@ -26,10 +26,24 @@
 
 # COMMAND ----------
 
-# MAGIC # cellxgene-census (tiledbsoma) ships extensions built against numpy<2 → pin numpy==1.26.4 for
-# MAGIC # the Census read. torch is only used here for the (CPU/GPU) top-k, identical to 03b's math.
-# MAGIC %pip install -q -r ../requirements.txt cellxgene-census==1.17.0 pyarrow==15.0.2 numpy==1.26.4 "ray[data]==2.59.0"
-# MAGIC dbutils.library.restartPython()
+# cellxgene-census (tiledbsoma) ships extensions built against numpy<2 → needs numpy==1.26.4 for the
+# Census read (torch here is only the CPU/GPU top-k, identical to 03b's math). pyarrow==18.1.0 because
+# ray[data]==2.59.0 requires pyarrow>=17 and mlflow (requirements.txt) requires pyarrow<20 — the old
+# pyarrow==15.0.2 pin predates the ray 2.59 bump and is unsatisfiable. numpy==1.26.4 also conflicts with
+# the serverless base env's numpy 2.x in pipConstraints.txt, so %pip (which force-adds -c
+# pipConstraints.txt) can't resolve this set. Use a subprocess pip (NOT %pip) to bypass the constraints;
+# capture output so any resolver error is visible. Pattern: diffdock_v1/notebooks/01_register_diffdock.py.
+import subprocess, sys
+_r = subprocess.run(
+    [sys.executable, "-m", "pip", "install", "-q",
+     "-r", "../requirements.txt",
+     "cellxgene-census==1.17.0", "pyarrow==18.1.0", "numpy==1.26.4", "ray[data]==2.59.0"],
+    capture_output=True, text=True,
+)
+print((_r.stdout or "")[-3000:])
+if _r.returncode != 0:
+    raise RuntimeError(f"pip install failed (exit {_r.returncode}):\n{(_r.stderr or '')[-6000:]}")
+dbutils.library.restartPython()
 
 # COMMAND ----------
 
@@ -40,7 +54,7 @@ dbutils.widgets.text("teddy_model_size", "400M", "TEDDY-G variant")
 dbutils.widgets.text("target_n_cells", "2000000", "Target reference cell count")
 dbutils.widgets.text("per_stratum_cap", "30000", "Max cells per (tissue, disease) stratum")
 dbutils.widgets.text("census_version", "2024-07-01", "CELLxGENE Census version (LTS tag or 'latest')")
-dbutils.widgets.text("num_gpu_workers", "4", "Number of single-A10 serverless-GPU Ray workers (stage fetch parallelism)")
+dbutils.widgets.text("num_gpu_workers", "8", "Number of single-H100 serverless-GPU Ray workers (stage fetch parallelism)")
 dbutils.widgets.text("obs_limit", "0", "Cap Census obs scan to first N soma_joinids (0 = full scan; >0 for fast tests)")
 
 catalog = dbutils.widgets.get("catalog")
@@ -180,7 +194,7 @@ RUN_TOKENS_DIR = f"{TOKENS_STAGE_DIR}/chunk_{int(_time.time())}"
 # DBTITLE 1,Ray: N A10 workers fetch Census X in parallel → top-k TEDDY tokens → token parquet
 from serverless_gpu.ray import ray_launch
 
-@ray_launch(gpus=NUM_GPU_WORKERS, gpu_type="a10", remote=True)
+@ray_launch(gpus=NUM_GPU_WORKERS, gpu_type="h100", remote=True)
 def stage_tokens_with_ray():
     import inspect, json, sys
     import numpy as np

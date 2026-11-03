@@ -33,14 +33,18 @@ resources:
         # multi_gpu_cluster). max_sequences caps the corpus. The single-A10 variant is
         # kept at 03_batch_embed_sequences_sgc.py for small-corpus / fallback runs.
         - task_key: batch_embed_sequences
-          max_retries: 0
+          # H100 serverless (client '6'): the A10 serverless-GPU Ray cluster won't start on this
+          # workshop (RayInitializationError), whereas H100 is the reliably-provisioned pool here
+          # (same as the RFD4 / antibody / vaccine jobs). ray_launch(gpu_type="h100") fans the embed
+          # across num_gpu_workers=8 H100s. H100 compute-start can exceed 900s, so retry.
+          max_retries: 2
           depends_on:
             - task_key: create_delta_tables
-          environment_key: gpu_env
+          environment_key: gpu_env_h100
           disable_auto_optimization: true
           retry_on_timeout: false
           compute:
-            hardware_accelerator: GPU_1xA10
+            hardware_accelerator: GPU_1xH100
           notebook_task:
             notebook_path: ../notebooks/03_batch_embed_sequences_ray.py
             source: WORKSPACE
@@ -96,9 +100,9 @@ resources:
         # the corpus (e.g. for a quick verification run).
         - name: max_sequences
           default: "1000000"
-        # Ray embed fan-out width (03) — number of A10 serverless-GPU workers.
+        # Ray embed fan-out width (03) — number of H100 serverless-GPU workers.
         - name: num_gpu_workers
-          default: "4"
+          default: "8"
 
       # Serverless GPU environment for the two embedding tasks (client "4" matches
       # the register jobs' serverless GPU AI runtime). Default CPU environment for
@@ -110,6 +114,11 @@ resources:
         - environment_key: gpu_env
           spec:
             client: "4"
+        # H100 serverless (AI Runtime v6 / CUDA 13) for the Ray batch-embed — the A10 Ray
+        # cluster won't start on this workshop; H100 is the reliably-provisioned pool here.
+        - environment_key: gpu_env_h100
+          spec:
+            client: '6'
 
       tags: ${var.common_resource_tags}
 

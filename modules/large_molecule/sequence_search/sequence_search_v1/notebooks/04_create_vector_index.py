@@ -96,8 +96,18 @@ try:
 except Exception as e:
     if "already exists" in str(e).lower():
         print(f"Index '{index_name}' already exists. Triggering sync...")
-        w.vector_search_indexes.sync_index(index_name=index_name)
-        print("Sync triggered.")
+        try:
+            w.vector_search_indexes.sync_index(index_name=index_name)
+            print("Sync triggered.")
+        except Exception as se:
+            # A Delta Sync index still running its initial (or a previous) sync rejects a new
+            # sync: "Index is not ready to sync yet. Pipeline ... INITIALIZING". That just means a
+            # sync is already in flight — not an error — so tolerate it and fall through to the
+            # readiness wait below instead of failing the task.
+            if "not ready to sync" in str(se).lower() or "initializing" in str(se).lower():
+                print(f"Sync already in progress; skipping redundant trigger ({se}).")
+            else:
+                raise
     else:
         raise
 

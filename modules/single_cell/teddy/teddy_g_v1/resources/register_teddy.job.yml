@@ -44,14 +44,17 @@ resources:
         # bottleneck). Resumable — a re-run fetches only the soma_joinids not already tokenized,
         # so an interrupted stage never loses progress.
         - task_key: stage_reference_task
-          max_retries: 0
+          # H100 serverless (client '6'): the A10 serverless-GPU Ray cluster won't start on this
+          # workshop (RayInitializationError); H100 is the reliably-provisioned pool here. H100
+          # compute-start can exceed 900s, so retry. ray_launch(gpu_type="h100") × num_gpu_workers=8.
+          max_retries: 2
           disable_auto_optimization: true
           retry_on_timeout: false
           depends_on:
             - task_key: "register_teddy_task"
-          environment_key: gpu_env
+          environment_key: gpu_env_h100
           compute:
-            hardware_accelerator: GPU_1xA10
+            hardware_accelerator: GPU_1xH100
           notebook_task:
             notebook_path: ../notebooks/03a_stage_reference.py
 
@@ -59,14 +62,17 @@ resources:
         # into the reference Delta `teddy_cells`. GPU-bound → scales ~linearly with
         # `num_gpu_workers`. Idempotent — skips if teddy_cells is already populated at target+dim.
         - task_key: reembed_reference_task
-          max_retries: 0
+          # H100 serverless (client '6'): A10 Ray cluster won't start here; H100 is the reliably
+          # provisioned pool. H100 compute-start can exceed 900s, so retry. ray_launch(gpu_type="h100")
+          # × num_gpu_workers=8. Idempotent — skips if teddy_cells is already populated at target+dim.
+          max_retries: 2
           disable_auto_optimization: true
           retry_on_timeout: false
           depends_on:
             - task_key: "stage_reference_task"
-          environment_key: gpu_env
+          environment_key: gpu_env_h100
           compute:
-            hardware_accelerator: GPU_1xA10
+            hardware_accelerator: GPU_1xH100
           notebook_task:
             notebook_path: ../notebooks/03b_embed_reference_ray.py
 
@@ -90,6 +96,11 @@ resources:
         - environment_key: gpu_env
           spec:
             client: '4'
+        # H100 serverless (AI Runtime v6 / CUDA 13) for the Ray stage + embed tasks — the A10
+        # Ray cluster won't start on this workshop; H100 is the reliably-provisioned pool here.
+        - environment_key: gpu_env_h100
+          spec:
+            client: '6'
 
       parameters:
         - name: catalog
@@ -121,10 +132,11 @@ resources:
           default: ${var.teddy_reembed_per_stratum_cap}
         - name: census_version
           default: ${var.teddy_reembed_census_version}
-        # Number of single-A10 serverless-GPU Ray workers for the reembed
-        # (serverless_gpu.ray.ray_launch provisions this many A10 nodes).
+        # Number of single-H100 serverless-GPU Ray workers for the stage + reembed
+        # (serverless_gpu.ray.ray_launch provisions this many H100 nodes; A10 Ray
+        # won't start on this workshop).
         - name: num_gpu_workers
-          default: "4"
+          default: "8"
 
       timeout_seconds: 43200  # 12h hard cap — covers the 5-8h reembed plus
                               # mapping, register, and serving deploy overhead.
