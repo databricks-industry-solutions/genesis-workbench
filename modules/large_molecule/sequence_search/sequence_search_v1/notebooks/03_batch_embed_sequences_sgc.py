@@ -27,7 +27,7 @@
 # DBTITLE 1,Install dependencies
 # torch/CUDA are preinstalled on the serverless GPU AI runtime; add transformers.
 # hf_transfer is required because the runtime sets HF_HUB_ENABLE_HF_TRANSFER=1.
-# MAGIC %pip install -q transformers==4.41.2 pyarrow==15.0.2 hf_transfer==0.1.9
+# MAGIC %pip install -q transformers==4.41.2 hf_transfer==0.1.9
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
