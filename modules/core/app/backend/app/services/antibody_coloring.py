@@ -194,6 +194,22 @@ def mhc_burden_values_from_array(pdb_str: str, antigen_chain: str, burden: List[
     return values
 
 
+def complex_chains_and_epitope(pdb_str: str, antigen_chain: str = "A"
+                               ) -> Tuple[str, Optional[str], List[int]]:
+    """For a VHH–antigen complex PDB, return (antibody_chain, antigen_chain_or_None, epitope_resids).
+
+    The antibody chain is the non-antigen chain; the epitope is the antigen residues within 5 Å of
+    the VHH (the same interface geometry the epitope/paratope coloring uses). A single-chain input
+    (just the VHH) returns no antigen and an empty epitope. Feeds the two-tone cartoon viewer
+    (`molstar.antibody_complex_cartoon_html`): antibody light-blue, antigen light-yellow, epitope red
+    sticks."""
+    vhh, ag = _resolve_chains(pdb_str, antigen_chain)
+    if ag is None:
+        return vhh, None, []
+    epi, _par = _interface(pdb_str, ag, vhh)
+    return vhh, ag, sorted(epi)
+
+
 def compute_coloring(pdb_str: str, color_by: str, antigen_chain: str = "A"
                      ) -> Tuple[Optional[Dict[Tuple[str, int], float]], str, bool]:
     """Return (res_values, theme, with_surface) for a coloring mode. `res_values` is None for the

@@ -483,7 +483,7 @@ const _AXIS_LABELS: [string, string][] = [
 // the blue→white→red "uncertainty" ramp for coded categories, the AlphaFold pLDDT palette, and the
 // chain-id colors. Rendered inline next to the dropdown so the colors are self-explanatory.
 const COLOR_LEGENDS: Record<string, [string, string][]> = {
-  chain: [['#16a085', 'Antibody'], ['#e67e22', 'Antigen']],
+  chain: [['#add8e6', 'Antibody'], ['#ffffe0', 'Antigen'], ['#cc0000', 'Epitope (sticks)']],
   epitope_paratope: [['#c0392b', 'Epitope'], ['#e8e8e8', 'Paratope'], ['#4e79c7', 'Other']],
   cdr_fr: [['#e8e8e8', 'CDR1'], ['#e39a9a', 'CDR2'], ['#c0392b', 'CDR3'], ['#4e79c7', 'Framework']],
   plddt: [['#0053d6', '≥90'], ['#65cbf3', '70–90'], ['#ffdb13', '50–70'], ['#ff7d45', '<50']],
