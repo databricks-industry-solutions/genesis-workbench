@@ -64,8 +64,17 @@ Target source → how to get the model input:
    For a **ligand** campaign, also screen the small molecule with `chemprop_admet([...])`.
 5. **Composite reward & select:** `composite_reward(df, axis_cols)` with `DEFAULT_WEIGHTS`; rank; pick finalists.
    Drop axes you didn't compute (e.g. no `iptm` for a monomer-only task).
-6. **Compare to the paper:** fetch any deposited design/complex PDB and eyeball it against the top pick.
-7. (Optional) log the funnel to **MLflow** (standard Databricks, not a GWB library).
+6. **Visualize (PDBe Mol\* — the DEFAULT viewer):**
+   `show_molstar(df.iloc[0].get("complex_pdb") or df.iloc[0].get("backbone_pdb"), binder_chain="A", target_chain="B", highlight_resids=<hotspots>)`.
+   `show_molstar` (in `00_toolkit.py`) renders the top design inline with **PDBe Mol\*** (`displayHTML`):
+   binder chain teal, target chain gold, the epitope/hotspot residues on the target as **red
+   ball-and-stick**, with a legend + sequence panel. The plugin loads via a **multi-CDN fallback
+   (jsDelivr → unpkg → ebi.ac.uk)** — PDBe Mol\* is the only Mol\* build that renders in a Databricks
+   `displayHTML` iframe, and a single CDN can fail on serverless (`PDBeMolstarPlugin is not defined`).
+   PDBe Mol\* is the default — do not substitute another viewer (py3Dmol, rcsb-molstar, core molstar.Viewer)
+   unless the user explicitly asks. **See `references/protein-structure-3d.md`.**
+7. **Compare to the paper:** fetch any deposited design/complex PDB and view it (also `show_molstar`) against the top pick.
+8. (Optional) log the funnel to **MLflow** (standard Databricks, not a GWB library).
 
 ## Step 3 — Per-task deltas
 
@@ -85,7 +94,7 @@ Target source → how to get the model input:
 3. Wire Step 4's Boltz `spec` to the target type (protein vs ligand), and trim `axis_cols` in Step 6 to the
    axes actually computed.
 4. Set sensible run sizes for a session: `NUM_DESIGNS` 6–8, `num_cofold` (TOP_N) 3–4.
-5. Keep the honest-scope reflection cell.
+5. Keep the **Mol\* visualization cell** (`show_molstar`, the default viewer) and the honest-scope reflection cell.
 
 ## Endpoint reference (slug → payload → output)
 

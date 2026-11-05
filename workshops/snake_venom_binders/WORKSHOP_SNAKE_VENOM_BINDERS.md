@@ -18,7 +18,7 @@ Genesis Workbench reaps idle serving endpoints and apps, so **warm everything th
       (Run notebook cell **0.1** — it fails loud and lists what's available if any are missing/asleep.)
 - [ ] If the app or endpoints are missing, re-run the module `update.sh` / re-deploy before the session.
 - [ ] Each attendee can reach the workspace and attach the notebook to a cluster/serverless with the
-      Databricks SDK available (DBR ML has it; the notebook also `pip install`s `databricks-sdk`, `requests`, `py3Dmol`).
+      Databricks SDK available (DBR ML has it; the notebook also `pip install`s `databricks-sdk`, `requests`). Structures render in the PDBe Mol* viewer (pdbe-molstar-plugin-3.1.3.js from ebi.ac.uk — no pip).
 - [ ] Warm the GPU endpoints with one tiny call (fold a short sequence through ESMFold) so the first
       attendee call isn't a cold start.
 - [ ] Decide the time budget: `num_designs` (default 8) and `num_cofold` (default 4) are the two knobs

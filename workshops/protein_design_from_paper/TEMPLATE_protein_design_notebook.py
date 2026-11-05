@@ -151,6 +151,22 @@ display(df[["sample_id", "composite_reward"] + [v[0] for v in axis_cols.values()
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## 6.5 · Visualize the top design (Mol\* — default viewer)
+
+# COMMAND ----------
+
+# PDBe Mol* (via show_molstar, multi-CDN jsDelivr->unpkg->ebi.ac.uk) is the default 3D viewer: binder
+# chain teal, target chain gold, epitope/hotspot residues as red ball-and-stick + a legend. A
+# binder/antibody+target task has a complex_pdb on the top row; a monomer-only task has just the backbone.
+top = df.iloc[0]
+_hot = [int(x) for x in str(HOTSPOTS).replace(" ", "").split(",") if x.strip().isdigit()]
+show_molstar(top.get("complex_pdb") or top.get("backbone_pdb") or "",
+             binder_chain="A", target_chain="B", highlight_resids=_hot,
+             binder_label="Design", target_label="Target")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## 7 · Reflection & honest scope
 # MAGIC - What survived each gate, and why? Which axis did the damage?
 # MAGIC - **In silico ≠ wet lab.** ipTM is a *confidence* two chains dock as modeled, not a measured Kd;

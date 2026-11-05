@@ -21,13 +21,20 @@ Claude Code skill `claude_skills/SKILL_GENESIS_WORKBENCH_PROTEIN_DESIGN_FROM_PAP
 ## How to respond (generation procedure)
 When the request matches, generate these cells in order:
 1. **Markdown** — paper citation, one-line goal, and the chosen **task** (see classification).
-2. **Code: `%pip install -q "databricks-sdk>=0.50.0" requests py3Dmol` then `dbutils.library.restartPython()`.**
+2. **Code: `%pip install -q "databricks-sdk>=0.50.0" requests` then `dbutils.library.restartPython()`.**
 3. **Code: the Toolkit cell** (emit the Python block in *Toolkit* below, unchanged).
 4. **Code: Problem definition** — target source (PDB id / sequence / SMILES) + constraints (hotspots, lengths, chains).
 5. **Code: Generation** — the one task block from *Per-task generation* that matches the classification.
 6. **Code: Monomer gate → Complex confidence → Developability → Composite reward** (see *Shared funnel*),
    trimming the Boltz step for monomer-only tasks and trimming reward axes to those computed.
-7. **Markdown: Reflection & honest scope**, and (optional) fetch a deposited design PDB to compare.
+7. **Code: Final visualization** — render the top design in the **PDBe Mol\* viewer by default**
+   (`show_molstar`, see *Shared funnel*): binder chain teal, target chain gold, epitope/hotspot residues
+   as red ball-and-stick, with a legend + sequence panel. The plugin loads via a multi-CDN fallback
+   (jsDelivr → unpkg → ebi.ac.uk) — PDBe Mol\* is the only Mol\* build that renders in a Databricks
+   `displayHTML` iframe, and a single CDN can fail on serverless. PDBe Mol\* is the default; only fall
+   back to another viewer if asked. (See `references/protein-structure-3d.md`.)
+8. **Markdown: Reflection & honest scope**, and (optional) fetch a deposited design PDB to compare
+   (view it the same way with `show_molstar`).
 
 ## Task classification
 Pick exactly one from the user's intent:
@@ -238,7 +245,82 @@ def composite_reward(df, axis_cols, weights=None):
     total = sum(weights[k] for k in keys) or 1.0
     return pd.Series(sum(weights[k] * normed[k] for k in keys) / total, index=df.index)
 
-print("✅ GWB protein-design toolkit loaded (endpoints resolve lazily via get_ep).")
+def show_molstar(structure, fmt="pdb", binder_chain="A", target_chain="B", highlight_resids=None,
+                 binder_label="Design", target_label="Target", height=620):
+    """DEFAULT 3D viewer for the final design — PDBe Mol* (PDBeMolstarPlugin), inline via displayHTML.
+    PDBe Mol* is the only Mol* build that reliably renders inside a Databricks displayHTML iframe (the
+    core molstar.Viewer loads but its WebGL canvas stays invisible there). The plugin is loaded via a
+    MULTI-CDN fallback (jsDelivr -> unpkg -> ebi.ac.uk) because a single CDN — notably ebi.ac.uk — can
+    fail on serverless compute ("PDBeMolstarPlugin is not defined"). Colours the binder chain teal and
+    the target chain gold, and draws `highlight_resids` on the target chain as red ball-and-stick (the
+    epitope / hotspot interface), with a legend + sequence panel. `structure` is a PDB/mmCIF string,
+    passed as a base64 data: URL. (Rendering pattern verified in a Databricks notebook.)"""
+    import base64, json
+    if not structure:
+        print("show_molstar: no structure to display"); return
+    b64 = base64.b64encode(structure.encode()).decode()
+    sel = [{"auth_asym_id": binder_chain, "color": {"r": 51, "g": 181, "b": 229}},
+           {"auth_asym_id": target_chain, "color": {"r": 230, "g": 168, "b": 23}}]
+    for r in (highlight_resids or []):
+        sel.append({"auth_asym_id": target_chain, "auth_residue_number": int(r),
+                    "color": {"r": 231, "g": 76, "b": 60}, "sideChain": True,
+                    "representation": "ball-and-stick", "representationColor": {"r": 231, "g": 76, "b": 60}})
+    hl = ", ".join(str(int(r)) for r in (highlight_resids or []))
+    epi_legend = ('<span><span class="sw" style="background:#e74c3c;"></span>Epitope/hotspots (' + hl
+                  + ')</span>') if highlight_resids else ""
+    html = ("""
+<!DOCTYPE html><html><head><style>
+  body{margin:0;padding:8px;background:#1a1a2e;font-family:'Segoe UI',Arial,sans-serif;}
+  #molviewer{position:relative;width:100%;height:__H__px;}
+  .legend{display:flex;flex-wrap:wrap;gap:16px;padding:8px 2px;color:#aaa;font-size:13px;line-height:1.6;}
+  .sw{display:inline-block;width:13px;height:13px;border-radius:3px;margin-right:5px;vertical-align:middle;}
+  .hint{color:#666;font-style:italic;}
+</style></head><body>
+  <div id="molviewer"></div>
+  <div class="legend">
+    <span><span class="sw" style="background:#33b5e5;"></span>__BINDER__ (chain __BC__)</span>
+    <span><span class="sw" style="background:#e6a817;"></span>__TARGET__ (chain __TC__)</span>
+    __EPI_LEGEND__
+    <span class="hint">drag = rotate &middot; scroll = zoom &middot; click = residue info</span>
+  </div>
+  <script>
+  (function(){
+    var CDNS=[
+      {js:"https://cdn.jsdelivr.net/npm/pdbe-molstar@3.3.0/build/pdbe-molstar-plugin.js",
+       css:"https://cdn.jsdelivr.net/npm/pdbe-molstar@3.3.0/build/pdbe-molstar.css"},
+      {js:"https://unpkg.com/pdbe-molstar@3.3.0/build/pdbe-molstar-plugin.js",
+       css:"https://unpkg.com/pdbe-molstar@3.3.0/build/pdbe-molstar.css"},
+      {js:"https://www.ebi.ac.uk/pdbe/pdb-component-library/js/pdbe-molstar-plugin-3.1.3.js",
+       css:"https://www.ebi.ac.uk/pdbe/pdb-component-library/css/pdbe-molstar-3.1.3.css"}];
+    var el=document.getElementById("molviewer");
+    function render(){
+      try{
+        var v=new PDBeMolstarPlugin();
+        v.render(el,{customData:{url:"data:text/plain;base64,__B64__",format:"__FMT__"},
+                     bgColor:{r:26,g:26,b:46},hideControls:false,sequencePanel:true,landscape:true});
+        v.events.loadComplete.subscribe(function(){ try{ v.visual.select({data:__SEL__}); }catch(e){} });
+      }catch(e){ el.innerText="PDBe Mol* render failed: "+(e&&e.message); }
+    }
+    function tryCdn(i){
+      if(typeof PDBeMolstarPlugin!=="undefined"){render();return;}
+      if(i>=CDNS.length){el.innerText="PDBe Mol* failed: all CDNs unreachable";return;}
+      var link=document.createElement("link");link.rel="stylesheet";link.href=CDNS[i].css;document.head.appendChild(link);
+      var s=document.createElement("script");s.src=CDNS[i].js;
+      s.onload=function(){ (typeof PDBeMolstarPlugin!=="undefined")?render():tryCdn(i+1); };
+      s.onerror=function(){tryCdn(i+1);};
+      document.head.appendChild(s);
+    }
+    tryCdn(0);
+  })();
+  </script>
+</body></html>
+""".replace("__H__", str(int(height))).replace("__B64__", b64).replace("__FMT__", fmt)
+   .replace("__BC__", binder_chain).replace("__TC__", target_chain)
+   .replace("__BINDER__", binder_label).replace("__TARGET__", target_label)
+   .replace("__EPI_LEGEND__", epi_legend).replace("__SEL__", json.dumps(sel)))
+    displayHTML(html)
+
+print("✅ GWB protein-design toolkit loaded (endpoints resolve lazily via get_ep; Mol* = default viewer).")
 ```
 
 ## Per-task generation (emit the one matching the classification)
@@ -301,6 +383,15 @@ axis_cols = {k: v for k, v in axis_cols.items() if v[0] in df.columns}
 df["composite_reward"] = composite_reward(df, axis_cols)
 df = df.sort_values("composite_reward", ascending=False).reset_index(drop=True)
 display(df[["sample_id", "composite_reward"] + [v[0] for v in axis_cols.values()] + ["sequence"]])
+
+# 7) visualize the top design — PDBe Mol* viewer by DEFAULT: binder chain teal, target chain gold, and
+#    the epitope/hotspot residues on the target as red ball-and-stick + a legend. (denovo_monomer: no
+#    complex → pass the backbone, no highlight.) PDBe Mol* is the default — don't swap it out.
+top = df.iloc[0]
+_hot = [int(x) for x in str(HOTSPOTS).replace(" ", "").split(",") if x.strip().isdigit()]
+show_molstar(top.get("complex_pdb") or top.get("backbone_pdb") or "",
+             binder_chain="A", target_chain="B", highlight_resids=_hot,
+             binder_label="Design", target_label="Target")
 ```
 
 ## Endpoint reference (slug → payload → output)
