@@ -31,6 +31,11 @@ generalization of the worked snake-venom example at `workshops/snake_venom_binde
    reproducible in silico; the developability endpoints are *proxies* that prioritize what to order.
 4. **Fail loud on missing models.** Endpoint discovery (`get_ep`) raises if a model is undeployed/asleep —
    keep that behavior; tell the user to warm endpoints (they get reaped for inactivity).
+5. **Sanitize sequences & structures.** Endpoint fields (`designed_sequence`, `sequence`, `pdb`/`complex_pdb`)
+   can come back as a 1-element list or ndarray — `str()` on those leaves `[`, `]`, `'`, `,` that break
+   ESMFold, the Boltz spec, and the Mol\* sequence panel. The toolkit's `clean_sequence(...)` is applied at
+   extraction (template) and `show_molstar` self-coerces the structure; keep both. Never pass a raw
+   list/array repr downstream.
 
 ## Step 1 — Classify the task
 

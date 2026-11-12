@@ -79,9 +79,9 @@ raw = gen_protein_binders(target_pdb=target_pdb_text, target_chain=TARGET_CHAIN,
 # See the skill's "optimize" recipe: re-sample around a seed (endpoints-only) or dispatch the
 # run_enzyme_optimization_gwb job (motif/enzyme capstone) via the Jobs API. Start from TASK A/C output.
 
-designs = [{"sample_id": str(r.get("sample_id", i)), "sequence": str(r.get("sequence", "")),
+designs = [{"sample_id": str(r.get("sample_id", i)), "sequence": clean_sequence(r.get("sequence", "")),
             "rewards": to_float(r.get("rewards", 0.0), 0.0), "backbone_pdb": r.get("pdb_output", "")}
-           for i, r in enumerate(raw) if str(r.get("sequence", "")).strip()]
+           for i, r in enumerate(raw) if clean_sequence(r.get("sequence", "")).strip()]
 display(pd.DataFrame([{k: d[k] for k in ("sample_id", "sequence", "rewards")} for d in designs]))
 
 # COMMAND ----------

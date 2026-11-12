@@ -76,6 +76,20 @@ def to_float(x, default=float("nan")):
     except (TypeError, ValueError):
         return default
 
+_AA1 = set("ACDEFGHIKLMNPQRSTVWYX")
+def clean_sequence(seq):
+    """Coerce an endpoint 'sequence' field to a bare amino-acid string. An endpoint can hand it back as a
+    1-element list / ndarray; str() on those leaves [ ] ' , that break ESMFold, the Boltz spec, and the
+    Mol* sequence panel. Flatten, keep only amino-acid letters, uppercase. A clean sequence passes through
+    unchanged; None/garbage -> "" so the caller's non-empty filter drops it."""
+    if seq is None:
+        return ""
+    if hasattr(seq, "tolist"):          # numpy array / pandas scalar
+        seq = seq.tolist()
+    if isinstance(seq, (list, tuple)):
+        seq = "".join(str(x) for x in seq if x is not None)
+    return "".join(ch for ch in str(seq).upper() if ch in _AA1)
+
 # COMMAND ----------
 
 # MAGIC %md
@@ -295,8 +309,14 @@ def show_molstar(structure: str, fmt: str = "pdb", binder_chain: str = "A", targ
     epitope / hotspot interface), with a legend + sequence panel. `structure` is a PDB/mmCIF string,
     passed as a base64 data: URL. (Rendering pattern verified in a Databricks notebook.)"""
     import base64, json
-    if not structure:
+    if isinstance(structure, (list, tuple)):     # endpoints may return a 1-element list of frames
+        structure = structure[0] if structure else ""
+    structure = str(structure)
+    if not structure.strip():
         print("show_molstar: no structure to display"); return
+    # auto-detect mmCIF so the viewer's format flag can't silently mismatch (RFD4/biotite may return CIF)
+    if fmt == "pdb" and ("_atom_site." in structure or structure.lstrip().startswith("data_")):
+        fmt = "mmcif"
     b64 = base64.b64encode(structure.encode()).decode()
     sel = [{"auth_asym_id": binder_chain, "color": {"r": 51, "g": 181, "b": 229}},
            {"auth_asym_id": target_chain, "color": {"r": 230, "g": 168, "b": 23}}]

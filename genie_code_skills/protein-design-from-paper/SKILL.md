@@ -17,6 +17,11 @@ Claude Code skill `claude_skills/SKILL_GENESIS_WORKBENCH_PROTEIN_DESIGN_FROM_PAP
    reproducible in silico; the developability endpoints are proxies that prioritize what to order.
 4. **Fail loud on missing models.** Keep `get_ep`'s loud error; tell the user to warm endpoints (Genesis
    Workbench reaps idle serving endpoints) before running.
+5. **Sanitize sequences & structures before anything consumes them.** Endpoint fields (`designed_sequence`,
+   `sequence`, `pdb`/`complex_pdb`) can come back as a 1-element list or ndarray — `str()` on those leaves
+   `[`, `]`, `'`, `,` that break ESMFold, the Boltz spec, and the Mol\* sequence panel. Always run sequences
+   through `clean_sequence(...)` (in the Toolkit) at extraction; `show_molstar` self-coerces the structure.
+   Never pass a raw list/array repr downstream.
 
 ## How to respond (generation procedure)
 When the request matches, generate these cells in order:
@@ -90,6 +95,20 @@ def to_float(x, default=float("nan")):
     except (TypeError, ValueError):
         return default
 
+_AA1 = set("ACDEFGHIKLMNPQRSTVWYX")
+def clean_sequence(seq):
+    """Coerce an endpoint 'sequence' field to a bare amino-acid string. An endpoint can hand it back as a
+    1-element list / ndarray; str() on those leaves [ ] ' , that break ESMFold, the Boltz spec, and the
+    Mol* sequence panel. Flatten, keep only amino-acid letters, uppercase. A clean sequence passes through
+    unchanged; None/garbage -> "" so the caller's non-empty filter drops it."""
+    if seq is None:
+        return ""
+    if hasattr(seq, "tolist"):          # numpy array / pandas scalar
+        seq = seq.tolist()
+    if isinstance(seq, (list, tuple)):
+        seq = "".join(str(x) for x in seq if x is not None)
+    return "".join(ch for ch in str(seq).upper() if ch in _AA1)
+
 _PC_COLS = ["target_pdb", "binder_length_min", "binder_length_max",
             "num_samples", "hotspot_residues", "target_chain"]
 
@@ -129,7 +148,7 @@ def gen_vhh_antibodies(target_pdb, target_chain="A", hotspots="", length_min=110
     for r in _unwrap(resp.predictions):
         if not isinstance(r, dict):
             continue
-        out.append({"sample_id": r.get("sample_id"), "sequence": str(r.get("designed_sequence", "")),
+        out.append({"sample_id": r.get("sample_id"), "sequence": clean_sequence(r.get("designed_sequence", "")),
                     "rewards": 0.0, "pdb_output": r.get("designed_pdb", ""),
                     "complex_pdb": r.get("complex_pdb", "")})
     return out
@@ -256,8 +275,14 @@ def show_molstar(structure, fmt="pdb", binder_chain="A", target_chain="B", highl
     epitope / hotspot interface), with a legend + sequence panel. `structure` is a PDB/mmCIF string,
     passed as a base64 data: URL. (Rendering pattern verified in a Databricks notebook.)"""
     import base64, json
-    if not structure:
+    if isinstance(structure, (list, tuple)):     # endpoints may return a 1-element list of frames
+        structure = structure[0] if structure else ""
+    structure = str(structure)
+    if not structure.strip():
         print("show_molstar: no structure to display"); return
+    # auto-detect mmCIF so the viewer's format flag can't silently mismatch (RFD4/biotite may return CIF)
+    if fmt == "pdb" and ("_atom_site." in structure or structure.lstrip().startswith("data_")):
+        fmt = "mmcif"
     b64 = base64.b64encode(structure.encode()).decode()
     sel = [{"auth_asym_id": binder_chain, "color": {"r": 51, "g": 181, "b": 229}},
            {"auth_asym_id": target_chain, "color": {"r": 230, "g": 168, "b": 23}}]
@@ -346,9 +371,9 @@ raw = gen_protein_binders(target_pdb=target_pdb_text, target_chain=TARGET_CHAIN,
 # bb = rfdiffusion_inpaint(target_pdb_text, start_idx=<i>, end_idx=<j>)[0]
 # raw = [{"sample_id": k, "sequence": s, "rewards": 0.0, "pdb_output": bb} for k, s in enumerate(proteinmpnn(bb))]
 
-designs = [{"sample_id": str(r.get("sample_id", i)), "sequence": str(r.get("sequence", "")),
+designs = [{"sample_id": str(r.get("sample_id", i)), "sequence": clean_sequence(r.get("sequence", "")),
             "rewards": to_float(r.get("rewards", 0.0), 0.0), "backbone_pdb": r.get("pdb_output", "")}
-           for i, r in enumerate(raw) if str(r.get("sequence", "")).strip()]
+           for i, r in enumerate(raw) if clean_sequence(r.get("sequence", "")).strip()]
 ```
 
 ## Shared funnel (emit after generation)
