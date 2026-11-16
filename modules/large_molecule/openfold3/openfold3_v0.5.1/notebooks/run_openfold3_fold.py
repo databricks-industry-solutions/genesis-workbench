@@ -18,6 +18,12 @@
 
 # COMMAND ----------
 
+# DBTITLE 1,Install biotite in the notebook kernel (CIF->PDB parse happens here, not in the of3 venv)
+# MAGIC %pip install -q biotite
+# MAGIC dbutils.library.restartPython()
+
+# COMMAND ----------
+
 dbutils.widgets.text("catalog", "genesis_workbench", "Catalog")
 dbutils.widgets.text("schema", "genesis_schema", "Schema")
 dbutils.widgets.text("model_volume", "openfold3", "Model Volume")
@@ -66,13 +72,17 @@ with mlflow.start_run(run_id=RUN_ID):
 # DBTITLE 1,Paths — checkpoint cache persists on the model Volume
 import os
 
-# OPENFOLD_CACHE on the UC Volume so the ~2 GB OpenBind checkpoint is downloaded ONCE and reused by
-# every later run (setup is a no-op when the checkpoint is already present). The isolated venv lives on
-# fast local disk (ephemeral; rebuilt on a cold node — serverless uses /tmp, not /local_disk0).
-CACHE_DIR = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/cache"
+# setup_openfold downloads the ~2 GB checkpoint from S3 with boto3 MULTIPART (parallel/seeked range
+# writes). A UC Volume FUSE mount does NOT support random/seek writes -> OSError [Errno 5]. So the live
+# OPENFOLD_CACHE lives on LOCAL disk (multipart-safe), and we persist/restore the checkpoint to a Volume
+# dir with plain SEQUENTIAL copies (which FUSE does support) so later cold nodes skip the re-download.
+# The isolated venv also lives on local disk (serverless uses /tmp, not /local_disk0).
+CACHE_DIR = "/tmp/of3_cache"                                    # OPENFOLD_CACHE (local, multipart-safe)
+VOLUME_CACHE = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/cache"    # persistent (sequential copy only)
 RESULTS_DIR = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/results/{RUN_ID}"
 VENV_DIR = "/tmp/of3venv"
 os.makedirs(CACHE_DIR, exist_ok=True)
+os.makedirs(VOLUME_CACHE, exist_ok=True)
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 PY = os.path.join(VENV_DIR, "bin", "python")
@@ -125,11 +135,39 @@ with open(SETUP_CFG, "w") as f:
                "selected_parameters": "default", "force_download_parameters": False,
                "run_integration_tests": False, "update_biotite_ccd": False}, f)
 
+import shutil as _sh
+MARKER = os.path.join(VOLUME_CACHE, ".of3_complete")
+# Restore from the Volume ONLY if a prior run marked the cache COMPLETE — never restore a half-written
+# checkpoint from a failed run (that would poison the local cache).
+if os.path.exists(MARKER):
+    subprocess.run(["cp", "-r", f"{VOLUME_CACHE}/.", CACHE_DIR + "/"], check=False)
+    print("Restored complete checkpoint cache from Volume ->", CACHE_DIR)
+
+# Free-space diagnostics: the venv (~several GB) + the ~2 GB checkpoint both live under /tmp.
+for p in ("/tmp", CACHE_DIR, VOLUME_CACHE):
+    try:
+        du = _sh.disk_usage(p)
+        print(f"disk {p}: free={du.free/1e9:.1f}GB / total={du.total/1e9:.1f}GB")
+    except Exception as _e:  # noqa: BLE001
+        print(f"disk {p}: n/a ({_e})")
+
 r = subprocess.run([SETUP_BIN, "--config", SETUP_CFG, "--skip-biotite-ccd-update"],
                    capture_output=True, text=True, timeout=2400,
                    stdin=subprocess.DEVNULL, env=of3_env())
-assert r.returncode == 0, f"setup_openfold failed (rc={r.returncode}): {r.stderr[-1500:]}"
+if r.returncode != 0:
+    raise RuntimeError(
+        f"setup_openfold failed (rc={r.returncode}).\n--- STDERR head ---\n{r.stderr[:1800]}\n"
+        f"--- STDERR tail ---\n{r.stderr[-1800:]}")
 print("OpenFold3 checkpoint ready in", CACHE_DIR)
+
+# Persist to the Volume for later cold nodes (best-effort, sequential copy) + a completion marker so the
+# restore above only ever pulls a fully-downloaded checkpoint.
+try:
+    subprocess.run(["cp", "-r", f"{CACHE_DIR}/.", VOLUME_CACHE + "/"], check=False)
+    open(MARKER, "w").write("ok")
+    print("Persisted checkpoint cache to Volume ->", VOLUME_CACHE)
+except Exception as e:  # noqa: BLE001
+    print("cache persist skipped:", e)
 
 # COMMAND ----------
 
