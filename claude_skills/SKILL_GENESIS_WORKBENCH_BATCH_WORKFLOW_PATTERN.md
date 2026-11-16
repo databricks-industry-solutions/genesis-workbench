@@ -9,7 +9,7 @@ When a new feature looks like:
 
 > "User fills a form → app dispatches a Databricks job → job runs for several minutes / hours → user comes back later to review results."
 
-Follow this pattern end-to-end. Don't invent a parallel approach — every batch workflow in this repo (AlphaFold, Genomics GWAS / Variant Annotation, Guided Enzyme Optimization, Scanpy) has converged on it. Newer implementations refine it slightly; the most complete reference is the **Guided Enzyme Optimization** stack landed on the `guided_enzyme_creation` branch.
+Follow this pattern end-to-end. Don't invent a parallel approach — every batch workflow in this repo (OpenFold3, Genomics GWAS / Variant Annotation, Guided Enzyme Optimization, Scanpy) has converged on it. Newer implementations refine it slightly; the most complete reference is the **Guided Enzyme Optimization** stack landed on the `guided_enzyme_creation` branch.
 
 > **Notebook readability applies here too.** Any orchestrator/registration notebook this pattern adds must meet the **Notebook authoring standard (hard rule)** — a `%md` section cell with a `## N ·` header before every code cell, rationale in markdown rather than crammed into code, and readable names. See `SKILL_GENESIS_WORKBENCH_DEVELOPMENT.md`.
 
@@ -36,14 +36,14 @@ Follow this pattern end-to-end. Don't invent a parallel approach — every batch
 Reason this is a hard rule: the BioNeMo ESM2 fine-tune feature was first shipped
 launch-only (no status/search) and had to be retrofitted — a full extra cycle
 (dispatcher pre-create, notebook `job_status` tags, search + run-details
-endpoints, frontend). Genomics / AlphaFold / Enzyme / **BioNeMo ESM2 fine-tune**
+endpoints, frontend). Genomics / OpenFold3 / Enzyme / **BioNeMo ESM2 fine-tune**
 all now follow this; copy from one of them rather than shipping launch-only.
 
 ## What NOT to do (anti-patterns from real bugs in this repo)
 
 These each cost a deploy cycle when they slipped in. Read them before writing code.
 
-1. **Don't render an inline auto-polling result pane on the launch page.** It conflicts with the *Search Past Runs* dialog flow, can't survive a tab refresh, and forces awkward `st.session_state["active_run"]` plumbing. Use the AlphaFold-style success-message + Search-Past-Runs dialog instead. Reference: `modules/core/app/views/large_molecule_workflows/structure_prediction.py:104-186`.
+1. **Don't render an inline auto-polling result pane on the launch page.** It conflicts with the *Search Past Runs* dialog flow, can't survive a tab refresh, and forces awkward `st.session_state["active_run"]` plumbing. Use the OpenFold3-style success-message + Search-Past-Runs dialog instead. Reference: `modules/core/app/views/large_molecule_workflows/structure_prediction.py:104-186`.
 
 2. **Don't return `job_run.run_id` from the dispatcher and treat it as the MLflow run_id.** They are different things. `job_run.run_id` (int) is the Databricks job-run id; the MLflow run_id (str hex) is what `MlflowClient.get_run()`, `download_artifacts()`, etc. expect. The dispatcher's success message displays `job_run_id`; the *search* discovers the MLflow run via tags.
 
@@ -71,7 +71,7 @@ These each cost a deploy cycle when they slipped in. Read them before writing co
 
 14. **A crashed orchestrator must not show a perpetual "running".** Wrap the orchestrator loop in `try/except`, set `job_status="failed"` + an `error` tag, then re-raise — otherwise the tag stays at its last value (`running`) forever while the MLflow run is actually `FAILED`. Belt-and-suspenders: the search helper should fall back to the MLflow run lifecycle (`if run.info.status in ('FAILED','KILLED') and job_status not terminal → 'failed'`) so already-stuck runs render 🟥 without a re-run. Also **warm serving endpoints up front** (`wait_for_endpoint_ready`) — a scale-to-zero GPU cold start can exceed the SDK's 5-minute request timeout and crash the run with a bare `TimeoutError` (this is exactly what failed a mol-opt run).
 
-15. **The run must show in Search Past Runs *immediately* after submit — auto-search, don't make the user click Search.** Wire a `searchToken` (a counter) bumped in the dispatch mutation's `onSuccess`, passed to `RunSearchSection` (or the bespoke section). The shared `RunSearchSection` runs the search when the token changes and **auto-refreshes every 10s while any run is in progress** (`isInProgress = !viewableStatuses.includes(status) && status not failed/error`). Two real causes of "it doesn't show up like other screens": (a) no auto-search after submit, and (b) **the search default doesn't match the run naming** — AlphaFold defaulted to `experiment_name='alphafold'` but its experiment is `structure_prediction` (the *run* is `alphafold_<ts>`), so it matched nothing. Default `mode='run_name'` with a needle that prefixes the run name (`mol_opt`, `enzyme_opt`, `alphafold`). New search-result features should reuse `RunSearchSection` (which bakes all of this in) rather than hand-rolling a search panel.
+15. **The run must show in Search Past Runs *immediately* after submit — auto-search, don't make the user click Search.** Wire a `searchToken` (a counter) bumped in the dispatch mutation's `onSuccess`, passed to `RunSearchSection` (or the bespoke section). The shared `RunSearchSection` runs the search when the token changes and **auto-refreshes every 10s while any run is in progress** (`isInProgress = !viewableStatuses.includes(status) && status not failed/error`). Two real causes of "it doesn't show up like other screens": (a) no auto-search after submit, and (b) **the search default doesn't match the run naming** — the structure workflow defaulted to `experiment_name='openfold3'` but its experiment is `structure_prediction` (the *run* is `openfold3_<ts>`), so it matched nothing. Default `mode='run_name'` with a needle that prefixes the run name (`mol_opt`, `enzyme_opt`, `openfold3`). New search-result features should reuse `RunSearchSection` (which bakes all of this in) rather than hand-rolling a search panel.
 
 ## The five layers
 
@@ -301,7 +301,7 @@ Three sections, in order:
 
 a) **Form** — inputs for the run.
 
-b) **Dispatch** — AlphaFold-style success message + View Run button:
+b) **Dispatch** — OpenFold3-style success message + View Run button:
 
 ```python
 if run_btn:
@@ -490,7 +490,7 @@ if search_btn:
 | Feature | Module | Notes |
 |---|---|---|
 | **Guided Enzyme Optimization** | `modules/small_molecule/enzyme_optimization/` + `modules/core/app/utils/enzyme_optimization_tools.py` + `modules/core/app/views/small_molecule_workflows/enzyme_optimization.py` | **Most complete reference.** Has all five layers, progress dots, dialog with metrics + collapsed expander, Fast/Accurate dual-job dispatch toggle, in-process AME failure-handling. Copy from here when adding the next batch workflow. |
-| **AlphaFold** | `modules/large_molecule/alphafold/` + `modules/core/app/utils/protein_structure.py` + `modules/core/app/views/large_molecule_workflows/structure_prediction.py:104-186` | The original Search Past Runs UX template. Simpler — single status (`fold_complete`), no progress dots. |
+| **OpenFold3** | `modules/large_molecule/openfold3/` + `modules/core/app/utils/protein_structure.py` + `modules/core/app/views/large_molecule_workflows/structure_prediction.py:104-186` | The original Search Past Runs UX template. Simpler — single status (`fold_complete`), no progress dots. |
 | **Genomics — GWAS / Variant Annotation** | `modules/genomics/*` + `modules/core/app/utils/genomics.py` | Source of the **MLflow run pre-creation pattern** (`genomics.py:122-166`) and progress-dots helper. |
 | **Scanpy** | `modules/single_cell/scanpy/scanpy_v0.0.1/` | Earlier batch-flow without pre-creation — useful to see what NOT to do for the run-visibility piece. |
 

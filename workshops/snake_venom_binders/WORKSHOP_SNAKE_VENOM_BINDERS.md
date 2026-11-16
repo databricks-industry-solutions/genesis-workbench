@@ -51,7 +51,7 @@ stops and experiments begin.
 - **One GWB call replaces two paper steps.** The paper used **RFdiffusion** (backbone) + **ProteinMPNN**
   (sequence). GWB's **Proteina-Complexa Binder** emits backbone *and* sequence jointly, hotspot-aware, in a
   single endpoint call.
-- **Interface confidence is the key filter.** GWB's AlphaFold2 is monomer-only, so the paper's
+- **Interface confidence is the key filter.** GWB's fast fold endpoint (ESMFold) is monomer-only, so the paper's
   "AF2-multimer pae/ipTM" filter is reproduced with **Boltz-2 co-folding** of `protein_A:binder;protein_B:toxin`,
   ranked on **ipTM** (a BindCraft-style interface-confidence metric). Boltz returns the confidence scalars
   directly from the endpoint.

@@ -52,7 +52,7 @@ Genesis Workbench is an open-source, Databricks-native blueprint that packages b
 
 **Get started fast with prepackaged models and workflows — and clear patterns to customize and extend them with your own.**
 
-- **Pre-packaged biological models** ready to deploy: ESMFold, AlphaFold2, ProteinMPNN, RFDiffusion, scGPT, SCimilarity, Scanpy, rapids-singlecell (part of scverse), ChemProp, DiffDock, Boltz, NVIDIA Parabricks, NVIDIA BioNeMo and more.
+- **Pre-packaged biological models** ready to deploy: ESMFold, OpenFold3, ProteinMPNN, RFDiffusion, scGPT, SCimilarity, Scanpy, rapids-singlecell (part of scverse), ChemProp, DiffDock, Boltz, NVIDIA Parabricks, NVIDIA BioNeMo and more.
 - **Tailored workflows** across protein design, drug discovery, single-cell analysis, and variant analysis — including **Antibody (VHH) Design**, **Vaccine Immunogen Design**, and guided **Enzyme** & **Molecule** optimization — each a UI tab with sane defaults.
 - **Built on Databricks primitives**: Asset Bundles, Workflows, Model Serving, MLflow, Unity Catalog, and Databricks Apps — so everything you run is governed, reproducible, and traceable.
 - **Modular and extensible**: each capability is an independent module that can be deployed and destroyed independently.
@@ -71,9 +71,9 @@ Single-cell RNA-seq at scale. Run end-to-end pipelines on millions of cells with
 📖 [Single Cell Analysis](modules/core/app/backend/documentation/single_cell_analysis.md) · [Cell Type Annotation](modules/core/app/backend/documentation/cell_type_annotation.md) · [Cell Similarity Search](modules/core/app/backend/documentation/cell_similarity.md) · [Gene Perturbation Prediction](modules/core/app/backend/documentation/perturbation_prediction.md)
 
 ### Large Molecule
-Protein structure prediction, design, and engineering. Fold proteins in seconds with **ESMFold** or at high accuracy with **AlphaFold2**; design backbones with **RFDiffusion** + **ProteinMPNN**; redesign sequences for a fixed backbone (inverse folding) and validate by re-folding; and run BLAST-like search across 150M+ sequences with **ESM-2** embeddings. The **Guided Enzyme Optimization** workflow chains Proteina-Complexa, ProteinMPNN, ESMFold, Boltz, NetSolP, PLTNUM, DeepSTABp, and MHCflurry into a reward-weighted scaffold-and-score loop, ranking variants on motif fidelity, fold confidence, optional substrate complex, and four developability axes (solubility, half-life, melting temperature, immunogenicity). The NVIDIA×Baker **RFD4-Proteina** flow-matching model — served on an H100 endpoint via Express env_pack — generates backbones de novo and powers two in-process design workflows: **Antibody (VHH) Design**, single-domain nanobodies optimized against an antigen epitope for binding, fold confidence, and developability; and **Vaccine Immunogen Design**, conserved epitopes grafted onto de-novo scaffolds and optimized for epitope presentation (motif RMSD), fold confidence, and manufacturability.
+Protein structure prediction, design, and engineering. Fold proteins in seconds with **ESMFold** or at high accuracy (monomers and complexes) with **OpenFold3**; design backbones with **RFDiffusion** + **ProteinMPNN**; redesign sequences for a fixed backbone (inverse folding) and validate by re-folding; and run BLAST-like search across 150M+ sequences with **ESM-2** embeddings. The **Guided Enzyme Optimization** workflow chains Proteina-Complexa, ProteinMPNN, ESMFold, Boltz, NetSolP, PLTNUM, DeepSTABp, and MHCflurry into a reward-weighted scaffold-and-score loop, ranking variants on motif fidelity, fold confidence, optional substrate complex, and four developability axes (solubility, half-life, melting temperature, immunogenicity). The NVIDIA×Baker **RFD4-Proteina** flow-matching model — served on an H100 endpoint via Express env_pack — generates backbones de novo and powers two in-process design workflows: **Antibody (VHH) Design**, single-domain nanobodies optimized against an antigen epitope for binding, fold confidence, and developability; and **Vaccine Immunogen Design**, conserved epitopes grafted onto de-novo scaffolds and optimized for epitope presentation (motif RMSD), fold confidence, and manufacturability.
 
-**Models bundled:** ESMFold, ESM-2 Embeddings, AlphaFold2, ProteinMPNN, RFDiffusion, Boltz, RFD4-Proteina
+**Models bundled:** ESMFold, ESM-2 Embeddings, OpenFold3, ProteinMPNN, RFDiffusion, Boltz, RFD4-Proteina
 
 📖 [Protein Structure Prediction](modules/core/app/backend/documentation/protein_structure_prediction.md) · [Protein Design](modules/core/app/backend/documentation/protein_design.md) · [Inverse Folding](modules/core/app/backend/documentation/inverse_folding.md) · [Sequence Similarity Search](modules/core/app/backend/documentation/sequence_search.md) · [RFD4-Proteina Design](modules/core/app/backend/documentation/rfd4_proteina_design.md) · [Antibody Design (VHH)](modules/core/app/backend/documentation/antibody_design.md) · [Vaccine Immunogen Design](modules/core/app/backend/documentation/vaccine_immunogen.md) · [Guided Enzyme Optimization](modules/core/app/backend/documentation/enzyme_optimization.md)
 
@@ -143,7 +143,7 @@ Genesis Workbench ships open models and open datasets across all modules. Models
 
 | Model | Module / submodule | Source | Task |
 |---|---|---|---|
-| AlphaFold2 | large_molecule / alphafold | DeepMind AlphaFold2 v2.3.2 | Protein 3D structure prediction (MSA + templates) |
+| OpenFold3 | large_molecule / openfold3 | OpenFold3 (`openfold3==0.5.1`, OpenBind-0 checkpoint) | Protein & complex 3D structure prediction (ColabFold MSA; no local DBs) |
 | ESMFold | large_molecule / esmfold | `facebook/esmfold_v1` | Fast single-sequence structure prediction (no MSA) |
 | Boltz-2 | large_molecule / boltz | jwohlwend/boltz (Boltz-2, `boltz==2.2.1`) | Structure / co-folding prediction + protein–ligand binding-affinity head |
 | ESM-2 Embeddings | large_molecule / esm2_embeddings | `facebook/esm2_t33_650M_UR50D` | 650M mean-pooled protein embeddings (1280-dim) for similarity search |
@@ -185,7 +185,7 @@ All datasets below are open/public (UniProt CC-BY 4.0, PDB/ClinVar/1000G public 
 | Adams et al. 2020 lung scRNA-seq (Zenodo) | single_cell / scimilarity — IPF/healthy lung query sample | No |
 | Ensembl gene reference (BioMart) | single_cell — Ensembl ID ↔ gene-symbol mapping | No |
 | Enrichr gene-set libraries (GMT) | single_cell / scanpy — pathway enrichment | No |
-| AlphaFold genetic DBs — UniRef90, UniRef30, MGnify, small BFD, PDB70, PDB mmCIF, pdb_seqres, UniProt | large_molecule / alphafold — MSA + template search for folding | No |
+| OpenFold3 checkpoint (OpenBind-0, ~2 GB) | large_molecule / openfold3 — staged to a Volume at deploy; MSA fetched from the remote ColabFold server (no local genetic DBs) | No |
 
 > The three vector indexes are served from Databricks Vector Search: `gene_sequence_embedding_index` and `sequence_embedding_index` (protein similarity) plus `scimilarity_cell_index` (cell similarity). Protein search queries the human and UniRef indexes together so a single query returns both human and broad-organism hits.
 
@@ -278,9 +278,8 @@ ProteinMPNN | mlflow==2.15.1 | Apache2.0 | https://github.com/mlflow/mlflow
 ProteinMPNN | cloudpickle==2.2.1 | BSD-3 | https://github.com/cloudpipe/cloudpickle
 ProteinMPNN | biopython==1.79 | [BioPython License Agreement](https://github.com/biopython/biopython/blob/master/LICENSE.rst) |  https://github.com/biopython/biopython
 ProteinMPNN | MODEL WEIGHTS | MIT | https://github.com/dauparas/ProteinMPNN
-Alphafold | AlphaFold (2.3.2) | Apache2.0 | https://github.com/google-deepmind/alphafold
-Alphafold | other dependencies | we provide a file of requirements per alphafold's own [repo](https://github.com/google-deepmind/alphafold), see [yml file](https://github.com/databricks-industry-solutions/genesis-workbench/blob/main/modules/large_molecule/alphafold/alphafold_v2.3.2/envs/alphafold_env.yml) for further details |
-Alphafold | MODEL WEIGHTS | CC BY 4.0
+OpenFold3 | openfold3==0.5.1 | Apache-2.0 | https://pypi.org/project/openfold3/
+OpenFold3 | MODEL WEIGHTS (OpenBind-0, openbind-2025-06-30-174k) | Apache-2.0
 ESMfold | ESMFold |	MIT | https://github.com/facebookresearch/esm
 ESMfold | torch | BSD-3 | https://github.com/pytorch/pytorch
 ESMfold | transformers | Apache2.0 | https://github.com/huggingface/transformers
