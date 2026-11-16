@@ -359,7 +359,7 @@ _WORKFLOW_NODES: list[NodeType] = [
     # ── Structure prediction ──
     NodeType(
         type="alphafold2", label="AlphaFold Structure Prediction", category=NodeCategory.BATCH,
-        kind=_KIND_JOB, module="large_molecule", job_name="run_alphafold",
+        kind=_KIND_JOB, module="large_molecule", job_name="run_openfold3",
         description="High-accuracy 3D structure prediction from a protein sequence.",
         inputs=[Port("sequence", PortType.SEQUENCE)],
         outputs=[Port("pdb", PortType.PDB)],
