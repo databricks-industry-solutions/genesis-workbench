@@ -44,13 +44,13 @@ const nodeTypes: NodeTypes = { vortex: CanvasNode }
 
 // Fun, catalog-valid example goals for the ✨ "Show me how" button. Each leans on
 // a Prebuilt Workflow (Guided Enzyme/Molecule Optimization, Protein Design, ADMET
-// Screen, AlphaFold, GWAS) so the generated graph reads as a real pipeline.
+// Screen, OpenFold3, GWAS) so the generated graph reads as a real pipeline.
 const EXAMPLE_GOALS = [
   'Guided enzyme optimization on a motif, then fold the best candidate and check solubility',
   'Design a protein around a target with Protein Design, then predict thermostability',
   'Run an ADMET screen on a molecule, then guided molecule optimization on the winners',
-  'Optimize an enzyme for a substrate and validate the top design with AlphaFold',
-  'Predict structure with AlphaFold, dock a ligand, and screen it for toxicity',
+  'Optimize an enzyme for a substrate and validate the top design with OpenFold3',
+  'Predict structure with OpenFold3, dock a ligand, and screen it for toxicity',
   'Call variants from a FASTQ, run GWAS, and annotate the pathogenic hits',
   'Generate molecules, ADMET-screen them, then optimize the best for a target',
 ]

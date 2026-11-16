@@ -254,7 +254,7 @@ def alphafold_result(
     except Exception as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Pulling AlphaFold result failed: {e}")
     return AlphaFoldResultResponse(
-        pdb=pdb, viewer_html=_viewer_html(pdb, f"AlphaFold2 — {run_name}")
+        pdb=pdb, viewer_html=_viewer_html(pdb, f"OpenFold3 — {run_name}")
     )
 
 

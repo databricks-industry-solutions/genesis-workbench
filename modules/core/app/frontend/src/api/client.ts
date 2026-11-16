@@ -206,7 +206,12 @@ export const api = {
       body: JSON.stringify({ sequence, experiment_name, run_name }),
     }),
 
-  alphafoldStart: (body: { sequence: string; experiment_name: string; run_name: string }) =>
+  alphafoldStart: (body: {
+    sequence: string
+    experiment_name: string
+    run_name: string
+    use_msa?: boolean
+  }) =>
     request<AlphaFoldStartResponse>('/api/large_molecule/alphafold/start', {
       method: 'POST',
       body: JSON.stringify(body),

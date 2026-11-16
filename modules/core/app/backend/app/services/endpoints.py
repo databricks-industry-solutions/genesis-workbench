@@ -38,7 +38,6 @@ DISPLAY_TO_UC: dict[str, str] = {
     "ProteinMPNN": "proteinmpnn",
     "RFDiffusion": "rfdiffusion_inpainting",
     "Boltz": "boltz",
-    "AlphaFold2": "alphafold2",
     # Single Cell
     "scGPT Perturbation": "scgpt_perturbation",
     "scGPT Embeddings": "scgpt",

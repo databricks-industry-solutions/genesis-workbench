@@ -258,7 +258,7 @@ function BatchModelsTab() {
       <DataTable
         columns={columns}
         data={q.data.batch_models}
-        emptyText="No batch models registered yet. Deploy Parabricks, AlphaFold2, or BioNeMo to register batch models."
+        emptyText="No batch models registered yet. Deploy Parabricks, OpenFold3, or BioNeMo to register batch models."
       />
     </section>
   )
