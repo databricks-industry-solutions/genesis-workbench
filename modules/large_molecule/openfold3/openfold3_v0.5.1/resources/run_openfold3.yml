@@ -1,0 +1,112 @@
+resources:
+  jobs:
+    openfold3:
+      name: run_openfold3
+      description: >
+        # OpenFold3 structure prediction (fold)
+        inputs:
+         - protein_sequence: protein sequence. For a complex, separate chains with a colon, e.g. TARGET:BINDER.
+         - use_msa: query the ColabFold MSA server (true) or run single-sequence (false).
+         - run_id: the MLflow run id to resume and tag.
+      email_notifications:
+        on_failure:
+          - ${var.current_user}
+        on_duration_warning_threshold_exceeded:
+          - ${var.current_user}
+        no_alert_for_skipped_runs: true
+      notification_settings:
+        no_alert_for_skipped_runs: true
+        no_alert_for_canceled_runs: true
+      timeout_seconds: 86400
+      health:
+        rules:
+          - metric: RUN_DURATION_SECONDS
+            op: GREATER_THAN
+            value: 50400
+      max_concurrent_runs: 5
+
+      tasks:
+        # Single serverless-GPU fold task. GPU_1xH100 + client '6' (CUDA 13 / py3.12) matches the
+        # OpenFold3 CUDA-13 torch wheel. max_retries: serverless-GPU capacity here is intermittent and
+        # the compute-start can exceed the 900s window — auto-retry to catch an available H100.
+        - task_key: fold
+          max_retries: 2
+          disable_auto_optimization: true
+          retry_on_timeout: false
+          environment_key: gpu_env
+          compute:
+            hardware_accelerator: GPU_1xH100
+          notebook_task:
+            notebook_path: ../notebooks/run_openfold3_fold.py
+            source: WORKSPACE
+          timeout_seconds: 28800
+          health:
+            rules:
+              - metric: RUN_DURATION_SECONDS
+                op: GREATER_THAN
+                value: 14400
+
+        - task_key: mark_success
+          max_retries: 0
+          disable_auto_optimization: true
+          depends_on:
+            - task_key: fold
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: ../notebooks/update_mlflow_status.py
+            source: WORKSPACE
+            base_parameters:
+              mlflow_run_id: "{{job.parameters.run_id}}"
+              job_status: "fold_complete"
+          environment_key: cpu_env
+
+        - task_key: mark_failure
+          max_retries: 0
+          disable_auto_optimization: true
+          depends_on:
+            - task_key: fold
+          run_if: AT_LEAST_ONE_FAILED
+          notebook_task:
+            notebook_path: ../notebooks/update_mlflow_status.py
+            source: WORKSPACE
+            base_parameters:
+              mlflow_run_id: "{{job.parameters.run_id}}"
+              job_status: "failed"
+          environment_key: cpu_env
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: model_volume
+          default: ${var.model_volume}
+        - name: user_email
+          default: ${var.current_user}
+        - name: protein_sequence
+          default: XXX
+        - name: run_id
+          default: run
+        - name: use_msa
+          default: "true"
+        - name: num_samples
+          default: "1"
+        - name: of3_version
+          default: ${var.of3_version}
+        - name: of3_ckpt_name
+          default: ${var.of3_ckpt_name}
+
+      # gpu_env = client '6' (AI Runtime v6 = CUDA 13 + py3.12) for the OpenFold3 CUDA-13 torch wheel.
+      # cpu_env ('4') is the lightweight serverless env for the status-tag tasks.
+      environments:
+        - environment_key: gpu_env
+          spec:
+            client: '6'
+        - environment_key: cpu_env
+          spec:
+            client: '4'
+
+      tags: ${var.common_resource_tags}
+
+      queue:
+        enabled: true

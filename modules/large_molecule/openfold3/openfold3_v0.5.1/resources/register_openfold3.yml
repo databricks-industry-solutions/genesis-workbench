@@ -1,0 +1,54 @@
+resources:
+  jobs:
+    openfold3_register:
+      name: openfold3_register
+      email_notifications:
+        on_success:
+          - ${var.current_user}
+        on_failure:
+          - ${var.current_user}
+      notification_settings:
+        no_alert_for_skipped_runs: true
+        no_alert_for_canceled_runs: true
+
+      tasks:
+        # Register-only: persist the fold job id, grant app permissions, register the batch model.
+        # No database downloads (OpenFold3 needs only the ~2 GB checkpoint, which the fold job caches
+        # on the model Volume on first use). Runs on serverless CPU (client '4').
+        - task_key: register_run_job
+          max_retries: 0
+          environment_key: cpu_env
+          notebook_task:
+            notebook_path: ../notebooks/register_openfold3_job.py
+            source: WORKSPACE
+          health:
+            rules:
+              - metric: RUN_DURATION_SECONDS
+                op: GREATER_THAN
+                value: 600
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: model_volume
+          default: ${var.model_volume}
+        - name: user_email
+          default: ${var.current_user}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: run_openfold3_job_id
+          default: ${resources.jobs.openfold3.id}
+        - name: databricks_app_names
+          default: genesis-workbench:mcp-genesis-workbench
+
+      environments:
+        - environment_key: cpu_env
+          spec:
+            client: '4'
+
+      tags: ${var.common_resource_tags}
+
+      queue:
+        enabled: true

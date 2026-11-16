@@ -1,0 +1,11 @@
+resources:
+  volumes:
+    # Holds the ~2 GB OpenBind checkpoint cache (downloaded once by the fold job's setup_openfold) and
+    # the per-run prediction results (ranked_0.pdb + model.cif + confidences.json). Created by
+    # `databricks bundle deploy` so it exists before the first on-demand fold run.
+    openfold3_volume:
+      catalog_name: ${var.core_catalog_name}
+      schema_name: ${var.core_schema_name}
+      name: ${var.model_volume}
+      volume_type: MANAGED
+      comment: OpenFold3 checkpoint cache + prediction results.
