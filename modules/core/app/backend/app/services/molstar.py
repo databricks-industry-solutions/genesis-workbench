@@ -210,6 +210,67 @@ def molstar_html_complex(pdb: str, name: Optional[str] = None, with_iframe: Opti
     return html_str
 
 
+def antibody_complex_cartoon_html(pdb: str, antibody_chain: str = "F", antigen_chain: str = "A",
+                                  epitope_resids: Optional[List[int]] = None,
+                                  with_iframe: bool = True) -> str:
+    """Render a VHH–antigen COMPLEX as a clean two-tone cartoon with the epitope called out — the
+    "biologist's view" of a bound complex: the antibody/VHH chain as a LIGHT-BLUE cartoon, the
+    antigen chain as a LIGHT-YELLOW cartoon, and the epitope residues (the antigen interface,
+    passed in `epitope_resids`) as RED sticks. This is the look of a py3Dmol reference figure.
+
+    Uses 3Dmol.js (loaded from the same jsdelivr CDN as the Mol* viewers) rather than rcsb-molstar:
+    a per-chain uniform cartoon color PLUS sticks on a residue subset is a two-line selection in
+    3Dmol, whereas Mol*'s B-factor→theme coloring (used by the per-residue analytical color modes)
+    cannot draw sticks on a selection. `antibody_chain`/`antigen_chain` are resolved by the caller
+    (antigen defaults to "A"); `epitope_resids` are antigen residue numbers. All JS uses double
+    quotes only (survives the React `srcDoc` and the single-quoted `srcdoc` iframe), and the PDB is
+    base64-injected via replace() to avoid f-string brace escaping. The build degrades gracefully:
+    a missing antigen chain simply yields the antibody cartoon alone."""
+    logging.info('doing antibody-complex two-tone cartoon (3Dmol)')
+    pdb_base64 = base64.b64encode(pdb.encode()).decode()
+    resi_js = "[" + ",".join(str(int(r)) for r in (epitope_resids or [])) + "]"
+    epitope_js = ("""
+                    var EPI = __RESI__;
+                    if (EPI.length > 0) {
+                        viewer.addStyle({chain: "__AG__", resi: EPI}, {stick: {color: "red", radius: 0.25}});
+                    }""" if epitope_resids else "")
+    js = ("""
+                (function() {
+                    var element = document.getElementById("viewer");
+                    var viewer = $3Dmol.createViewer(element, {backgroundColor: "#1e1e1e"});
+                    viewer.addModel(atob("__PDB_B64__"), "pdb");
+                    // Faint grey baseline for any stray atoms, then the two domains as distinct light
+                    // cartoons (antibody blue, antigen yellow); the per-chain setStyle REPLACES the
+                    // baseline on those chains, so only non-chain atoms (if any) stay as thin lines.
+                    viewer.setStyle({}, {line: {color: "#555555"}});
+                    viewer.setStyle({chain: "__AB__"}, {cartoon: {color: "lightblue"}});
+                    viewer.setStyle({chain: "__AG__"}, {cartoon: {color: "lightyellow"}});
+__EPITOPE__
+                    viewer.zoomTo();
+                    viewer.render();
+                })();
+    """.replace("__EPITOPE__", epitope_js)  # splice the (optional) epitope block in FIRST, so the
+        .replace("__PDB_B64__", pdb_base64)  # __RESI__/__AG__ tokens inside it get substituted below
+        .replace("__AB__", antibody_chain)
+        .replace("__AG__", antigen_chain)
+        .replace("__RESI__", resi_js))
+    html_str = ("""
+    <!DOCTYPE html>
+    <html>
+        <head>
+            <script src="https://cdn.jsdelivr.net/npm/3dmol@2/build/3Dmol-min.js"></script>
+            <style> body { background: #1e1e1e; margin: 0; } </style>
+        </head>
+        <body>
+            <div id="viewer" style="width: 100%; height: 500px; position: relative;"></div>
+            <script>""" + js + """</script>
+        </body>
+    </html>""")
+    if with_iframe:
+        return html_as_iframe(html_str)
+    return html_str
+
+
 _HYDROPHOBICITY_LEGEND_HTML = """
     <div style="position:absolute; top:10px; right:10px; background:rgba(30,30,30,0.82); color:#ddd;
          font:11px/1.3 sans-serif; padding:6px 8px; border-radius:4px; z-index:10; pointer-events:none;">

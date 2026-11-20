@@ -31,6 +31,11 @@ generalization of the worked snake-venom example at `workshops/snake_venom_binde
    reproducible in silico; the developability endpoints are *proxies* that prioritize what to order.
 4. **Fail loud on missing models.** Endpoint discovery (`get_ep`) raises if a model is undeployed/asleep —
    keep that behavior; tell the user to warm endpoints (they get reaped for inactivity).
+5. **Sanitize sequences & structures.** Endpoint fields (`designed_sequence`, `sequence`, `pdb`/`complex_pdb`)
+   can come back as a 1-element list or ndarray — `str()` on those leaves `[`, `]`, `'`, `,` that break
+   ESMFold, the Boltz spec, and the Mol\* sequence panel. The toolkit's `clean_sequence(...)` is applied at
+   extraction (template) and `show_molstar` self-coerces the structure; keep both. Never pass a raw
+   list/array repr downstream.
 
 ## Step 1 — Classify the task
 
@@ -40,6 +45,7 @@ Map to exactly one task:
 | If the user wants to… | Task | GWB generation endpoint (toolkit fn) |
 |---|---|---|
 | Bind a **protein** target (block an interaction, neutralize a toxin, antibody-alternative) | `binder_vs_protein` | **Proteina-Complexa Binder** → `gen_protein_binders(target_pdb, target_chain, hotspots, …)` |
+| Design a **single-domain antibody (VHH / nanobody)** against an antigen epitope | `antibody_vhh` | **RFD4-Proteina** → `gen_vhh_antibodies(target_pdb, target_chain, hotspots, length_min=110, length_max=130, …)` |
 | Bind a **small molecule / ligand** | `binder_vs_ligand` | **Proteina-Complexa Ligand** → `gen_ligand_binders(ligand_pdb, …)` |
 | Graft/preserve a **functional motif** (active site, epitope) onto a new scaffold | `motif_scaffold` | **Proteina-Complexa AME** → `scaffold_motif(motif_pdb, motif_chain, …)` |
 | Generate/diversify a **de novo monomer** fold | `denovo_monomer` | **RFdiffusion-inpaint + ProteinMPNN** → `rfdiffusion_inpaint(pdb, i, j)` then `proteinmpnn(bb)` |
@@ -63,12 +69,22 @@ Target source → how to get the model input:
    For a **ligand** campaign, also screen the small molecule with `chemprop_admet([...])`.
 5. **Composite reward & select:** `composite_reward(df, axis_cols)` with `DEFAULT_WEIGHTS`; rank; pick finalists.
    Drop axes you didn't compute (e.g. no `iptm` for a monomer-only task).
-6. **Compare to the paper:** fetch any deposited design/complex PDB and eyeball it against the top pick.
-7. (Optional) log the funnel to **MLflow** (standard Databricks, not a GWB library).
+6. **Visualize (PDBe Mol\* — the DEFAULT viewer):**
+   `show_molstar(df.iloc[0].get("complex_pdb") or df.iloc[0].get("backbone_pdb"), binder_chain="A", target_chain="B", highlight_resids=<hotspots>)`.
+   `show_molstar` (in `00_toolkit.py`) renders the top design inline with **PDBe Mol\*** (`displayHTML`):
+   binder chain teal, target chain gold, the epitope/hotspot residues on the target as **red
+   ball-and-stick**, with a legend + sequence panel. The plugin loads via a **multi-CDN fallback
+   (jsDelivr → unpkg → ebi.ac.uk)** — PDBe Mol\* is the only Mol\* build that renders in a Databricks
+   `displayHTML` iframe, and a single CDN can fail on serverless (`PDBeMolstarPlugin is not defined`).
+   PDBe Mol\* is the default — do not substitute another viewer (py3Dmol, rcsb-molstar, core molstar.Viewer)
+   unless the user explicitly asks. **See `references/protein-structure-3d.md`.**
+7. **Compare to the paper:** fetch any deposited design/complex PDB and view it (also `show_molstar`) against the top pick.
+8. (Optional) log the funnel to **MLflow** (standard Databricks, not a GWB library).
 
 ## Step 3 — Per-task deltas
 
 - **binder_vs_protein** — the full funnel. Hotspots steer the interface. *(Worked example: `workshops/snake_venom_binders/`.)*
+- **antibody_vhh** — epitope-conditioned single-domain antibody (VHH/nanobody) via **RFD4-Proteina** (`gen_vhh_antibodies`, VHH length 110–130; `exclude_chain`=antigen chain so the sequence is the VHH alone). Same funnel as binder_vs_protein, but add the **MHC-II / anti-drug-antibody (ADA)** axis — `developability(seq, which=(…, "hlaiipred"))` → `predicted_immuno_mhc2` (lower = de-immunized), the key immunogenicity signal for a biologic. First-draft VHH (epitope-conditioned binder, not yet a full Ig-framework scaffold).
 - **binder_vs_ligand** — generate with `gen_ligand_binders`; validate the pocket with `diffdock(binder_pdb, SMILES)` (confidence↑) and/or Boltz `ligand_B:`; add `chemprop_admet` on the ligand.
 - **motif_scaffold** — generate with `scaffold_motif`; optionally redesign surface with `proteinmpnn`; verify the motif is preserved by folding (ESMFold) and, if there's a partner, Boltz. There is **no Rosetta/InterfaceAnalyzer** in GWB — rank on pLDDT/ipTM.
 - **denovo_monomer** — no binding partner: `rfdiffusion_inpaint` a span of a seed PDB, `proteinmpnn` the backbone, ESMFold-gate; **skip Boltz**; score on pLDDT + developability.
@@ -83,7 +99,7 @@ Target source → how to get the model input:
 3. Wire Step 4's Boltz `spec` to the target type (protein vs ligand), and trim `axis_cols` in Step 6 to the
    axes actually computed.
 4. Set sensible run sizes for a session: `NUM_DESIGNS` 6–8, `num_cofold` (TOP_N) 3–4.
-5. Keep the honest-scope reflection cell.
+5. Keep the **Mol\* visualization cell** (`show_molstar`, the default viewer) and the honest-scope reflection cell.
 
 ## Endpoint reference (slug → payload → output)
 
@@ -92,12 +108,13 @@ Target source → how to get the model input:
 | `gen_protein_binders` | `proteina_complexa` (excl. ligand/ame) | `dataframe_split` cols `target_pdb,binder_length_min,binder_length_max,num_samples,hotspot_residues,target_chain` | `sample_id, pdb_output, sequence, rewards` |
 | `gen_ligand_binders` | `proteina_complexa_ligand` | same cols, ligand PDB in `target_pdb` slot | `sample_id, pdb_output, sequence, rewards` |
 | `scaffold_motif` | `proteina_complexa_ame` | same cols, motif PDB + `target_chain` (default B) | `sample_id, pdb_output, sequence, rewards` |
+| `gen_vhh_antibodies` | `rfd4_proteina` | `dataframe_split` cols `task,target_pdb,binder_length_min,binder_length_max,num_samples,hotspot_residues,target_chain,condition_spec_json,structure_cif,exclude_chain` (task=`binder`, exclude_chain=antigen chain) | `sample_id, designed_pdb, designed_sequence, complex_pdb` |
 | `rfdiffusion_inpaint` | `rfdiffusion` | `dataframe_records [{pdb,start_idx,end_idx}]` | backbone PDB string(s) |
 | `proteinmpnn` | `proteinmpnn` | `dataframe_records [{pdb,fixed_positions}]` | sequence strings |
 | `esmfold` | `esmfold` | `inputs=[seq]` | PDB (pLDDT in B-factors) |
 | `boltz_complex` | `boltz` | `inputs=[{input,msa,use_msa_server}]` | `pdb, iptm, protein_iptm, ptm, confidence_score, complex_plddt` |
 | `diffdock` | `diffdock_esm_embeddings` + `diffdock` | `dataframe_split` | best `ligand_sdf`, `confidence` |
-| `developability` | `netsolp` / `deepstabp` / `pltnum` / `mhcflurry` | `dataframe_records [{sequence,…}]` | `predicted_solubility` / `predicted_tm_celsius` / `predicted_stability` / `predicted_immuno_burden` |
+| `developability` | `netsolp` / `deepstabp` / `pltnum` / `mhcflurry` / `hlaiipred` | `dataframe_records [{sequence,…}]` | `predicted_solubility` / `predicted_tm_celsius` / `predicted_stability` / `predicted_immuno_burden` (mhcflurry = MHC-I; hlaiipred = MHC-II/ADA, pass DRB1 `alleles` → alias `predicted_immuno_mhc2`) |
 | `chemprop_admet` | `chemprop_admet` / `chemprop_bbbp` / `chemprop_clintox` | `inputs=[smiles,…]` | per-model predictions |
 
 ## GWB-vs-literature deviations to state in the generated notebook

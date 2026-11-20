@@ -35,11 +35,12 @@
 # MAGIC ## 0 · Setup — connect to the Genesis Workbench serving endpoints
 # MAGIC
 # MAGIC We use only the **Databricks SDK** (`WorkspaceClient.serving_endpoints`). No `genesis_workbench`
-# MAGIC import. `requests` is used to pull a public PDB from RCSB; `py3Dmol` (optional) renders structures.
+# MAGIC import. `requests` pulls a public PDB from RCSB; structures render in the PDBe Mol* viewer
+# MAGIC (pdbe-molstar-plugin-3.1.3.js from ebi.ac.uk, loaded by `show_molstar` — no pip needed).
 
 # COMMAND ----------
 
-# MAGIC %pip install -q "databricks-sdk>=0.50.0" requests py3Dmol
+# MAGIC %pip install -q "databricks-sdk>=0.50.0" requests
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
@@ -210,7 +211,79 @@ def to_float(x, default=float("nan")):
     except (TypeError, ValueError):
         return default
 
-print("Helpers ready: fetch_pdb, chain_sequence, mean_plddt, to_float")
+def show_molstar(structure: str, fmt: str = "pdb", binder_chain: str = "A", target_chain: str = "B",
+                 highlight_resids=None, binder_label: str = "Binder", target_label: str = "Target",
+                 height: int = 620) -> None:
+    """DEFAULT 3D viewer — PDBe Mol* (PDBeMolstarPlugin), inline via displayHTML. PDBe Mol* is the only
+    Mol* build that reliably renders in a Databricks displayHTML iframe; loaded via a MULTI-CDN fallback
+    (jsDelivr -> unpkg -> ebi.ac.uk) because a single CDN can fail on serverless ("PDBeMolstarPlugin is
+    not defined"). Binder chain teal, target chain gold, `highlight_resids` on the target as red
+    ball-and-stick (epitope/hotspots), + a legend & sequence panel. `structure` = PDB/mmCIF string."""
+    import base64, json
+    if not structure:
+        print("show_molstar: no structure to display"); return
+    b64 = base64.b64encode(structure.encode()).decode()
+    sel = [{"auth_asym_id": binder_chain, "color": {"r": 51, "g": 181, "b": 229}},
+           {"auth_asym_id": target_chain, "color": {"r": 230, "g": 168, "b": 23}}]
+    for r in (highlight_resids or []):
+        sel.append({"auth_asym_id": target_chain, "auth_residue_number": int(r),
+                    "color": {"r": 231, "g": 76, "b": 60}, "sideChain": True,
+                    "representation": "ball-and-stick", "representationColor": {"r": 231, "g": 76, "b": 60}})
+    hl = ", ".join(str(int(r)) for r in (highlight_resids or []))
+    epi_legend = ('<span><span class="sw" style="background:#e74c3c;"></span>Epitope/hotspots (' + hl
+                  + ')</span>') if highlight_resids else ""
+    displayHTML("""
+<!DOCTYPE html><html><head><style>
+  body{margin:0;padding:8px;background:#1a1a2e;font-family:'Segoe UI',Arial,sans-serif;}
+  #molviewer{position:relative;width:100%;height:__H__px;}
+  .legend{display:flex;flex-wrap:wrap;gap:16px;padding:8px 2px;color:#aaa;font-size:13px;line-height:1.6;}
+  .sw{display:inline-block;width:13px;height:13px;border-radius:3px;margin-right:5px;vertical-align:middle;}
+  .hint{color:#666;font-style:italic;}
+</style></head><body>
+  <div id="molviewer"></div>
+  <div class="legend">
+    <span><span class="sw" style="background:#33b5e5;"></span>__BINDER__ (chain __BC__)</span>
+    <span><span class="sw" style="background:#e6a817;"></span>__TARGET__ (chain __TC__)</span>
+    __EPI_LEGEND__
+    <span class="hint">drag = rotate &middot; scroll = zoom &middot; click = residue info</span>
+  </div>
+  <script>
+  (function(){
+    var CDNS=[
+      {js:"https://cdn.jsdelivr.net/npm/pdbe-molstar@3.3.0/build/pdbe-molstar-plugin.js",
+       css:"https://cdn.jsdelivr.net/npm/pdbe-molstar@3.3.0/build/pdbe-molstar.css"},
+      {js:"https://unpkg.com/pdbe-molstar@3.3.0/build/pdbe-molstar-plugin.js",
+       css:"https://unpkg.com/pdbe-molstar@3.3.0/build/pdbe-molstar.css"},
+      {js:"https://www.ebi.ac.uk/pdbe/pdb-component-library/js/pdbe-molstar-plugin-3.1.3.js",
+       css:"https://www.ebi.ac.uk/pdbe/pdb-component-library/css/pdbe-molstar-3.1.3.css"}];
+    var el=document.getElementById("molviewer");
+    function render(){
+      try{
+        var v=new PDBeMolstarPlugin();
+        v.render(el,{customData:{url:"data:text/plain;base64,__B64__",format:"__FMT__"},
+                     bgColor:{r:26,g:26,b:46},hideControls:false,sequencePanel:true,landscape:true});
+        v.events.loadComplete.subscribe(function(){ try{ v.visual.select({data:__SEL__}); }catch(e){} });
+      }catch(e){ el.innerText="PDBe Mol* render failed: "+(e&&e.message); }
+    }
+    function tryCdn(i){
+      if(typeof PDBeMolstarPlugin!=="undefined"){render();return;}
+      if(i>=CDNS.length){el.innerText="PDBe Mol* failed: all CDNs unreachable";return;}
+      var link=document.createElement("link");link.rel="stylesheet";link.href=CDNS[i].css;document.head.appendChild(link);
+      var s=document.createElement("script");s.src=CDNS[i].js;
+      s.onload=function(){ (typeof PDBeMolstarPlugin!=="undefined")?render():tryCdn(i+1); };
+      s.onerror=function(){tryCdn(i+1);};
+      document.head.appendChild(s);
+    }
+    tryCdn(0);
+  })();
+  </script>
+</body></html>
+""".replace("__H__", str(int(height))).replace("__B64__", b64).replace("__FMT__", fmt)
+   .replace("__BC__", binder_chain).replace("__TC__", target_chain)
+   .replace("__BINDER__", binder_label).replace("__TARGET__", target_label)
+   .replace("__EPI_LEGEND__", epi_legend).replace("__SEL__", json.dumps(sel)))
+
+print("Helpers ready: fetch_pdb, chain_sequence, mean_plddt, to_float, show_molstar (Mol* = default viewer)")
 
 # COMMAND ----------
 
@@ -348,18 +421,12 @@ display(pd.DataFrame([{
 
 # COMMAND ----------
 
-try:
-    import py3Dmol
-    best = ranked[0]
-    view = py3Dmol.view(width=720, height=480)
-    view.addModel(best["complex_pdb"], "pdb")
-    view.setStyle({"chain": "A"}, {"cartoon": {"color": "cyan"}})     # designed binder
-    view.setStyle({"chain": "B"}, {"cartoon": {"color": "magenta"}})  # α-cobratoxin
-    view.zoomTo()
-    displayHTML(view._make_html())
-    print(f"Top design {best['sample_id']}: ipTM={best['iptm']:.3f}  (cyan = binder, magenta = toxin)")
-except Exception as e:
-    print("py3Dmol unavailable or no complex to show:", e)
+# PDBe Mol* (default viewer): binder chain teal, α-cobratoxin gold, the hotspot epitope as red ball-and-stick.
+best = ranked[0]
+_hot = [int(x) for x in str(HOTSPOTS).replace(" ", "").split(",") if x.strip().isdigit()]
+show_molstar(best["complex_pdb"], binder_chain="A", target_chain="B", highlight_resids=_hot,
+             binder_label="Binder", target_label="α-cobratoxin")
+print(f"Top design {best['sample_id']}: ipTM={best['iptm']:.3f}  (PDBe Mol* — binder teal, toxin gold, hotspots red)")
 
 # COMMAND ----------
 
@@ -474,17 +541,10 @@ except Exception as e:
 
 # COMMAND ----------
 
-try:
-    import py3Dmol
-    ref = fetch_pdb("9BK5")
-    view = py3Dmol.view(width=720, height=480)
-    view.addModel(ref, "pdb")
-    view.setStyle({"cartoon": {"colorscheme": "chainHetatm"}})
-    view.zoomTo()
-    displayHTML(view._make_html())
-    print("9BK5 — the Baker-lab LNG binder bound to α-cobratoxin (the structure your funnel is chasing).")
-except Exception as e:
-    print("Could not render 9BK5:", e)
+# PDBe Mol* render of the real deposited complex — the structure your funnel is chasing.
+ref = fetch_pdb("9BK5")
+show_molstar(ref, binder_label="LNG binder", target_label="α-cobratoxin")
+print("9BK5 — the Baker-lab LNG binder bound to α-cobratoxin.")
 
 # COMMAND ----------
 

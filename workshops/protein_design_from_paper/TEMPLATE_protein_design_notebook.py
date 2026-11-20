@@ -79,9 +79,9 @@ raw = gen_protein_binders(target_pdb=target_pdb_text, target_chain=TARGET_CHAIN,
 # See the skill's "optimize" recipe: re-sample around a seed (endpoints-only) or dispatch the
 # run_enzyme_optimization_gwb job (motif/enzyme capstone) via the Jobs API. Start from TASK A/C output.
 
-designs = [{"sample_id": str(r.get("sample_id", i)), "sequence": str(r.get("sequence", "")),
+designs = [{"sample_id": str(r.get("sample_id", i)), "sequence": clean_sequence(r.get("sequence", "")),
             "rewards": to_float(r.get("rewards", 0.0), 0.0), "backbone_pdb": r.get("pdb_output", "")}
-           for i, r in enumerate(raw) if str(r.get("sequence", "")).strip()]
+           for i, r in enumerate(raw) if clean_sequence(r.get("sequence", "")).strip()]
 display(pd.DataFrame([{k: d[k] for k in ("sample_id", "sequence", "rewards")} for d in designs]))
 
 # COMMAND ----------
@@ -147,6 +147,22 @@ axis_cols = {k: v for k, v in axis_cols.items() if v[0] in df.columns}
 df["composite_reward"] = composite_reward(df, axis_cols)
 df = df.sort_values("composite_reward", ascending=False).reset_index(drop=True)
 display(df[["sample_id", "composite_reward"] + [v[0] for v in axis_cols.values()] + ["sequence"]])
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 6.5 · Visualize the top design (Mol\* — default viewer)
+
+# COMMAND ----------
+
+# PDBe Mol* (via show_molstar, multi-CDN jsDelivr->unpkg->ebi.ac.uk) is the default 3D viewer: binder
+# chain teal, target chain gold, epitope/hotspot residues as red ball-and-stick + a legend. A
+# binder/antibody+target task has a complex_pdb on the top row; a monomer-only task has just the backbone.
+top = df.iloc[0]
+_hot = [int(x) for x in str(HOTSPOTS).replace(" ", "").split(",") if x.strip().isdigit()]
+show_molstar(top.get("complex_pdb") or top.get("backbone_pdb") or "",
+             binder_chain="A", target_chain="B", highlight_resids=_hot,
+             binder_label="Design", target_label="Target")
 
 # COMMAND ----------
 

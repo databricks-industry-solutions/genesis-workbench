@@ -21,10 +21,15 @@ from app.routers.large_molecule import _build_user_info
 from app.services import antibody_design as ab_pipeline
 from app.services.antibody_coloring import (
     COLOR_MODES,
+    complex_chains_and_epitope,
     compute_coloring,
     mhc_burden_values_from_array,
 )
-from app.services.molstar import molstar_html_colored, molstar_html_complex, molstar_html_singlebody
+from app.services.molstar import (
+    antibody_complex_cartoon_html,
+    molstar_html_colored,
+    molstar_html_singlebody,
+)
 
 router = APIRouter(prefix="/api/antibody_design", tags=["antibody_design"])
 
@@ -203,6 +208,16 @@ def _base_candidate_id(cid: str) -> str:
     return cid
 
 
+def _complex_viewer_html(pdb: str, antigen_chain: str = "A") -> str:
+    """Two-tone cartoon of a VHH–antigen complex: antibody light-blue, antigen light-yellow, epitope
+    (antigen interface within 5 Å of the VHH) as red sticks — the clean "bound complex" figure.
+    Chains + epitope are resolved from the PDB so it works for any antigen chain, not a fixed id."""
+    ab, ag, epi = complex_chains_and_epitope(pdb, antigen_chain=antigen_chain)
+    return antibody_complex_cartoon_html(
+        pdb, antibody_chain=ab, antigen_chain=(ag or antigen_chain),
+        epitope_resids=epi, with_iframe=False)
+
+
 class AntibodyCandidate(BaseModel):
     candidate_id: str
     pdb: str
@@ -229,11 +244,11 @@ def antibody_design_top_k(
         AntibodyCandidate(
             candidate_id=cid, pdb=pdb,
             # The `*_complex` structures are the VHH docked to the antigen (two chains) — render them
-            # as a bound complex (chain-distinct colors + semi-transparent surface) so the interface
-            # reads as contact, not two detached cartoons. The single-chain `*_rfd4`/`*_esmfold` VHH
-            # structures keep the plain single-body viewer.
+            # as a clean two-tone cartoon (antibody light-blue, antigen light-yellow) with the epitope
+            # as red sticks, the "bound complex" biologist's view. The single-chain `*_rfd4`/`*_esmfold`
+            # VHH structures keep the plain single-body viewer.
             viewer_html=(
-                molstar_html_complex(pdb, name=cid, with_iframe=False)
+                _complex_viewer_html(pdb)
                 if "complex" in cid
                 else molstar_html_singlebody(pdb, name=cid, with_iframe=False)
             ),
@@ -274,6 +289,12 @@ def antibody_design_color_structure(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "User email missing from headers")
     if payload.color_by not in COLOR_MODES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unknown color_by '{payload.color_by}'")
+
+    # "By chain": the clean two-tone cartoon + epitope red sticks (3Dmol) — identical to the default
+    # complex render, so selecting "By chain" returns the same view the dialog opened with.
+    if payload.color_by == "chain":
+        return AntibodyColorResponse(
+            viewer_html=_complex_viewer_html(payload.pdb, antigen_chain=payload.antigen_chain))
 
     # MHC-II immunogenicity (ADA): purely a read of the per-residue burden precomputed at generation
     # time (while HLAIIPred was warm) and stored in the run — no serving call from the viewer.
