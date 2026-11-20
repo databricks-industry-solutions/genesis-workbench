@@ -19,7 +19,7 @@ Genesis Workbench deploys through **modules**, each containing sub-modules with 
 
 **Available modules:**
 - `core` — UI app (React + FastAPI Databricks App named genesis-workbench), shared library, initialization workflows (MUST be deployed first)
-- `large_molecule` — ESMFold, AlphaFold2, ProteinMPNN, RFDiffusion, Boltz-1, ESM2 Embeddings, Sequence Search
+- `large_molecule` — ESMFold, OpenFold3, ProteinMPNN, RFDiffusion, Boltz-1, ESM2 Embeddings, Sequence Search
 - `single_cell` — scGPT (embeddings + perturbation), SCimilarity (3 endpoints), Scanpy, rapids-singlecell (part of scverse)
 - `small_molecule` — Chemprop (BBBP, ClinTox, ADMET), DiffDock (molecular docking), Proteina-Complexa (binder design)
 - `genomics` — VCF Ingestion (Glow), Variant Annotation (ClinVar), GWAS Analysis
@@ -146,7 +146,7 @@ Deploy modules sequentially. Wait for all background jobs to complete before dep
 **Deployment time notes:**
 - `single_cell` — SCimilarity downloads ~2GB model weights from Zenodo on first deploy (~60 min). Re-deploys skip if files exist in Volume. scGPT downloads ~3GB from Google Drive.
 - `small_molecule` — DiffDock and Proteina-Complexa download model checkpoints from NVIDIA NGC.
-- `large_molecule` — AlphaFold2 downloads reference databases (~2TB). Boltz downloads from HuggingFace.
+- `large_molecule` — OpenFold3 stages a ~2 GB checkpoint to a Volume at deploy and fetches MSA from the remote ColabFold server (no multi-TB databases). Boltz downloads from HuggingFace.
 
 ### Step 4: Post-Deploy Verification
 
@@ -188,8 +188,8 @@ databricks jobs reset --json '<updated_job_spec>'  # Fix if needed
 ```
 Affected jobs: `run_scanpy_gwb`, `run_rapidssinglecell_gwb`, `register_scgpt`, `register_scimilarity`, `register_proteinmpnn`, `register_rfdiffusion`
 
-### AlphaFold Download Failures
-Five stacked issues on AWS: spot preemption, FTP/rsync blocked on VPC, heredoc quoting in `%sh` cells, path parsing, and HTML href regex. Fixed in code — `download_setup.py` and `download_pdb_mmcif.py` now use `aria2c` with explicit URL parsing.
+### OpenFold3 Checkpoint Staging
+OpenFold3 has no multi-TB database download. The ~2 GB OpenBind-0 checkpoint is staged to a UC Volume once at deploy (a serverless-CPU `stage_checkpoint` task) and restored by the fold job, so the GPU fold node never re-downloads it. MSA comes from the remote ColabFold server at fold time.
 
 ### Boltz PyTorch Version Mismatch
 `conda_env.yml` had `torch==2.3.1+cu121` but `transformers>=4.41` required torch>=2.4. Fixed: updated to `torch==2.4.1+cu121`, `torchvision==0.19.1+cu121`. Pins: `transformers>=4.41,<4.50`, `sentence-transformers>=2.7,<3`.

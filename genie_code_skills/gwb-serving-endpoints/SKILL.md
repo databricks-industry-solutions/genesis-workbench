@@ -69,7 +69,7 @@ by slug at runtime** via `get_ep` — don't hard-code the full name.
 | `rfdiffusion` | B | `[{pdb, start_idx, end_idx}]` | inpainted backbone PDB(s) (motif inpainting) |
 | `proteinmpnn` | B | `[{pdb, fixed_positions}]` | sequence(s) for a backbone |
 | `esm2_embeddings` | A | `[seq1, seq2, ...]` | `[[float × 1280], ...]` (mean-pooled, excl. BOS/EOS) |
-| AlphaFold2 | — | **no endpoint** — monomer-only *job* | → **gwb-batch-jobs** |
+| OpenFold3 | — | **no endpoint** — structure/complex *batch job* | → **gwb-batch-jobs** |
 
 ### Developability & safety (protein)
 | slug | style | payload | output (units) |

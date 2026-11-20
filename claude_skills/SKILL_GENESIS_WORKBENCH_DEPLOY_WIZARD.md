@@ -107,7 +107,7 @@ This selection **drives the rest of the wizard** — you only validate/create en
    - **`.deployed` exists** → this is an existing install. ⚠️ See the hard rule below: refresh core with `update.sh`, never `./deploy.sh core`.
    - **absent** → fresh install; `./deploy.sh core <cloud>` is the first step.
 2. Ask, with `AskUserQuestion` (`multiSelect: true`), which **additional** modules to deploy beyond core:
-   - `large_molecule` — AlphaFold, Boltz, ESMFold, ProteinMPNN, RFdiffusion, enzyme optimization, …
+   - `large_molecule` — OpenFold3, Boltz, ESMFold, ProteinMPNN, RFdiffusion, enzyme optimization, …
    - `small_molecule` — ChemProp, DiffDock, GenMol, KERMT, NetSolP, …
    - `single_cell` — scGPT, SCimilarity, scanpy, rapids-singlecell, …
    - `genomics` — GWAS, variant annotation, VCF ingestion, **parabricks** (GPU, needs docker creds)
@@ -275,7 +275,7 @@ If `terraform` isn't installed: `brew install terraform` (macOS) and retry.
 Then print:
 - Databricks App URL: `<workspace_url>/apps/<app_name>`
 - Jobs UI (track background registration): `<workspace_url>/jobs`
-- Reminder: registration jobs for some models (AlphaFold, Parabricks, BioNeMo) can run for hours.
+- Reminder: registration jobs for some models (Parabricks, BioNeMo) can run for hours.
 
 Offer the next module in the approved list, or stop.
 

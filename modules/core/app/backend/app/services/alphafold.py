@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 _PROGRESS_MAP = {
     "started": "🟩⬜⬜⬜",
     "featurize_complete": "🟩🟩🟩⬜",
+    "folding": "🟩🟩🟩⬜",
     "running": "🟩🟩🟩⬜",
     "fold_complete": "🟩🟩🟩🟩",
     "failed": "🟥",
@@ -60,6 +61,7 @@ def start_run_alphafold_job(
     mlflow_experiment_name: str,
     mlflow_run_name: str,
     user_info: UserInfo,
+    use_msa: bool = True,
 ) -> str:
     experiment = set_mlflow_experiment(
         experiment_tag=mlflow_experiment_name,
@@ -74,13 +76,14 @@ def start_run_alphafold_job(
         mlflow.log_param("protein_sequence", protein_sequence)
 
         job_run_id = execute_workflow(
-            job_id=int(get_job_id("run_alphafold_job_id")),
+            job_id=int(get_job_id("run_openfold3_job_id")),
             params={
                 "catalog": os.environ["CORE_CATALOG_NAME"],
                 "schema": os.environ["CORE_SCHEMA_NAME"],
                 "run_id": mlflow_run_id,
                 "protein_sequence": protein_sequence,
                 "user_email": user_info.user_email,
+                "use_msa": "true" if use_msa else "false",
             },
         )
         mlflow.set_tag("origin", "genesis_workbench")
@@ -118,7 +121,7 @@ def _df_to_runs(experiments: dict[str, str], df: pd.DataFrame) -> list[AlphaFold
 
     df = df.copy()
     df["experiment_name"] = df["experiment_id"].map(experiments)
-    job_id = get_job_id("run_alphafold_job_id")
+    job_id = get_job_id("run_openfold3_job_id")
     out: list[AlphaFoldRun] = []
     for _, r in df.iterrows():
         job_run_id = str(r.get("tags.job_run_id", "") or "")
@@ -164,10 +167,11 @@ def search_by_experiment_name(
 def pull_alphafold_pdb(run_id: str) -> str:
     catalog = os.environ["CORE_CATALOG_NAME"]
     schema = os.environ["CORE_SCHEMA_NAME"]
-    logger.info("Fetching AlphaFold PDB for run %s", run_id)
+    logger.info("Fetching OpenFold3 PDB for run %s", run_id)
     w = WorkspaceClient()
+    # OpenFold3 writes a single flat results dir (no AlphaFold-style per-fasta subdir).
     response = w.files.download(
-        f"/Volumes/{catalog}/{schema}/alphafold/results/{run_id}/{run_id}/ranked_0.pdb"
+        f"/Volumes/{catalog}/{schema}/openfold3/results/{run_id}/ranked_0.pdb"
     )
     return str(response.contents.read(), encoding="utf-8")
 

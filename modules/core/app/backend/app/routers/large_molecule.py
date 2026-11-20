@@ -144,6 +144,9 @@ class AlphaFoldStartRequest(BaseModel):
     sequence: str = Field(..., min_length=1)
     experiment_name: str = Field(..., min_length=1)
     run_name: str = Field(..., min_length=1)
+    # OpenFold3: query the ColabFold MSA server (better fold, needs egress) vs single-sequence.
+    # Defaults on; the frontend wires an explicit toggle in the UI relabel phase.
+    use_msa: bool = True
 
 
 class AlphaFoldStartResponse(BaseModel):
@@ -202,9 +205,10 @@ def alphafold_start(
             mlflow_experiment_name=payload.experiment_name,
             mlflow_run_name=payload.run_name,
             user_info=user_info,
+            use_msa=payload.use_msa,
         )
     except Exception as e:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Starting AlphaFold job failed: {e}")
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Starting OpenFold3 job failed: {e}")
     return AlphaFoldStartResponse(job_run_id=job_run_id)
 
 
@@ -250,7 +254,7 @@ def alphafold_result(
     except Exception as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Pulling AlphaFold result failed: {e}")
     return AlphaFoldResultResponse(
-        pdb=pdb, viewer_html=_viewer_html(pdb, f"AlphaFold2 — {run_name}")
+        pdb=pdb, viewer_html=_viewer_html(pdb, f"OpenFold3 — {run_name}")
     )
 
 

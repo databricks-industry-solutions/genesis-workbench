@@ -2,7 +2,7 @@ variables:
   current_user:
     description: User deploying the bundle. Can apply to service principals as well.
     default: ${workspace.current_user.userName}
-  
+
   current_working_directory:
     description: Working directory or bundle root.
     default: /Users/${var.current_user}/.bundle/${bundle.name}/${bundle.target}
@@ -12,43 +12,49 @@ variables:
 
   common_resource_tags:
     description: Resource tags
-    default: 
+    default:
       application: genesis_workbench
-      module: alphafold
+      module: openfold3
       created_by: ${workspace.current_user.short_name}
 
+  # Shared compute vars are supplied at deploy time from application.env / <cloud>.env (same as every
+  # other large_molecule submodule). OpenFold3 runs on SERVERLESS GPU so it does not use these node
+  # types, but they must be declared because the module-level deploy passes them as --var.
   cpu_node_type:
     description: Node type for CPU vms
-    
   t4_node_type:
     description: Node type for T4 GPUs
-
   a10_node_type:
     description: Node type for A10 GPUs
-
   gpu_small_setting:
     description: The config setting for small gpu
-
   gpu_medium_setting:
     description: The config setting for medium gpu
-
   gpu_large_setting:
     description: The config setting for large gpu
 
-  sql_warehouse_id:
-    description: SQL Warehouse ID for genesis workbench
-
   core_catalog_name:
     description: primary catalog where data, models, and files are stored for this project.
-  
   core_schema_name:
     description: The schema where core components will be installed.
-
+  sql_warehouse_id:
+    description: Id of the SQL Warehouse that will be used by the app
   module_registration_experiment_name:
     description: The experiment to which all registered modules are logged
     default: dbx_genesis_workbench_modules
 
+  # UC Volume that holds the OpenFold3 checkpoint cache + per-run results. Created by deploy.sh.
   model_volume:
-    description: The volume directory for the model and associated files
-    default: alphafold
+    description: UC volume for the OpenFold3 checkpoint cache and prediction results
+    default: openfold3
 
+  # OpenFold3 is pip-installed into an isolated venv by the fold job at runtime (openfold3 is
+  # Apache-2.0; nothing vendored). Pinned for reproducibility.
+  of3_version:
+    description: openfold3 PyPI package version installed by the fold job
+    default: 0.5.1
+
+  # Default OpenBind-0 checkpoint (Apache-2.0). Downloaded once to the model Volume by setup_openfold.
+  of3_ckpt_name:
+    description: OpenFold3 inference checkpoint name (setup_openfold default)
+    default: openbind-2025-06-30-174k

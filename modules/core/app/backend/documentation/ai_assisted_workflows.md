@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Vortex is a visual, drag-and-drop canvas for composing multi-step pipelines from the building blocks Genesis Workbench already deploys — model-serving endpoints, prebuilt workflows (Guided Enzyme/Molecule Optimization, Protein Design, ADMET Screen, AlphaFold, GWAS, …), data input/output nodes, and small deterministic transforms. A pipeline is wired on the canvas and dispatched to a single orchestrator Databricks Job that runs each node in topological order and tracks the whole run in MLflow. Vortex can also **generate** a workflow from a plain-language goal: an LLM drafts the graph, then reviews and corrects its own draft before handing it back.
+Vortex is a visual, drag-and-drop canvas for composing multi-step pipelines from the building blocks Genesis Workbench already deploys — model-serving endpoints, prebuilt workflows (Guided Enzyme/Molecule Optimization, Protein Design, ADMET Screen, OpenFold3, GWAS, …), data input/output nodes, and small deterministic transforms. A pipeline is wired on the canvas and dispatched to a single orchestrator Databricks Job that runs each node in topological order and tracks the whole run in MLflow. Vortex can also **generate** a workflow from a plain-language goal: an LLM drafts the graph, then reviews and corrects its own draft before handing it back.
 
 ## What It Achieves
 
@@ -21,7 +21,7 @@ Vortex is a visual, drag-and-drop canvas for composing multi-step pipelines from
 Open the **Vortex** tab (Home). Either:
 
 - **Build by hand** — drag nodes from the left palette onto the canvas, wire an output port to a compatible input port, set params on the right panel, and click **Run**. Inputs are *convertible*: type a value inline on the node, or wire it from an upstream node (an edge overrides the inline value).
-- **Generate with AI** — type a goal (e.g. *"Optimize an enzyme for a substrate and validate the top design with AlphaFold"*) and click **Generate workflow**. The model streams its plan, drafts the graph, then reviews and rewires it; the finished pipeline lands on the canvas ready to edit and run.
+- **Generate with AI** — type a goal (e.g. *"Optimize an enzyme for a substrate and validate the top design with OpenFold3"*) and click **Generate workflow**. The model streams its plan, drafts the graph, then reviews and rewires it; the finished pipeline lands on the canvas ready to edit and run.
 
 Use **Save**/**Load** to persist workflows, the **Past Vortex Runs** tab (Home, right side) to browse history / inspect a run's workflow·inputs·outputs / **re-run with edited inputs** / triage failures, and the `{ }` button (canvas top-right, and on each result) to view/copy the graph JSON.
 

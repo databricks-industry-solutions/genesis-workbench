@@ -8,7 +8,7 @@ import { SequenceSourceControls } from '@/components/SequenceSourceControls'
 import { WorkflowProgress } from '@/components/WorkflowProgress'
 import { cn } from '@/lib/utils'
 
-const MODELS = ['ESMFold', 'Boltz', 'AlphaFold2'] as const
+const MODELS = ['ESMFold', 'Boltz', 'OpenFold3'] as const
 type Model = (typeof MODELS)[number]
 
 const DEFAULT_SEQUENCE = 'MTYKLILNGKTLKGETTTEAVDAATAEKVFKQYANDNGVDGEWTYDAATKTFTVTE'
@@ -33,18 +33,25 @@ export function StructurePredictionTab() {
   const [expName, setExpName] = useState('structure_prediction')
   const [runName, setRunName] = useState(`esmfold_${ts()}`)
   const [viewerHtml, setViewerHtml] = useState<string | null>(null)
-  // Bumped after an AlphaFold job dispatch so the search panel auto-loads the run.
+  // MSA toggle for OpenFold3 — default ON (ColabFold remote MSA server → better accuracy).
+  const [useMsa, setUseMsa] = useState(true)
+  // Bumped after an OpenFold3 job dispatch so the search panel auto-loads the run.
   const [afSearchToken, setAfSearchToken] = useState(0)
 
-  const isAsync = model === 'AlphaFold2'
+  const isAsync = model === 'OpenFold3'
 
   // ESMFold / Boltz fold synchronously (→ live viewer + MLflow log);
-  // AlphaFold2 starts an async job (→ Search Past Runs on the right).
+  // OpenFold3 starts an async job (→ Search Past Runs on the right).
   const predict = useMutation({
     mutationFn: async () => {
       if (model === 'ESMFold') return api.esmfold(sequence, expName, runName)
       if (model === 'Boltz') return api.boltz(sequence, expName, runName)
-      return api.alphafoldStart({ sequence, experiment_name: expName, run_name: runName })
+      return api.alphafoldStart({
+        sequence,
+        experiment_name: expName,
+        run_name: runName,
+        use_msa: useMsa,
+      })
     },
     onSuccess: (data) => {
       if ('viewer_html' in data) setViewerHtml(data.viewer_html)
@@ -59,7 +66,7 @@ export function StructurePredictionTab() {
     setModel(m)
     setViewerHtml(null)
     predict.reset()
-    setRunName(`${m === 'AlphaFold2' ? 'alphafold' : m.toLowerCase()}_${ts()}`)
+    setRunName(`${m.toLowerCase()}_${ts()}`)
     if (m === 'Boltz') setSequence(BOLTZ_DEFAULT)
     if (m === 'ESMFold') setSequence(DEFAULT_SEQUENCE)
   }
@@ -107,6 +114,13 @@ export function StructurePredictionTab() {
               placeholder="Paste a protein sequence (single-letter amino acid code), resolve from a gene, or paste from the Clipboard"
               className="w-full rounded-md border border-border bg-background p-3 font-mono text-xs"
             />
+            {isAsync && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Fold a complex by separating chains with a colon{' '}
+                <code className="rounded bg-muted px-1">:</code> — e.g.{' '}
+                <code className="rounded bg-muted px-1">SEQA:SEQB</code>.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -131,6 +145,21 @@ export function StructurePredictionTab() {
               />
             </label>
           </div>
+
+          {isAsync && (
+            <label className="flex items-start gap-2 rounded-md border border-border bg-muted/30 p-2.5 text-xs">
+              <input
+                type="checkbox"
+                checked={useMsa}
+                onChange={(e) => setUseMsa(e.target.checked)}
+                className="mt-0.5 h-3.5 w-3.5"
+              />
+              <span>
+                <span className="font-medium">Use MSA</span> (ColabFold server) — recommended for
+                best accuracy. Turn off for a faster single-sequence fold.
+              </span>
+            </label>
+          )}
 
           <div className="flex gap-2">
             <button

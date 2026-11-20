@@ -1,0 +1,74 @@
+resources:
+  jobs:
+    openfold3_register:
+      name: openfold3_register
+      email_notifications:
+        on_success:
+          - ${var.current_user}
+        on_failure:
+          - ${var.current_user}
+      notification_settings:
+        no_alert_for_skipped_runs: true
+        no_alert_for_canceled_runs: true
+
+      tasks:
+        # Stage the ~2 GB OpenBind checkpoint to the model Volume ONCE, at deploy time, on serverless CPU
+        # (no GPU needed to download). Downloads to local disk — boto3 multipart can't write to the FUSE
+        # Volume directly — then sequential-copies to the Volume + writes a .of3_complete marker. Every
+        # fold run then restores it (FUSE-safe) and never re-downloads. Idempotent (no-op if marked).
+        - task_key: stage_checkpoint
+          max_retries: 1
+          environment_key: cpu_env
+          notebook_task:
+            notebook_path: ../notebooks/stage_checkpoint.py
+            source: WORKSPACE
+          timeout_seconds: 5400
+          health:
+            rules:
+              - metric: RUN_DURATION_SECONDS
+                op: GREATER_THAN
+                value: 3600
+
+        # Register-only: persist the fold job id, grant app permissions, register the batch model.
+        # Independent of staging (quick SQL/registration), so it isn't blocked by the long download.
+        - task_key: register_run_job
+          max_retries: 0
+          environment_key: cpu_env
+          notebook_task:
+            notebook_path: ../notebooks/register_openfold3_job.py
+            source: WORKSPACE
+          health:
+            rules:
+              - metric: RUN_DURATION_SECONDS
+                op: GREATER_THAN
+                value: 600
+
+      parameters:
+        - name: catalog
+          default: ${var.core_catalog_name}
+        - name: schema
+          default: ${var.core_schema_name}
+        - name: model_volume
+          default: ${var.model_volume}
+        - name: user_email
+          default: ${var.current_user}
+        - name: sql_warehouse_id
+          default: ${var.sql_warehouse_id}
+        - name: run_openfold3_job_id
+          default: ${resources.jobs.openfold3.id}
+        - name: databricks_app_names
+          default: genesis-workbench:mcp-genesis-workbench
+        - name: of3_version
+          default: ${var.of3_version}
+        - name: of3_ckpt_name
+          default: ${var.of3_ckpt_name}
+
+      environments:
+        - environment_key: cpu_env
+          spec:
+            client: '4'
+
+      tags: ${var.common_resource_tags}
+
+      queue:
+        enabled: true

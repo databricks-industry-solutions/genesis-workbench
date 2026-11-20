@@ -35,6 +35,6 @@ indices**, and dispatch its **batch jobs** — **never `import genesis_workbench
 
 ## What's installed here
 Models span **large-molecule** (ESMFold, Boltz-2, Proteina-Complexa, RFdiffusion, ProteinMPNN, ESM-2,
-AlphaFold2-monomer), **small-molecule** (ChemProp/KERMT ADMET, DiffDock, GenMol, NetSolP, DeepSTABp,
+OpenFold3), **small-molecule** (ChemProp/KERMT ADMET, DiffDock, GenMol, NetSolP, DeepSTABp,
 PLTNUM, MHCflurry), **single-cell** (TEDDY, scGPT, SCimilarity), and **genomics** (Parabricks, GWAS, VCF).
 Run **gwb-discover-resources** to see exactly what's deployed and awake in this workspace.

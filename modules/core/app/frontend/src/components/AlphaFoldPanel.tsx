@@ -1,5 +1,5 @@
-// AlphaFold "Search Past Runs" + result viewer — rendered as the right panel of
-// the Structure Prediction tab when the AlphaFold model is selected (AlphaFold
+// OpenFold3 "Search Past Runs" + result viewer — rendered as the right panel of
+// the Structure Prediction tab when the OpenFold3 model is selected (OpenFold3
 // is async, so you fold via the shared input panel then find the result here).
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -16,11 +16,11 @@ import { cn } from '@/lib/utils'
 type SearchMode = 'experiment_name' | 'run_name'
 
 export function AlphaFoldSearchResults({ searchToken }: { searchToken?: number } = {}) {
-  // Default to run-name search: AlphaFold runs are named `alphafold_<ts>` while
-  // the experiment is `structure_prediction`, so an experiment_name='alphafold'
+  // Default to run-name search: OpenFold3 runs are named `openfold3_<ts>` while
+  // the experiment is `structure_prediction`, so an experiment_name='openfold3'
   // default would match nothing right after submit.
   const [searchMode, setSearchMode] = useState<SearchMode>('run_name')
-  const [searchText, setSearchText] = useState('alphafold')
+  const [searchText, setSearchText] = useState('openfold3')
   const [searchedAt, setSearchedAt] = useState<number>(0)
   const [viewing, setViewing] = useState<AlphaFoldRun | null>(null)
 
@@ -117,8 +117,8 @@ export function AlphaFoldSearchResults({ searchToken }: { searchToken?: number }
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        AlphaFold runs asynchronously (minutes–hours). Start a job from the panel on the left, then
-        find it here once it completes.
+        OpenFold3 runs asynchronously (typically a few minutes). Start a job from the panel on the
+        left, then find it here once it completes.
       </p>
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex gap-1">
@@ -174,7 +174,7 @@ export function AlphaFoldSearchResults({ searchToken }: { searchToken?: number }
       <Dialog
         open={!!viewing}
         onClose={() => setViewing(null)}
-        title={`AlphaFold2 result — ${viewing?.run_name ?? ''}`}
+        title={`OpenFold3 result — ${viewing?.run_name ?? ''}`}
         width="max-w-4xl"
       >
         {viewing && <ViewerLoader runId={viewing.run_id} runName={viewing.run_name} />}

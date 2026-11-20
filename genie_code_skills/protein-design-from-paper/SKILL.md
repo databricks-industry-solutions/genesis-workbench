@@ -429,6 +429,6 @@ show_molstar(top.get("complex_pdb") or top.get("backbone_pdb") or "",
 
 ## Deviations to state in the generated notebook
 - Proteina-Complexa Binder = the RFdiffusion+ProteinMPNN analog (GWB has no target-conditioned RFdiffusion).
-- GWB AlphaFold2 is monomer-only → **Boltz-2 ipTM** is the complex/interface filter.
+- **Boltz-2 ipTM** is the complex/interface filter — the real-time fold endpoint (ESMFold) is monomer-only; OpenFold3 folds complexes but runs as a batch job.
 - No Rosetta ddG → rank on ipTM + pLDDT. Developability are proxies; PLTNUM is a 0–1 ranker, not hours.
 - Antibody (`antibody_vhh`): RFD4-Proteina designs a VHH-length binder conditioned on the epitope (C_HOT) — a first-draft VHH, not a full immunoglobulin-framework scaffold. MHC-II (HLAIIPred) is the anti-drug-antibody (ADA) signal and the right immunogenicity axis for a biologic; MHC-I (MHCflurry) is the CD8 axis.

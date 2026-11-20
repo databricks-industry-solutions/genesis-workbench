@@ -2,8 +2,8 @@
 //
 // Lets a downstream tab (e.g. Small Molecule docking / ligand design) load a
 // PDB produced by a prior Large Molecule structure run instead of pasting it —
-// the same "Pick a Run" UX as Genomics. Reuses the existing AlphaFold search +
-// result endpoints (AlphaFold is the Large Molecule workflow that persists a
+// the same "Pick a Run" UX as Genomics. Reuses the existing OpenFold3 search +
+// result endpoints (OpenFold3 is the Large Molecule workflow that persists a
 // foldable structure per run); no new backend.
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
@@ -17,8 +17,11 @@ type SearchMode = 'experiment_name' | 'run_name'
 
 export function StructurePicker({ onPick }: { onPick: (pdb: string) => void }) {
   const [open, setOpen] = useState(false)
-  const [mode, setMode] = useState<SearchMode>('experiment_name')
-  const [text, setText] = useState('alphafold')
+  // Default to run-name search for 'openfold3' — runs are named `openfold3_<ts>`
+  // while the experiment is `structure_prediction`, so an experiment search would
+  // miss them.
+  const [mode, setMode] = useState<SearchMode>('run_name')
+  const [text, setText] = useState('openfold3')
   const [rows, setRows] = useState<AlphaFoldRun[]>([])
 
   const search = useMutation({
@@ -85,7 +88,7 @@ export function StructurePicker({ onPick }: { onPick: (pdb: string) => void }) {
 
         {rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            {search.isPending ? 'Searching…' : 'No AlphaFold runs found — run a structure prediction first, or adjust the search.'}
+            {search.isPending ? 'Searching…' : 'No OpenFold3 runs found — run a structure prediction first, or adjust the search.'}
           </p>
         ) : (
           <div className="max-h-72 overflow-auto rounded-md border border-border">

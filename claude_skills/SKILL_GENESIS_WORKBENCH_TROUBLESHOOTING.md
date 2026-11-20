@@ -222,10 +222,10 @@ databricks jobs get <job_id>
 databricks jobs reset --json '<updated_spec>'
 ```
 
-### AlphaFold download failures
-**Symptom:** FTP/rsync downloads fail or produce empty files.
-**Root cause:** VPC may block FTP. Figshare/Zenodo may reject non-browser user agents.
-**Fix:** Use HTTPS URLs and `api.figshare.com/v2/file/download/` instead of `ndownloader` URLs.
+### OpenFold3 checkpoint staging fails (OSError Errno 5 / EIO)
+**Symptom:** The OpenBind-0 checkpoint download fails while writing to the Volume (or `/tmp`).
+**Root cause:** `setup_openfold` pulls the ~2 GB checkpoint via boto3 **multipart** (seeked/parallel) writes, which fail on the serverless FUSE filesystem.
+**Fix:** Stage the checkpoint at deploy on serverless CPU (`stage_checkpoint` task) with a **sequential** copy to the Volume + a `.of3_complete` marker; the fold job restores it (marker-guarded) and runs `setup_openfold` with `force_download=False`, so the GPU fold node never does the multipart download. MSA is fetched from the remote ColabFold server at fold time.
 
 ## UI Issues
 

@@ -121,8 +121,8 @@ Target source → how to get the model input:
 
 - **No target-conditioned RFdiffusion.** Proteina-Complexa Binder *is* the RFdiffusion+ProteinMPNN analog
   (joint backbone+sequence, hotspot-aware). GWB's `rfdiffusion` is motif-inpainting only.
-- **AlphaFold2 is monomer-only** in GWB (no interface pAE) → use **Boltz-2** for the complex and ipTM as the
-  interface filter.
+- **Use Boltz-2 ipTM as the complex/interface filter** → the real-time fold endpoint (ESMFold) is
+  monomer-only, and OpenFold3 folds complexes but runs as a batch job, not an endpoint.
 - **No Rosetta ddG / InterfaceAnalyzer** → rank on ipTM + pLDDT (+ optional backbone RMSD via BioPython).
 - **Developability are proxies**, not assays; PLTNUM is a 0–1 ranker, not hours.
 

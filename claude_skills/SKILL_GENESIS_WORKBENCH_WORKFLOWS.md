@@ -20,11 +20,11 @@ Three models available via pills selector:
 - Speed: Seconds
 - Best for: Quick single-chain structure prediction
 
-**AlphaFold2 (batch job):**
-- Input: Amino acid sequence + MLflow experiment/run name
-- Output: PDB structure stored in MLflow (view via search)
-- Speed: Hours (MSA + template search + folding)
-- Best for: High-accuracy prediction when time is not a constraint
+**OpenFold3 (batch job):**
+- Input: Amino acid sequence (`:`-separated chains for a complex) + MLflow experiment/run name; MSA toggle (default on)
+- Output: PDB structure stored in MLflow (view via search); confidence metrics pTM/ipTM/pLDDT/interface PAE
+- Speed: Minutes on serverless GPU (ColabFold MSA server — no multi-TB databases)
+- Best for: High-accuracy prediction of monomers and complexes
 - Workflow: Start Job → Search Past Runs → View Result
 
 **Boltz (real-time):**
@@ -197,12 +197,12 @@ A reward-weighted resampling loop on top of Motif Scaffolding's stack — instea
 
 ## Instructions
 
-1. When a user asks "how do I predict protein structure?" → guide them to Large Molecule → Structure Prediction, recommend ESMFold for quick results or AlphaFold2 for accuracy.
+1. When a user asks "how do I predict protein structure?" → guide them to Large Molecule → Structure Prediction, recommend ESMFold for quick results or OpenFold3 for accuracy.
 2. When a user asks about cell types → guide them to Single Cell → Cell Type Annotation (requires a completed processing run first).
 3. When a user asks about drug-target interactions → guide them to Small Molecule → Ligand Binder Design or ADMET & Safety.
 4. When a user asks about gene effects → guide them to Single Cell → Perturbation Prediction.
 5. For demos, recommend starting all endpoints first (Settings → Start All Endpoints) to avoid scale-from-zero delays.
-6. Always mention that batch workflows (AlphaFold2, Scanpy/Rapids processing) take time — start them first, then demo real-time workflows while waiting.
+6. Always mention that batch workflows (OpenFold3, Scanpy/Rapids processing) take time — start them first, then demo real-time workflows while waiting.
 
 ## When to Use This Skill
 

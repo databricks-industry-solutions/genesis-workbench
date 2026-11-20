@@ -31,14 +31,14 @@ Genesis Workbench simplifies deploying GPU-accelerated biological AI models on D
 
 ### Large Molecule Module
 - **ESMFold** — Fast protein structure prediction from sequence
-- **AlphaFold2** — High-accuracy protein structure prediction (batch job)
+- **OpenFold3** — High-accuracy protein & complex structure prediction (batch job)
 - **Boltz-1** — Multi-chain protein structure prediction (protein-protein, protein-ligand complexes)
 - **ProteinMPNN** — Protein sequence design from backbone structure
 - **RFDiffusion** — Protein backbone generation via diffusion (inpainting)
 - **ESM2 Embeddings** — 1280-D protein sequence embeddings for similarity search
 
 **UI Workflows:**
-- **Structure Prediction** — ESMFold (real-time), AlphaFold2 (batch), and Boltz (real-time, multi-chain)
+- **Structure Prediction** — ESMFold (real-time), OpenFold3 (batch, complexes), and Boltz (real-time, multi-chain)
 - **Protein Design** — ESMFold → RFDiffusion inpainting → ProteinMPNN → ESMFold validation pipeline
 - **Inverse Folding** — Standalone ProteinMPNN: paste PDB backbone → get designed sequences → auto-fold with ESMFold
 - **Sequence Search** — ESM2 embeddings → vector search → Smith-Waterman alignment → ranked results
@@ -130,7 +130,7 @@ Genesis Workbench simplifies deploying GPU-accelerated biological AI models on D
 ## When to Use This Skill
 
 - User asks about deploying biological/life sciences AI models on Databricks
-- User mentions Genesis Workbench, protein folding, single-cell analysis, scGPT, AlphaFold, ESMFold, BioNeMo, or drug discovery workflows on Databricks
+- User mentions Genesis Workbench, protein folding, single-cell analysis, scGPT, OpenFold3/AlphaFold, ESMFold, BioNeMo, or drug discovery workflows on Databricks
 - User wants to demo life sciences capabilities on Databricks
 - User needs to set up GPU-accelerated biological model inference
 - User asks about cell type annotation, differential expression, pathway enrichment, pseudotime analysis, or gene perturbation prediction

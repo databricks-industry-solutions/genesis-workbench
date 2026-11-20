@@ -725,16 +725,18 @@ def _job_alphafold(w, inputs, params, ctx, progress=None) -> dict:
     if not seq:
         raise RuntimeError("alphafold2: sequence input required")
     child = _child_for(ctx, "alphafold")
-    _emit(progress, 15, "Dispatching AlphaFold")
-    # NB: this job reads the run id under "run_id" (not "mlflow_run_id").
-    jr = _dispatch_wait(w, "run_alphafold", {
+    _emit(progress, 15, "Dispatching OpenFold3")
+    # NB: this job reads the run id under "run_id" (not "mlflow_run_id"). OpenFold3 replaces the
+    # AlphaFold2 job; MSA defaults on (ColabFold server). A ':' in `seq` folds a complex.
+    jr = _dispatch_wait(w, "run_openfold3", {
         "catalog": ctx["catalog"], "schema": ctx["schema"],
         "protein_sequence": seq, "user_email": ctx.get("user_email", ""),
+        "use_msa": "true",
     }, child_run_id=child, run_id_key="run_id", progress=progress)
     _emit(progress, 90, "Reading folded structure")
     cat, sch = ctx["catalog"], ctx["schema"]
-    # The run_id appears twice: OUTDIR results/{run_id} + AlphaFold's per-fasta subdir.
-    pdb_path = f"/Volumes/{cat}/{sch}/alphafold/results/{child}/{child}/ranked_0.pdb"
+    # OpenFold3 writes a single flat results dir (no AlphaFold-style per-fasta subdir).
+    pdb_path = f"/Volumes/{cat}/{sch}/openfold3/results/{child}/ranked_0.pdb"
     pdb = ""
     try:
         pdb = _read_volume_text(w, pdb_path)

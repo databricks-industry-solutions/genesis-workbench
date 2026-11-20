@@ -14,7 +14,7 @@
 
 ## Large Molecule
 
-- [Protein Structure Prediction](protein_structure_prediction.md) — Predict 3D protein structures with ESMFold (fast) or AlphaFold2 (high-accuracy)
+- [Protein Structure Prediction](protein_structure_prediction.md) — Predict 3D protein structures with ESMFold (fast) or OpenFold3 (high-accuracy, complexes)
 - [Protein Design](protein_design.md) — Design novel proteins by redesigning specified regions using RFDiffusion + ProteinMPNN
 - [Inverse Folding](inverse_folding.md) — Design new sequences for a fixed backbone with ProteinMPNN, each validated by re-folding with ESMFold
 - [Sequence Similarity Search](sequence_search.md) — Fast BLAST-like search across 150M+ sequences using ESM-2 embeddings
