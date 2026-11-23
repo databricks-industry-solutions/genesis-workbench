@@ -48,9 +48,19 @@ def hit_rfdiffusion(w: WorkspaceClient, payload: dict) -> str:
 def hit_boltz(
     w: WorkspaceClient,
     sequence: str,
-    msa: str = "no_msa",
+    msa: str = "mmseqs",
     use_msa_server: str = "True",
 ) -> str:
+    """Fold a sequence (or ':'-joined complex) with Boltz via its serving endpoint.
+
+    MSA matters: Boltz-2 relies on the co-evolution signal in a multiple-sequence
+    alignment. Folding single-sequence yields low-confidence, often unphysical
+    (fully extended) structures. The endpoint fetches an MSA from the remote
+    ColabFold/MMseqs2 server ONLY for ``msa="mmseqs"`` (that is the mode that makes
+    it pass Boltz's ``--use_msa_server``). ``msa="no_msa"`` folds with an empty MSA,
+    and the ``use_msa_server`` payload field is NOT consumed by the endpoint — so the
+    default must be ``"mmseqs"`` to get accurate folds.
+    """
     if not any(prefix in sequence for prefix in ("protein_", "rna_", "dna_", "smiles_", ":")):
         boltz_input = f"protein_A:{sequence}"
     else:
