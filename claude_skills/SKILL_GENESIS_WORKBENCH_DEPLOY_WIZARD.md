@@ -110,7 +110,7 @@ This selection **drives the rest of the wizard** — you only validate/create en
    - `large_molecule` — OpenFold3, Boltz, ESMFold, ProteinMPNN, RFdiffusion, enzyme optimization, …
    - `small_molecule` — ChemProp, DiffDock, GenMol, KERMT, NetSolP, …
    - `single_cell` — scGPT, SCimilarity, scanpy, rapids-singlecell, …
-   - `genomics` — GWAS, variant annotation, VCF ingestion, **parabricks** (GPU; stock NGC image pulled at deploy — no docker creds)
+   - `genomics` — GWAS, variant annotation, VCF ingestion, **parabricks** (GPU; the GWAS/parabricks deploy runs `databricks air images push` → **needs Docker Desktop running locally**, though no NGC creds / no image build)
    - `bionemo` — NVIDIA BioNeMo ESM-2 finetune/inference (containerless, serverless GPU — no docker image/creds)
 3. **Treat the approved list + order as a contract.** Deploy in exactly the order confirmed. If a module is blocked (e.g. waiting on a GPU quota or a required credential) do NOT silently jump to a later one — ask the user to re-approve any reordering. (Past user feedback: silent reordering was rejected.)
 
@@ -148,7 +148,7 @@ Only **`core`** (Phase 5) requires a `module.env`. **`large_molecule` has an OPT
 
 - **`bionemo` — no `module.env`, no Docker.** BioNeMo ESM-2 finetune/inference is **containerless**: serverless-GPU (`GPU_1xA10`) notebook jobs that read ESM-2 from Hugging Face and run on Transformer Engine. Deploy registers the jobs; the UI launches them on demand. (Earlier releases needed `bionemo_docker_*` creds + a pre-built image via `build_docker.sh` — no longer.)
 
-- **`genomics` / `parabricks` — no `module.env`, no Docker creds.** The Parabricks submodule pulls the **stock NVIDIA NGC container directly at deploy** (public, no credentials; registers an `ai_runtime_task`-style job with the NGC image). The GWAS / variant-annotation / VCF-ingestion submodules never needed creds.
+- **`genomics` / `parabricks` — no `module.env`, no NGC creds, no image *build* — but Docker Desktop MUST be running locally.** The `gwas` submodule (first in the list) runs `databricks air images push` for the stock NVIDIA NGC Parabricks image (`nvcr.io/nvidia/clara/clara-parabricks`, public), which **pulls the image via local Docker and pushes it to the Databricks Artifact Registry** — so `./deploy.sh genomics` aborts at the very first submodule with `failed to connect to the docker API ... daemon not running` if Docker isn't up. Start Docker Desktop (`open -a Docker`, wait ~30s) before deploying genomics. No module.env/creds needed; the first push is several GB.
 
 - **If `large_molecule` was selected** → an OPTIONAL `modules/large_molecule/module.env` for RFD4-Proteina:
   ```

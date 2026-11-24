@@ -38,7 +38,7 @@ Genesis Workbench deploys through **modules**, each containing sub-modules with 
 6. **Exclusive schema** — a schema name used only by Genesis Workbench (created automatically if it doesn't exist)
 7. **SQL Warehouse** — provision a `2X-Small` warehouse
 
-> **No Docker build for any module.** BioNeMo is containerless (serverless GPU + Transformer Engine) and Parabricks pulls the stock NVIDIA NGC image directly at deploy — neither needs a pre-built/pushed container or docker credentials anymore.
+> **No Docker *build* for any module.** BioNeMo is containerless (serverless GPU + Transformer Engine). Parabricks (a `genomics` submodule) pulls the stock NVIDIA NGC image at deploy — no build, no NGC creds — **but the `genomics` deploy runs `databricks air images push`, which needs Docker Desktop *running locally* to pull the image and push it to the Databricks Artifact Registry.** Start Docker before `./deploy.sh genomics` or it aborts at the first submodule with `daemon not running`.
 
 ## Environment Configuration
 
@@ -65,7 +65,7 @@ secret_scope_name=<Unique secret scope name — app will create it>
 
 BioNeMo ESM-2 finetune/inference is **containerless**: it runs on serverless GPU (`GPU_1xA10`) as notebook jobs that read ESM-2 from Hugging Face and run on Transformer Engine. There is **no Docker image, no NGC container, and no `modules/bionemo/module.env`** — `deploy.sh` just registers the jobs and the UI launches them on demand. (Earlier releases required `bionemo_docker_*` creds + a pre-built image via `build_docker.sh`; **Docker build is no longer necessary.**)
 
-Likewise **Parabricks** (a `genomics` submodule) no longer needs docker creds or a pre-built image: the stock **NVIDIA NGC** container is pulled **directly at deploy** (public, no credentials), so `modules/genomics/module.env` is not required either. Both `genomics/deploy.sh` and `bionemo/deploy.sh` append `module.env` only when the file exists, so a missing file is correct — don't fabricate one.
+Likewise **Parabricks** (a `genomics` submodule) needs no docker creds and no image build — the stock **NVIDIA NGC** container is public. **But the `genomics` deploy's `gwas` submodule runs `databricks air images push`, which pulls that NGC image via *local Docker* and pushes it to the Databricks Artifact Registry — so Docker Desktop must be running locally** (else the deploy aborts at the first submodule). No `modules/genomics/module.env` is required; both `genomics/deploy.sh` and `bionemo/deploy.sh` append `module.env` only when the file exists, so a missing file is correct — don't fabricate one.
 
 ### module.env — Large Molecule Module (`modules/large_molecule/module.env`) — OPTIONAL
 
