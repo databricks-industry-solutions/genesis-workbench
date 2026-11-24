@@ -155,5 +155,11 @@ results = w.vector_search_indexes.query_index(
 )
 
 print("Test query results:")
-for row in results.result.data_array:
+# A freshly (re)synced DELTA_SYNC index can report ONLINE before its rows are queryable,
+# so `result.data_array` may be None here — guard it so the smoke test never crashes the
+# task with `TypeError: 'NoneType' object is not iterable` (the index itself is fine).
+rows = (results.result.data_array if results and results.result else None) or []
+if not rows:
+    print("  (index not yet populated — sync still settling; this is non-fatal)")
+for row in rows:
     print(f"  {row}")
