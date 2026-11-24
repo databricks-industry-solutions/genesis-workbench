@@ -103,6 +103,11 @@ resources:
         # Ray embed fan-out width (03) — number of H100 serverless-GPU workers.
         - name: num_gpu_workers
           default: "8"
+        # Embed output table override (03). Blank = production `sequence_embeddings`.
+        # Set to a scratch name for a bounded validation run that won't touch the live
+        # VS source table (the skip-if-populated guard also won't trip on a fresh name).
+        - name: target_table
+          default: ""
 
       # Serverless GPU environment for the two embedding tasks (client "4" matches
       # the register jobs' serverless GPU AI runtime). Default CPU environment for

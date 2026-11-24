@@ -131,12 +131,19 @@ if not skip_embedding:
 from serverless_gpu.ray import ray_launch
 
 
+# REPRODUCIBILITY: do NOT rely on torch being preinstalled in the serverless-GPU base image.
+# That implicit dependency differs across runtimes (present on A10/client-4, ABSENT on the
+# H100/client-6 `ray_launch` workers used here) and drifts with base-image updates, which is
+# exactly what broke this job with `ModuleNotFoundError: torch`. Instead pin the embedding deps
+# EXPLICITLY in the Ray actor's `runtime_env` (torch==2.7.1 = the runtime's cu126 build), so every
+# actor worker gets the same stack regardless of the base image. Keep torch/transformers/numpy
+# imports INSIDE the actor (where runtime_env applies) — the rank-0 driver only needs `ray`.
+ACTOR_RUNTIME_ENV = {"pip": ["torch==2.7.1", "transformers==4.41.2", "hf_transfer==0.1.9", "numpy"]}
+
+
 @ray_launch(gpus=NUM_WORKERS, gpu_type="h100", remote=True)
 def embed_with_ray():
-    import numpy as np
     import ray
-    import torch
-    from transformers import AutoTokenizer, AutoModel
 
     print(f"Ray cluster resources: {ray.cluster_resources()}")
 
@@ -144,6 +151,8 @@ def embed_with_ray():
         """Stateful Ray Data actor — loads ESM-2 once per actor (i.e. once per GPU)."""
 
         def __init__(self):
+            import torch
+            from transformers import AutoTokenizer, AutoModel
             self.tokenizer = AutoTokenizer.from_pretrained(ESM2_MODEL)
             self.model = AutoModel.from_pretrained(
                 ESM2_MODEL, torch_dtype=torch.float16
@@ -152,6 +161,8 @@ def embed_with_ray():
             print(f"ESM-2 (FP16) loaded on {torch.cuda.get_device_name(0)}")
 
         def __call__(self, batch):
+            import numpy as np
+            import torch
             seqs = list(batch["sequence"])
             tokens = self.tokenizer(
                 seqs,
@@ -183,6 +194,9 @@ def embed_with_ray():
         num_gpus=1,                # one GPU per actor
         concurrency=NUM_WORKERS,   # one actor per GPU → one per node
         batch_format="numpy",
+        # Install the pinned embedding stack on EVERY actor worker (reproducible — not
+        # dependent on the serverless base image shipping torch).
+        ray_remote_args={"runtime_env": ACTOR_RUNTIME_ENV},
     )
 
     # Distributed write to parquet: each Ray worker writes its own block to the
