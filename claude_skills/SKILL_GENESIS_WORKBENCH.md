@@ -65,7 +65,7 @@ Genesis Workbench simplifies deploying GPU-accelerated biological AI models on D
 - **GWAS Analysis** — Genome-wide association studies pipeline
 
 ### BioNeMo Integration
-- NVIDIA BioNeMo container infrastructure
+- NVIDIA BioNeMo ESM-2 fine-tuning + inference — containerless, on serverless GPU (Transformer Engine; no Docker image)
 - Pre-trained models optimized for enterprise workloads (ESM2 fine-tuning)
 
 ### Parabricks Module

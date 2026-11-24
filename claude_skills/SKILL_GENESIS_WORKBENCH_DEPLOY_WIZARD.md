@@ -110,9 +110,9 @@ This selection **drives the rest of the wizard** — you only validate/create en
    - `large_molecule` — OpenFold3, Boltz, ESMFold, ProteinMPNN, RFdiffusion, enzyme optimization, …
    - `small_molecule` — ChemProp, DiffDock, GenMol, KERMT, NetSolP, …
    - `single_cell` — scGPT, SCimilarity, scanpy, rapids-singlecell, …
-   - `genomics` — GWAS, variant annotation, VCF ingestion, **parabricks** (GPU, needs docker creds)
-   - `bionemo` — NVIDIA BioNeMo ESM-2 finetune/inference (container-only, needs docker creds)
-3. **Treat the approved list + order as a contract.** Deploy in exactly the order confirmed. If a module is blocked (e.g. waiting on docker creds) do NOT silently jump to a later one — ask the user to re-approve any reordering. (Past user feedback: silent reordering was rejected.)
+   - `genomics` — GWAS, variant annotation, VCF ingestion, **parabricks** (GPU; stock NGC image pulled at deploy — no docker creds)
+   - `bionemo` — NVIDIA BioNeMo ESM-2 finetune/inference (containerless, serverless GPU — no docker image/creds)
+3. **Treat the approved list + order as a contract.** Deploy in exactly the order confirmed. If a module is blocked (e.g. waiting on a GPU quota or a required credential) do NOT silently jump to a later one — ask the user to re-approve any reordering. (Past user feedback: silent reordering was rejected.)
 
 ---
 
@@ -144,23 +144,11 @@ Read the current file if present; offer each field with its current value as the
 
 ## Phase 6 — Module-specific `module.env` — ONLY for selected modules
 
-`core` (Phase 5), `bionemo`, and `genomics` need a `module.env`; **`large_molecule` has an OPTIONAL one** (an RFD4-Proteina Hugging Face token); `single_cell` and `small_molecule` need none — they run off `application.env` + the cloud env file. So:
+Only **`core`** (Phase 5) requires a `module.env`. **`large_molecule` has an OPTIONAL one** (an RFD4-Proteina Hugging Face token); **`bionemo`, `genomics`, `single_cell`, and `small_molecule` need NONE** — they run off `application.env` + the cloud env file. **Docker build is no longer necessary for any module.** So:
 
-- **If `bionemo` was selected** → `modules/bionemo/module.env`:
-  ```
-  bionemo_docker_userid=<userid>
-  bionemo_docker_token=<token>
-  bionemo_docker_image=<image>
-  ```
-  Remind the user the BioNeMo container must be pre-built + pushed (`modules/bionemo/docker/build_docker.sh`). Treat the token as a secret — don't echo it back.
+- **`bionemo` — no `module.env`, no Docker.** BioNeMo ESM-2 finetune/inference is **containerless**: serverless-GPU (`GPU_1xA10`) notebook jobs that read ESM-2 from Hugging Face and run on Transformer Engine. Deploy registers the jobs; the UI launches them on demand. (Earlier releases needed `bionemo_docker_*` creds + a pre-built image via `build_docker.sh` — no longer.)
 
-- **If `genomics` was selected AND the parabricks submodule is wanted** → `modules/genomics/module.env`:
-  ```
-  parabricks_docker_userid=<userid>
-  parabricks_docker_token=<token>
-  parabricks_docker_image=<image>
-  ```
-  (parabricks is a genomics submodule; the GWAS / variant-annotation / VCF-ingestion submodules don't need docker creds.)
+- **`genomics` / `parabricks` — no `module.env`, no Docker creds.** The Parabricks submodule pulls the **stock NVIDIA NGC container directly at deploy** (public, no credentials; registers an `ai_runtime_task`-style job with the NGC image). The GWAS / variant-annotation / VCF-ingestion submodules never needed creds.
 
 - **If `large_molecule` was selected** → an OPTIONAL `modules/large_molecule/module.env` for RFD4-Proteina:
   ```
@@ -168,7 +156,9 @@ Read the current file if present; offer each field with its current value as the
   ```
   RFD4's public repo + public HuggingFace weights need no credentials today, so this is optional. If set, `deploy.sh` seeds it into the `dbx_genesis_workbench/hf_token` secret (NOT a plaintext `--var` — `large_molecule/deploy.sh` strips it from the `paste` and `put-secret`s it), keeping RFD4 working if the weights repo becomes gated / for a private fork. Skip it otherwise.
 
-- **If only `single_cell` / `small_molecule` were selected** (no `large_molecule`) → skip Phase 6 entirely; do **not** prompt for or create any extra `module.env`.
+- **`single_cell` / `small_molecule`** → no `module.env`; skip.
+
+`modules/genomics/deploy.sh` and `modules/bionemo/deploy.sh` both append `module.env` only `if [[ -f module.env ]]`, so a missing file is correct — do **not** fabricate one.
 
 ### Env-file writing rule (critical)
 Write env files with the `Write` tool — **no comments, no blank lines, `key=value` only**. `deploy.sh` flattens each file with `paste -sd,` into the bundle's `--var` string; a comment or blank line corrupts the variable list and breaks the deploy.

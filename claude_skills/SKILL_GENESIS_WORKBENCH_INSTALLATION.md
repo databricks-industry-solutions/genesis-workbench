@@ -37,7 +37,8 @@ Genesis Workbench deploys through **modules**, each containing sub-modules with 
 5. **Unity Catalog** — identify or create a catalog for the application
 6. **Exclusive schema** — a schema name used only by Genesis Workbench (created automatically if it doesn't exist)
 7. **SQL Warehouse** — provision a `2X-Small` warehouse
-8. **BioNeMo only**: Build Docker container from `/modules/bionemo/docker/` and push to a container repo. See `build_docker.sh` in that directory.
+
+> **No Docker build for any module.** BioNeMo is containerless (serverless GPU + Transformer Engine) and Parabricks pulls the stock NVIDIA NGC image directly at deploy — neither needs a pre-built/pushed container or docker credentials anymore.
 
 ## Environment Configuration
 
@@ -60,15 +61,11 @@ app_name=<Databricks App name>
 secret_scope_name=<Unique secret scope name — app will create it>
 ```
 
-### module.env — BioNeMo Module (`modules/bionemo/module.env`)
+### BioNeMo Module — NO `module.env`, no Docker
 
-```
-bionemo_docker_userid=<Docker repo user ID>
-bionemo_docker_token=<Docker repo token>
-bionemo_docker_image=<Docker image tag>
-```
+BioNeMo ESM-2 finetune/inference is **containerless**: it runs on serverless GPU (`GPU_1xA10`) as notebook jobs that read ESM-2 from Hugging Face and run on Transformer Engine. There is **no Docker image, no NGC container, and no `modules/bionemo/module.env`** — `deploy.sh` just registers the jobs and the UI launches them on demand. (Earlier releases required `bionemo_docker_*` creds + a pre-built image via `build_docker.sh`; **Docker build is no longer necessary.**)
 
-**Security note:** `bionemo_docker_token` (and `parabricks_docker_token`) are passed as plaintext DAB variables — visible in job definitions via API. For hardening, store in a secret scope and reference via `{{secrets/scope/key}}`.
+Likewise **Parabricks** (a `genomics` submodule) no longer needs docker creds or a pre-built image: the stock **NVIDIA NGC** container is pulled **directly at deploy** (public, no credentials), so `modules/genomics/module.env` is not required either. Both `genomics/deploy.sh` and `bionemo/deploy.sh` append `module.env` only when the file exists, so a missing file is correct — don't fabricate one.
 
 ### module.env — Large Molecule Module (`modules/large_molecule/module.env`) — OPTIONAL
 
@@ -76,7 +73,7 @@ bionemo_docker_image=<Docker image tag>
 hf_token=<Hugging Face token with access to the RFD4-Proteina weights>
 ```
 
-Only needed to serve **RFD4-Proteina** (large_molecule/rfd4_proteina + the Antibody/Vaccine workflows). RFD4's code (public [RosettaCommons/RFD4-Proteina](https://github.com/RosettaCommons/RFD4-Proteina)) and weights (public [`nvidia/RFD4-Proteina`](https://huggingface.co/nvidia/RFD4-Proteina)) currently need **no credentials**, so this file is OPTIONAL. If present, `modules/large_molecule/deploy.sh` seeds `hf_token` into the `dbx_genesis_workbench/hf_token` secret and **excludes it from the `--var` paste** (unlike the docker tokens above, it is a real secret, not a plaintext job variable). Set it to stay working if the weights repo becomes gated or for a private fork.
+Only needed to serve **RFD4-Proteina** (large_molecule/rfd4_proteina + the Antibody/Vaccine workflows). RFD4's code (public [RosettaCommons/RFD4-Proteina](https://github.com/RosettaCommons/RFD4-Proteina)) and weights (public [`nvidia/RFD4-Proteina`](https://huggingface.co/nvidia/RFD4-Proteina)) currently need **no credentials**, so this file is OPTIONAL. If present, `modules/large_molecule/deploy.sh` seeds `hf_token` into the `dbx_genesis_workbench/hf_token` secret and **excludes it from the `--var` paste** (it is a real secret, put into the scope rather than passed as a plaintext job variable). Set it to stay working if the weights repo becomes gated or for a private fork.
 
 ### Cloud-Specific Configuration
 
