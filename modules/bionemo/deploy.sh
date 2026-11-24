@@ -9,6 +9,13 @@ fi
 
 CLOUD=$1
 
+case "$CLOUD" in
+  aws)   TARGET=prod_aws ;;
+  azure) TARGET=prod_azure ;;
+  gcp)   TARGET=prod_gcp ;;
+  *) echo "Usage: $0 <aws|azure|gcp>"; exit 1 ;;
+esac
+
 EXTRA_PARAMS_CLOUD=$(paste -sd, "../../$CLOUD.env")
 EXTRA_PARAMS_GENERAL=$(paste -sd, "../../application.env")
 
@@ -29,11 +36,11 @@ fi
 
 echo ""
 echo "▶️ [BioNeMo] Validating bundle"
-databricks bundle validate --var="$EXTRA_PARAMS"
+databricks bundle validate --target $TARGET --var="$EXTRA_PARAMS"
 
 echo ""
 echo "▶️ [BioNeMo] Deploying bundle"
-databricks bundle deploy --var="$EXTRA_PARAMS"
+databricks bundle deploy --target $TARGET --var="$EXTRA_PARAMS"
 
 if [[ ! -e ".deployed" ]]; then
     echo ""
@@ -42,7 +49,7 @@ if [[ ! -e ".deployed" ]]; then
     echo ""
 
     user_email=$(databricks current-user me | jq '.emails[0].value' | tr -d '"')
-    databricks bundle run --params "user_email=$user_email" initial_setup_job --var="$EXTRA_PARAMS"  --no-wait
+    databricks bundle run --target $TARGET --params "user_email=$user_email" initial_setup_job --var="$EXTRA_PARAMS"  --no-wait
 fi
 
 date +"%Y-%m-%d %H:%M:%S" > .deployed
