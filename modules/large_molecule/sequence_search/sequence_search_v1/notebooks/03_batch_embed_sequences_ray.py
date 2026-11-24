@@ -131,18 +131,24 @@ if not skip_embedding:
 from serverless_gpu.ray import ray_launch
 
 
-# REPRODUCIBILITY: do NOT rely on torch being preinstalled in the serverless-GPU base image.
-# That implicit dependency differs across runtimes (present on A10/client-4, ABSENT on the
-# H100/client-6 `ray_launch` workers used here) and drifts with base-image updates, which is
-# exactly what broke this job with `ModuleNotFoundError: torch`. Instead pin the embedding deps
-# EXPLICITLY in the Ray actor's `runtime_env` (torch==2.7.1 = the runtime's cu126 build), so every
-# actor worker gets the same stack regardless of the base image. Keep torch/transformers/numpy
-# imports INSIDE the actor (where runtime_env applies) — the rank-0 driver only needs `ray`.
-ACTOR_RUNTIME_ENV = {"pip": ["torch==2.7.1", "transformers==4.41.2", "hf_transfer==0.1.9", "numpy"]}
-
-
+# REPRODUCIBILITY: do NOT rely on torch being preinstalled in the serverless-GPU base image —
+# that implicit dependency is present on A10/client-4 but ABSENT on the H100 `ray_launch` workers,
+# which is exactly what broke this job with `ModuleNotFoundError: torch`. Install the embedding stack
+# EXPLICITLY and pinned (torch==2.7.1 = the runtime's cu126 build) on the worker node itself.
+# WHY a node-level subprocess pip (not Ray `runtime_env`): serverless_gpu's Ray does NOT honor an
+# actor `runtime_env` pip (validated empirically — the actors still failed to import torch). But H100
+# serverless nodes are whole 8-GPU nodes, so gpus<=8 runs on ONE node and every Ray actor shares this
+# node's Python site-packages — so a single pip here, at the top of the remote function, covers them all.
 @ray_launch(gpus=NUM_WORKERS, gpu_type="h100", remote=True)
 def embed_with_ray():
+    import subprocess, sys
+    _p = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-q",
+         "torch==2.7.1", "transformers==4.41.2", "hf_transfer==0.1.9"],
+        capture_output=True, text=True,
+    )
+    if _p.returncode != 0:
+        raise RuntimeError(f"worker pip install failed (exit {_p.returncode}):\n{(_p.stderr or '')[-4000:]}")
     import ray
 
     print(f"Ray cluster resources: {ray.cluster_resources()}")
@@ -194,9 +200,6 @@ def embed_with_ray():
         num_gpus=1,                # one GPU per actor
         concurrency=NUM_WORKERS,   # one actor per GPU → one per node
         batch_format="numpy",
-        # Install the pinned embedding stack on EVERY actor worker (reproducible — not
-        # dependent on the serverless base image shipping torch).
-        ray_remote_args={"runtime_env": ACTOR_RUNTIME_ENV},
     )
 
     # Distributed write to parquet: each Ray worker writes its own block to the
