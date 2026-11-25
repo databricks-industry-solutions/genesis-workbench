@@ -31,17 +31,23 @@
 
 # COMMAND ----------
 
-# DBTITLE 1,Install dependencies
-# torch/CUDA are preinstalled on the serverless GPU AI runtime (don't pin torch — a reinstall risks a
-# cuDNN mismatch). hf_transfer is required because the runtime sets HF_HUB_ENABLE_HF_TRANSFER=1; ray[data]
-# drives the fan-out. pyarrow==18.1.0 because ray[data]==2.59.0 requires pyarrow>=17 (the old
-# pyarrow==15.0.2 pin predates the ray 2.59 bump and is unsatisfiable). These pins conflict with the
-# serverless base env's pipConstraints.txt, so %pip (which force-adds -c pipConstraints.txt) can't
-# resolve them. Use a subprocess pip (NOT %pip) to bypass the constraints; capture output on failure.
+# DBTITLE 1,Install worker deps via %pip (captured by the serverless_gpu snapshot -> restored on Ray workers)
+# MAGIC %pip install -q torch==2.7.1 transformers==4.41.2 hf_transfer==0.1.9
+
+# COMMAND ----------
+
+# DBTITLE 1,Install orchestrator deps (driver-side)
+# REPRODUCIBILITY: serverless_gpu `ray_launch(remote=True)` SNAPSHOTS the NOTEBOOK's pip env and restores
+# it on the remote workers — but only %pip / notebook-scoped libraries are captured, a raw subprocess pip
+# is NOT. torch was the missing piece on the H100 workers (preinstalled on the A10/client-4 driver, absent
+# on the H100 worker base), so the ACTOR stack (torch/transformers/hf_transfer) is %pip-installed ABOVE so
+# it rides the snapshot onto every worker. pyarrow/ray[data] are installed here via subprocess (to bypass
+# pipConstraints.txt) for the driver's own use; the H100 worker base already provides them (the Ray
+# `read_parquet` succeeded on the worker — the import that failed was torch, in the actor).
 import subprocess, sys
 _r = subprocess.run(
     [sys.executable, "-m", "pip", "install", "-q",
-     "transformers==4.41.2", "pyarrow==18.1.0", "hf_transfer==0.1.9", "ray[data]==2.59.0"],
+     "pyarrow==18.1.0", "ray[data]==2.59.0"],
     capture_output=True, text=True,
 )
 print((_r.stdout or "")[-3000:])
@@ -131,24 +137,11 @@ if not skip_embedding:
 from serverless_gpu.ray import ray_launch
 
 
-# REPRODUCIBILITY: do NOT rely on torch being preinstalled in the serverless-GPU base image —
-# that implicit dependency is present on A10/client-4 but ABSENT on the H100 `ray_launch` workers,
-# which is exactly what broke this job with `ModuleNotFoundError: torch`. Install the embedding stack
-# EXPLICITLY and pinned (torch==2.7.1 = the runtime's cu126 build) on the worker node itself.
-# WHY a node-level subprocess pip (not Ray `runtime_env`): serverless_gpu's Ray does NOT honor an
-# actor `runtime_env` pip (validated empirically — the actors still failed to import torch). But H100
-# serverless nodes are whole 8-GPU nodes, so gpus<=8 runs on ONE node and every Ray actor shares this
-# node's Python site-packages — so a single pip here, at the top of the remote function, covers them all.
+# The embedding deps (torch==2.7.1, transformers) are installed via %pip at the top of the notebook so
+# serverless_gpu's env snapshot carries them onto the Ray workers (see the install cell). The rank-0
+# driver here only needs `ray`; torch/transformers import inside the actor, where the snapshot applies.
 @ray_launch(gpus=NUM_WORKERS, gpu_type="h100", remote=True)
 def embed_with_ray():
-    import subprocess, sys
-    _p = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "-q",
-         "torch==2.7.1", "transformers==4.41.2", "hf_transfer==0.1.9"],
-        capture_output=True, text=True,
-    )
-    if _p.returncode != 0:
-        raise RuntimeError(f"worker pip install failed (exit {_p.returncode}):\n{(_p.stderr or '')[-4000:]}")
     import ray
 
     print(f"Ray cluster resources: {ray.cluster_resources()}")
