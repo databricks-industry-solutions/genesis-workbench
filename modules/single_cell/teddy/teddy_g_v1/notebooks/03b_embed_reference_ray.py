@@ -16,6 +16,15 @@
 # also conflict with the serverless base env's pipConstraints.txt, so %pip (which force-adds -c
 # pipConstraints.txt) can't resolve them. Use a subprocess pip (NOT %pip) to bypass the constraints;
 # capture output so any resolver error is visible.
+# DBTITLE 1,Worker torch stack via %pip (captured by the serverless_gpu snapshot -> restored on Ray workers)
+# MAGIC %pip install -q torch==2.7.1 transformers==4.44.2 hf_transfer==0.1.9
+
+# COMMAND ----------
+
+# serverless_gpu ray_launch(remote=True) snapshots only %pip / notebook-scoped libs onto the workers, NOT
+# a raw subprocess pip — and torch is absent from the H100 worker base — so the actor torch stack is %pip'd
+# ABOVE (rides the snapshot). pyarrow conflicts with pipConstraints.txt, so it stays on this subprocess
+# pip (driver-side); capture output on failure.
 import subprocess, sys
 _r = subprocess.run(
     [sys.executable, "-m", "pip", "install", "-q",

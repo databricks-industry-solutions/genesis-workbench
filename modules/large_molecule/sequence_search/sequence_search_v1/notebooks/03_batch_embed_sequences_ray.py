@@ -87,7 +87,11 @@ BATCH_SIZE = 32
 ESM2_MODEL = "facebook/esm2_t33_650M_UR50D"
 
 SOURCE_TABLE = f"{catalog}.{schema}.sequence_db"
+# A bare (unqualified) override is qualified with the configured catalog.schema so it can't
+# accidentally resolve against the workspace default catalog (CREATE TABLE <bare> -> default-catalog).
 TARGET_TABLE = _target_override or f"{catalog}.{schema}.sequence_embeddings"
+if _target_override and "." not in _target_override:
+    TARGET_TABLE = f"{catalog}.{schema}.{_target_override}"
 # Stage paths on a UC Volume — both ends of the Ray run use these because UC
 # Volumes are FUSE-accessible from non-Spark clients (Ray, pyarrow).
 # Spark fills the input stage; Ray writes parquet to the output stage in

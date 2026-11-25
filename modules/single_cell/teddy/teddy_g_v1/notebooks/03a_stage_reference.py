@@ -33,6 +33,15 @@
 # the serverless base env's numpy 2.x in pipConstraints.txt, so %pip (which force-adds -c
 # pipConstraints.txt) can't resolve this set. Use a subprocess pip (NOT %pip) to bypass the constraints;
 # capture output so any resolver error is visible. Pattern: diffdock_v1/notebooks/01_register_diffdock.py.
+# DBTITLE 1,Worker torch stack via %pip (captured by the serverless_gpu snapshot -> restored on Ray workers)
+# MAGIC %pip install -q torch==2.7.1 transformers==4.44.2 hf_transfer==0.1.9
+
+# COMMAND ----------
+
+# serverless_gpu ray_launch(remote=True) snapshots only %pip / notebook-scoped libs onto the workers, NOT
+# a raw subprocess pip — and torch is absent from the H100 worker base — so the actor torch stack is %pip'd
+# ABOVE (rides the snapshot). cellxgene-census/numpy==1.26.4/pyarrow conflict with pipConstraints.txt, so
+# they stay on this subprocess pip (driver-side); capture output on failure.
 import subprocess, sys
 _r = subprocess.run(
     [sys.executable, "-m", "pip", "install", "-q",
